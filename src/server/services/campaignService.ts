@@ -154,6 +154,40 @@ export function joinCampaign(
   return { ok: true, data: toCampaignJson(userRepo, campaignRepo, row, userId) }
 }
 
+/** Whatever campaign the DM currently has open — `null` if they haven't opened one (or aren't hosting anything yet). Not membership-gated: this is the discovery step a connecting player uses *before* they're necessarily a member of anything. */
+export function getActiveCampaign(db: DatabaseType, viewerUserId: string): ServiceResult<CampaignJson | null> {
+  const userRepo = new UserRepo(db)
+  const campaignRepo = new CampaignRepo(db)
+  const activeId = campaignRepo.getActiveCampaignId()
+  if (!activeId) return { ok: true, data: null }
+  const row = campaignRepo.findById(activeId)
+  if (!row) return { ok: true, data: null }
+  return { ok: true, data: toCampaignJson(userRepo, campaignRepo, row, viewerUserId) }
+}
+
+/** Only the DM (campaign owner) decides what "the table" currently is — this is what the CampaignSwitcher calls whenever the DM's own active campaign changes. */
+export function setActiveCampaign(
+  db: DatabaseType,
+  campaignId: string,
+  userId: string
+): ServiceResult<CampaignJson> {
+  const userRepo = new UserRepo(db)
+  const campaignRepo = new CampaignRepo(db)
+  const row = campaignRepo.findById(campaignId)
+  if (!row) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (row.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can set the active campaign.' }
+  campaignRepo.setActiveCampaignId(row.id)
+  return { ok: true, data: toCampaignJson(userRepo, campaignRepo, row, userId) }
+}
+
+/** A connecting player's one-step join — auto-adds them to whatever campaign the DM currently has active, instead of making them pick one from a list. */
+export function joinActiveCampaign(db: DatabaseType, userId: string): ServiceResult<CampaignJson> {
+  const campaignRepo = new CampaignRepo(db)
+  const activeId = campaignRepo.getActiveCampaignId()
+  if (!activeId) return { ok: false, status: 404, error: "The DM hasn't started a session yet." }
+  return joinCampaign(db, activeId, userId)
+}
+
 export function listNotes(
   db: DatabaseType,
   campaignId: string,

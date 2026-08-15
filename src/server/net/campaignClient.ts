@@ -78,6 +78,31 @@ export function joinCampaign(
   return call(address, certPem, token, 'POST', `/campaigns/${campaignId}/join`)
 }
 
+export function getActiveCampaign(
+  address: string,
+  certPem: string,
+  token: string
+): Promise<ClientResult<{ campaign: CampaignJson | null }>> {
+  return call(address, certPem, token, 'GET', '/active-campaign')
+}
+
+export function setActiveCampaign(
+  address: string,
+  certPem: string,
+  token: string,
+  campaignId: string
+): Promise<ClientResult<{ campaign: CampaignJson }>> {
+  return call(address, certPem, token, 'POST', '/active-campaign', { campaignId })
+}
+
+export function joinActiveCampaign(
+  address: string,
+  certPem: string,
+  token: string
+): Promise<ClientResult<{ campaign: CampaignJson }>> {
+  return call(address, certPem, token, 'POST', '/active-campaign/join')
+}
+
 export function listNotes(
   address: string,
   certPem: string,

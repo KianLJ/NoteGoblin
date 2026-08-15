@@ -13,7 +13,10 @@ const api: AppApi = {
       ipcRenderer.invoke('identity:change-password', currentPassword, newPassword),
     hasRemembered: () => ipcRenderer.invoke('identity:has-remembered'),
     autoLogin: () => ipcRenderer.invoke('identity:auto-login'),
-    remember: (remember) => ipcRenderer.invoke('identity:remember', remember)
+    remember: (remember) => ipcRenderer.invoke('identity:remember', remember),
+    list: () => ipcRenderer.invoke('identity:list'),
+    switch: (id, password, remember) => ipcRenderer.invoke('identity:switch', id, password, remember),
+    forgetSaved: (id) => ipcRenderer.invoke('identity:forget-saved', id)
   },
   hosting: {
     start: () => ipcRenderer.invoke('hosting:start'),
@@ -31,7 +34,10 @@ const api: AppApi = {
   campaigns: {
     list: (address) => ipcRenderer.invoke('campaigns:list', address),
     create: (name, address) => ipcRenderer.invoke('campaigns:create', name, address),
-    join: (campaignId, address) => ipcRenderer.invoke('campaigns:join', campaignId, address)
+    join: (campaignId, address) => ipcRenderer.invoke('campaigns:join', campaignId, address),
+    getActive: (address) => ipcRenderer.invoke('campaigns:get-active', address),
+    setActive: (campaignId, address) => ipcRenderer.invoke('campaigns:set-active', campaignId, address),
+    joinActive: (address) => ipcRenderer.invoke('campaigns:join-active', address)
   },
   notes: {
     list: (campaignId, address) => ipcRenderer.invoke('notes:list', campaignId, address),
@@ -69,6 +75,17 @@ const api: AppApi = {
   },
   files: {
     pickImage: () => ipcRenderer.invoke('files:pick-image')
+  },
+  windowControls: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    onMaximizedChange: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, maximized: boolean): void => callback(maximized)
+      ipcRenderer.on('window:maximized-changed', listener)
+      return () => ipcRenderer.removeListener('window:maximized-changed', listener)
+    }
   }
 }
 

@@ -31,6 +31,13 @@ export class PasswordAccountRepo {
     return row !== undefined
   }
 
+  list(): Account[] {
+    const rows = this.db
+      .prepare(`SELECT id, display_name FROM ${this.table} ORDER BY display_name COLLATE NOCASE`)
+      .all() as { id: string; display_name: string }[]
+    return rows.map((r) => ({ id: r.id, displayName: r.display_name }))
+  }
+
   findByDisplayName(displayName: string): AccountRow | undefined {
     return this.db
       .prepare(`SELECT id, display_name, password_hash FROM ${this.table} WHERE display_name = ?`)

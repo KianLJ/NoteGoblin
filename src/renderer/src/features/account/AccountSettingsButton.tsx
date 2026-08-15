@@ -3,6 +3,7 @@ import { Button } from '../../ui/Button'
 import { GearIcon } from './icons'
 import { ChevronRightIcon } from '../campaigns/icons'
 import { ColorTokenEditor } from './ColorTokenEditor'
+import { AccountSwitcher } from './AccountSwitcher'
 import { getStoredMode, setThemeMode, type ThemeMode } from '../../theme'
 import type { Identity } from '@shared/ipc'
 
@@ -150,6 +151,10 @@ function AccountSettingsForm(): JSX.Element {
         This only renames your identity on this device — hosts you've already joined under the old
         name won't follow automatically.
       </p>
+
+      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
+
+      <AccountSwitcher />
 
       <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
 

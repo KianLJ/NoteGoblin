@@ -12,18 +12,19 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    // Matches the dark-theme tokens in theme.css (--bg-canvas / --text-primary for
-    // :root[data-theme="dark"], which index.html sets by default) — the overlay is
-    // native-drawn, so it can't read our CSS variables and has to be kept in sync
-    // by hand. If a light/dark toggle is ever added, this needs to follow it (see
-    // win.setTitleBarOverlay).
+    // Matches the dark-theme --bg-canvas token (index.html sets dark by
+    // default) — just the color Electron paints before the page's own CSS
+    // loads, so a mismatch here is only a flash-of-wrong-color, not a
+    // functional issue.
     backgroundColor: '#14110c',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#14110c',
-      symbolColor: '#f2ead6',
-      height: 44
-    },
+    // Fully custom chrome (frame: false) rather than titleBarStyle:'hidden'
+    // + titleBarOverlay — the native overlay's Windows-side hit-testing for
+    // the drag region turned out to be unreliable (window dragging would
+    // silently stop working, unrelated to anything on our side). Plain
+    // -webkit-app-region CSS + our own minimize/maximize/close buttons
+    // (see AppShell.tsx + window: IPC handlers below) is a much simpler,
+    // better-tested mechanism.
+    frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,

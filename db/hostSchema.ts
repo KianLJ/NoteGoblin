@@ -30,6 +30,15 @@ CREATE TABLE IF NOT EXISTS campaign_members (
   PRIMARY KEY (campaign_id, user_id)
 );
 
+-- Singleton (id is always 1) — which campaign the DM currently has open.
+-- Connecting players auto-join whatever this points at rather than picking
+-- from a list themselves; the DM decides what "the table" is, not each
+-- player individually.
+CREATE TABLE IF NOT EXISTS host_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  active_campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL
+);
+
 -- Folders organize notes into a tree, scoped to the same 'dm'/'shared'
 -- visibility split as notes (a folder's own visibility, not its contents'
 -- individual notes, gates who sees it) so the two note sections in the

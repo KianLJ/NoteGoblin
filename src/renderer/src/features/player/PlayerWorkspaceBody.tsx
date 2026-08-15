@@ -20,7 +20,6 @@ export function PlayerWorkspaceBody({
 }: PlayerWorkspaceBodyProps): JSX.Element {
   const {
     characters,
-    campaigns,
     activeCampaign,
     notes,
     folders,
@@ -28,8 +27,7 @@ export function PlayerWorkspaceBody({
     activeCharacter,
     activeNote,
     openTab,
-    joinCampaign,
-    selectCampaign,
+    resync,
     createCharacter,
     saveCharacter,
     deleteCharacter,
@@ -62,7 +60,6 @@ export function PlayerWorkspaceBody({
 
       <PlayerSidebar
         characters={characters ?? []}
-        campaigns={campaigns}
         activeCampaign={activeCampaign}
         notes={notes}
         folders={folders}
@@ -81,8 +78,7 @@ export function PlayerWorkspaceBody({
         onMoveFolder={moveFolder}
         onPasteNote={duplicateNote}
         onPasteFolder={duplicateFolder}
-        onJoinCampaign={joinCampaign}
-        onSelectCampaign={selectCampaign}
+        onResync={resync}
         connectedLabel={connectedLabel}
         onConnected={onConnected}
         footer={

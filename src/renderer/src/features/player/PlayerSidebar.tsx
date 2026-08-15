@@ -10,7 +10,6 @@ import type { PlayerTabRef } from './usePlayerWorkspace'
 
 interface PlayerSidebarProps {
   characters: CharacterSheet[]
-  campaigns: Campaign[] | null
   activeCampaign: Campaign | null
   notes: Note[] | null
   folders: Folder[] | null
@@ -29,8 +28,8 @@ interface PlayerSidebarProps {
   onMoveFolder: (folderId: string, parentFolderId: string | null, visibility: 'dm' | 'shared') => void
   onPasteNote: (sourceNoteId: string, targetFolderId: string | null, targetVisibility: 'dm' | 'shared') => void
   onPasteFolder: (sourceFolderId: string, targetParentId: string | null, targetVisibility: 'dm' | 'shared') => void
-  onJoinCampaign: (campaignId: string) => void
-  onSelectCampaign: (campaign: Campaign) => void
+  /** Re-fetches the DM's active campaign — the closest thing to "catch up" if they switched tables after you connected, since there's no live push for that yet. */
+  onResync: () => void
   connectedLabel: string | null
   onConnected: (address: string, label: string) => void
   /** The character switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
@@ -39,7 +38,6 @@ interface PlayerSidebarProps {
 
 export function PlayerSidebar({
   characters,
-  campaigns,
   activeCampaign,
   notes,
   folders,
@@ -58,8 +56,7 @@ export function PlayerSidebar({
   onMoveFolder,
   onPasteNote,
   onPasteFolder,
-  onJoinCampaign,
-  onSelectCampaign,
+  onResync,
   connectedLabel,
   onConnected,
   footer
@@ -96,10 +93,8 @@ export function PlayerSidebar({
         }}
       >
         <TableBar
-          campaigns={campaigns}
           activeCampaign={activeCampaign}
-          onJoinCampaign={onJoinCampaign}
-          onSelectCampaign={onSelectCampaign}
+          onResync={onResync}
           connectedLabel={connectedLabel}
           onConnected={onConnected}
         />
@@ -163,19 +158,15 @@ export function PlayerSidebar({
   )
 }
 
-/** Connection/campaign context — deliberately separate from the note/character "file" sections below, since it's not a file, it's the table you're sitting at. */
+/** Connection context — deliberately separate from the note/character "file" sections below, since it's not a file, it's the table you're sitting at. Which campaign you're in is entirely the DM's call (see the active-campaign auto-join in usePlayerWorkspace) — this just shows where you landed, with a manual re-sync in case the DM switches tables after you've connected. */
 function TableBar({
-  campaigns,
   activeCampaign,
-  onJoinCampaign,
-  onSelectCampaign,
+  onResync,
   connectedLabel,
   onConnected
 }: {
-  campaigns: Campaign[] | null
   activeCampaign: Campaign | null
-  onJoinCampaign: (campaignId: string) => void
-  onSelectCampaign: (campaign: Campaign) => void
+  onResync: () => void
   connectedLabel: string | null
   onConnected: (address: string, label: string) => void
 }): JSX.Element {
@@ -231,55 +222,37 @@ function TableBar({
           className="gb-card"
           style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 'var(--space-2)', width: 300, zIndex: 20 }}
         >
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
             {connectedLabel ? `Connected: ${connectedLabel}` : 'Not connected'}
           </div>
 
-          {connectedLabel && campaigns && campaigns.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 'var(--space-3)' }}>
-              {campaigns.map((campaign) => (
-                <div
-                  key={campaign.id}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (campaign.myRole) {
-                        onSelectCampaign(campaign)
-                        setOpen(false)
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      textAlign: 'left',
-                      background: activeCampaign?.id === campaign.id ? 'var(--accent-subtle)' : 'transparent',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '4px 6px',
-                      cursor: campaign.myRole ? 'pointer' : 'default',
-                      fontSize: 13,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {campaign.name}
-                  </button>
-                  {!campaign.myRole && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        onJoinCampaign(campaign.id)
-                        setOpen(false)
-                      }}
-                      style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
-                    >
-                      Join
-                    </Button>
-                  )}
-                </div>
-              ))}
+          {connectedLabel && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 6,
+                marginBottom: 'var(--space-3)'
+              }}
+            >
+              <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {activeCampaign ? (
+                  <>
+                    Playing <strong>{activeCampaign.name}</strong>
+                  </>
+                ) : (
+                  "The DM hasn't started a session yet"
+                )}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={onResync}
+                title="Catch up if the DM switched campaigns"
+                style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
+              >
+                Sync
+              </Button>
             </div>
           )}
 

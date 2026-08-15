@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Campaign, CharacterSheet, Folder, Note } from '@shared/ipc'
 
 export type PlayerTabRef = { kind: 'character'; id: string } | { kind: 'note'; id: string }
@@ -17,7 +17,6 @@ function sameTab(a: PlayerTabRef, b: PlayerTabRef): boolean {
  */
 export function usePlayerWorkspace(address: string | undefined) {
   const [characters, setCharacters] = useState<CharacterSheet[] | null>(null)
-  const [campaigns, setCampaigns] = useState<Campaign[] | null>(null)
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [folders, setFolders] = useState<Folder[] | null>(null)
@@ -25,17 +24,14 @@ export function usePlayerWorkspace(address: string | undefined) {
   const [tabs, setTabs] = useState<PlayerTabRef[]>([])
   const [activeTab, setActiveTabState] = useState<PlayerTabRef | null>(null)
 
-  const autoOpenedForRef = useRef<string | undefined>(undefined)
-
   useEffect(() => {
     refreshCharacters()
   }, [])
 
   useEffect(() => {
     setActiveCampaign(null)
-    setCampaigns(null)
     if (!address) return
-    refreshCampaigns(address)
+    resyncActiveCampaign(address)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address])
 
@@ -59,20 +55,16 @@ export function usePlayerWorkspace(address: string | undefined) {
     })
   }
 
-  function refreshCampaigns(addr: string): void {
-    window.goblin.campaigns.list(addr).then((result) => {
+  /** Auto-joins whatever campaign the DM currently has active, rather than making you pick one — the DM decides what "the table" is. Also doubles as a manual "catch up" if the DM switches campaigns after you've already connected (there's no live push for that yet). */
+  function resyncActiveCampaign(addr: string): void {
+    setError(null)
+    window.goblin.campaigns.joinActive(addr).then((result) => {
       if (!result.ok) {
         setError(result.error)
+        setActiveCampaign(null)
         return
       }
-      setCampaigns(result.data)
-      // Auto-open the most recent campaign you're already part of, once per
-      // connected host — you can still switch/join others from the sidebar.
-      if (autoOpenedForRef.current !== addr) {
-        autoOpenedForRef.current = addr
-        const mine = result.data.filter((c) => c.myRole !== null)
-        if (mine.length > 0) setActiveCampaign(mine[0])
-      }
+      setActiveCampaign(result.data)
     })
   }
 
@@ -93,21 +85,6 @@ export function usePlayerWorkspace(address: string | undefined) {
     })
   }
 
-  async function joinCampaign(campaignId: string): Promise<void> {
-    if (!address) return
-    setError(null)
-    const result = await window.goblin.campaigns.join(campaignId, address)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setActiveCampaign(result.data)
-    refreshCampaigns(address)
-  }
-
-  function selectCampaign(campaign: Campaign): void {
-    setActiveCampaign(campaign)
-  }
 
   function openTab(ref: PlayerTabRef): void {
     setTabs((prev) => (prev.some((t) => sameTab(t, ref)) ? prev : [...prev, ref]))
@@ -312,7 +289,6 @@ export function usePlayerWorkspace(address: string | undefined) {
 
   return {
     characters,
-    campaigns,
     activeCampaign,
     notes,
     folders,
@@ -322,8 +298,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     setActiveTab: openTab,
     openTab,
     closeTab,
-    joinCampaign,
-    selectCampaign,
+    resync: () => address && resyncActiveCampaign(address),
     createCharacter,
     saveCharacter,
     deleteCharacter,

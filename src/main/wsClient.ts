@@ -5,6 +5,8 @@ import { getActiveConnection } from './appState'
 interface WsEntry {
   socket: WebSocket
   campaignId: string | null
+  /** The token this socket authenticated with — if activeConnections now holds a different one for this address (e.g. switched identities, and the new identity's connection reuses the same address such as the loopback self-address), the pooled socket is stale and must be replaced, not reused. */
+  token: string
 }
 
 /** One persistent WS connection per host address, reused across subscribe/select-character calls. */
@@ -15,11 +17,21 @@ function isLive(socket: WebSocket): boolean {
 }
 
 function connect(address: string, window: BrowserWindow): WsEntry {
-  const existing = sockets.get(address)
-  if (existing && isLive(existing.socket)) return existing
-
   const connection = getActiveConnection(address)
   if (!connection) throw new Error('Not connected to that host.')
+
+  const existing = sockets.get(address)
+  if (existing && isLive(existing.socket) && existing.token === connection.token) return existing
+  if (existing) {
+    // Stale — either dead, or authenticated as a different identity than
+    // whoever currently owns this address. Either way it can't be reused.
+    try {
+      existing.socket.close()
+    } catch {
+      /* already closing/closed — fine */
+    }
+    sockets.delete(address)
+  }
 
   const [host, portStr] = address.split(':')
   const socket = new WebSocket(`wss://${host}:${portStr}/ws?token=${encodeURIComponent(connection.token)}`, {
@@ -31,7 +43,7 @@ function connect(address: string, window: BrowserWindow): WsEntry {
     checkServerIdentity: () => true
   })
 
-  const entry: WsEntry = { socket, campaignId: null }
+  const entry: WsEntry = { socket, campaignId: null, token: connection.token }
   sockets.set(address, entry)
 
   socket.on('message', (raw) => {

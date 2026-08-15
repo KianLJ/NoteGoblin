@@ -191,8 +191,20 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>): Decoratio
     while ((imageMatch = IMAGE_RE.exec(line.text))) {
       const from = line.from + imageMatch.index
       const to = from + imageMatch[0].length
-      if (selectionOverlaps(state, from, to)) continue
-      ranges.push(Decoration.replace({ widget: new ImageWidget(imageMatch[2], imageMatch[1]) }).range(from, to))
+      const alt = imageMatch[1]
+      const src = imageMatch[2]
+      // "![alt]" — the visible part even while editing this line.
+      const altTextEnd = from + 2 + alt.length + 1
+      // The `(src)` portion is always hidden, focused or not: it's a data:
+      // URI that can run to hundreds of KB of base64, not something anyone
+      // hand-edits, and showing it inline was flooding the line with text.
+      if (altTextEnd < to) ranges.push(Decoration.replace({}).range(altTextEnd, to))
+      if (selectionOverlaps(state, from, to)) {
+        // Focused: leave "![alt]" as plain editable text so the alt text
+        // itself can still be changed.
+        continue
+      }
+      ranges.push(Decoration.replace({ widget: new ImageWidget(src, alt) }).range(from, altTextEnd))
     }
   }
 

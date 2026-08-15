@@ -48,4 +48,19 @@ export class CampaignRepo {
       .get(campaignId, userId) as { role: CampaignRole } | undefined
     return row?.role ?? null
   }
+
+  getActiveCampaignId(): string | null {
+    const row = this.db.prepare('SELECT active_campaign_id FROM host_state WHERE id = 1').get() as
+      | { active_campaign_id: string | null }
+      | undefined
+    return row?.active_campaign_id ?? null
+  }
+
+  setActiveCampaignId(campaignId: string | null): void {
+    this.db
+      .prepare(
+        'INSERT INTO host_state (id, active_campaign_id) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET active_campaign_id = excluded.active_campaign_id'
+      )
+      .run(campaignId)
+  }
 }

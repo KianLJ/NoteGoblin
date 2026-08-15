@@ -23,6 +23,8 @@ export interface ActiveConnection {
 
 let currentIdentity: CurrentIdentity | null = null
 let hostServerHandle: HostServerHandle | null = null
+/** Which local identity actually started hosting — hosting itself is process-wide (any identity can view it once switched to), but only the identity that started it should see "Stop Hosting" or be described as the host, since it isn't really *their* table otherwise. */
+let hostOwnerIdentityId: string | null = null
 const activeConnections = new Map<string, ActiveConnection>()
 
 export function getCurrentIdentity(): CurrentIdentity | null {
@@ -39,6 +41,15 @@ export function getHostServerHandle(): HostServerHandle | null {
 
 export function setHostServerHandle(handle: HostServerHandle | null): void {
   hostServerHandle = handle
+  if (!handle) hostOwnerIdentityId = null
+}
+
+export function getHostOwnerIdentityId(): string | null {
+  return hostOwnerIdentityId
+}
+
+export function setHostOwnerIdentityId(id: string | null): void {
+  hostOwnerIdentityId = id
 }
 
 export function getActiveConnection(address: string): ActiveConnection | undefined {
@@ -47,4 +58,9 @@ export function getActiveConnection(address: string): ActiveConnection | undefin
 
 export function setActiveConnection(connection: ActiveConnection): void {
   activeConnections.set(connection.address, connection)
+}
+
+/** Called on identity switch — active connections hold another identity's auth token/userId, and must never leak into whichever identity is now current. Hosting itself (hostServerHandle) is left running; it serves whoever connects to it regardless of which identity is currently being browsed as in this window. */
+export function clearActiveConnections(): void {
+  activeConnections.clear()
 }

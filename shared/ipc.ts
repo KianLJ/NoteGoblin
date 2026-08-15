@@ -6,6 +6,16 @@ export interface Identity {
   displayName: string
 }
 
+/** One local test account, as shown in the account switcher. */
+export interface IdentitySummary {
+  id: string
+  displayName: string
+  /** Password saved (via safeStorage) so switching to it doesn't need re-entering it. */
+  remembered: boolean
+  /** This is the identity currently active in this window. */
+  current: boolean
+}
+
 export type LoginResult = { ok: true; identity: Identity } | { ok: false; error: string }
 
 export interface HostAddressOption {
@@ -16,7 +26,15 @@ export interface HostAddressOption {
 
 export type HostingStatus =
   | { hosting: false }
-  | { hosting: true; fingerprint: string; addresses: HostAddressOption[] }
+  | {
+      hosting: true
+      fingerprint: string
+      addresses: HostAddressOption[]
+      /** Display name of whichever local identity actually started hosting — hosting is process-wide, so a different (e.g. switched-to test) identity can be looking at this without being the one who turned it on. */
+      startedBy: string
+      /** True only for the identity that started it — controls whether Stop Hosting is even offered, since stopping someone else's hosting from a different identity would be surprising/destructive. */
+      isOwner: boolean
+    }
 
 export type HostingStartResult =
   | { ok: true; fingerprint: string; addresses: HostAddressOption[] }
@@ -110,6 +128,12 @@ export interface AppApi {
     hasRemembered: () => Promise<boolean>
     autoLogin: () => Promise<LoginResult>
     remember: (remember: boolean) => Promise<{ ok: true } | { ok: false; error: string }>
+    /** Every local identity on this install — lets you create a handful of throwaway test accounts and switch between them, e.g. to exercise the join flow against your own hosted campaign without a second device. */
+    list: () => Promise<IdentitySummary[]>
+    /** `password` is only needed if that identity isn't already remembered. */
+    switch: (id: string, password: string | undefined, remember: boolean) => Promise<LoginResult>
+    /** Forgets a saved password without deleting the account itself. */
+    forgetSaved: (id: string) => Promise<void>
   }
   hosting: {
     start: () => Promise<HostingStartResult>
@@ -134,6 +158,12 @@ export interface AppApi {
     list: (address?: string) => Promise<ApiResult<Campaign[]>>
     create: (name: string, address?: string) => Promise<ApiResult<Campaign>>
     join: (campaignId: string, address?: string) => Promise<ApiResult<Campaign>>
+    /** Whatever campaign the DM currently has open — null if they haven't opened one. */
+    getActive: (address?: string) => Promise<ApiResult<Campaign | null>>
+    /** DM-only — sets which campaign connecting players auto-join. */
+    setActive: (campaignId: string, address?: string) => Promise<ApiResult<Campaign>>
+    /** The player-side one-step join: auto-adds you to the DM's active campaign, no picking from a list. */
+    joinActive: (address?: string) => Promise<ApiResult<Campaign>>
   }
   notes: {
     list: (campaignId: string, address?: string) => Promise<ApiResult<Note[]>>
@@ -184,5 +214,13 @@ export interface AppApi {
   files: {
     /** Opens a native file picker and reads the chosen image back as a data: URI — see registerIpc.ts for why images are embedded rather than stored separately. */
     pickImage: () => Promise<ApiResult<{ dataUrl: string; fileName: string }>>
+  }
+  /** The window is frame:false with a fully custom titlebar (see main/index.ts) — these replace the native minimize/maximize/close buttons. */
+  windowControls: {
+    minimize: () => Promise<void>
+    toggleMaximize: () => Promise<void>
+    close: () => Promise<void>
+    isMaximized: () => Promise<boolean>
+    onMaximizedChange: (callback: (maximized: boolean) => void) => () => void
   }
 }

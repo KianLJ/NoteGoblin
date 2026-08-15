@@ -112,6 +112,21 @@ export function startHostServer(opts: HostServerOptions): Promise<HostServerHand
     send(res, campaignService.joinCampaign(opts.db, req.params.id, req.userId as string), 'campaign')
   })
 
+  // Deliberately not /campaigns/active/... — Express would match that
+  // against the /campaigns/:id/join pattern above first ("active" as the
+  // :id), never reaching these.
+  app.get('/active-campaign', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.getActiveCampaign(opts.db, req.userId as string), 'campaign')
+  })
+
+  app.post('/active-campaign', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.setActiveCampaign(opts.db, req.body?.campaignId, req.userId as string), 'campaign')
+  })
+
+  app.post('/active-campaign/join', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.joinActiveCampaign(opts.db, req.userId as string), 'campaign')
+  })
+
   app.get('/campaigns/:id/notes', auth, (req: AuthedRequest, res) => {
     send(res, campaignService.listNotes(opts.db, req.params.id, req.userId as string), 'notes')
   })

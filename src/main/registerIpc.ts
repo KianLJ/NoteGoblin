@@ -20,17 +20,23 @@ import { CharacterRepo, type CharacterRow } from '@server/repositories/character
 import { subscribeToCampaign, announceSelectedCharacter } from './wsClient'
 import {
   hasRememberedCredentials,
-  loadRememberedCredentials,
-  saveRememberedCredentials,
-  clearRememberedCredentials
+  loadLastActiveCredentials,
+  loadRememberedPassword,
+  rememberIdentity,
+  touchLastActive,
+  forgetIdentity as forgetRememberedIdentity,
+  isRemembered
 } from './rememberedCredentials'
 import {
   getCurrentIdentity,
   setCurrentIdentity,
   getHostServerHandle,
   setHostServerHandle,
+  getHostOwnerIdentityId,
+  setHostOwnerIdentityId,
   getActiveConnection,
   setActiveConnection,
+  clearActiveConnections,
   type ActiveConnection
 } from './appState'
 import type {
@@ -119,8 +125,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         identityRepo.rename(identity.id, trimmed)
         setCurrentIdentity({ ...identity, displayName: trimmed })
         // Keep any saved "remember me" credentials pointing at the new name.
-        if (hasRememberedCredentials(userDataDir)) {
-          saveRememberedCredentials(userDataDir, trimmed, identity.password)
+        if (isRemembered(userDataDir, identity.id)) {
+          rememberIdentity(userDataDir, identity.id, trimmed, identity.password)
         }
         return { ok: true, identity: { id: identity.id, displayName: trimmed } }
       } catch (err) {
@@ -142,8 +148,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       await identityRepo.setPassword(identity.id, newPassword)
       const passwordHash = identityRepo.findByDisplayName(identity.displayName)!.password_hash
       setCurrentIdentity({ ...identity, passwordHash, password: newPassword })
-      if (hasRememberedCredentials(userDataDir)) {
-        saveRememberedCredentials(userDataDir, identity.displayName, newPassword)
+      if (isRemembered(userDataDir, identity.id)) {
+        rememberIdentity(userDataDir, identity.id, identity.displayName, newPassword)
       }
       return { ok: true, identity: { id: identity.id, displayName: identity.displayName } }
     }
@@ -152,7 +158,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('identity:has-remembered', () => hasRememberedCredentials(userDataDir))
 
   ipcMain.handle('identity:auto-login', async (): Promise<LoginResult> => {
-    const stored = loadRememberedCredentials(userDataDir)
+    const stored = loadLastActiveCredentials(userDataDir)
     if (!stored) return { ok: false, error: 'No saved login.' }
     const identity = await identityRepo.verify(stored.displayName, stored.password)
     if (!identity) return { ok: false, error: 'Saved login no longer works — please log in again.' }
@@ -168,13 +174,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     'identity:remember',
     (_event, remember: boolean): { ok: true } | { ok: false; error: string } => {
       const identity = getCurrentIdentity()
+      if (!identity) return { ok: false, error: 'Log in first.' }
       if (!remember) {
-        clearRememberedCredentials(userDataDir)
+        forgetRememberedIdentity(userDataDir, identity.id)
         return { ok: true }
       }
-      if (!identity) return { ok: false, error: 'Log in first.' }
       try {
-        saveRememberedCredentials(userDataDir, identity.displayName, identity.password)
+        rememberIdentity(userDataDir, identity.id, identity.displayName, identity.password)
         return { ok: true }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : 'Could not save login.' }
@@ -182,50 +188,127 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
 
+  // Local test accounts — the schema/repo already support any number of
+  // identity rows (one per display name); this just exposes listing and
+  // switching between them. Handy for exercising the join flow without a
+  // second device: host as one identity, switch to another, join your own
+  // hosted campaign over the real network path.
+  ipcMain.handle(
+    'identity:list',
+    (): { id: string; displayName: string; remembered: boolean; current: boolean }[] => {
+      const current = getCurrentIdentity()
+      return identityRepo.list().map((account) => ({
+        ...account,
+        remembered: isRemembered(userDataDir, account.id),
+        current: account.id === current?.id
+      }))
+    }
+  )
+
+  ipcMain.handle(
+    'identity:switch',
+    async (
+      _event,
+      id: string,
+      password: string | undefined,
+      remember: boolean
+    ): Promise<LoginResult> => {
+      const row = identityRepo.findById(id)
+      if (!row) return { ok: false, error: 'That account no longer exists.' }
+
+      const resolvedPassword = password ?? loadRememberedPassword(userDataDir, id) ?? undefined
+      if (resolvedPassword === undefined) return { ok: false, error: 'Password required.' }
+
+      const identity = await identityRepo.verify(row.display_name, resolvedPassword)
+      if (!identity) return { ok: false, error: 'Incorrect password.' }
+
+      setCurrentIdentity({ ...identity, passwordHash: row.password_hash, password: resolvedPassword })
+      // Switching identities makes any cached host tokens/userIds belong to
+      // the wrong account — never let them leak across the switch. Hosting
+      // itself (if running) is untouched; it isn't tied to "who's currently
+      // browsing" in this window.
+      clearActiveConnections()
+
+      if (remember) rememberIdentity(userDataDir, identity.id, identity.displayName, resolvedPassword)
+      else if (isRemembered(userDataDir, identity.id)) touchLastActive(userDataDir, identity.id)
+
+      return { ok: true, identity }
+    }
+  )
+
+  ipcMain.handle(
+    'identity:forget-saved',
+    (_event, id: string): void => {
+      forgetRememberedIdentity(userDataDir, id)
+    }
+  )
+
   // --- Hosting ----------------------------------------------------------
+  // Whichever identity is current needs its own valid self-connection to
+  // reach the loopback address (127.0.0.1:<port>) — this is what the DM's
+  // own "connected players" presence subscription authenticates with. It
+  // used to only ever get set up once, for whichever identity happened to
+  // call hosting:start first; switching identities clears activeConnections
+  // entirely (so no identity's session token leaks into another's), which
+  // left every identity but that first one without a working self-address —
+  // their own DM view would throw "Not connected to that host" the moment
+  // it tried to subscribe to presence. Called from both hosting:start (so a
+  // freshly-started server has one immediately) and hosting:self-address
+  // (which is what actually re-runs on every mount/identity-switch once
+  // hosting is already running, since HostingCorner only calls
+  // hosting:start once and hosting:status/self-address afterward).
+  function ensureSelfConnection(handle: HostServerHandle): void {
+    const identity = getCurrentIdentity()
+    if (!identity) return
+    const address = `127.0.0.1:${handle.port}`
+    const hostDb = getHostDb(userDataDir)
+    const hostUserRepo = new UserRepo(hostDb)
+    const hostUser = hostUserRepo.ensureWithHash(identity.displayName, identity.passwordHash)
+    // Checked by *whose* connection this is, not just whether one exists —
+    // a test identity joining this same loopback address as a player (handy
+    // for same-machine testing) overwrites this map entry, since
+    // activeConnections is keyed by address alone. Without this check,
+    // switching back to the DM identity would wrongly think it's still
+    // provisioned and keep using the player's token.
+    if (getActiveConnection(address)?.userId === hostUser.id) return
+    const cert = getOrCreateHostCertificate(userDataDir)
+    const sessionSecret = getOrCreateSessionSecret(userDataDir)
+    const token = signToken(sessionSecret, hostUser.id)
+    setActiveConnection({ address, token, userId: hostUser.id, certPem: cert.cert })
+  }
+
   ipcMain.handle('hosting:start', async (): Promise<HostingStartResult> => {
     const identity = getCurrentIdentity()
     if (!identity) return { ok: false, error: 'Log in first.' }
 
-    const existing = getHostServerHandle()
-    if (existing) {
-      return { ok: true, fingerprint: existing.fingerprint, addresses: buildAddressOptions(existing) }
+    let handle = getHostServerHandle()
+    if (!handle) {
+      const hostDb = getHostDb(userDataDir)
+      const cert = getOrCreateHostCertificate(userDataDir)
+      const sessionSecret = getOrCreateSessionSecret(userDataDir)
+      try {
+        handle = await startHostServer({
+          db: hostDb,
+          cert: cert.cert,
+          key: cert.key,
+          fingerprint: cert.fingerprint,
+          sessionSecret
+        })
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException)?.code
+        const error =
+          code === 'EADDRINUSE'
+            ? `Port ${DEFAULT_HOST_PORT} is already in use — close whatever else is using it (or another NoteGoblin instance) and try again.`
+            : err instanceof Error
+              ? err.message
+              : 'Could not start hosting.'
+        return { ok: false, error }
+      }
+      setHostServerHandle(handle)
+      setHostOwnerIdentityId(identity.id)
     }
 
-    const hostDb = getHostDb(userDataDir)
-    const cert = getOrCreateHostCertificate(userDataDir)
-    const sessionSecret = getOrCreateSessionSecret(userDataDir)
-
-    let handle
-    try {
-      handle = await startHostServer({
-        db: hostDb,
-        cert: cert.cert,
-        key: cert.key,
-        fingerprint: cert.fingerprint,
-        sessionSecret
-      })
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException)?.code
-      const error =
-        code === 'EADDRINUSE'
-          ? `Port ${DEFAULT_HOST_PORT} is already in use — close whatever else is using it (or another NoteGoblin instance) and try again.`
-          : err instanceof Error
-            ? err.message
-            : 'Could not start hosting.'
-      return { ok: false, error }
-    }
-    setHostServerHandle(handle)
-
-    const hostUserRepo = new UserRepo(hostDb)
-    const hostUser = hostUserRepo.ensureWithHash(identity.displayName, identity.passwordHash)
-    const token = signToken(sessionSecret, hostUser.id)
-    setActiveConnection({
-      address: `127.0.0.1:${handle.port}`,
-      token,
-      userId: hostUser.id,
-      certPem: cert.cert
-    })
+    ensureSelfConnection(handle)
 
     return { ok: true, fingerprint: handle.fingerprint, addresses: buildAddressOptions(handle) }
   })
@@ -233,6 +316,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('hosting:stop', async (): Promise<void> => {
     const handle = getHostServerHandle()
     if (!handle) return
+    // Only the identity that started hosting can stop it — otherwise
+    // switching to a test identity to try the join flow could accidentally
+    // shut down the actual DM's table out from under them.
+    const identity = getCurrentIdentity()
+    const ownerId = getHostOwnerIdentityId()
+    if (ownerId && identity?.id !== ownerId) return
     await handle.close()
     setHostServerHandle(null)
   })
@@ -240,12 +329,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('hosting:status', (): HostingStatus => {
     const handle = getHostServerHandle()
     if (!handle) return { hosting: false }
-    return { hosting: true, fingerprint: handle.fingerprint, addresses: buildAddressOptions(handle) }
+    const ownerId = getHostOwnerIdentityId()
+    const owner = ownerId ? identityRepo.findById(ownerId) : undefined
+    const identity = getCurrentIdentity()
+    return {
+      hosting: true,
+      fingerprint: handle.fingerprint,
+      addresses: buildAddressOptions(handle),
+      startedBy: owner?.display_name ?? 'someone else',
+      isOwner: !!identity && identity.id === ownerId
+    }
   })
 
   ipcMain.handle('hosting:self-address', (): string | null => {
     const handle = getHostServerHandle()
-    return handle ? `127.0.0.1:${handle.port}` : null
+    if (!handle) return null
+    ensureSelfConnection(handle)
+    return `127.0.0.1:${handle.port}`
   })
 
   // --- Joining other hosts ----------------------------------------------
@@ -399,6 +499,57 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       const conn = requireConnection(address)
       if ('error' in conn) return { ok: false, error: conn.error }
       const result = await campaignClient.joinCampaign(address, conn.certPem, conn.token, campaignId)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.campaign }
+    }
+  )
+
+  ipcMain.handle(
+    'campaigns:get-active',
+    async (_event, address?: string): Promise<ApiResult<Campaign | null>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.getActiveCampaign(me.db, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.getActiveCampaign(address, conn.certPem, conn.token)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.campaign }
+    }
+  )
+
+  ipcMain.handle(
+    'campaigns:set-active',
+    async (_event, campaignId: string, address?: string): Promise<ApiResult<Campaign>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.setActiveCampaign(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.setActiveCampaign(address, conn.certPem, conn.token, campaignId)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.campaign }
+    }
+  )
+
+  ipcMain.handle(
+    'campaigns:join-active',
+    async (_event, address?: string): Promise<ApiResult<Campaign>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.joinActiveCampaign(me.db, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.joinActiveCampaign(address, conn.certPem, conn.token)
       if (!result.ok) return { ok: false, error: result.error }
       return { ok: true, data: result.data.campaign }
     }
@@ -694,4 +845,22 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       }
     }
   )
+
+  // --- Window controls ----------------------------------------------------
+  // Hand-rolled minimize/maximize/close since the window is frame:false —
+  // see the comment in main/index.ts for why (native titleBarOverlay's drag
+  // hit-testing was unreliable).
+  ipcMain.handle('window:minimize', () => {
+    mainWindow.minimize()
+  })
+  ipcMain.handle('window:toggle-maximize', () => {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  ipcMain.handle('window:close', () => {
+    mainWindow.close()
+  })
+  ipcMain.handle('window:is-maximized', () => mainWindow.isMaximized())
+  mainWindow.on('maximize', () => mainWindow.webContents.send('window:maximized-changed', true))
+  mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximized-changed', false))
 }

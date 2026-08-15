@@ -38,12 +38,16 @@ export function HostingCorner({ onStatusChange }: HostingCornerProps): JSX.Eleme
     setBusy(true)
     setError(null)
     const result = await window.goblin.hosting.start()
-    setBusy(false)
     if (!result.ok) {
+      setBusy(false)
       setError(result.error)
       return
     }
-    const next: HostingStatus = { hosting: true, fingerprint: result.fingerprint, addresses: result.addresses }
+    // Re-fetch rather than hand-build the status — startedBy/isOwner are
+    // resolved server-side (from whichever identity actually called
+    // hosting:start), not something this response carries directly.
+    const next = await window.goblin.hosting.status()
+    setBusy(false)
     setStatus(next)
     onStatusChange?.(next)
   }
@@ -93,9 +97,11 @@ export function HostingCorner({ onStatusChange }: HostingCornerProps): JSX.Eleme
           >
             <h3 style={{ fontSize: 15, margin: 0 }}>Your Table</h3>
             {status.hosting ? (
-              <Button variant="secondary" onClick={stop} disabled={busy}>
-                Stop Hosting
-              </Button>
+              status.isOwner && (
+                <Button variant="secondary" onClick={stop} disabled={busy}>
+                  Stop Hosting
+                </Button>
+              )
             ) : (
               <Button variant="primary" onClick={start} disabled={busy}>
                 {busy ? 'Starting…' : 'Start Hosting'}
@@ -105,6 +111,12 @@ export function HostingCorner({ onStatusChange }: HostingCornerProps): JSX.Eleme
 
           {status.hosting ? (
             <div>
+              {!status.isOwner && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
+                  Hosting was started by <strong>{status.startedBy}</strong> — you're viewing it as a
+                  different local account, not the one running it.
+                </p>
+              )}
               <p style={{ fontSize: 12, marginBottom: 'var(--space-2)' }}>
                 Share an invite code so players can join live:
               </p>

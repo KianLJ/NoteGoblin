@@ -12,3 +12,36 @@ export function CrownIcon(): JSX.Element {
     </svg>
   )
 }
+
+export function MinimizeIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <path d="M1 5h8" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  )
+}
+
+export function MaximizeIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <rect x="1" y="1" width="8" height="8" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  )
+}
+
+export function RestoreIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <rect x="2.5" y="1" width="6.5" height="6.5" stroke="currentColor" strokeWidth="1" />
+      <path d="M1 3.5V9h5.5" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  )
+}
+
+export function CloseWindowIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <path d="M1 1l8 8M9 1 1 9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  )
+}
