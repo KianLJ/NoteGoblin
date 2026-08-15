@@ -1,4 +1,6 @@
-import { app, ipcMain, type BrowserWindow } from 'electron'
+import { app, dialog, ipcMain, type BrowserWindow } from 'electron'
+import { readFile } from 'node:fs/promises'
+import { basename, extname } from 'node:path'
 import { getLocalDb } from '@server/db/localDb'
 import { getHostDb } from '@server/db/hostDb'
 import { IdentityRepo } from '@server/repositories/identityRepo'
@@ -643,6 +645,49 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     'presence:select-character',
     (_event, address: string, characterName: string | null): void => {
       announceSelectedCharacter(address, characterName)
+    }
+  )
+
+  // --- Files --------------------------------------------------------------
+  // Images are embedded as base64 data URIs directly in a note's markdown
+  // rather than stored/served separately — notes already sync to remote
+  // players as plain text via the existing notes API, so a data URI just
+  // works there for free, with no new storage layer or endpoint needed.
+  // Caps out at a few MB so one image doesn't blow up a note's row size.
+  const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+  const IMAGE_MIME_BY_EXT: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml'
+  }
+
+  ipcMain.handle(
+    'files:pick-image',
+    async (): Promise<ApiResult<{ dataUrl: string; fileName: string }>> => {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Insert image',
+        properties: ['openFile'],
+        filters: [{ name: 'Images', extensions: Object.keys(IMAGE_MIME_BY_EXT) }]
+      })
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, error: 'Cancelled.' }
+      }
+      const filePath = result.filePaths[0]
+      const mime = IMAGE_MIME_BY_EXT[extname(filePath).slice(1).toLowerCase()]
+      if (!mime) return { ok: false, error: 'Unsupported image type.' }
+      try {
+        const buffer = await readFile(filePath)
+        if (buffer.byteLength > MAX_IMAGE_BYTES) {
+          return { ok: false, error: 'That image is too large (max 8 MB) — try a smaller file.' }
+        }
+        const dataUrl = `data:${mime};base64,${buffer.toString('base64')}`
+        return { ok: true, data: { dataUrl, fileName: basename(filePath) } }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Could not read that file.' }
+      }
     }
   )
 }

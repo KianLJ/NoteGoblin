@@ -66,6 +66,9 @@ const api: AppApi = {
       ipcRenderer.on('ws:presence', listener)
       return () => ipcRenderer.removeListener('ws:presence', listener)
     }
+  },
+  files: {
+    pickImage: () => ipcRenderer.invoke('files:pick-image')
   }
 }
 

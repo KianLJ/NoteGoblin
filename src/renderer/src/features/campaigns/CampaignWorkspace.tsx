@@ -97,7 +97,14 @@ export function CampaignWorkspace({
             No campaign yet — add one in the sidebar.
           </div>
         ) : activeNote ? (
-          <NoteEditor key={activeNote.id} note={activeNote} onSave={(patch) => saveNote(activeNote.id, patch)} />
+          <NoteEditor
+            key={activeNote.id}
+            note={activeNote}
+            notes={notes ?? []}
+            onSave={(patch) => saveNote(activeNote.id, patch)}
+            onNavigateToNote={openNote}
+            onCreateAndLinkNote={(title) => createNote(activeNote.visibility, null, title)}
+          />
         ) : (
           <div
             style={{

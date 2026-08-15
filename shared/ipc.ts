@@ -181,4 +181,8 @@ export interface AppApi {
     selectCharacter: (address: string, characterName: string | null) => Promise<void>
     onUpdate: (callback: (update: PresenceUpdate) => void) => () => void
   }
+  files: {
+    /** Opens a native file picker and reads the chosen image back as a data: URI — see registerIpc.ts for why images are embedded rather than stored separately. */
+    pickImage: () => Promise<ApiResult<{ dataUrl: string; fileName: string }>>
+  }
 }

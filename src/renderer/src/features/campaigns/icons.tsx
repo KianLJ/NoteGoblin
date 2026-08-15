@@ -155,3 +155,73 @@ export function LocateIcon(): JSX.Element {
     </svg>
   )
 }
+
+export function ImageIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.3" stroke="currentColor" strokeWidth="1.1" />
+      <circle cx="5.3" cy="6" r="1.1" stroke="currentColor" strokeWidth="1.1" />
+      <path
+        d="M2.3 11.8 6 8.3a1 1 0 0 1 1.3 0l1 .9a1 1 0 0 0 1.3 0l1.4-1.3a1 1 0 0 1 1.3 0l1.4 1.3"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+export function LinkIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M6.8 9.2a2.6 2.6 0 0 0 3.9.3l1.7-1.7a2.7 2.7 0 0 0-3.9-3.9L7.2 5.3"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.2 6.8a2.6 2.6 0 0 0-3.9-.3L3.6 8.2a2.7 2.7 0 0 0 3.9 3.9l1.3-1.4"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+export function TableIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.2" stroke="currentColor" strokeWidth="1.1" />
+      <path d="M1.8 6.5h12.4M6.3 2.8v10.4M10.7 2.8v10.4" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  )
+}
+
+export function EyeIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M1.5 8S3.8 3.3 8 3.3 14.5 8 14.5 8 12.2 12.7 8 12.7 1.5 8 1.5 8Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  )
+}
+
+export function PencilIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M10.9 2.6a1.4 1.4 0 0 1 2 2L5.5 11.9l-2.7.7.7-2.7 7.4-7.3Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}

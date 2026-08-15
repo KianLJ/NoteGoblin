@@ -107,7 +107,14 @@ export function PlayerWorkspaceBody({
             onDelete={() => deleteCharacter(activeCharacter.id)}
           />
         ) : activeNote ? (
-          <NoteEditor key={activeNote.id} note={activeNote} onSave={(patch) => saveNote(activeNote.id, patch)} />
+          <NoteEditor
+            key={activeNote.id}
+            note={activeNote}
+            notes={notes ?? []}
+            onSave={(patch) => saveNote(activeNote.id, patch)}
+            onNavigateToNote={(id) => openTab({ kind: 'note', id })}
+            onCreateAndLinkNote={(title) => createNote(null, title)}
+          />
         ) : (
           <div
             style={{

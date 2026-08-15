@@ -114,3 +114,171 @@
   border-top: 1px solid var(--border-subtle);
   margin: var(--space-4) 0;
 }
+
+/* Rendered note markdown — headings, tables, images, wikilinks. */
+.gb-markdown {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+.gb-markdown h1,
+.gb-markdown h2,
+.gb-markdown h3,
+.gb-markdown h4,
+.gb-markdown h5,
+.gb-markdown h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.2em 0 0.5em;
+}
+.gb-markdown h1:first-child,
+.gb-markdown h2:first-child,
+.gb-markdown h3:first-child {
+  margin-top: 0;
+}
+.gb-markdown h1 {
+  font-size: 26px;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.gb-markdown h2 {
+  font-size: 21px;
+}
+.gb-markdown h3 {
+  font-size: 17px;
+}
+.gb-markdown h4 {
+  font-size: 15px;
+}
+.gb-markdown h5,
+.gb-markdown h6 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.gb-markdown p {
+  margin: 0 0 1em;
+}
+.gb-markdown ul,
+.gb-markdown ol {
+  margin: 0 0 1em;
+  padding-left: 1.5em;
+}
+.gb-markdown li {
+  margin: 0.2em 0;
+}
+.gb-markdown blockquote {
+  margin: 0 0 1em;
+  padding: 0.2em 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--text-secondary);
+}
+.gb-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--bg-sunken);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
+}
+.gb-markdown pre {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  overflow-x: auto;
+  margin: 0 0 1em;
+}
+.gb-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.gb-markdown img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+}
+.gb-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 1.5em 0;
+}
+.gb-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 1em;
+  font-size: 13px;
+}
+.gb-markdown th,
+.gb-markdown td {
+  border: 1px solid var(--border-subtle);
+  padding: 6px 10px;
+  text-align: left;
+}
+.gb-markdown th {
+  background: var(--bg-sunken);
+  font-weight: 700;
+}
+.gb-markdown a {
+  color: var(--accent);
+}
+.gb-wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--accent);
+  cursor: pointer;
+}
+.gb-wikilink:hover {
+  color: var(--accent-hover);
+  border-bottom-style: solid;
+}
+.gb-wikilink--broken {
+  color: var(--danger);
+  border-bottom-color: var(--danger);
+}
+
+/* Live-preview decorations inside MarkdownLiveEditor (CodeMirror) — mirrors
+   .gb-markdown's headings/links, applied inline to the same editable text. */
+.cm-live-h1,
+.cm-live-h2,
+.cm-live-h3,
+.cm-live-h4,
+.cm-live-h5,
+.cm-live-h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.cm-live-h1 {
+  font-size: 26px;
+}
+.cm-live-h2 {
+  font-size: 21px;
+}
+.cm-live-h3 {
+  font-size: 17px;
+}
+.cm-live-h4 {
+  font-size: 15px;
+}
+.cm-live-h5,
+.cm-live-h6 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.cm-live-bold {
+  font-weight: 700;
+}
+.cm-live-italic {
+  font-style: italic;
+}
+.cm-live-wikilink {
+  color: var(--accent);
+  border-bottom: 1px dotted var(--accent);
+  cursor: pointer;
+}
+.cm-live-wikilink--broken {
+  color: var(--danger);
+  border-bottom-color: var(--danger);
+}

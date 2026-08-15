@@ -1,28 +1,52 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { Note } from '@shared/ipc'
+import { renderNoteMarkdown } from '../../markdown'
+import { MarkdownLiveEditor, type MarkdownLiveEditorHandle } from './MarkdownLiveEditor'
+import { EyeIcon, ImageIcon, LinkIcon, PencilIcon, TableIcon } from './icons'
 
 interface NoteEditorProps {
   note: Note
+  /** Every note currently visible to you, across all sections — resolves [[Title]] wikilinks and feeds the link picker. Excludes nothing by visibility since you can only ever see what you're already allowed to. */
+  notes: Note[]
   onSave: (patch: { title?: string; bodyMarkdown?: string }) => void
+  /** Wikilink target matched an existing note by title — open it. */
+  onNavigateToNote: (noteId: string) => void
+  /** Wikilink target didn't match anything — create a note with that title (in this note's own visibility) and open it. */
+  onCreateAndLinkNote: (title: string) => void
 }
 
 const AUTOSAVE_DELAY_MS = 700
+const TABLE_TEMPLATE = '\n| Header 1 | Header 2 |\n| --- | --- |\n| Cell | Cell |\n| Cell | Cell |\n'
 
 /**
  * Keyed by note.id from the parent, so switching notes remounts this with
  * fresh local state instead of leaking edits between files.
  *
- * Title/body are uncontrolled (defaultValue, not value) on purpose: a
- * controlled value here fights the browser's native undo stack — Ctrl+Z ends
- * up reverting the DOM and then immediately getting stomped back to React's
- * state on the next render, so undo looks broken. Local state still tracks
- * the latest typed value (via onChange) for autosave/onBlur, it just never
- * gets fed back into the field.
+ * "Write" mode is an Obsidian-style Live Preview (see MarkdownLiveEditor) —
+ * headers/bold/italic/wikilinks render inline in the same single pane
+ * you're editing, un-rendering back to raw syntax right where your cursor
+ * is so you can change it. "Preview" is the fully rendered, read-only view
+ * (tables and images included — those don't have a sensible "live" inline
+ * form, so they only show up here, not in Write mode).
+ *
+ * The title field is uncontrolled (defaultValue, not value) for the same
+ * reason CodeMirror owns its own document instead of a controlled React
+ * string: fighting the field's own undo/edit state from React on every
+ * keystroke is what broke Ctrl+Z originally.
  */
-export function NoteEditor({ note, onSave }: NoteEditorProps): JSX.Element {
+export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndLinkNote }: NoteEditorProps): JSX.Element {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.bodyMarkdown)
+  const [mode, setMode] = useState<'write' | 'preview'>('write')
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false)
+  const [linkQuery, setLinkQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const editorRef = useRef<MarkdownLiveEditorHandle>(null)
+  const linkPickerRef = useRef<HTMLDivElement>(null)
+  const knownTitlesRef = useRef<Set<string>>(new Set())
+
+  const knownTitles = useMemo(() => new Set(notes.map((n) => (n.title || 'Untitled').toLowerCase())), [notes])
+  knownTitlesRef.current = knownTitles
 
   function scheduleSave(patch: { title?: string; bodyMarkdown?: string }): void {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -34,6 +58,59 @@ export function NoteEditor({ note, onSave }: NoteEditorProps): JSX.Element {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!linkPickerOpen) return
+    function handleClickOutside(e: MouseEvent): void {
+      if (linkPickerRef.current && !linkPickerRef.current.contains(e.target as Node)) setLinkPickerOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [linkPickerOpen])
+
+  function handleBodyChange(value: string): void {
+    setBody(value)
+    scheduleSave({ bodyMarkdown: value })
+  }
+
+  function insertText(text: string): void {
+    if (mode !== 'write') setMode('write')
+    editorRef.current?.insertText(text)
+  }
+
+  async function handleInsertImage(): Promise<void> {
+    const result = await window.goblin.files.pickImage()
+    if (!result.ok) return
+    insertText(`![${result.data.fileName}](${result.data.dataUrl})`)
+  }
+
+  function handlePickLink(target: Note): void {
+    insertText(`[[${target.title || 'Untitled'}]]`)
+    setLinkPickerOpen(false)
+    setLinkQuery('')
+  }
+
+  function resolveWikilink(target: string): void {
+    const match = notes.find((n) => (n.title || 'Untitled').toLowerCase() === target.toLowerCase())
+    if (match) onNavigateToNote(match.id)
+    else onCreateAndLinkNote(target)
+  }
+
+  function handlePreviewClick(e: ReactMouseEvent<HTMLDivElement>): void {
+    const link = (e.target as HTMLElement).closest<HTMLElement>('[data-wikilink]')
+    if (!link) return
+    e.preventDefault()
+    resolveWikilink(link.dataset.wikilink as string)
+  }
+
+  const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles), [body, knownTitles])
+  const linkableNotes = useMemo(
+    () =>
+      notes
+        .filter((n) => n.id !== note.id)
+        .filter((n) => (n.title || 'Untitled').toLowerCase().includes(linkQuery.toLowerCase())),
+    [notes, note.id, linkQuery]
+  )
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--space-5)' }}>
@@ -72,30 +149,144 @@ export function NoteEditor({ note, onSave }: NoteEditorProps): JSX.Element {
         </div>
       </div>
 
-      <textarea
-        defaultValue={note.bodyMarkdown}
-        onChange={(e) => {
-          setBody(e.target.value)
-          scheduleSave({ bodyMarkdown: e.target.value })
-        }}
-        onBlur={() => onSave({ bodyMarkdown: body })}
-        placeholder="Write in Markdown…"
+      <div
         style={{
-          flex: 1,
-          resize: 'none',
-          border: 'none',
-          outline: 'none',
-          background: 'transparent',
-          fontFamily: 'var(--font-body)',
-          fontSize: 14,
-          lineHeight: 1.7,
-          color: 'var(--text-primary)'
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          marginBottom: 'var(--space-2)',
+          borderBottom: '1px solid var(--border-subtle)',
+          paddingBottom: 'var(--space-2)'
         }}
-      />
+      >
+        {mode === 'write' && (
+          <>
+            <ToolbarButton title="Insert image" onClick={() => void handleInsertImage()}>
+              <ImageIcon />
+            </ToolbarButton>
+            <div ref={linkPickerRef} style={{ position: 'relative' }}>
+              <ToolbarButton title="Link a note" onClick={() => setLinkPickerOpen((o) => !o)}>
+                <LinkIcon />
+              </ToolbarButton>
+              {linkPickerOpen && (
+                <div
+                  className="gb-card"
+                  style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, width: 240, padding: 'var(--space-2)', zIndex: 20 }}
+                >
+                  <input
+                    autoFocus
+                    className="gb-input"
+                    placeholder="Find a note…"
+                    value={linkQuery}
+                    onChange={(e) => setLinkQuery(e.target.value)}
+                    style={{ fontSize: 13, marginBottom: 6 }}
+                  />
+                  <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {linkableNotes.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => handlePickLink(n)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '5px 6px',
+                          border: 'none',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'transparent',
+                          color: 'var(--text-primary)',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-sunken)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        {n.title || 'Untitled'}
+                      </button>
+                    ))}
+                    {linkableNotes.length === 0 && (
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '4px 6px' }}>No matches</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <ToolbarButton title="Insert table" onClick={() => insertText(TABLE_TEMPLATE)}>
+              <TableIcon />
+            </ToolbarButton>
+            <div style={{ width: 1, height: 18, background: 'var(--border-subtle)', margin: '0 4px' }} />
+          </>
+        )}
+        <ToolbarButton
+          title={mode === 'write' ? 'Preview' : 'Back to editing'}
+          onClick={() => setMode((m) => (m === 'write' ? 'preview' : 'write'))}
+        >
+          {mode === 'write' ? <EyeIcon /> : <PencilIcon />}
+        </ToolbarButton>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, display: mode === 'write' ? 'block' : 'none' }}>
+        <MarkdownLiveEditor
+          ref={editorRef}
+          defaultValue={note.bodyMarkdown}
+          knownTitlesRef={knownTitlesRef}
+          onChange={handleBodyChange}
+          onWikilinkClick={resolveWikilink}
+        />
+      </div>
+      {mode === 'preview' && (
+        <div
+          className="gb-markdown"
+          onClick={handlePreviewClick}
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      )}
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
         by {note.authorDisplayName}
       </div>
     </div>
+  )
+}
+
+function ToolbarButton({
+  title,
+  onClick,
+  children
+}: {
+  title: string
+  onClick: () => void
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'none',
+        border: 'none',
+        color: 'var(--text-muted)',
+        cursor: 'pointer',
+        padding: 6,
+        borderRadius: 'var(--radius-sm)'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--bg-sunken)'
+        e.currentTarget.style.color = 'var(--text-primary)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'none'
+        e.currentTarget.style.color = 'var(--text-muted)'
+      }}
+    >
+      {children}
+    </button>
   )
 }

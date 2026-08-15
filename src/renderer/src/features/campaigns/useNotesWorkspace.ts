@@ -57,12 +57,16 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
     })
   }
 
-  async function createNote(visibility: 'dm' | 'shared', folderId: string | null = null): Promise<void> {
+  async function createNote(
+    visibility: 'dm' | 'shared',
+    folderId: string | null = null,
+    title: string = 'Untitled'
+  ): Promise<void> {
     if (!campaignId) return
     setError(null)
     const result = await window.goblin.notes.create(
       campaignId,
-      { title: 'Untitled', bodyMarkdown: '', visibility, folderId },
+      { title, bodyMarkdown: '', visibility, folderId },
       address
     )
     if (!result.ok) {

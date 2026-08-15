@@ -154,12 +154,12 @@ export function usePlayerWorkspace(address: string | undefined) {
     closeTab({ kind: 'character', id })
   }
 
-  async function createNote(folderId: string | null = null): Promise<void> {
+  async function createNote(folderId: string | null = null, title: string = 'Untitled'): Promise<void> {
     if (!activeCampaign) return
     setError(null)
     const result = await window.goblin.notes.create(
       activeCampaign.id,
-      { title: 'Untitled', bodyMarkdown: '', visibility: 'shared', folderId },
+      { title, bodyMarkdown: '', visibility: 'shared', folderId },
       address
     )
     if (!result.ok) {
