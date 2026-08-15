@@ -147,6 +147,46 @@ export function startHostServer(opts: HostServerOptions): Promise<HostServerHand
     }
   })
 
+  app.get('/campaigns/:id/folders', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.listFolders(opts.db, req.params.id, req.userId as string), 'folders')
+  })
+
+  app.post('/campaigns/:id/folders', auth, (req: AuthedRequest, res) => {
+    send(
+      res,
+      campaignService.createFolder(opts.db, req.params.id, req.userId as string, req.body ?? {}),
+      'folder'
+    )
+  })
+
+  app.patch('/campaigns/:id/folders/:folderId', auth, (req: AuthedRequest, res) => {
+    send(
+      res,
+      campaignService.updateFolder(
+        opts.db,
+        req.params.id,
+        req.params.folderId,
+        req.userId as string,
+        req.body ?? {}
+      ),
+      'folder'
+    )
+  })
+
+  app.delete('/campaigns/:id/folders/:folderId', auth, (req: AuthedRequest, res) => {
+    const result = campaignService.deleteFolder(
+      opts.db,
+      req.params.id,
+      req.params.folderId,
+      req.userId as string
+    )
+    if (result.ok) {
+      res.json({ ok: true })
+    } else {
+      res.status(result.status).json({ error: result.error })
+    }
+  })
+
   const httpsServer: HttpsServer = createHttpsServer({ cert: opts.cert, key: opts.key }, app)
   const wss = new WebSocketServer({ server: httpsServer, path: '/ws' })
 

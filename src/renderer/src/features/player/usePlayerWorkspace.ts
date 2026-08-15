@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Campaign, CharacterSheet, Note } from '@shared/ipc'
+import type { Campaign, CharacterSheet, Folder, Note } from '@shared/ipc'
 
 export type PlayerTabRef = { kind: 'character'; id: string } | { kind: 'note'; id: string }
 
@@ -20,6 +20,7 @@ export function usePlayerWorkspace(address: string | undefined) {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null)
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
+  const [folders, setFolders] = useState<Folder[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tabs, setTabs] = useState<PlayerTabRef[]>([])
   const [activeTab, setActiveTabState] = useState<PlayerTabRef | null>(null)
@@ -41,6 +42,7 @@ export function usePlayerWorkspace(address: string | undefined) {
   useEffect(() => {
     if (!activeCampaign) {
       setNotes(null)
+      setFolders(null)
       return
     }
     refreshNotes(activeCampaign.id)
@@ -81,6 +83,13 @@ export function usePlayerWorkspace(address: string | undefined) {
         return
       }
       setNotes(result.data)
+    })
+    window.goblin.folders.list(campaignId, address).then((result) => {
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      setFolders(result.data)
     })
   }
 
@@ -145,12 +154,12 @@ export function usePlayerWorkspace(address: string | undefined) {
     closeTab({ kind: 'character', id })
   }
 
-  async function createNote(): Promise<void> {
+  async function createNote(folderId: string | null = null): Promise<void> {
     if (!activeCampaign) return
     setError(null)
     const result = await window.goblin.notes.create(
       activeCampaign.id,
-      { title: 'Untitled', bodyMarkdown: '', visibility: 'shared' },
+      { title: 'Untitled', bodyMarkdown: '', visibility: 'shared', folderId },
       address
     )
     if (!result.ok) {
@@ -161,7 +170,10 @@ export function usePlayerWorkspace(address: string | undefined) {
     openTab({ kind: 'note', id: result.data.id })
   }
 
-  async function saveNote(id: string, patch: { title?: string; bodyMarkdown?: string }): Promise<void> {
+  async function saveNote(
+    id: string,
+    patch: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' }
+  ): Promise<void> {
     if (!activeCampaign) return
     const result = await window.goblin.notes.update(activeCampaign.id, id, patch, address)
     if (!result.ok) {
@@ -182,6 +194,111 @@ export function usePlayerWorkspace(address: string | undefined) {
     closeTab({ kind: 'note', id })
   }
 
+  async function createFolder(name: string, parentFolderId: string | null = null): Promise<string | undefined> {
+    if (!activeCampaign) return undefined
+    setError(null)
+    const result = await window.goblin.folders.create(
+      activeCampaign.id,
+      { name, visibility: 'shared', parentFolderId },
+      address
+    )
+    if (!result.ok) {
+      setError(result.error)
+      return undefined
+    }
+    setFolders((prev) => (prev ? [...prev, result.data] : [result.data]))
+    return result.data.id
+  }
+
+  async function renameFolder(folderId: string, name: string): Promise<void> {
+    if (!activeCampaign) return
+    const result = await window.goblin.folders.update(activeCampaign.id, folderId, { name }, address)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setFolders((prev) => prev?.map((f) => (f.id === folderId ? result.data : f)) ?? prev)
+  }
+
+  async function moveFolder(
+    folderId: string,
+    parentFolderId: string | null,
+    visibility?: 'dm' | 'shared'
+  ): Promise<void> {
+    if (!activeCampaign) return
+    const result = await window.goblin.folders.update(
+      activeCampaign.id,
+      folderId,
+      { parentFolderId, ...(visibility ? { visibility } : {}) },
+      address
+    )
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setFolders((prev) => prev?.map((f) => (f.id === folderId ? result.data : f)) ?? prev)
+  }
+
+  async function deleteFolder(folderId: string): Promise<void> {
+    if (!activeCampaign) return
+    const result = await window.goblin.folders.remove(activeCampaign.id, folderId, address)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    refreshNotes(activeCampaign.id)
+  }
+
+  /** Copy-paste for a single note. */
+  async function duplicateNote(
+    sourceId: string,
+    targetFolderId: string | null,
+    targetVisibility: 'dm' | 'shared'
+  ): Promise<void> {
+    if (!activeCampaign) return
+    const source = notes?.find((n) => n.id === sourceId)
+    if (!source) return
+    setError(null)
+    const result = await window.goblin.notes.create(
+      activeCampaign.id,
+      { title: source.title, bodyMarkdown: source.bodyMarkdown, visibility: targetVisibility, folderId: targetFolderId },
+      address
+    )
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setNotes((prev) => (prev ? [result.data, ...prev] : [result.data]))
+  }
+
+  /** Copy-paste for a folder — recursively duplicates its whole subtree under the new parent, from a stable snapshot of notes/folders taken when called. */
+  async function duplicateFolder(
+    sourceId: string,
+    targetParentId: string | null,
+    targetVisibility: 'dm' | 'shared'
+  ): Promise<void> {
+    if (!activeCampaign) return
+    const sourceFolders = folders ?? []
+    const sourceNotes = notes ?? []
+    const source = sourceFolders.find((f) => f.id === sourceId)
+    if (!source) return
+
+    async function copySubtree(folderId: string, parentId: string | null): Promise<void> {
+      const original = sourceFolders.find((f) => f.id === folderId)
+      if (!original) return
+      const newId = await createFolder(original.name, parentId)
+      if (!newId) return
+      for (const child of sourceFolders.filter((f) => f.parentFolderId === folderId)) {
+        await copySubtree(child.id, newId)
+      }
+      for (const note of sourceNotes.filter((n) => n.folderId === folderId)) {
+        await duplicateNote(note.id, newId, targetVisibility)
+      }
+    }
+
+    await copySubtree(source.id, targetParentId)
+  }
+
   const activeCharacter =
     activeTab?.kind === 'character' ? (characters?.find((c) => c.id === activeTab.id) ?? null) : null
   const activeNote =
@@ -198,6 +315,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     campaigns,
     activeCampaign,
     notes,
+    folders,
     error,
     tabItems,
     activeTab,
@@ -212,6 +330,12 @@ export function usePlayerWorkspace(address: string | undefined) {
     createNote,
     saveNote,
     deleteNote,
+    createFolder,
+    renameFolder,
+    moveFolder,
+    deleteFolder,
+    duplicateNote,
+    duplicateFolder,
     activeCharacter,
     activeNote
   }

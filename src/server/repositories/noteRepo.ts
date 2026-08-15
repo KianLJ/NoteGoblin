@@ -10,6 +10,7 @@ export interface NoteRow {
   title: string
   body_markdown: string
   visibility: NoteVisibility
+  folder_id: string | null
   created_at: string
   updated_at: string
 }
@@ -39,11 +40,12 @@ export class NoteRepo {
     title: string
     bodyMarkdown: string
     visibility: NoteVisibility
+    folderId: string | null
   }): NoteRow {
     const id = uuid()
     this.db
       .prepare(
-        'INSERT INTO notes (id, campaign_id, author_user_id, title, body_markdown, visibility) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO notes (id, campaign_id, author_user_id, title, body_markdown, visibility, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         id,
@@ -51,21 +53,28 @@ export class NoteRepo {
         input.authorUserId,
         input.title,
         input.bodyMarkdown,
-        input.visibility
+        input.visibility,
+        input.folderId
       )
     return this.findById(id)!
   }
 
-  update(id: string, input: { title?: string; bodyMarkdown?: string }): NoteRow | undefined {
+  /** `folderId` is tri-state: omit to leave unchanged, pass null to move to root, pass an id to move into that folder. */
+  update(
+    id: string,
+    input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: NoteVisibility }
+  ): NoteRow | undefined {
     const existing = this.findById(id)
     if (!existing) return undefined
     const title = input.title ?? existing.title
     const bodyMarkdown = input.bodyMarkdown ?? existing.body_markdown
+    const folderId: string | null = 'folderId' in input ? (input.folderId as string | null) : existing.folder_id
+    const visibility = input.visibility ?? existing.visibility
     this.db
       .prepare(
-        "UPDATE notes SET title = ?, body_markdown = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+        "UPDATE notes SET title = ?, body_markdown = ?, folder_id = ?, visibility = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
       )
-      .run(title, bodyMarkdown, id)
+      .run(title, bodyMarkdown, folderId, visibility, id)
     return this.findById(id)
   }
 

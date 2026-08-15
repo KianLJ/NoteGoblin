@@ -73,7 +73,7 @@ export function CampaignSwitcher({ address, canCreate, current, onSelect }: Camp
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
       {open && (
         <div
           className="gb-card"
@@ -174,7 +174,7 @@ export function CampaignSwitcher({ address, canCreate, current, onSelect }: Camp
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="gb-btn gb-btn--secondary"
-        style={{ maxWidth: 240, boxShadow: 'var(--shadow-md)' }}
+        style={{ width: '100%', minWidth: 0, boxShadow: 'var(--shadow-md)' }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {current ? current.name : canCreate ? '+ Add a campaign' : 'No campaign yet'}

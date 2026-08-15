@@ -24,7 +24,22 @@ export function CampaignWorkspace({
   onSwitchCampaign,
   hostingSelfAddress
 }: CampaignWorkspaceProps): JSX.Element {
-  const { notes, error, activeNote, openNote, createNote, saveNote, deleteNote } = workspace
+  const {
+    notes,
+    folders,
+    error,
+    activeNote,
+    openNote,
+    createNote,
+    saveNote,
+    deleteNote,
+    createFolder,
+    renameFolder,
+    moveFolder,
+    deleteFolder,
+    duplicateNote,
+    duplicateFolder
+  } = workspace
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -43,10 +58,22 @@ export function CampaignWorkspace({
 
       <NoteSidebar
         notes={notes ?? []}
+        folders={folders ?? []}
         isDm
         activeId={workspace.activeId}
+        myDisplayName={myDisplayName}
+        campaignId={campaign?.id ?? null}
         onSelect={openNote}
-        onCreate={campaign ? createNote : undefined}
+        onCreateNote={(visibility, folderId) => createNote(visibility, folderId)}
+        onCreateFolder={(visibility, name, parentFolderId) => createFolder(visibility, name, parentFolderId)}
+        onRenameNote={(noteId, title) => saveNote(noteId, { title })}
+        onDeleteNote={deleteNote}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={deleteFolder}
+        onMoveNote={(noteId, folderId, visibility) => saveNote(noteId, { folderId, visibility })}
+        onMoveFolder={moveFolder}
+        onPasteNote={duplicateNote}
+        onPasteFolder={duplicateFolder}
         footer={
           <>
             <CampaignSwitcher canCreate current={campaign} onSelect={onSwitchCampaign} />
@@ -70,13 +97,7 @@ export function CampaignWorkspace({
             No campaign yet — add one in the sidebar.
           </div>
         ) : activeNote ? (
-          <NoteEditor
-            key={activeNote.id}
-            note={activeNote}
-            canDelete={activeNote.authorDisplayName === myDisplayName}
-            onSave={(patch) => saveNote(activeNote.id, patch)}
-            onDelete={() => deleteNote(activeNote.id)}
-          />
+          <NoteEditor key={activeNote.id} note={activeNote} onSave={(patch) => saveNote(activeNote.id, patch)} />
         ) : (
           <div
             style={{

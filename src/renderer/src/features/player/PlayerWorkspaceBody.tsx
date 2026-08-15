@@ -23,6 +23,7 @@ export function PlayerWorkspaceBody({
     campaigns,
     activeCampaign,
     notes,
+    folders,
     activeTab,
     activeCharacter,
     activeNote,
@@ -35,6 +36,12 @@ export function PlayerWorkspaceBody({
     createNote,
     saveNote,
     deleteNote,
+    createFolder,
+    renameFolder,
+    moveFolder,
+    deleteFolder,
+    duplicateNote,
+    duplicateFolder,
     error
   } = workspace
 
@@ -58,11 +65,22 @@ export function PlayerWorkspaceBody({
         campaigns={campaigns}
         activeCampaign={activeCampaign}
         notes={notes}
+        folders={folders}
         activeTab={activeTab}
+        myDisplayName={myDisplayName}
         onSelectCharacter={(id) => openTab({ kind: 'character', id })}
         onSelectNote={(id) => openTab({ kind: 'note', id })}
         onCreateCharacter={() => createCharacter('New Character')}
         onCreateNote={createNote}
+        onCreateFolder={createFolder}
+        onRenameNote={(noteId, title) => saveNote(noteId, { title })}
+        onDeleteNote={deleteNote}
+        onRenameFolder={renameFolder}
+        onDeleteFolder={deleteFolder}
+        onMoveNote={(noteId, folderId, visibility) => saveNote(noteId, { folderId, visibility })}
+        onMoveFolder={moveFolder}
+        onPasteNote={duplicateNote}
+        onPasteFolder={duplicateFolder}
         onJoinCampaign={joinCampaign}
         onSelectCampaign={selectCampaign}
         connectedLabel={connectedLabel}
@@ -89,13 +107,7 @@ export function PlayerWorkspaceBody({
             onDelete={() => deleteCharacter(activeCharacter.id)}
           />
         ) : activeNote ? (
-          <NoteEditor
-            key={activeNote.id}
-            note={activeNote}
-            canDelete={activeNote.authorDisplayName === myDisplayName}
-            onSave={(patch) => saveNote(activeNote.id, patch)}
-            onDelete={() => deleteNote(activeNote.id)}
-          />
+          <NoteEditor key={activeNote.id} note={activeNote} onSave={(patch) => saveNote(activeNote.id, patch)} />
         ) : (
           <div
             style={{

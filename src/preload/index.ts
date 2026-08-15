@@ -42,6 +42,15 @@ const api: AppApi = {
     remove: (campaignId, noteId, address) =>
       ipcRenderer.invoke('notes:remove', campaignId, noteId, address)
   },
+  folders: {
+    list: (campaignId, address) => ipcRenderer.invoke('folders:list', campaignId, address),
+    create: (campaignId, input, address) =>
+      ipcRenderer.invoke('folders:create', campaignId, input, address),
+    update: (campaignId, folderId, input, address) =>
+      ipcRenderer.invoke('folders:update', campaignId, folderId, input, address),
+    remove: (campaignId, folderId, address) =>
+      ipcRenderer.invoke('folders:remove', campaignId, folderId, address)
+  },
   characters: {
     list: () => ipcRenderer.invoke('characters:list'),
     create: (name) => ipcRenderer.invoke('characters:create', name),

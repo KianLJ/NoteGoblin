@@ -30,6 +30,26 @@ CREATE TABLE IF NOT EXISTS campaign_members (
   PRIMARY KEY (campaign_id, user_id)
 );
 
+-- Folders organize notes into a tree, scoped to the same 'dm'/'shared'
+-- visibility split as notes (a folder's own visibility, not its contents'
+-- individual notes, gates who sees it) so the two note sections in the
+-- sidebar (Shared Notes / DM Only) each get their own independent tree.
+-- Deleting a folder deletes everything beneath it (sub-folders and notes),
+-- recursively — see FolderRepo.remove.
+CREATE TABLE IF NOT EXISTS folders (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  author_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  parent_folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
+  visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_folders_campaign ON folders(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_folder_id);
+
 CREATE TABLE IF NOT EXISTS notes (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
@@ -39,11 +59,13 @@ CREATE TABLE IF NOT EXISTS notes (
   -- 'dm' notes are only ever returned to their author (the DM); 'shared'
   -- notes are returned to every campaign member. Enforced server-side.
   visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared')),
+  folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_notes_campaign ON notes(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id);
 
 -- The campaign-facing copy of a character, created when a player pairs a
 -- locally-owned character (see localSchema.ts) to this campaign.

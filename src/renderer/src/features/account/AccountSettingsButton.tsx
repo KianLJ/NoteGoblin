@@ -17,7 +17,7 @@ export function AccountSettingsButton(): JSX.Element {
   }, [])
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative', flexShrink: 0 }}>
       {open && (
         <div
           className="gb-card"

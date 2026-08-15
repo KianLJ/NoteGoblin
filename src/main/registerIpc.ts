@@ -44,6 +44,7 @@ import type {
   ApiResult,
   Campaign,
   Note,
+  Folder,
   CharacterSheet
 } from '@shared/ipc'
 
@@ -423,7 +424,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     async (
       _event,
       campaignId: string,
-      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared' },
+      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared'; folderId?: string | null },
       address?: string
     ): Promise<ApiResult<Note>> => {
       if (!address) {
@@ -452,7 +453,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       _event,
       campaignId: string,
       noteId: string,
-      input: { title?: string; bodyMarkdown?: string },
+      input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' },
       address?: string
     ): Promise<ApiResult<Note>> => {
       if (!address) {
@@ -488,6 +489,98 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       const conn = requireConnection(address)
       if ('error' in conn) return { ok: false, error: conn.error }
       const result = await campaignClient.deleteNote(address, conn.certPem, conn.token, campaignId, noteId)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: undefined }
+    }
+  )
+
+  ipcMain.handle(
+    'folders:list',
+    async (_event, campaignId: string, address?: string): Promise<ApiResult<Folder[]>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.listFolders(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.listFolders(address, conn.certPem, conn.token, campaignId)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.folders }
+    }
+  )
+
+  ipcMain.handle(
+    'folders:create',
+    async (
+      _event,
+      campaignId: string,
+      input: { name: string; visibility: 'dm' | 'shared'; parentFolderId?: string | null },
+      address?: string
+    ): Promise<ApiResult<Folder>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.createFolder(me.db, campaignId, me.userId, input)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.createFolder(
+        address,
+        conn.certPem,
+        conn.token,
+        campaignId,
+        input
+      )
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.folder }
+    }
+  )
+
+  ipcMain.handle(
+    'folders:update',
+    async (
+      _event,
+      campaignId: string,
+      folderId: string,
+      input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' },
+      address?: string
+    ): Promise<ApiResult<Folder>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.updateFolder(me.db, campaignId, folderId, me.userId, input)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.updateFolder(
+        address,
+        conn.certPem,
+        conn.token,
+        campaignId,
+        folderId,
+        input
+      )
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.folder }
+    }
+  )
+
+  ipcMain.handle(
+    'folders:remove',
+    async (_event, campaignId: string, folderId: string, address?: string): Promise<ApiResult<void>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.deleteFolder(me.db, campaignId, folderId, me.userId)
+        return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.deleteFolder(address, conn.certPem, conn.token, campaignId, folderId)
       if (!result.ok) return { ok: false, error: result.error }
       return { ok: true, data: undefined }
     }

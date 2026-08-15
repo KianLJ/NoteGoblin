@@ -17,6 +17,19 @@ export interface NoteJson {
   title: string
   bodyMarkdown: string
   visibility: 'dm' | 'shared'
+  folderId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FolderJson {
+  id: string
+  campaignId: string
+  authorUserId: string
+  authorDisplayName: string
+  name: string
+  parentFolderId: string | null
+  visibility: 'dm' | 'shared'
   createdAt: string
   updatedAt: string
 }
@@ -79,7 +92,7 @@ export function createNote(
   certPem: string,
   token: string,
   campaignId: string,
-  input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared' }
+  input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared'; folderId?: string | null }
 ): Promise<ClientResult<{ note: NoteJson }>> {
   return call(address, certPem, token, 'POST', `/campaigns/${campaignId}/notes`, input)
 }
@@ -90,7 +103,7 @@ export function updateNote(
   token: string,
   campaignId: string,
   noteId: string,
-  input: { title?: string; bodyMarkdown?: string }
+  input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' }
 ): Promise<ClientResult<{ note: NoteJson }>> {
   return call(address, certPem, token, 'PATCH', `/campaigns/${campaignId}/notes/${noteId}`, input)
 }
@@ -103,4 +116,44 @@ export function deleteNote(
   noteId: string
 ): Promise<ClientResult<{ ok: true }>> {
   return call(address, certPem, token, 'DELETE', `/campaigns/${campaignId}/notes/${noteId}`)
+}
+
+export function listFolders(
+  address: string,
+  certPem: string,
+  token: string,
+  campaignId: string
+): Promise<ClientResult<{ folders: FolderJson[] }>> {
+  return call(address, certPem, token, 'GET', `/campaigns/${campaignId}/folders`)
+}
+
+export function createFolder(
+  address: string,
+  certPem: string,
+  token: string,
+  campaignId: string,
+  input: { name: string; visibility: 'dm' | 'shared'; parentFolderId?: string | null }
+): Promise<ClientResult<{ folder: FolderJson }>> {
+  return call(address, certPem, token, 'POST', `/campaigns/${campaignId}/folders`, input)
+}
+
+export function updateFolder(
+  address: string,
+  certPem: string,
+  token: string,
+  campaignId: string,
+  folderId: string,
+  input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' }
+): Promise<ClientResult<{ folder: FolderJson }>> {
+  return call(address, certPem, token, 'PATCH', `/campaigns/${campaignId}/folders/${folderId}`, input)
+}
+
+export function deleteFolder(
+  address: string,
+  certPem: string,
+  token: string,
+  campaignId: string,
+  folderId: string
+): Promise<ClientResult<{ ok: true }>> {
+  return call(address, certPem, token, 'DELETE', `/campaigns/${campaignId}/folders/${folderId}`)
 }

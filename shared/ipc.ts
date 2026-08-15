@@ -57,6 +57,20 @@ export interface Note {
   title: string
   bodyMarkdown: string
   visibility: 'dm' | 'shared'
+  folderId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Folders share notes' 'dm'/'shared' visibility split — a folder's own visibility (not its contents') gates who sees it, so Shared Notes and DM Only are two independent trees. */
+export interface Folder {
+  id: string
+  campaignId: string
+  authorUserId: string
+  authorDisplayName: string
+  name: string
+  parentFolderId: string | null
+  visibility: 'dm' | 'shared'
   createdAt: string
   updatedAt: string
 }
@@ -125,16 +139,31 @@ export interface AppApi {
     list: (campaignId: string, address?: string) => Promise<ApiResult<Note[]>>
     create: (
       campaignId: string,
-      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared' },
+      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared'; folderId?: string | null },
       address?: string
     ) => Promise<ApiResult<Note>>
     update: (
       campaignId: string,
       noteId: string,
-      input: { title?: string; bodyMarkdown?: string },
+      input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' },
       address?: string
     ) => Promise<ApiResult<Note>>
     remove: (campaignId: string, noteId: string, address?: string) => Promise<ApiResult<void>>
+  }
+  folders: {
+    list: (campaignId: string, address?: string) => Promise<ApiResult<Folder[]>>
+    create: (
+      campaignId: string,
+      input: { name: string; visibility: 'dm' | 'shared'; parentFolderId?: string | null },
+      address?: string
+    ) => Promise<ApiResult<Folder>>
+    update: (
+      campaignId: string,
+      folderId: string,
+      input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' },
+      address?: string
+    ) => Promise<ApiResult<Folder>>
+    remove: (campaignId: string, folderId: string, address?: string) => Promise<ApiResult<void>>
   }
   // Characters live entirely on your own device, owned by your local
   // identity — campaign-independent, no address/network involved.

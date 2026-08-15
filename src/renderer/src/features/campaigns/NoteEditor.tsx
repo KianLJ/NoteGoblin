@@ -3,15 +3,23 @@ import type { Note } from '@shared/ipc'
 
 interface NoteEditorProps {
   note: Note
-  canDelete: boolean
   onSave: (patch: { title?: string; bodyMarkdown?: string }) => void
-  onDelete: () => void
 }
 
 const AUTOSAVE_DELAY_MS = 700
 
-/** Keyed by note.id from the parent, so switching notes remounts this with fresh local state instead of leaking edits between files. */
-export function NoteEditor({ note, canDelete, onSave, onDelete }: NoteEditorProps): JSX.Element {
+/**
+ * Keyed by note.id from the parent, so switching notes remounts this with
+ * fresh local state instead of leaking edits between files.
+ *
+ * Title/body are uncontrolled (defaultValue, not value) on purpose: a
+ * controlled value here fights the browser's native undo stack — Ctrl+Z ends
+ * up reverting the DOM and then immediately getting stomped back to React's
+ * state on the next render, so undo looks broken. Local state still tracks
+ * the latest typed value (via onChange) for autosave/onBlur, it just never
+ * gets fed back into the field.
+ */
+export function NoteEditor({ note, onSave }: NoteEditorProps): JSX.Element {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.bodyMarkdown)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
@@ -39,7 +47,7 @@ export function NoteEditor({ note, canDelete, onSave, onDelete }: NoteEditorProp
         }}
       >
         <input
-          value={title}
+          defaultValue={note.title}
           onChange={(e) => {
             setTitle(e.target.value)
             scheduleSave({ title: e.target.value })
@@ -61,28 +69,11 @@ export function NoteEditor({ note, canDelete, onSave, onDelete }: NoteEditorProp
           <span className={`gb-badge ${note.visibility === 'dm' ? 'gb-badge--danger' : 'gb-badge--success'}`}>
             {note.visibility === 'dm' ? 'DM Only' : 'Shared'}
           </span>
-          {canDelete && (
-            <button
-              type="button"
-              onClick={onDelete}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-muted)',
-                fontSize: 12,
-                cursor: 'pointer',
-                textDecoration: 'underline',
-                padding: 0
-              }}
-            >
-              Delete
-            </button>
-          )}
         </div>
       </div>
 
       <textarea
-        value={body}
+        defaultValue={note.bodyMarkdown}
         onChange={(e) => {
           setBody(e.target.value)
           scheduleSave({ bodyMarkdown: e.target.value })

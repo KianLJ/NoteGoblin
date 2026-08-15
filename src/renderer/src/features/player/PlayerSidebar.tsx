@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '../../ui/Button'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { FileIcon, PlusIcon } from '../campaigns/icons'
+import { PlusIcon } from '../campaigns/icons'
+import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
 import { UserIcon } from './icons'
 import { JoinCampaignPanel } from '../connect/JoinCampaignPanel'
-import type { Campaign, CharacterSheet, Note } from '@shared/ipc'
+import type { Campaign, CharacterSheet, Folder, Note } from '@shared/ipc'
 import type { PlayerTabRef } from './usePlayerWorkspace'
 
 interface PlayerSidebarProps {
@@ -12,11 +13,22 @@ interface PlayerSidebarProps {
   campaigns: Campaign[] | null
   activeCampaign: Campaign | null
   notes: Note[] | null
+  folders: Folder[] | null
   activeTab: PlayerTabRef | null
+  myDisplayName: string
   onSelectCharacter: (id: string) => void
   onSelectNote: (id: string) => void
   onCreateCharacter: () => void
-  onCreateNote: () => void
+  onCreateNote: (folderId: string | null) => void
+  onCreateFolder: (name: string, parentFolderId: string | null) => Promise<string | undefined>
+  onRenameNote: (noteId: string, title: string) => void
+  onDeleteNote: (noteId: string) => void
+  onRenameFolder: (folderId: string, name: string) => void
+  onDeleteFolder: (folderId: string) => void
+  onMoveNote: (noteId: string, folderId: string | null, visibility: 'dm' | 'shared') => void
+  onMoveFolder: (folderId: string, parentFolderId: string | null, visibility: 'dm' | 'shared') => void
+  onPasteNote: (sourceNoteId: string, targetFolderId: string | null, targetVisibility: 'dm' | 'shared') => void
+  onPasteFolder: (sourceFolderId: string, targetParentId: string | null, targetVisibility: 'dm' | 'shared') => void
   onJoinCampaign: (campaignId: string) => void
   onSelectCampaign: (campaign: Campaign) => void
   connectedLabel: string | null
@@ -30,17 +42,30 @@ export function PlayerSidebar({
   campaigns,
   activeCampaign,
   notes,
+  folders,
   activeTab,
+  myDisplayName,
   onSelectCharacter,
   onSelectNote,
   onCreateCharacter,
   onCreateNote,
+  onCreateFolder,
+  onRenameNote,
+  onDeleteNote,
+  onRenameFolder,
+  onDeleteFolder,
+  onMoveNote,
+  onMoveFolder,
+  onPasteNote,
+  onPasteFolder,
   onJoinCampaign,
   onSelectCampaign,
   connectedLabel,
   onConnected,
   footer
 }: PlayerSidebarProps): JSX.Element {
+  const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
+
   return (
     <ResizableSidebar
       defaultWidth={220}
@@ -53,7 +78,8 @@ export function PlayerSidebar({
             padding: 'var(--space-2)',
             display: 'flex',
             gap: 'var(--space-2)',
-            flexShrink: 0
+            flexShrink: 0,
+            minWidth: 0
           }}
         >
           {footer}
@@ -78,44 +104,59 @@ export function PlayerSidebar({
           onConnected={onConnected}
         />
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2) 0' }}>
-          <Section title="My Characters" onCreate={onCreateCharacter}>
-            {characters.map((character) => {
-              const active = activeTab?.kind === 'character' && activeTab.id === character.id
-              return (
-                <Row
-                  key={character.id}
-                  icon={<UserIcon />}
-                  label={character.name || 'Untitled'}
-                  active={active}
-                  onClick={() => onSelectCharacter(character.id)}
-                />
-              )
-            })}
-            {characters.length === 0 && <EmptyHint>No characters yet</EmptyHint>}
-          </Section>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flexShrink: 0, overflowY: 'auto', padding: 'var(--space-2) 0' }}>
+            <Section title="My Characters" onCreate={onCreateCharacter}>
+              {characters.map((character) => {
+                const active = activeTab?.kind === 'character' && activeTab.id === character.id
+                return (
+                  <Row
+                    key={character.id}
+                    icon={<UserIcon />}
+                    label={character.name || 'Untitled'}
+                    active={active}
+                    onClick={() => onSelectCharacter(character.id)}
+                  />
+                )
+              })}
+              {characters.length === 0 && <EmptyHint>No characters yet</EmptyHint>}
+            </Section>
+          </div>
 
-          <Section title="Campaign Notes" onCreate={activeCampaign ? onCreateNote : undefined}>
-            {activeCampaign ? (
-              <>
-                {(notes ?? []).map((note) => {
-                  const active = activeTab?.kind === 'note' && activeTab.id === note.id
-                  return (
-                    <Row
-                      key={note.id}
-                      icon={<FileIcon />}
-                      label={note.title || 'Untitled'}
-                      active={active}
-                      onClick={() => onSelectNote(note.id)}
-                    />
-                  )
-                })}
-                {(notes ?? []).length === 0 && <EmptyHint>No notes yet</EmptyHint>}
-              </>
-            ) : (
-              <EmptyHint>{connectedLabel ? 'Pick a campaign above' : 'Connect to a table above'}</EmptyHint>
-            )}
-          </Section>
+          {activeCampaign ? (
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <NoteTreeSection
+                title="Campaign Notes"
+                storageKey={`${activeCampaign.id}:player`}
+                visibility="shared"
+                fill
+                notes={notes ?? []}
+                folders={folders ?? []}
+                activeId={activeTab?.kind === 'note' ? activeTab.id : null}
+                myDisplayName={myDisplayName}
+                onSelectNote={onSelectNote}
+                onCreateNote={onCreateNote}
+                onCreateFolder={onCreateFolder}
+                onRenameNote={onRenameNote}
+                onDeleteNote={onDeleteNote}
+                onRenameFolder={onRenameFolder}
+                onDeleteFolder={onDeleteFolder}
+                onMoveNote={onMoveNote}
+                onMoveFolder={onMoveFolder}
+                onPasteNote={onPasteNote}
+                onPasteFolder={onPasteFolder}
+                clipboard={clipboard}
+                onSetClipboard={(items: ClipboardItem[], mode) => setClipboard({ items, mode })}
+                onClearClipboard={() => setClipboard(null)}
+              />
+            </div>
+          ) : (
+            <div style={{ overflowY: 'auto', padding: 'var(--space-2) 0' }}>
+              <Section title="Campaign Notes">
+                <EmptyHint>{connectedLabel ? 'Pick a campaign above' : 'Connect to a table above'}</EmptyHint>
+              </Section>
+            </div>
+          )}
         </div>
       </div>
     </ResizableSidebar>
