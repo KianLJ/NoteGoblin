@@ -150,6 +150,33 @@ export function startHostServer(opts: HostServerOptions): Promise<HostServerHand
   const httpsServer: HttpsServer = createHttpsServer({ cert: opts.cert, key: opts.key }, app)
   const wss = new WebSocketServer({ server: httpsServer, path: '/ws' })
 
+  // --- Presence -------------------------------------------------------------
+  // Every open socket, tagged with whichever campaign it's currently
+  // "subscribed" to (a client subscribes after opening a campaign) and
+  // whichever character it last announced. Broadcast to everyone subscribed
+  // to that campaign whenever any of that changes — this is the foundation
+  // future live features (initiative tracker, chat) build on too.
+  interface PresenceEntry {
+    socket: WebSocket
+    userId: string
+    displayName: string
+    campaignId: string | null
+    characterName: string | null
+  }
+  const connections = new Set<PresenceEntry>()
+
+  function broadcastPresence(campaignId: string): void {
+    const players = [...connections]
+      .filter((c) => c.campaignId === campaignId)
+      .map((c) => ({ userId: c.userId, displayName: c.displayName, characterName: c.characterName }))
+    const payload = JSON.stringify({ type: 'presence', campaignId, players })
+    for (const c of connections) {
+      if (c.campaignId === campaignId && c.socket.readyState === c.socket.OPEN) {
+        c.socket.send(payload)
+      }
+    }
+  }
+
   wss.on('connection', (socket: WebSocket, request) => {
     const url = new URL(request.url ?? '', 'https://notegoblin.local')
     const token = url.searchParams.get('token') ?? ''
@@ -158,9 +185,43 @@ export function startHostServer(opts: HostServerOptions): Promise<HostServerHand
       socket.close(4001, 'Unauthorized')
       return
     }
-    // Presence, initiative broadcast, and chat channel wiring land with the
-    // campaigns/initiative/chat build steps — this just proves the
-    // authenticated upgrade path works end to end.
+
+    const account = userRepo.findById(payload.userId)
+    const entry: PresenceEntry = {
+      socket,
+      userId: payload.userId,
+      displayName: account?.display_name ?? 'Unknown',
+      campaignId: null,
+      characterName: null
+    }
+    connections.add(entry)
+
+    socket.on('message', (raw) => {
+      let message: unknown
+      try {
+        message = JSON.parse(raw.toString())
+      } catch {
+        return
+      }
+      if (typeof message !== 'object' || message === null) return
+      const msg = message as { type?: unknown; campaignId?: unknown; characterName?: unknown }
+
+      if (msg.type === 'subscribe' && typeof msg.campaignId === 'string') {
+        const previousCampaignId = entry.campaignId
+        entry.campaignId = msg.campaignId
+        if (previousCampaignId) broadcastPresence(previousCampaignId)
+        broadcastPresence(entry.campaignId)
+      } else if (msg.type === 'select-character') {
+        entry.characterName = typeof msg.characterName === 'string' ? msg.characterName : null
+        if (entry.campaignId) broadcastPresence(entry.campaignId)
+      }
+    })
+
+    socket.on('close', () => {
+      connections.delete(entry)
+      if (entry.campaignId) broadcastPresence(entry.campaignId)
+    })
+
     socket.send(JSON.stringify({ type: 'connected', userId: payload.userId }))
   })
 
@@ -175,6 +236,14 @@ export function startHostServer(opts: HostServerOptions): Promise<HostServerHand
         fingerprint: opts.fingerprint,
         close: () =>
           new Promise((res) => {
+            // wss.close() alone only stops accepting new upgrades — it does
+            // NOT close already-open client sockets, and httpsServer.close()
+            // waits for every connection (including those) to end before its
+            // callback fires. Without terminating them explicitly, stopping
+            // the server while any player is still connected hangs forever.
+            for (const client of wss.clients) {
+              client.terminate()
+            }
             wss.close(() => {
               httpsServer.close(() => res())
             })

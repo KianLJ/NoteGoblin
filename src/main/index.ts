@@ -4,7 +4,7 @@ import { registerIpcHandlers } from './registerIpc'
 
 const isDev = !app.isPackaged
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -46,11 +46,11 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers()
-
   if (!isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
@@ -64,7 +64,8 @@ app.whenReady().then(() => {
     })
   }
 
-  createWindow()
+  const mainWindow = createWindow()
+  registerIpcHandlers(mainWindow)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

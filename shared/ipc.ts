@@ -61,6 +61,26 @@ export interface Note {
   updatedAt: string
 }
 
+export interface CharacterSheet {
+  id: string
+  name: string
+  notes: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PresencePlayer {
+  userId: string
+  displayName: string
+  characterName: string | null
+}
+
+export interface PresenceUpdate {
+  address: string
+  campaignId: string
+  players: PresencePlayer[]
+}
+
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
 export interface AppApi {
@@ -115,5 +135,21 @@ export interface AppApi {
       address?: string
     ) => Promise<ApiResult<Note>>
     remove: (campaignId: string, noteId: string, address?: string) => Promise<ApiResult<void>>
+  }
+  // Characters live entirely on your own device, owned by your local
+  // identity — campaign-independent, no address/network involved.
+  characters: {
+    list: () => Promise<ApiResult<CharacterSheet[]>>
+    create: (name: string) => Promise<ApiResult<CharacterSheet>>
+    update: (id: string, input: { name?: string; notes?: string }) => Promise<ApiResult<CharacterSheet>>
+    remove: (id: string) => Promise<ApiResult<void>>
+  }
+  // Live "who's here" for a campaign, over the same WebSocket connection
+  // used for future real-time features (initiative, chat). Only meaningful
+  // for a host address you're actively connected to.
+  presence: {
+    subscribe: (address: string, campaignId: string) => Promise<void>
+    selectCharacter: (address: string, characterName: string | null) => Promise<void>
+    onUpdate: (callback: (update: PresenceUpdate) => void) => () => void
   }
 }

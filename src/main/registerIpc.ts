@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, type BrowserWindow } from 'electron'
 import { getLocalDb } from '@server/db/localDb'
 import { getHostDb } from '@server/db/hostDb'
 import { IdentityRepo } from '@server/repositories/identityRepo'
@@ -9,10 +9,13 @@ import { getOrCreateSessionSecret } from '@server/auth/sessionSecret'
 import { signToken } from '@server/auth/token'
 import { startHostServer, DEFAULT_HOST_PORT, type HostServerHandle } from '@server/hostServer'
 import { probeAddress, authenticateWithHost } from '@server/net/connectToHost'
+import { friendlyConnectionError } from '@server/net/friendlyConnectionError'
 import { getLocalAddresses } from '@server/net/localAddresses'
 import { encodeInviteCode, decodeInviteCode } from '@server/net/inviteCode'
 import * as campaignClient from '@server/net/campaignClient'
 import * as campaignService from '@server/services/campaignService'
+import { CharacterRepo, type CharacterRow } from '@server/repositories/characterRepo'
+import { subscribeToCampaign, announceSelectedCharacter } from './wsClient'
 import {
   hasRememberedCredentials,
   loadRememberedCredentials,
@@ -40,7 +43,8 @@ import type {
   DecodeInviteResult,
   ApiResult,
   Campaign,
-  Note
+  Note,
+  CharacterSheet
 } from '@shared/ipc'
 
 /** Every network-reachable (non-loopback) address this machine has, each with an invite code baked for it. Loopback is left out — it's only useful to the host's own process, never to a joining player. */
@@ -51,7 +55,7 @@ function buildAddressOptions(handle: HostServerHandle): HostAddressOption[] {
   })
 }
 
-export function registerIpcHandlers(): void {
+export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const userDataDir = app.getPath('userData')
   const localDb = getLocalDb(userDataDir)
   const identityRepo = new IdentityRepo(localDb)
@@ -257,7 +261,7 @@ export function registerIpcHandlers(): void {
         previousFingerprint: known.certFingerprint
       }
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Could not reach that address.' }
+      return { ok: false, error: friendlyConnectionError(err) }
     }
   })
 
@@ -278,9 +282,18 @@ export function registerIpcHandlers(): void {
         if (!auth.ok) return { ok: false, error: auth.error }
 
         const existingLabel = knownHostRepo.findByAddress(address)?.label
+        // A raw IP:port is meaningless to remember by — default to whichever
+        // DM's table this is instead. Only computed the first time a host is
+        // seen; an existing (auto- or user-set) label always wins after that.
+        let defaultLabel = address
+        if (!label?.trim() && !existingLabel) {
+          const campaignsResult = await campaignClient.listCampaigns(address, probed.certPem, auth.token)
+          const dmName = campaignsResult.ok ? campaignsResult.data.campaigns[0]?.dmDisplayName : undefined
+          if (dmName) defaultLabel = `${dmName}'s Table`
+        }
         knownHostRepo.upsert({
           address,
-          label: label?.trim() || existingLabel || address,
+          label: label?.trim() || existingLabel || defaultLabel,
           certFingerprint: probed.fingerprint,
           certPem: probed.certPem
         })
@@ -293,10 +306,7 @@ export function registerIpcHandlers(): void {
 
         return { ok: true, address, fingerprint: probed.fingerprint }
       } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : 'Could not connect to that host.'
-        }
+        return { ok: false, error: friendlyConnectionError(err) }
       }
     }
   )
@@ -480,6 +490,66 @@ export function registerIpcHandlers(): void {
       const result = await campaignClient.deleteNote(address, conn.certPem, conn.token, campaignId, noteId)
       if (!result.ok) return { ok: false, error: result.error }
       return { ok: true, data: undefined }
+    }
+  )
+
+  // --- Characters -----------------------------------------------------
+  // Entirely local — owned by the local identity, never routed over the
+  // network, so no address/host concept applies here at all.
+  const characterRepo = new CharacterRepo(localDb)
+
+  function toCharacterSheet(row: CharacterRow): CharacterSheet {
+    const sheet = JSON.parse(row.sheet_json || '{}') as { notes?: string }
+    return {
+      id: row.id,
+      name: row.name,
+      notes: sheet.notes ?? '',
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }
+  }
+
+  ipcMain.handle('characters:list', (): ApiResult<CharacterSheet[]> => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    return { ok: true, data: characterRepo.listByOwner(identity.id).map(toCharacterSheet) }
+  })
+
+  ipcMain.handle('characters:create', (_event, name: string): ApiResult<CharacterSheet> => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    if (name.trim().length < 1) return { ok: false, error: 'Give your character a name.' }
+    return { ok: true, data: toCharacterSheet(characterRepo.create(identity.id, name.trim())) }
+  })
+
+  ipcMain.handle(
+    'characters:update',
+    (_event, id: string, input: { name?: string; notes?: string }): ApiResult<CharacterSheet> => {
+      const identity = getCurrentIdentity()
+      if (!identity) return { ok: false, error: 'Log in first.' }
+      const updated = characterRepo.update(id, identity.id, input)
+      if (!updated) return { ok: false, error: 'Character not found.' }
+      return { ok: true, data: toCharacterSheet(updated) }
+    }
+  )
+
+  ipcMain.handle('characters:remove', (_event, id: string): ApiResult<void> => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    const removed = characterRepo.remove(id, identity.id)
+    if (!removed) return { ok: false, error: 'Character not found.' }
+    return { ok: true, data: undefined }
+  })
+
+  // --- Presence ---------------------------------------------------------
+  ipcMain.handle('presence:subscribe', (_event, address: string, campaignId: string): void => {
+    subscribeToCampaign(address, campaignId, mainWindow)
+  })
+
+  ipcMain.handle(
+    'presence:select-character',
+    (_event, address: string, characterName: string | null): void => {
+      announceSelectedCharacter(address, characterName)
     }
   )
 }

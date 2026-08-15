@@ -82,8 +82,11 @@
 
 :root[data-theme='dark'] {
   --bg-canvas: var(--ink-950);
-  --bg-surface: var(--ink-900);
-  --bg-surface-raised: var(--ink-800);
+  /* Deliberately lighter than --bg-sunken by more than a shade — sidebars/
+     chrome should read as visibly recessed relative to the main content
+     surface, not just barely-distinguishable dark-on-dark. */
+  --bg-surface: var(--ink-800);
+  --bg-surface-raised: var(--ink-700);
   --bg-sunken: #100d09;
   --border-subtle: var(--ink-700);
   --border-strong: var(--parchment-300);

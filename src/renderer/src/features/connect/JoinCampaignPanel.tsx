@@ -319,19 +319,30 @@ export function JoinCampaignPanel({ onConnected }: JoinCampaignPanelProps): JSX.
             }}
           >
             {knownHosts.map((host) => (
-              <div
-                key={host.address}
-                className="gb-card"
-                style={{
-                  padding: 'var(--space-3)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{host.label}</div>
-                  <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
+              <div key={host.address} className="gb-card" style={{ padding: 'var(--space-3)', minWidth: 0 }}>
+                <div style={{ minWidth: 0, marginBottom: 'var(--space-2)' }}>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      fontSize: 14,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {host.label}
+                  </div>
+                  <code
+                    style={{
+                      display: 'block',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
                     {host.address}
                   </code>
                 </div>
@@ -340,10 +351,15 @@ export function JoinCampaignPanel({ onConnected }: JoinCampaignPanelProps): JSX.
                     variant="secondary"
                     onClick={() => handleReconnect(host)}
                     disabled={reconnectingAddress === host.address}
+                    style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
                   >
                     {reconnectingAddress === host.address ? 'Connecting…' : 'Reconnect'}
                   </Button>
-                  <Button variant="ghost" onClick={() => handleForget(host.address)}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => handleForget(host.address)}
+                    style={{ fontSize: 12, padding: '4px 8px', flexShrink: 0 }}
+                  >
                     Forget
                   </Button>
                 </div>

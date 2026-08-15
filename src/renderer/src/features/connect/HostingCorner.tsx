@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import type { HostAddressOption, HostingStatus } from '@shared/ipc'
 
+interface HostingCornerProps {
+  onStatusChange?: (status: HostingStatus) => void
+}
+
 /** A compact hosting toggle for the header — hosting is only about letting remote players connect, not a gate on editing your own campaigns, so it doesn't need to dominate the screen. */
-export function HostingCorner(): JSX.Element {
+export function HostingCorner({ onStatusChange }: HostingCornerProps): JSX.Element {
   const [status, setStatus] = useState<HostingStatus | null>(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -11,7 +15,13 @@ export function HostingCorner(): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.goblin.hosting.status().then(setStatus)
+    window.goblin.hosting.status().then((s) => {
+      setStatus(s)
+      onStatusChange?.(s)
+    })
+    // onStatusChange is expected to be referentially stable for the life of
+    // this component — only re-run this fetch on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -33,14 +43,18 @@ export function HostingCorner(): JSX.Element {
       setError(result.error)
       return
     }
-    setStatus({ hosting: true, fingerprint: result.fingerprint, addresses: result.addresses })
+    const next: HostingStatus = { hosting: true, fingerprint: result.fingerprint, addresses: result.addresses }
+    setStatus(next)
+    onStatusChange?.(next)
   }
 
   async function stop(): Promise<void> {
     setBusy(true)
     await window.goblin.hosting.stop()
     setBusy(false)
-    setStatus({ hosting: false })
+    const next: HostingStatus = { hosting: false }
+    setStatus(next)
+    onStatusChange?.(next)
   }
 
   if (!status) return <></>

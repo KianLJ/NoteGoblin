@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppApi } from '../../shared/ipc'
+import type { AppApi, PresenceUpdate } from '../../shared/ipc'
 
 const api: AppApi = {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
@@ -41,6 +41,22 @@ const api: AppApi = {
       ipcRenderer.invoke('notes:update', campaignId, noteId, input, address),
     remove: (campaignId, noteId, address) =>
       ipcRenderer.invoke('notes:remove', campaignId, noteId, address)
+  },
+  characters: {
+    list: () => ipcRenderer.invoke('characters:list'),
+    create: (name) => ipcRenderer.invoke('characters:create', name),
+    update: (id, input) => ipcRenderer.invoke('characters:update', id, input),
+    remove: (id) => ipcRenderer.invoke('characters:remove', id)
+  },
+  presence: {
+    subscribe: (address, campaignId) => ipcRenderer.invoke('presence:subscribe', address, campaignId),
+    selectCharacter: (address, characterName) =>
+      ipcRenderer.invoke('presence:select-character', address, characterName),
+    onUpdate: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, update: PresenceUpdate): void => callback(update)
+      ipcRenderer.on('ws:presence', listener)
+      return () => ipcRenderer.removeListener('ws:presence', listener)
+    }
   }
 }
 

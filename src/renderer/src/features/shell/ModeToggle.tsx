@@ -1,9 +1,17 @@
+import { CrownIcon } from './icons'
+import { UserIcon } from '../player/icons'
+
 export type Mode = 'dm' | 'player'
 
 interface ModeToggleProps {
   mode: Mode
   onChange: (mode: Mode) => void
 }
+
+const OPTIONS: Array<{ mode: Mode; label: string; icon: JSX.Element }> = [
+  { mode: 'dm', label: 'DM Mode', icon: <CrownIcon /> },
+  { mode: 'player', label: 'Player Mode', icon: <UserIcon /> }
+]
 
 export function ModeToggle({ mode, onChange }: ModeToggleProps): JSX.Element {
   return (
@@ -18,28 +26,28 @@ export function ModeToggle({ mode, onChange }: ModeToggleProps): JSX.Element {
         border: '1px solid var(--border-subtle)'
       }}
     >
-      {(['dm', 'player'] as const).map((option) => (
+      {OPTIONS.map((option) => (
         <button
-          key={option}
+          key={option.mode}
           role="tab"
-          aria-selected={mode === option}
-          onClick={() => onChange(option)}
+          aria-selected={mode === option.mode}
+          title={option.label}
+          onClick={() => onChange(option.mode)}
           style={{
-            padding: '6px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '6px 12px',
             borderRadius: 'var(--radius-sm)',
             border: 'none',
-            fontSize: 13,
-            fontWeight: 700,
-            letterSpacing: '0.03em',
-            textTransform: 'uppercase',
             cursor: 'pointer',
-            background: mode === option ? 'var(--bg-surface-raised)' : 'transparent',
-            color: mode === option ? 'var(--accent)' : 'var(--text-muted)',
-            boxShadow: mode === option ? 'var(--shadow-sm)' : 'none',
+            background: mode === option.mode ? 'var(--bg-surface-raised)' : 'transparent',
+            color: mode === option.mode ? 'var(--accent)' : 'var(--text-muted)',
+            boxShadow: mode === option.mode ? 'var(--shadow-sm)' : 'none',
             transition: 'all 120ms ease'
           }}
         >
-          {option === 'dm' ? 'DM' : 'Player'}
+          {option.icon}
         </button>
       ))}
     </div>

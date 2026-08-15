@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { FileIcon, LockIcon, PlusIcon } from './icons'
+import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import type { Note } from '@shared/ipc'
 
 interface NoteSidebarProps {
@@ -7,40 +8,61 @@ interface NoteSidebarProps {
   isDm: boolean
   activeId: string | null
   onSelect: (id: string) => void
-  onCreate: (visibility: 'dm' | 'shared') => void
+  /** undefined when there's no campaign to attach a note to yet — sections just hide their "+". */
+  onCreate?: (visibility: 'dm' | 'shared') => void
+  /** The campaign switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
+  footer: ReactNode
 }
 
-export function NoteSidebar({ notes, isDm, activeId, onSelect, onCreate }: NoteSidebarProps): JSX.Element {
+export function NoteSidebar({ notes, isDm, activeId, onSelect, onCreate, footer }: NoteSidebarProps): JSX.Element {
   const shared = notes.filter((n) => n.visibility === 'shared')
   const dmOnly = notes.filter((n) => n.visibility === 'dm')
 
   return (
-    <div
-      style={{
-        width: 220,
-        flexShrink: 0,
-        borderRight: '1px solid var(--border-subtle)',
-        background: 'var(--bg-sunken)',
-        overflowY: 'auto',
-        padding: 'var(--space-2) 0'
-      }}
+    <ResizableSidebar
+      defaultWidth={220}
+      footer={
+        <div
+          style={{
+            borderRight: '1px solid var(--border-subtle)',
+            borderTop: '1px solid var(--border-subtle)',
+            background: 'var(--bg-sunken)',
+            padding: 'var(--space-2)',
+            display: 'flex',
+            gap: 'var(--space-2)',
+            flexShrink: 0
+          }}
+        >
+          {footer}
+        </div>
+      }
     >
-      <Section title="Shared Notes" onCreate={() => onCreate('shared')}>
-        {shared.map((note) => (
-          <FileRow key={note.id} note={note} active={note.id === activeId} onClick={() => onSelect(note.id)} />
-        ))}
-        {shared.length === 0 && <EmptyHint />}
-      </Section>
-
-      {isDm && (
-        <Section title="DM Only" icon={<LockIcon />} onCreate={() => onCreate('dm')}>
-          {dmOnly.map((note) => (
+      <div
+        style={{
+          height: '100%',
+          borderRight: '1px solid var(--border-subtle)',
+          background: 'var(--bg-sunken)',
+          overflowY: 'auto',
+          padding: 'var(--space-2) 0'
+        }}
+      >
+        <Section title="Shared Notes" onCreate={onCreate && (() => onCreate('shared'))}>
+          {shared.map((note) => (
             <FileRow key={note.id} note={note} active={note.id === activeId} onClick={() => onSelect(note.id)} />
           ))}
-          {dmOnly.length === 0 && <EmptyHint />}
+          {shared.length === 0 && <EmptyHint />}
         </Section>
-      )}
-    </div>
+
+        {isDm && (
+          <Section title="DM Only" icon={<LockIcon />} onCreate={onCreate && (() => onCreate('dm'))}>
+            {dmOnly.map((note) => (
+              <FileRow key={note.id} note={note} active={note.id === activeId} onClick={() => onSelect(note.id)} />
+            ))}
+            {dmOnly.length === 0 && <EmptyHint />}
+          </Section>
+        )}
+      </div>
+    </ResizableSidebar>
   )
 }
 
@@ -52,7 +74,7 @@ function Section({
 }: {
   title: string
   icon?: ReactNode
-  onCreate: () => void
+  onCreate?: () => void
   children: ReactNode
 }): JSX.Element {
   return (
@@ -80,21 +102,23 @@ function Section({
           {icon}
           {title}
         </span>
-        <button
-          type="button"
-          onClick={onCreate}
-          title="New note"
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            padding: 2,
-            display: 'flex'
-          }}
-        >
-          <PlusIcon />
-        </button>
+        {onCreate && (
+          <button
+            type="button"
+            onClick={onCreate}
+            title="New note"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: 2,
+              display: 'flex'
+            }}
+          >
+            <PlusIcon />
+          </button>
+        )}
       </div>
       {children}
     </div>
