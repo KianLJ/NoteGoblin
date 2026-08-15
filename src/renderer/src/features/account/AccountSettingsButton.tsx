@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { GearIcon } from './icons'
+import { ChevronRightIcon } from '../campaigns/icons'
+import { ColorTokenEditor } from './ColorTokenEditor'
+import { getStoredMode, setThemeMode, type ThemeMode } from '../../theme'
 import type { Identity } from '@shared/ipc'
 
 /** Bottom-left gear button, next to the campaign switcher — lets you view/edit your local identity's display name and password, and manage remembered login. */
@@ -53,6 +56,14 @@ function AccountSettingsForm(): JSX.Element {
   const [passwordSaved, setPasswordSaved] = useState(false)
 
   const [remembered, setRemembered] = useState<boolean | null>(null)
+
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredMode())
+  const [passwordOpen, setPasswordOpen] = useState(false)
+
+  function chooseThemeMode(mode: ThemeMode): void {
+    setThemeMode(mode)
+    setThemeModeState(mode)
+  }
 
   useEffect(() => {
     window.goblin.identity.getCurrent().then((i) => {
@@ -142,47 +153,107 @@ function AccountSettingsForm(): JSX.Element {
 
       <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
 
-      <h3 style={{ fontSize: 14, margin: '0 0 var(--space-2)' }}>Change password</h3>
-      <input
-        type="password"
-        className="gb-input"
-        placeholder="Current password"
-        style={{ marginBottom: 6 }}
-        value={currentPassword}
-        onChange={(e) => setCurrentPassword(e.target.value)}
-        autoComplete="current-password"
-      />
-      <input
-        type="password"
-        className="gb-input"
-        placeholder="New password"
-        style={{ marginBottom: 6 }}
-        value={newPassword}
-        onChange={(e) => setNewPassword(e.target.value)}
-        autoComplete="new-password"
-      />
-      <input
-        type="password"
-        className="gb-input"
-        placeholder="Confirm new password"
-        style={{ marginBottom: 6 }}
-        value={confirmPassword}
-        onChange={(e) => setConfirmPassword(e.target.value)}
-        autoComplete="new-password"
-      />
-      <Button
-        variant="secondary"
-        onClick={savePassword}
-        disabled={!currentPassword || !newPassword}
-        style={{ width: '100%' }}
+      <h3 style={{ fontSize: 14, margin: '0 0 var(--space-2)' }}>Appearance</h3>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
+        {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => chooseThemeMode(mode)}
+            style={{
+              flex: 1,
+              padding: '6px 0',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
+              background: themeMode === mode ? 'var(--accent-subtle)' : 'transparent',
+              color: themeMode === mode ? 'var(--accent-hover)' : 'var(--text-secondary)',
+              fontSize: 12,
+              fontWeight: themeMode === mode ? 700 : 400,
+              cursor: 'pointer',
+              textTransform: 'capitalize'
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
+      <div style={{ marginBottom: 'var(--space-3)' }}>
+        <ColorTokenEditor themeMode={themeMode} />
+      </div>
+
+      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
+
+      <button
+        type="button"
+        onClick={() => setPasswordOpen((o) => !o)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          margin: '0 0 var(--space-2)',
+          cursor: 'pointer'
+        }}
       >
-        Update Password
-      </Button>
-      {passwordError && (
-        <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{passwordError}</p>
-      )}
-      {passwordSaved && (
-        <p style={{ color: 'var(--success)', fontSize: 12, marginTop: 4 }}>Password updated.</p>
+        <span
+          style={{
+            display: 'flex',
+            transform: passwordOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 100ms',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <ChevronRightIcon />
+        </span>
+        <h3 style={{ fontSize: 14, margin: 0 }}>Change password</h3>
+      </button>
+      {passwordOpen && (
+        <>
+          <input
+            type="password"
+            className="gb-input"
+            placeholder="Current password"
+            style={{ marginBottom: 6 }}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          <input
+            type="password"
+            className="gb-input"
+            placeholder="New password"
+            style={{ marginBottom: 6 }}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <input
+            type="password"
+            className="gb-input"
+            placeholder="Confirm new password"
+            style={{ marginBottom: 6 }}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Button
+            variant="secondary"
+            onClick={savePassword}
+            disabled={!currentPassword || !newPassword}
+            style={{ width: '100%' }}
+          >
+            Update Password
+          </Button>
+          {passwordError && (
+            <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{passwordError}</p>
+          )}
+          {passwordSaved && (
+            <p style={{ color: 'var(--success)', fontSize: 12, marginTop: 4 }}>Password updated.</p>
+          )}
+        </>
       )}
 
       <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
