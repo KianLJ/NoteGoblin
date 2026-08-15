@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist/
+build/*.exe
+*.log
+.DS_Store
+Thumbs.db
+
+# runtime data — never commit a real user's campaign database, keys, or certs
+*.sqlite
+*.sqlite3
+*.db
+*.pem
+*.key
+*.crt
+userdata/

@@ -1,0 +1,116 @@
+/* Component primitives — shared visual language for buttons, cards, inputs. */
+
+.gb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+  user-select: none;
+}
+.gb-btn:active {
+  transform: translateY(1px);
+}
+.gb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.gb-btn--primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.gb-btn--primary:not(:disabled):hover {
+  background: var(--accent-hover);
+}
+
+.gb-btn--secondary {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.gb-btn--secondary:not(:disabled):hover {
+  background: var(--bg-sunken);
+}
+
+.gb-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.gb-btn--ghost:not(:disabled):hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+
+.gb-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+.gb-input::placeholder {
+  color: var(--text-muted);
+}
+.gb-input:focus {
+  border-color: var(--accent);
+}
+
+.gb-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.gb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+}
+.gb-badge--accent {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+.gb-badge--success {
+  color: var(--success);
+}
+.gb-badge--danger {
+  color: var(--danger);
+}
+
+.gb-divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-4) 0;
+}

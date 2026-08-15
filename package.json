@@ -1,0 +1,49 @@
+{
+  "name": "notegoblin",
+  "version": "0.1.0",
+  "description": "A D&D campaign companion for DMs and players — notes, character sheets, initiative, and live party chat over your own network.",
+  "main": "./out/main/index.js",
+  "author": "NoteGoblin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:win": "electron-vite build && electron-builder --win",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "argon2": "0.40.3",
+    "better-sqlite3": "11.10.0",
+    "express": "4.22.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.30.4",
+    "selfsigned": "2.4.1",
+    "uuid": "9.0.1",
+    "ws": "8.21.3",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/express": "4.17.25",
+    "@types/node": "20.19.43",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@types/uuid": "9.0.8",
+    "@types/ws": "8.18.1",
+    "@vitejs/plugin-react": "4.7.0",
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3",
+    "electron-vite": "2.3.0",
+    "typescript": "5.9.3",
+    "vite": "5.4.21"
+  },
+  "allowScripts": {
+    "argon2@0.40.3": true,
+    "better-sqlite3@11.10.0": true,
+    "electron@31.7.7": true,
+    "esbuild@0.21.5": true
+  }
+}

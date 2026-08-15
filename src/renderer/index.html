@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      CSP is applied via a response header in the packaged build (see src/main/index.ts) instead
+      of a static meta tag here, because Vite's dev server needs 'unsafe-eval' for HMR and this
+      same index.html is served in both dev and production.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NoteGoblin</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

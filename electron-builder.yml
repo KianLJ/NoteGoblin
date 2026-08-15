@@ -1,0 +1,19 @@
+appId: com.notegoblin.app
+productName: NoteGoblin
+directories:
+  buildResources: build
+files:
+  - out/**/*
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+asarUnpack:
+  - resources/**
+win:
+  target: nsis
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
