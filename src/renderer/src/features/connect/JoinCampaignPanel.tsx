@@ -5,7 +5,11 @@ import type { KnownHostSummary, ProbeResult } from '@shared/ipc'
 
 type Step = 'closed' | 'invite' | 'address' | 'confirm' | 'connecting'
 
-export function JoinCampaignPanel(): JSX.Element {
+interface JoinCampaignPanelProps {
+  onConnected?: (address: string, label: string) => void
+}
+
+export function JoinCampaignPanel({ onConnected }: JoinCampaignPanelProps): JSX.Element {
   const [step, setStep] = useState<Step>('closed')
   const [inviteCode, setInviteCode] = useState('')
   const [address, setAddress] = useState('')
@@ -86,9 +90,11 @@ export function JoinCampaignPanel(): JSX.Element {
       setStep('confirm')
       return
     }
+    const connectedLabel = label.trim() || address.trim()
     setStep('closed')
     reset()
     refreshKnownHosts()
+    onConnected?.(result.address, connectedLabel)
   }
 
   /** One-click path for a host we already trust: only fall back to the confirm screen if its fingerprint has actually changed since we last saw it. */
@@ -111,6 +117,7 @@ export function JoinCampaignPanel(): JSX.Element {
         return
       }
       refreshKnownHosts()
+      onConnected?.(joinResult.address, host.label)
       return
     }
 

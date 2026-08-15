@@ -11,14 +11,25 @@ import { startHostServer, DEFAULT_HOST_PORT, type HostServerHandle } from '@serv
 import { probeAddress, authenticateWithHost } from '@server/net/connectToHost'
 import { getLocalAddresses } from '@server/net/localAddresses'
 import { encodeInviteCode, decodeInviteCode } from '@server/net/inviteCode'
+import * as campaignClient from '@server/net/campaignClient'
+import * as campaignService from '@server/services/campaignService'
+import {
+  hasRememberedCredentials,
+  loadRememberedCredentials,
+  saveRememberedCredentials,
+  clearRememberedCredentials
+} from './rememberedCredentials'
 import {
   getCurrentIdentity,
   setCurrentIdentity,
   getHostServerHandle,
   setHostServerHandle,
-  setActiveConnection
+  getActiveConnection,
+  setActiveConnection,
+  type ActiveConnection
 } from './appState'
 import type {
+  Identity,
   LoginResult,
   HostingStartResult,
   HostingStatus,
@@ -26,7 +37,10 @@ import type {
   ProbeResult,
   JoinResult,
   KnownHostSummary,
-  DecodeInviteResult
+  DecodeInviteResult,
+  ApiResult,
+  Campaign,
+  Note
 } from '@shared/ipc'
 
 /** Every network-reachable (non-loopback) address this machine has, each with an invite code baked for it. Loopback is left out — it's only useful to the host's own process, never to a joining player. */
@@ -79,6 +93,85 @@ export function registerIpcHandlers(): void {
         password
       })
       return { ok: true, identity }
+    }
+  )
+
+  ipcMain.handle('identity:get-current', (): Identity | null => {
+    const identity = getCurrentIdentity()
+    return identity ? { id: identity.id, displayName: identity.displayName } : null
+  })
+
+  ipcMain.handle(
+    'identity:update-display-name',
+    (_event, newDisplayName: string): LoginResult => {
+      const identity = getCurrentIdentity()
+      if (!identity) return { ok: false, error: 'Log in first.' }
+      const trimmed = newDisplayName.trim()
+      if (trimmed.length < 2) return { ok: false, error: 'Pick a display name with at least 2 characters.' }
+      try {
+        identityRepo.rename(identity.id, trimmed)
+        setCurrentIdentity({ ...identity, displayName: trimmed })
+        // Keep any saved "remember me" credentials pointing at the new name.
+        if (hasRememberedCredentials(userDataDir)) {
+          saveRememberedCredentials(userDataDir, trimmed, identity.password)
+        }
+        return { ok: true, identity: { id: identity.id, displayName: trimmed } }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Could not rename.' }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'identity:change-password',
+    async (_event, currentPassword: string, newPassword: string): Promise<LoginResult> => {
+      const identity = getCurrentIdentity()
+      if (!identity) return { ok: false, error: 'Log in first.' }
+      const verified = await identityRepo.verify(identity.displayName, currentPassword)
+      if (!verified) return { ok: false, error: 'Current password is incorrect.' }
+      if (newPassword.length < 8) {
+        return { ok: false, error: 'New password should be at least 8 characters.' }
+      }
+      await identityRepo.setPassword(identity.id, newPassword)
+      const passwordHash = identityRepo.findByDisplayName(identity.displayName)!.password_hash
+      setCurrentIdentity({ ...identity, passwordHash, password: newPassword })
+      if (hasRememberedCredentials(userDataDir)) {
+        saveRememberedCredentials(userDataDir, identity.displayName, newPassword)
+      }
+      return { ok: true, identity: { id: identity.id, displayName: identity.displayName } }
+    }
+  )
+
+  ipcMain.handle('identity:has-remembered', () => hasRememberedCredentials(userDataDir))
+
+  ipcMain.handle('identity:auto-login', async (): Promise<LoginResult> => {
+    const stored = loadRememberedCredentials(userDataDir)
+    if (!stored) return { ok: false, error: 'No saved login.' }
+    const identity = await identityRepo.verify(stored.displayName, stored.password)
+    if (!identity) return { ok: false, error: 'Saved login no longer works — please log in again.' }
+    setCurrentIdentity({
+      ...identity,
+      passwordHash: identityRepo.findByDisplayName(identity.displayName)!.password_hash,
+      password: stored.password
+    })
+    return { ok: true, identity }
+  })
+
+  ipcMain.handle(
+    'identity:remember',
+    (_event, remember: boolean): { ok: true } | { ok: false; error: string } => {
+      const identity = getCurrentIdentity()
+      if (!remember) {
+        clearRememberedCredentials(userDataDir)
+        return { ok: true }
+      }
+      if (!identity) return { ok: false, error: 'Log in first.' }
+      try {
+        saveRememberedCredentials(userDataDir, identity.displayName, identity.password)
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Could not save login.' }
+      }
     }
   )
 
@@ -141,6 +234,11 @@ export function registerIpcHandlers(): void {
     const handle = getHostServerHandle()
     if (!handle) return { hosting: false }
     return { hosting: true, fingerprint: handle.fingerprint, addresses: buildAddressOptions(handle) }
+  })
+
+  ipcMain.handle('hosting:self-address', (): string | null => {
+    const handle = getHostServerHandle()
+    return handle ? `127.0.0.1:${handle.port}` : null
   })
 
   // --- Joining other hosts ----------------------------------------------
@@ -221,4 +319,167 @@ export function registerIpcHandlers(): void {
     if (!decoded) return { ok: false, error: "That doesn't look like a valid invite code." }
     return { ok: true, ...decoded }
   })
+
+  // --- Campaigns & notes --------------------------------------------------
+  // Two ways to reach the same data: pass an `address` to go over the network
+  // (a player reaching some host, or the DM reaching their own server while
+  // it happens to be running), or omit it to work directly against the DM's
+  // own host database in-process — no network, no hosting required, so
+  // solo campaign prep doesn't depend on anyone being connected.
+  function requireConnection(address: string): ActiveConnection | { error: string } {
+    const connection = getActiveConnection(address)
+    return connection ?? { error: 'Not connected to that host.' }
+  }
+
+  /** The DM's own host-side account, ensured (not necessarily hosting) from their local identity's existing password hash — no plaintext needed, no server required. */
+  function ensureMyHostUser(): { db: ReturnType<typeof getHostDb>; userId: string } | { error: string } {
+    const identity = getCurrentIdentity()
+    if (!identity) return { error: 'Log in first.' }
+    const db = getHostDb(userDataDir)
+    const hostUser = new UserRepo(db).ensureWithHash(identity.displayName, identity.passwordHash)
+    return { db, userId: hostUser.id }
+  }
+
+  ipcMain.handle(
+    'campaigns:list',
+    async (_event, address?: string): Promise<ApiResult<Campaign[]>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.listCampaigns(me.db, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.listCampaigns(address, conn.certPem, conn.token)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.campaigns }
+    }
+  )
+
+  ipcMain.handle(
+    'campaigns:create',
+    async (_event, name: string, address?: string): Promise<ApiResult<Campaign>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.createCampaign(me.db, me.userId, name)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.createCampaign(address, conn.certPem, conn.token, name)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.campaign }
+    }
+  )
+
+  ipcMain.handle(
+    'campaigns:join',
+    async (_event, campaignId: string, address?: string): Promise<ApiResult<Campaign>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.joinCampaign(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.joinCampaign(address, conn.certPem, conn.token, campaignId)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.campaign }
+    }
+  )
+
+  ipcMain.handle(
+    'notes:list',
+    async (_event, campaignId: string, address?: string): Promise<ApiResult<Note[]>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.listNotes(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.listNotes(address, conn.certPem, conn.token, campaignId)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.notes }
+    }
+  )
+
+  ipcMain.handle(
+    'notes:create',
+    async (
+      _event,
+      campaignId: string,
+      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared' },
+      address?: string
+    ): Promise<ApiResult<Note>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.createNote(me.db, campaignId, me.userId, input)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.createNote(
+        address,
+        conn.certPem,
+        conn.token,
+        campaignId,
+        input
+      )
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.note }
+    }
+  )
+
+  ipcMain.handle(
+    'notes:update',
+    async (
+      _event,
+      campaignId: string,
+      noteId: string,
+      input: { title?: string; bodyMarkdown?: string },
+      address?: string
+    ): Promise<ApiResult<Note>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.updateNote(me.db, campaignId, noteId, me.userId, input)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.updateNote(
+        address,
+        conn.certPem,
+        conn.token,
+        campaignId,
+        noteId,
+        input
+      )
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: result.data.note }
+    }
+  )
+
+  ipcMain.handle(
+    'notes:remove',
+    async (_event, campaignId: string, noteId: string, address?: string): Promise<ApiResult<void>> => {
+      if (!address) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.deleteNote(me.db, campaignId, noteId, me.userId)
+        return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+      }
+      const conn = requireConnection(address)
+      if ('error' in conn) return { ok: false, error: conn.error }
+      const result = await campaignClient.deleteNote(address, conn.certPem, conn.token, campaignId, noteId)
+      if (!result.ok) return { ok: false, error: result.error }
+      return { ok: true, data: undefined }
+    }
+  )
 }

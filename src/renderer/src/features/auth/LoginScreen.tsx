@@ -7,25 +7,44 @@ interface LoginScreenProps {
   onAuthenticated: (identity: Identity) => void
 }
 
+type Stage = 'checking' | 'returning' | 'create'
+
 export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element {
-  const [returning, setReturning] = useState<boolean | null>(null)
+  const [stage, setStage] = useState<Stage>('checking')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    window.goblin.identity.hasAny().then(setReturning)
+    ;(async () => {
+      if (await window.goblin.identity.hasRemembered()) {
+        const result = await window.goblin.identity.autoLogin()
+        if (result.ok) {
+          onAuthenticated(result.identity)
+          return
+        }
+      }
+      const hasAny = await window.goblin.identity.hasAny()
+      setStage(hasAny ? 'returning' : 'create')
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    })()
   }, [])
+
+  async function applyRememberPreference(): Promise<void> {
+    await window.goblin.identity.remember(rememberMe)
+  }
 
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault()
     setError(null)
 
-    if (returning) {
+    if (stage === 'returning') {
       setSubmitting(true)
       const result = await window.goblin.identity.login(username, password)
+      if (result.ok) await applyRememberPreference()
       setSubmitting(false)
       if (!result.ok) {
         setError(result.error)
@@ -49,6 +68,7 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
     }
     setSubmitting(true)
     const result = await window.goblin.identity.create(username, password)
+    if (result.ok) await applyRememberPreference()
     setSubmitting(false)
     if (!result.ok) {
       setError(result.error)
@@ -57,9 +77,11 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
     onAuthenticated(result.identity)
   }
 
-  if (returning === null) {
+  if (stage === 'checking') {
     return <div className="gb-drag" style={{ minHeight: '100vh' }} />
   }
+
+  const returning = stage === 'returning'
 
   return (
     <div
@@ -109,7 +131,7 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
           id="password"
           type="password"
           className="gb-input"
-          style={{ marginBottom: returning ? 'var(--space-4)' : 'var(--space-3)' }}
+          style={{ marginBottom: returning ? 'var(--space-3)' : 'var(--space-3)' }}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete={returning ? 'current-password' : 'new-password'}
@@ -124,13 +146,32 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
               id="confirm-password"
               type="password"
               className="gb-input"
-              style={{ marginBottom: 'var(--space-4)' }}
+              style={{ marginBottom: 'var(--space-3)' }}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
             />
           </>
         )}
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+            marginBottom: 'var(--space-4)',
+            cursor: 'pointer'
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+          />
+          Remember me on this device
+        </label>
 
         {error && (
           <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 'var(--space-3)' }}>

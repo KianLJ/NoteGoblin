@@ -6,7 +6,7 @@ export interface PinnedResponse {
 }
 
 export interface PinnedRequestInit {
-  method: 'GET' | 'POST'
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
   token?: string
 }

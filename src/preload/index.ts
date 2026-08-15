@@ -6,12 +6,20 @@ const api: AppApi = {
   identity: {
     hasAny: () => ipcRenderer.invoke('identity:has-any'),
     create: (displayName, password) => ipcRenderer.invoke('identity:create', displayName, password),
-    login: (displayName, password) => ipcRenderer.invoke('identity:login', displayName, password)
+    login: (displayName, password) => ipcRenderer.invoke('identity:login', displayName, password),
+    getCurrent: () => ipcRenderer.invoke('identity:get-current'),
+    updateDisplayName: (newDisplayName) => ipcRenderer.invoke('identity:update-display-name', newDisplayName),
+    changePassword: (currentPassword, newPassword) =>
+      ipcRenderer.invoke('identity:change-password', currentPassword, newPassword),
+    hasRemembered: () => ipcRenderer.invoke('identity:has-remembered'),
+    autoLogin: () => ipcRenderer.invoke('identity:auto-login'),
+    remember: (remember) => ipcRenderer.invoke('identity:remember', remember)
   },
   hosting: {
     start: () => ipcRenderer.invoke('hosting:start'),
     stop: () => ipcRenderer.invoke('hosting:stop'),
-    status: () => ipcRenderer.invoke('hosting:status')
+    status: () => ipcRenderer.invoke('hosting:status'),
+    selfAddress: () => ipcRenderer.invoke('hosting:self-address')
   },
   connections: {
     probe: (address) => ipcRenderer.invoke('connections:probe', address),
@@ -19,6 +27,20 @@ const api: AppApi = {
     list: () => ipcRenderer.invoke('connections:list'),
     forget: (address) => ipcRenderer.invoke('connections:forget', address),
     decodeInvite: (code) => ipcRenderer.invoke('connections:decode-invite', code)
+  },
+  campaigns: {
+    list: (address) => ipcRenderer.invoke('campaigns:list', address),
+    create: (name, address) => ipcRenderer.invoke('campaigns:create', name, address),
+    join: (campaignId, address) => ipcRenderer.invoke('campaigns:join', campaignId, address)
+  },
+  notes: {
+    list: (campaignId, address) => ipcRenderer.invoke('notes:list', campaignId, address),
+    create: (campaignId, input, address) =>
+      ipcRenderer.invoke('notes:create', campaignId, input, address),
+    update: (campaignId, noteId, input, address) =>
+      ipcRenderer.invoke('notes:update', campaignId, noteId, input, address),
+    remove: (campaignId, noteId, address) =>
+      ipcRenderer.invoke('notes:remove', campaignId, noteId, address)
   }
 }
 

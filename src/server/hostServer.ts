@@ -3,8 +3,11 @@ import { createServer as createHttpsServer, type Server as HttpsServer } from 'h
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { Database as DatabaseType } from 'better-sqlite3'
 import { UserRepo } from './repositories/userRepo'
+import * as campaignService from './services/campaignService'
 import { signToken, verifyToken } from './auth/token'
 import { requireAuth, type AuthedRequest } from './auth/requireAuth'
+import type { ServiceResult } from './services/campaignService'
+import type { Response } from 'express'
 
 /**
  * A DM's saved address (and every player's "known host" entry pointing at
@@ -30,6 +33,14 @@ export interface HostServerHandle {
 }
 
 const MIN_PASSWORD_LENGTH = 8
+
+function send<T>(res: Response, result: ServiceResult<T>, dataKey: string): void {
+  if (result.ok) {
+    res.json({ [dataKey]: result.data })
+  } else {
+    res.status(result.status).json({ error: result.error })
+  }
+}
 
 export function startHostServer(opts: HostServerOptions): Promise<HostServerHandle> {
   const app = express()
@@ -81,6 +92,59 @@ export function startHostServer(opts: HostServerOptions): Promise<HostServerHand
       return
     }
     res.json({ user: { id: account.id, displayName: account.display_name } })
+  })
+
+  const auth = requireAuth(opts.sessionSecret)
+
+  // --- Campaigns & notes ----------------------------------------------------
+  // Thin HTTP wrappers — all the actual logic (visibility, membership,
+  // author-only edits) lives in campaignService, shared with the DM's direct
+  // in-process path used when hosting isn't running (see registerIpc.ts).
+  app.get('/campaigns', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.listCampaigns(opts.db, req.userId as string), 'campaigns')
+  })
+
+  app.post('/campaigns', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.createCampaign(opts.db, req.userId as string, req.body?.name), 'campaign')
+  })
+
+  app.post('/campaigns/:id/join', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.joinCampaign(opts.db, req.params.id, req.userId as string), 'campaign')
+  })
+
+  app.get('/campaigns/:id/notes', auth, (req: AuthedRequest, res) => {
+    send(res, campaignService.listNotes(opts.db, req.params.id, req.userId as string), 'notes')
+  })
+
+  app.post('/campaigns/:id/notes', auth, (req: AuthedRequest, res) => {
+    send(
+      res,
+      campaignService.createNote(opts.db, req.params.id, req.userId as string, req.body ?? {}),
+      'note'
+    )
+  })
+
+  app.patch('/campaigns/:id/notes/:noteId', auth, (req: AuthedRequest, res) => {
+    send(
+      res,
+      campaignService.updateNote(
+        opts.db,
+        req.params.id,
+        req.params.noteId,
+        req.userId as string,
+        req.body ?? {}
+      ),
+      'note'
+    )
+  })
+
+  app.delete('/campaigns/:id/notes/:noteId', auth, (req: AuthedRequest, res) => {
+    const result = campaignService.deleteNote(opts.db, req.params.id, req.params.noteId, req.userId as string)
+    if (result.ok) {
+      res.json({ ok: true })
+    } else {
+      res.status(result.status).json({ error: result.error })
+    }
   })
 
   const httpsServer: HttpsServer = createHttpsServer({ cert: opts.cert, key: opts.key }, app)

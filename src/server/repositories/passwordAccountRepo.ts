@@ -73,4 +73,17 @@ export class PasswordAccountRepo {
     if (!valid) return null
     return { id: row.id, displayName: row.display_name }
   }
+
+  rename(id: string, newDisplayName: string): void {
+    const existing = this.findByDisplayName(newDisplayName)
+    if (existing && existing.id !== id) {
+      throw new Error('That display name is already in use.')
+    }
+    this.db.prepare(`UPDATE ${this.table} SET display_name = ? WHERE id = ?`).run(newDisplayName, id)
+  }
+
+  async setPassword(id: string, newPassword: string): Promise<void> {
+    const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id })
+    this.db.prepare(`UPDATE ${this.table} SET password_hash = ? WHERE id = ?`).run(passwordHash, id)
+  }
 }

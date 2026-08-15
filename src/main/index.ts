@@ -12,12 +12,17 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
+    // Matches the dark-theme tokens in theme.css (--bg-canvas / --text-primary for
+    // :root[data-theme="dark"], which index.html sets by default) — the overlay is
+    // native-drawn, so it can't read our CSS variables and has to be kept in sync
+    // by hand. If a light/dark toggle is ever added, this needs to follow it (see
+    // win.setTitleBarOverlay).
     backgroundColor: '#14110c',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#14110c',
-      symbolColor: '#ede4d3',
-      height: 36
+      symbolColor: '#f2ead6',
+      height: 44
     },
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),

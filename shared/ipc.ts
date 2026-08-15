@@ -40,17 +40,49 @@ export interface KnownHostSummary {
   lastConnectedAt: string | null
 }
 
+export interface Campaign {
+  id: string
+  name: string
+  dmUserId: string
+  dmDisplayName: string
+  createdAt: string
+  myRole: 'dm' | 'player' | null
+}
+
+export interface Note {
+  id: string
+  campaignId: string
+  authorUserId: string
+  authorDisplayName: string
+  title: string
+  bodyMarkdown: string
+  visibility: 'dm' | 'shared'
+  createdAt: string
+  updatedAt: string
+}
+
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string }
+
 export interface AppApi {
   getAppVersion: () => Promise<string>
   identity: {
     hasAny: () => Promise<boolean>
     create: (displayName: string, password: string) => Promise<LoginResult>
     login: (displayName: string, password: string) => Promise<LoginResult>
+    getCurrent: () => Promise<Identity | null>
+    updateDisplayName: (newDisplayName: string) => Promise<LoginResult>
+    changePassword: (currentPassword: string, newPassword: string) => Promise<LoginResult>
+    /** Opt-in "remember me" — encrypted at rest via Electron's safeStorage (OS-level, e.g. DPAPI on Windows). */
+    hasRemembered: () => Promise<boolean>
+    autoLogin: () => Promise<LoginResult>
+    remember: (remember: boolean) => Promise<{ ok: true } | { ok: false; error: string }>
   }
   hosting: {
     start: () => Promise<HostingStartResult>
     stop: () => Promise<void>
     status: () => Promise<HostingStatus>
+    /** The loopback address (127.0.0.1:port) this app uses to talk to its own hosted server — not shown to players, just used internally to drive the DM's own campaign views through the same API a joining player uses. */
+    selfAddress: () => Promise<string | null>
   }
   connections: {
     probe: (address: string) => Promise<ProbeResult>
@@ -58,5 +90,30 @@ export interface AppApi {
     list: () => Promise<KnownHostSummary[]>
     forget: (address: string) => Promise<void>
     decodeInvite: (code: string) => Promise<DecodeInviteResult>
+  }
+  // Every method here takes an optional trailing `address`: omit it to work
+  // directly against the DM's own campaign data (no network/hosting
+  // required), or pass a connected host's address to go over the network —
+  // used identically for the DM reaching their own running server and for a
+  // player reaching someone else's.
+  campaigns: {
+    list: (address?: string) => Promise<ApiResult<Campaign[]>>
+    create: (name: string, address?: string) => Promise<ApiResult<Campaign>>
+    join: (campaignId: string, address?: string) => Promise<ApiResult<Campaign>>
+  }
+  notes: {
+    list: (campaignId: string, address?: string) => Promise<ApiResult<Note[]>>
+    create: (
+      campaignId: string,
+      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared' },
+      address?: string
+    ) => Promise<ApiResult<Note>>
+    update: (
+      campaignId: string,
+      noteId: string,
+      input: { title?: string; bodyMarkdown?: string },
+      address?: string
+    ) => Promise<ApiResult<Note>>
+    remove: (campaignId: string, noteId: string, address?: string) => Promise<ApiResult<void>>
   }
 }
