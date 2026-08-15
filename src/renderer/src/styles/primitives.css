@@ -282,3 +282,13 @@
   color: var(--danger);
   border-bottom-color: var(--danger);
 }
+.cm-live-image {
+  display: inline-block;
+  max-width: 100%;
+}
+.cm-live-image img {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  margin: 4px 0;
+}

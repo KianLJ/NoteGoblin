@@ -44,9 +44,11 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
   const editorRef = useRef<MarkdownLiveEditorHandle>(null)
   const linkPickerRef = useRef<HTMLDivElement>(null)
   const knownTitlesRef = useRef<Set<string>>(new Set())
+  const notesRef = useRef<Note[]>(notes)
 
   const knownTitles = useMemo(() => new Set(notes.map((n) => (n.title || 'Untitled').toLowerCase())), [notes])
   knownTitlesRef.current = knownTitles
+  notesRef.current = notes
 
   function scheduleSave(patch: { title?: string; bodyMarkdown?: string }): void {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -232,6 +234,7 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
           ref={editorRef}
           defaultValue={note.bodyMarkdown}
           knownTitlesRef={knownTitlesRef}
+          notesRef={notesRef}
           onChange={handleBodyChange}
           onWikilinkClick={resolveWikilink}
         />

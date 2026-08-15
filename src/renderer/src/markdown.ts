@@ -1,12 +1,16 @@
 import { Marked, type Tokens } from 'marked'
 import DOMPurify from 'dompurify'
+import { WIKILINK_PATTERN, wikilinkAlias, wikilinkTarget } from './wikilink'
 
-/** A minimal Obsidian-style wikilink token — `[[Target]]` or `[[Target|Alias]]`. */
+/** A minimal Obsidian-style wikilink token — `[[Target]]`/`[[Target|Alias]]` or `[Target]`/`[Target|Alias]`. */
 interface WikilinkToken extends Tokens.Generic {
   type: 'wikilink'
   target: string
   alias?: string
 }
+
+const WIKILINK_START_RE = /\[/
+const WIKILINK_TOKEN_RE = new RegExp(`^(?:${WIKILINK_PATTERN})`)
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -14,9 +18,11 @@ function escapeHtml(value: string): string {
 
 /**
  * Renders note markdown to sanitized HTML — GFM (tables, strikethrough,
- * etc.) via marked, plus a custom `[[Note Title]]` / `[[Note Title|Alias]]`
- * wikilink extension (not part of standard markdown or marked's GFM
- * support, so it's hand-rolled as a marked inline extension). Resolved
+ * etc.) via marked, plus a custom wikilink extension (not part of standard
+ * markdown or marked's GFM support, so it's hand-rolled as a marked inline
+ * extension) recognizing both `[[Note Title]]`/`[[Title|Alias]]` and the
+ * lighter `[Note Title]`/`[Title|Alias]` form — see wikilink.ts for how the
+ * single-bracket form avoids colliding with real markdown links. Resolved
  * links (title found in `knownTitles`, case-insensitive) and broken ones
  * get different classes so the preview can show which links actually go
  * somewhere; navigation itself is handled by the caller via a
@@ -37,17 +43,19 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>): st
           name: 'wikilink',
           level: 'inline',
           start(src: string): number | undefined {
-            const idx = src.indexOf('[[')
+            const idx = src.search(WIKILINK_START_RE)
             return idx === -1 ? undefined : idx
           },
           tokenizer(src: string): WikilinkToken | undefined {
-            const match = /^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/.exec(src)
+            const match = WIKILINK_TOKEN_RE.exec(src)
             if (!match) return undefined
+            const target = wikilinkTarget(match)
+            if (!target) return undefined
             return {
               type: 'wikilink',
               raw: match[0],
-              target: match[1].trim(),
-              alias: match[2]?.trim()
+              target,
+              alias: wikilinkAlias(match)
             }
           },
           renderer(token: Tokens.Generic): string {

@@ -672,6 +672,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         properties: ['openFile'],
         filters: [{ name: 'Images', extensions: Object.keys(IMAGE_MIME_BY_EXT) }]
       })
+      // A native dialog attached to a frameless/custom-titlebar window can
+      // leave -webkit-app-region drag hit-testing stuck broken on Windows
+      // once it closes, until the window is explicitly refocused.
+      mainWindow.focus()
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, error: 'Cancelled.' }
       }
