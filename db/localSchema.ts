@@ -17,11 +17,15 @@ CREATE TABLE IF NOT EXISTS identity (
 
 -- Hosts this identity has previously connected to, so re-joining a
 -- campaign doesn't require re-typing the address every time.
+-- cert_pem is the full pinned certificate (not just its fingerprint) so
+-- future connections can be verified against it directly (see
+-- src/server/net/pinnedHttpClient.ts) rather than only checked-then-trusted.
 CREATE TABLE IF NOT EXISTS known_hosts (
   id TEXT PRIMARY KEY,
   label TEXT NOT NULL,
-  address TEXT NOT NULL,
-  cert_fingerprint TEXT,
+  address TEXT NOT NULL UNIQUE,
+  cert_fingerprint TEXT NOT NULL,
+  cert_pem TEXT NOT NULL,
   last_connected_at TEXT
 );
 

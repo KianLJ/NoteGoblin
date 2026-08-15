@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { createHash } from 'crypto'
 import selfsigned from 'selfsigned'
+import { fingerprintFromPem } from './certEncoding'
 
 export interface HostCertificate {
   cert: string
@@ -23,7 +23,7 @@ export function getOrCreateHostCertificate(userDataDir: string): HostCertificate
   if (existsSync(certPath) && existsSync(keyPath)) {
     const cert = readFileSync(certPath, 'utf-8')
     const key = readFileSync(keyPath, 'utf-8')
-    return { cert, key, fingerprint: fingerprintOf(cert) }
+    return { cert, key, fingerprint: fingerprintFromPem(cert) }
   }
 
   mkdirSync(dir, { recursive: true })
@@ -34,13 +34,5 @@ export function getOrCreateHostCertificate(userDataDir: string): HostCertificate
   })
   writeFileSync(certPath, pems.cert, { mode: 0o600 })
   writeFileSync(keyPath, pems.private, { mode: 0o600 })
-  return { cert: pems.cert, key: pems.private, fingerprint: fingerprintOf(pems.cert) }
-}
-
-function fingerprintOf(certPem: string): string {
-  const der = Buffer.from(
-    certPem.replace(/-----(BEGIN|END) CERTIFICATE-----/g, '').replace(/\s+/g, ''),
-    'base64'
-  )
-  return createHash('sha256').update(der).digest('hex')
+  return { cert: pems.cert, key: pems.private, fingerprint: fingerprintFromPem(pems.cert) }
 }

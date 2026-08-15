@@ -58,11 +58,12 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
   }
 
   if (returning === null) {
-    return <div style={{ minHeight: '100vh' }} />
+    return <div className="gb-drag" style={{ minHeight: '100vh' }} />
   }
 
   return (
     <div
+      className="gb-drag"
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -71,7 +72,11 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
         padding: 'var(--space-6)'
       }}
     >
-      <form onSubmit={handleSubmit} className="gb-card" style={{ maxWidth: 380, width: '100%' }}>
+      <form
+        onSubmit={handleSubmit}
+        className="gb-card gb-no-drag"
+        style={{ maxWidth: 380, width: '100%' }}
+      >
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-4)' }}>
           <Mark size={40} />
         </div>

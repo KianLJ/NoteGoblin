@@ -55,6 +55,15 @@ button {
   font-family: inherit;
 }
 
+/* The window uses a hidden native title bar (see BrowserWindow's titleBarStyle)
+   so our own header stands in for it — nothing is draggable unless marked here. */
+.gb-drag {
+  -webkit-app-region: drag;
+}
+.gb-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* Custom scrollbar — a thin, ink-toned bar instead of the default chrome */
 ::-webkit-scrollbar {
   width: 10px;

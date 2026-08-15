@@ -1,8 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain, session } from 'electron'
+import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'path'
-import { getLocalDb } from '@server/db/localDb'
-import { IdentityRepo } from '@server/repositories/identityRepo'
-import type { LoginResult } from '@shared/ipc'
+import { registerIpcHandlers } from './registerIpc'
 
 const isDev = !app.isPackaged
 
@@ -46,33 +44,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  const localDb = getLocalDb(app.getPath('userData'))
-  const identityRepo = new IdentityRepo(localDb)
-
-  ipcMain.handle('app:get-version', () => app.getVersion())
-
-  ipcMain.handle('identity:has-any', () => identityRepo.hasAny())
-
-  ipcMain.handle(
-    'identity:create',
-    async (_event, displayName: string, password: string): Promise<LoginResult> => {
-      try {
-        const identity = await identityRepo.create(displayName.trim(), password)
-        return { ok: true, identity }
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : 'Could not create identity.' }
-      }
-    }
-  )
-
-  ipcMain.handle(
-    'identity:login',
-    async (_event, displayName: string, password: string): Promise<LoginResult> => {
-      const identity = await identityRepo.verify(displayName.trim(), password)
-      if (!identity) return { ok: false, error: 'That display name and password don’t match.' }
-      return { ok: true, identity }
-    }
-  )
+  registerIpcHandlers()
 
   if (!isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {

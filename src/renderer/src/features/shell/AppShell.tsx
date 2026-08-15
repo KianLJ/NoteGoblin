@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Button } from '../../ui/Button'
 import { Mark } from '../../ui/Mark'
 import { ModeToggle, type Mode } from './ModeToggle'
+import { HostingPanel } from '../connect/HostingPanel'
+import { JoinCampaignPanel } from '../connect/JoinCampaignPanel'
 
 interface AppShellProps {
   displayName: string
@@ -13,6 +15,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header
+        className="gb-drag"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -29,7 +32,9 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           </span>
         </div>
 
-        <ModeToggle mode={mode} onChange={setMode} />
+        <div className="gb-no-drag">
+          <ModeToggle mode={mode} onChange={setMode} />
+        </div>
 
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{displayName}</span>
       </header>
@@ -43,12 +48,17 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
 function DmHome(): JSX.Element {
   return (
-    <EmptyState
-      eyebrow="DM"
-      title="No campaigns yet"
-      description="Start a campaign of your own — notes, initiative, and a bestiary will live here once hosting is wired up."
-      action="New Campaign"
-    />
+    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+      <span className="gb-badge gb-badge--accent">DM</span>
+      <h2 style={{ marginTop: 'var(--space-2)', marginBottom: 'var(--space-4)', fontSize: 22 }}>
+        Your Table
+      </h2>
+      <HostingPanel />
+      <p style={{ marginTop: 'var(--space-4)', fontSize: 12, color: 'var(--text-muted)' }}>
+        Campaign creation, notes, and the bestiary land here once hosting is wired to a real
+        campaign (next build step).
+      </p>
+    </div>
   )
 }
 
@@ -68,9 +78,6 @@ function PlayerHome(): JSX.Element {
           <h2 style={{ marginTop: 'var(--space-2)', fontSize: 22 }}>Your Characters</h2>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-          <Button variant="secondary" disabled>
-            Join a Campaign
-          </Button>
           <Button variant="primary" disabled>
             New Character
           </Button>
@@ -79,7 +86,7 @@ function PlayerHome(): JSX.Element {
 
       <div
         className="gb-card"
-        style={{ textAlign: 'center', padding: 'var(--space-7) var(--space-5)' }}
+        style={{ textAlign: 'center', padding: 'var(--space-7) var(--space-5)', marginBottom: 'var(--space-5)' }}
       >
         <h3 style={{ fontSize: 17 }}>No characters yet</h3>
         <p>
@@ -87,36 +94,8 @@ function PlayerHome(): JSX.Element {
           first. Pair it to a campaign later, from here or once you've joined one.
         </p>
       </div>
-    </div>
-  )
-}
 
-function EmptyState({
-  eyebrow,
-  title,
-  description,
-  action
-}: {
-  eyebrow: string
-  title: string
-  description: string
-  action: string
-}): JSX.Element {
-  return (
-    <div
-      style={{
-        maxWidth: 480,
-        margin: '0 auto',
-        textAlign: 'center',
-        paddingTop: 'var(--space-8)'
-      }}
-    >
-      <span className="gb-badge gb-badge--accent">{eyebrow}</span>
-      <h2 style={{ marginTop: 'var(--space-3)', fontSize: 22 }}>{title}</h2>
-      <p>{description}</p>
-      <Button variant="primary" disabled style={{ marginTop: 'var(--space-3)' }}>
-        {action}
-      </Button>
+      <JoinCampaignPanel />
     </div>
   )
 }

@@ -6,13 +6,20 @@ import { UserRepo } from './repositories/userRepo'
 import { signToken, verifyToken } from './auth/token'
 import { requireAuth, type AuthedRequest } from './auth/requireAuth'
 
+/**
+ * A DM's saved address (and every player's "known host" entry pointing at
+ * it) has to stay valid across app/hosting restarts, so real hosting always
+ * binds here rather than to an OS-assigned ephemeral port. Tests still pass
+ * `port: 0` explicitly to avoid colliding with a real running instance.
+ */
+export const DEFAULT_HOST_PORT = 47331
+
 export interface HostServerOptions {
   db: DatabaseType
   cert: string
   key: string
   fingerprint: string
   sessionSecret: Buffer
-  /** 0 lets the OS pick a free port — used in tests; real hosting uses a fixed port. */
   port?: number
 }
 
@@ -95,9 +102,10 @@ export function startHostServer(opts: HostServerOptions): Promise<HostServerHand
 
   return new Promise((resolve, reject) => {
     httpsServer.once('error', reject)
-    httpsServer.listen(opts.port ?? 0, () => {
+    httpsServer.listen(opts.port ?? DEFAULT_HOST_PORT, () => {
       const address = httpsServer.address()
-      const port = typeof address === 'object' && address ? address.port : (opts.port ?? 0)
+      const port =
+        typeof address === 'object' && address ? address.port : (opts.port ?? DEFAULT_HOST_PORT)
       resolve({
         port,
         fingerprint: opts.fingerprint,

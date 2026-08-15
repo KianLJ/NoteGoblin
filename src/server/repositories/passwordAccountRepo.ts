@@ -55,6 +55,17 @@ export class PasswordAccountRepo {
     return { id, displayName }
   }
 
+  /** Finds or creates an account using an already-hashed password — used to seed a host's own account from the local identity that's hosting it, without ever needing the plaintext password. */
+  ensureWithHash(displayName: string, passwordHash: string): Account {
+    const existing = this.findByDisplayName(displayName)
+    if (existing) return { id: existing.id, displayName: existing.display_name }
+    const id = uuid()
+    this.db
+      .prepare(`INSERT INTO ${this.table} (id, display_name, password_hash) VALUES (?, ?, ?)`)
+      .run(id, displayName, passwordHash)
+    return { id, displayName }
+  }
+
   async verify(displayName: string, password: string): Promise<Account | null> {
     const row = this.findByDisplayName(displayName)
     if (!row) return null
