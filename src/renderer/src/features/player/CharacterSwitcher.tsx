@@ -6,13 +6,12 @@ interface CharacterSwitcherProps {
   characters: CharacterSheet[] | null
   current: CharacterSheet | null
   onSelect: (character: CharacterSheet) => void
-  onCreate: (name: string) => void
+  onRequestCreate: () => void
 }
 
-/** Player mode's bottom-left corner control — picks/creates a character, the way CampaignSwitcher does for campaigns on the DM side. Fed from the shared player workspace state rather than fetching its own list. */
-export function CharacterSwitcher({ characters, current, onSelect, onCreate }: CharacterSwitcherProps): JSX.Element {
+/** Player mode's bottom-left corner control — picks/creates a character, the way CampaignSwitcher does for campaigns on the DM side. Fed from the shared player workspace state rather than fetching its own list. Creation itself opens the guided wizard (CharacterCreationWizard) rather than instant-creating here. */
+export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate }: CharacterSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
-  const [newName, setNewName] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -22,13 +21,6 @@ export function CharacterSwitcher({ characters, current, onSelect, onCreate }: C
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
-  function createCharacter(): void {
-    if (!newName.trim()) return
-    onCreate(newName.trim())
-    setNewName('')
-    setOpen(false)
-  }
 
   return (
     <div ref={containerRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
@@ -95,19 +87,16 @@ export function CharacterSwitcher({ characters, current, onSelect, onCreate }: C
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input
-              className="gb-input"
-              placeholder="New character"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && createCharacter()}
-              style={{ fontSize: 13 }}
-            />
-            <Button variant="primary" onClick={createCharacter} disabled={!newName.trim()}>
-              Add
-            </Button>
-          </div>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setOpen(false)
+              onRequestCreate()
+            }}
+            style={{ width: '100%' }}
+          >
+            + New Character
+          </Button>
         </div>
       )}
 

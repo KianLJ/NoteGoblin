@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { PlayerSidebar } from './PlayerSidebar'
-import { CharacterEditor } from './CharacterEditor'
+import { CharacterSheetEditor } from './CharacterSheetEditor'
+import { CharacterCreationWizard } from './CharacterCreationWizard'
 import { CharacterSwitcher } from './CharacterSwitcher'
 import { NoteEditor } from '../campaigns/NoteEditor'
 import { AccountSettingsButton } from '../account/AccountSettingsButton'
@@ -43,8 +45,20 @@ export function PlayerWorkspaceBody({
     error
   } = workspace
 
+  const [wizardOpen, setWizardOpen] = useState(false)
+
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      {wizardOpen && (
+        <CharacterCreationWizard
+          onCreate={(name, sheet) => {
+            createCharacter(name, sheet)
+            setWizardOpen(false)
+          }}
+          onClose={() => setWizardOpen(false)}
+        />
+      )}
+
       {error && (
         <p
           style={{
@@ -59,15 +73,12 @@ export function PlayerWorkspaceBody({
       )}
 
       <PlayerSidebar
-        characters={characters ?? []}
         activeCampaign={activeCampaign}
         notes={notes}
         folders={folders}
         activeTab={activeTab}
         myDisplayName={myDisplayName}
-        onSelectCharacter={(id) => openTab({ kind: 'character', id })}
         onSelectNote={(id) => openTab({ kind: 'note', id })}
-        onCreateCharacter={() => createCharacter('New Character')}
         onCreateNote={createNote}
         onCreateFolder={createFolder}
         onRenameNote={(noteId, title) => saveNote(noteId, { title })}
@@ -87,7 +98,7 @@ export function PlayerWorkspaceBody({
               characters={characters}
               current={activeCharacter}
               onSelect={(character) => openTab({ kind: 'character', id: character.id })}
-              onCreate={(name) => createCharacter(name)}
+              onRequestCreate={() => setWizardOpen(true)}
             />
             <AccountSettingsButton />
           </>
@@ -96,7 +107,7 @@ export function PlayerWorkspaceBody({
 
       <div style={{ flex: 1, minHeight: 0, background: 'var(--bg-surface)', overflowY: 'auto' }}>
         {activeCharacter ? (
-          <CharacterEditor
+          <CharacterSheetEditor
             key={activeCharacter.id}
             character={activeCharacter}
             onSave={(patch) => saveCharacter(activeCharacter.id, patch)}

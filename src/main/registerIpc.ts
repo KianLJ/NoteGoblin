@@ -17,6 +17,7 @@ import { encodeInviteCode, decodeInviteCode } from '@server/net/inviteCode'
 import * as campaignClient from '@server/net/campaignClient'
 import * as campaignService from '@server/services/campaignService'
 import { CharacterRepo, type CharacterRow } from '@server/repositories/characterRepo'
+import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { subscribeToCampaign, announceSelectedCharacter } from './wsClient'
 import {
   hasRememberedCredentials,
@@ -745,11 +746,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const characterRepo = new CharacterRepo(localDb)
 
   function toCharacterSheet(row: CharacterRow): CharacterSheet {
-    const sheet = JSON.parse(row.sheet_json || '{}') as { notes?: string }
+    const sheet = { ...emptyCharacterSheet(), ...JSON.parse(row.sheet_json || '{}') }
     return {
+      ...sheet,
       id: row.id,
       name: row.name,
-      notes: sheet.notes ?? '',
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
@@ -761,16 +762,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return { ok: true, data: characterRepo.listByOwner(identity.id).map(toCharacterSheet) }
   })
 
-  ipcMain.handle('characters:create', (_event, name: string): ApiResult<CharacterSheet> => {
-    const identity = getCurrentIdentity()
-    if (!identity) return { ok: false, error: 'Log in first.' }
-    if (name.trim().length < 1) return { ok: false, error: 'Give your character a name.' }
-    return { ok: true, data: toCharacterSheet(characterRepo.create(identity.id, name.trim())) }
-  })
+  ipcMain.handle(
+    'characters:create',
+    (_event, name: string, sheet: CharacterSheetData): ApiResult<CharacterSheet> => {
+      const identity = getCurrentIdentity()
+      if (!identity) return { ok: false, error: 'Log in first.' }
+      if (name.trim().length < 1) return { ok: false, error: 'Give your character a name.' }
+      return {
+        ok: true,
+        data: toCharacterSheet(characterRepo.create(identity.id, name.trim(), sheet))
+      }
+    }
+  )
 
   ipcMain.handle(
     'characters:update',
-    (_event, id: string, input: { name?: string; notes?: string }): ApiResult<CharacterSheet> => {
+    (
+      _event,
+      id: string,
+      input: Partial<CharacterSheetData> & { name?: string }
+    ): ApiResult<CharacterSheet> => {
       const identity = getCurrentIdentity()
       if (!identity) return { ok: false, error: 'Log in first.' }
       const updated = characterRepo.update(id, identity.id, input)

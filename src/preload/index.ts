@@ -59,7 +59,7 @@ const api: AppApi = {
   },
   characters: {
     list: () => ipcRenderer.invoke('characters:list'),
-    create: (name) => ipcRenderer.invoke('characters:create', name),
+    create: (name, sheet) => ipcRenderer.invoke('characters:create', name, sheet),
     update: (id, input) => ipcRenderer.invoke('characters:update', id, input),
     remove: (id) => ipcRenderer.invoke('characters:remove', id)
   },

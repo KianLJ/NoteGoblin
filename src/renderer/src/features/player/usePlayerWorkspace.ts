@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Campaign, CharacterSheet, Folder, Note } from '@shared/ipc'
+import type { CharacterSheetData } from '@shared/dnd5e'
 
 export type PlayerTabRef = { kind: 'character'; id: string } | { kind: 'note'; id: string }
 
@@ -45,6 +46,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, activeCampaign?.id])
 
+  /** Runs once at startup (see the mount effect below) — characters come back ordered most-recently-updated first, so opening the first one here means whichever character you were last working on is already up when you switch into player mode, instead of landing on an empty state. */
   function refreshCharacters(): void {
     window.goblin.characters.list().then((result) => {
       if (!result.ok) {
@@ -52,6 +54,9 @@ export function usePlayerWorkspace(address: string | undefined) {
         return
       }
       setCharacters(result.data)
+      if (result.data.length > 0) {
+        openTab({ kind: 'character', id: result.data[0].id })
+      }
     })
   }
 
@@ -101,9 +106,9 @@ export function usePlayerWorkspace(address: string | undefined) {
     })
   }
 
-  async function createCharacter(name: string): Promise<void> {
+  async function createCharacter(name: string, sheet: CharacterSheetData): Promise<void> {
     setError(null)
-    const result = await window.goblin.characters.create(name)
+    const result = await window.goblin.characters.create(name, sheet)
     if (!result.ok) {
       setError(result.error)
       return
@@ -112,7 +117,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     openTab({ kind: 'character', id: result.data.id })
   }
 
-  async function saveCharacter(id: string, patch: { name?: string; notes?: string }): Promise<void> {
+  async function saveCharacter(id: string, patch: Partial<CharacterSheetData> & { name?: string }): Promise<void> {
     const result = await window.goblin.characters.update(id, patch)
     if (!result.ok) {
       setError(result.error)

@@ -3,21 +3,17 @@ import { Button } from '../../ui/Button'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlusIcon } from '../campaigns/icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
-import { UserIcon } from './icons'
 import { JoinCampaignPanel } from '../connect/JoinCampaignPanel'
-import type { Campaign, CharacterSheet, Folder, Note } from '@shared/ipc'
+import type { Campaign, Folder, Note } from '@shared/ipc'
 import type { PlayerTabRef } from './usePlayerWorkspace'
 
 interface PlayerSidebarProps {
-  characters: CharacterSheet[]
   activeCampaign: Campaign | null
   notes: Note[] | null
   folders: Folder[] | null
   activeTab: PlayerTabRef | null
   myDisplayName: string
-  onSelectCharacter: (id: string) => void
   onSelectNote: (id: string) => void
-  onCreateCharacter: () => void
   onCreateNote: (folderId: string | null) => void
   onCreateFolder: (name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
@@ -37,15 +33,12 @@ interface PlayerSidebarProps {
 }
 
 export function PlayerSidebar({
-  characters,
   activeCampaign,
   notes,
   folders,
   activeTab,
   myDisplayName,
-  onSelectCharacter,
   onSelectNote,
-  onCreateCharacter,
   onCreateNote,
   onCreateFolder,
   onRenameNote,
@@ -99,60 +92,40 @@ export function PlayerSidebar({
           onConnected={onConnected}
         />
 
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div style={{ flexShrink: 0, overflowY: 'auto', padding: 'var(--space-2) 0' }}>
-            <Section title="My Characters" onCreate={onCreateCharacter}>
-              {characters.map((character) => {
-                const active = activeTab?.kind === 'character' && activeTab.id === character.id
-                return (
-                  <Row
-                    key={character.id}
-                    icon={<UserIcon />}
-                    label={character.name || 'Untitled'}
-                    active={active}
-                    onClick={() => onSelectCharacter(character.id)}
-                  />
-                )
-              })}
-              {characters.length === 0 && <EmptyHint>No characters yet</EmptyHint>}
+        {activeCampaign ? (
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <NoteTreeSection
+              title="Campaign Notes"
+              storageKey={`${activeCampaign.id}:player`}
+              visibility="shared"
+              fill
+              notes={notes ?? []}
+              folders={folders ?? []}
+              activeId={activeTab?.kind === 'note' ? activeTab.id : null}
+              myDisplayName={myDisplayName}
+              onSelectNote={onSelectNote}
+              onCreateNote={onCreateNote}
+              onCreateFolder={onCreateFolder}
+              onRenameNote={onRenameNote}
+              onDeleteNote={onDeleteNote}
+              onRenameFolder={onRenameFolder}
+              onDeleteFolder={onDeleteFolder}
+              onMoveNote={onMoveNote}
+              onMoveFolder={onMoveFolder}
+              onPasteNote={onPasteNote}
+              onPasteFolder={onPasteFolder}
+              clipboard={clipboard}
+              onSetClipboard={(items: ClipboardItem[], mode) => setClipboard({ items, mode })}
+              onClearClipboard={() => setClipboard(null)}
+            />
+          </div>
+        ) : (
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2) 0' }}>
+            <Section title="Campaign Notes">
+              <EmptyHint>{connectedLabel ? 'Pick a campaign above' : 'Connect to a table above'}</EmptyHint>
             </Section>
           </div>
-
-          {activeCampaign ? (
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <NoteTreeSection
-                title="Campaign Notes"
-                storageKey={`${activeCampaign.id}:player`}
-                visibility="shared"
-                fill
-                notes={notes ?? []}
-                folders={folders ?? []}
-                activeId={activeTab?.kind === 'note' ? activeTab.id : null}
-                myDisplayName={myDisplayName}
-                onSelectNote={onSelectNote}
-                onCreateNote={onCreateNote}
-                onCreateFolder={onCreateFolder}
-                onRenameNote={onRenameNote}
-                onDeleteNote={onDeleteNote}
-                onRenameFolder={onRenameFolder}
-                onDeleteFolder={onDeleteFolder}
-                onMoveNote={onMoveNote}
-                onMoveFolder={onMoveFolder}
-                onPasteNote={onPasteNote}
-                onPasteFolder={onPasteFolder}
-                clipboard={clipboard}
-                onSetClipboard={(items: ClipboardItem[], mode) => setClipboard({ items, mode })}
-                onClearClipboard={() => setClipboard(null)}
-              />
-            </div>
-          ) : (
-            <div style={{ overflowY: 'auto', padding: 'var(--space-2) 0' }}>
-              <Section title="Campaign Notes">
-                <EmptyHint>{connectedLabel ? 'Pick a campaign above' : 'Connect to a table above'}</EmptyHint>
-              </Section>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </ResizableSidebar>
   )
@@ -318,42 +291,6 @@ function Section({
       </div>
       {children}
     </div>
-  )
-}
-
-function Row({
-  icon,
-  label,
-  active,
-  onClick
-}: {
-  icon: ReactNode
-  label: string
-  active: boolean
-  onClick: () => void
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        width: '100%',
-        textAlign: 'left',
-        padding: '5px var(--space-3)',
-        background: active ? 'var(--accent-subtle)' : 'transparent',
-        border: 'none',
-        borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
-        color: active ? 'var(--accent-hover)' : 'var(--text-secondary)',
-        fontSize: 13,
-        cursor: 'pointer'
-      }}
-    >
-      {icon}
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-    </button>
   )
 }
 

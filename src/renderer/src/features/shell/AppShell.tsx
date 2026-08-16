@@ -87,7 +87,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   }, [connectedHost, playerWorkspace.activeCampaign, playerWorkspace.activeCharacter])
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <header
         className="gb-drag"
         style={{

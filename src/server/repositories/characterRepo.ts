@@ -1,5 +1,6 @@
 import type { Database as DatabaseType } from 'better-sqlite3'
 import { v4 as uuid } from 'uuid'
+import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 
 export interface CharacterRow {
   id: string
@@ -12,16 +13,11 @@ export interface CharacterRow {
   updated_at: string
 }
 
-interface SheetData {
-  notes?: string
-}
-
 /**
  * Characters live in the LOCAL database, owned by the local identity, not
  * any host — they're campaign-independent by design (see plan: players
  * often have a character idea before a campaign to put it in). sheet_json
- * is intentionally minimal for now (just freeform notes); real 5e stat
- * fields land as a later, more detailed pass.
+ * holds the full 5e sheet (see shared/dnd5e.ts for the shape).
  */
 export class CharacterRepo {
   constructor(private db: DatabaseType) {}
@@ -38,9 +34,8 @@ export class CharacterRepo {
       | undefined
   }
 
-  create(ownerIdentityId: string, name: string): CharacterRow {
+  create(ownerIdentityId: string, name: string, sheet: CharacterSheetData): CharacterRow {
     const id = uuid()
-    const sheet: SheetData = { notes: '' }
     this.db
       .prepare(
         'INSERT INTO characters (id, owner_identity_id, name, sheet_json) VALUES (?, ?, ?, ?)'
@@ -52,14 +47,15 @@ export class CharacterRepo {
   update(
     id: string,
     ownerIdentityId: string,
-    input: { name?: string; notes?: string }
+    input: Partial<CharacterSheetData> & { name?: string }
   ): CharacterRow | undefined {
     const existing = this.findById(id)
     if (!existing || existing.owner_identity_id !== ownerIdentityId) return undefined
 
-    const name = input.name ?? existing.name
-    const currentSheet = JSON.parse(existing.sheet_json || '{}') as SheetData
-    const sheet: SheetData = { notes: input.notes ?? currentSheet.notes ?? '' }
+    const { name: patchName, ...sheetPatch } = input
+    const name = patchName ?? existing.name
+    const currentSheet = { ...emptyCharacterSheet(), ...JSON.parse(existing.sheet_json || '{}') }
+    const sheet: CharacterSheetData = { ...currentSheet, ...sheetPatch }
 
     this.db
       .prepare(

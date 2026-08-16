@@ -1,6 +1,8 @@
 // Contract between the preload bridge and the renderer.
 // Grows as features (campaigns, characters, etc.) land in later build steps.
 
+import type { CharacterSheetData } from './dnd5e'
+
 export interface Identity {
   id: string
   displayName: string
@@ -93,10 +95,9 @@ export interface Folder {
   updatedAt: string
 }
 
-export interface CharacterSheet {
+export interface CharacterSheet extends CharacterSheetData {
   id: string
   name: string
-  notes: string
   createdAt: string
   updatedAt: string
 }
@@ -199,8 +200,11 @@ export interface AppApi {
   // identity — campaign-independent, no address/network involved.
   characters: {
     list: () => Promise<ApiResult<CharacterSheet[]>>
-    create: (name: string) => Promise<ApiResult<CharacterSheet>>
-    update: (id: string, input: { name?: string; notes?: string }) => Promise<ApiResult<CharacterSheet>>
+    create: (name: string, sheet: CharacterSheetData) => Promise<ApiResult<CharacterSheet>>
+    update: (
+      id: string,
+      input: Partial<CharacterSheetData> & { name?: string }
+    ) => Promise<ApiResult<CharacterSheet>>
     remove: (id: string) => Promise<ApiResult<void>>
   }
   // Live "who's here" for a campaign, over the same WebSocket connection
