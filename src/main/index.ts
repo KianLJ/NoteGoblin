@@ -4,6 +4,19 @@ import { registerIpcHandlers } from './registerIpc'
 
 const isDev = !app.isPackaged
 
+// Electron derives the userData folder from the app name alone, so an
+// unpacked/dev run and a real packaged install would otherwise land in the
+// exact same OS folder — meaning test accounts/notes/campaigns created while
+// developing show up the moment someone installs the shipped app. Give dev
+// runs their own sibling folder instead, set before anything (identity db,
+// host db, etc.) ever touches app.getPath('userData'). Skipped when
+// --user-data-dir was passed explicitly (e.g. the two-profile DM/player test
+// setup) — that's already an intentional, isolated override.
+const hasExplicitUserDataDir = process.argv.some((arg) => arg.startsWith('--user-data-dir'))
+if (isDev && !hasExplicitUserDataDir) {
+  app.setPath('userData', `${app.getPath('userData')}-dev`)
+}
+
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1280,
