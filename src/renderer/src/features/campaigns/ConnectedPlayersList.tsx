@@ -1,28 +1,35 @@
 import { useEffect, useState } from 'react'
-import type { PresencePlayer } from '@shared/ipc'
+import type { CharacterSheet, PresencePlayer } from '@shared/ipc'
 
 interface ConnectedPlayersListProps {
-  address: string | null
+  sessionId: string | null
   campaignId: string
+  playerCharacters: Map<string, CharacterSheet>
+  onSelectPlayer: (character: CharacterSheet) => void
 }
 
-export function ConnectedPlayersList({ address, campaignId }: ConnectedPlayersListProps): JSX.Element {
+export function ConnectedPlayersList({
+  sessionId,
+  campaignId,
+  playerCharacters,
+  onSelectPlayer
+}: ConnectedPlayersListProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
 
   useEffect(() => {
-    if (!address) {
+    if (!sessionId) {
       setPlayers([])
       return
     }
-    window.goblin.presence.subscribe(address, campaignId)
+    window.goblin.presence.subscribe(sessionId, campaignId)
     return window.goblin.presence.onUpdate((update) => {
-      if (update.address === address && update.campaignId === campaignId) {
+      if (update.sessionId === sessionId && update.campaignId === campaignId) {
         setPlayers(update.players)
       }
     })
-  }, [address, campaignId])
+  }, [sessionId, campaignId])
 
-  if (!address) {
+  if (!sessionId) {
     return (
       <EmptyState>
         Start hosting to see who's connected — you can still work on this campaign solo either way.
@@ -36,29 +43,41 @@ export function ConnectedPlayersList({ address, campaignId }: ConnectedPlayersLi
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {players.map((player) => (
-        <div
-          key={player.userId}
-          style={{
-            padding: 'var(--space-2) var(--space-3)',
-            borderBottom: '1px solid var(--border-subtle)'
-          }}
-        >
+      {players.map((player) => {
+        const character = playerCharacters.get(player.userId)
+        return (
           <div
+            key={player.userId}
+            onClick={character ? () => onSelectPlayer(character) : undefined}
+            title={character ? `View ${character.name}'s sheet` : undefined}
             style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
+              padding: 'var(--space-2) var(--space-3)',
+              borderBottom: '1px solid var(--border-subtle)',
+              cursor: character ? 'pointer' : 'default'
+            }}
+            onMouseEnter={(e) => {
+              if (character) e.currentTarget.style.background = 'var(--bg-surface-raised)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
             }}
           >
-            {player.characterName ?? <em style={{ fontWeight: 400, color: 'var(--text-muted)' }}>No character selected</em>}
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {player.characterName ?? <em style={{ fontWeight: 400, color: 'var(--text-muted)' }}>No character selected</em>}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player.displayName}</div>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player.displayName}</div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

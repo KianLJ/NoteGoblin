@@ -7,7 +7,7 @@ import type { Folder, Note } from '@shared/ipc'
  * this is a no-op) so both the header's tab strip and the sidebar/editor body
  * share a single source of truth instead of each fetching independently.
  */
-export function useNotesWorkspace(address: string | undefined, campaignId: string | null) {
+export function useNotesWorkspace(sessionId: string | undefined, campaignId: string | null) {
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [folders, setFolders] = useState<Folder[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -25,17 +25,25 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
     }
     refresh(campaignId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, campaignId])
+  }, [sessionId, campaignId])
+
+  useEffect(() => {
+    if (!campaignId) return
+    return window.goblin.campaigns.onChanged((event) => {
+      if (event.campaignId === campaignId) refresh(campaignId)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId])
 
   function refresh(id: string): void {
-    window.goblin.notes.list(id, address).then((result) => {
+    window.goblin.notes.list(id, sessionId).then((result) => {
       if (!result.ok) {
         setError(result.error)
         return
       }
       setNotes(result.data)
     })
-    window.goblin.folders.list(id, address).then((result) => {
+    window.goblin.folders.list(id, sessionId).then((result) => {
       if (!result.ok) {
         setError(result.error)
         return
@@ -67,7 +75,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
     const result = await window.goblin.notes.create(
       campaignId,
       { title, bodyMarkdown: '', visibility, folderId },
-      address
+      sessionId
     )
     if (!result.ok) {
       setError(result.error)
@@ -82,7 +90,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
     patch: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' }
   ): Promise<void> {
     if (!campaignId) return
-    const result = await window.goblin.notes.update(campaignId, noteId, patch, address)
+    const result = await window.goblin.notes.update(campaignId, noteId, patch, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -92,7 +100,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
 
   async function deleteNote(noteId: string): Promise<void> {
     if (!campaignId) return
-    const result = await window.goblin.notes.remove(campaignId, noteId, address)
+    const result = await window.goblin.notes.remove(campaignId, noteId, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -108,7 +116,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
   ): Promise<string | undefined> {
     if (!campaignId) return undefined
     setError(null)
-    const result = await window.goblin.folders.create(campaignId, { name, visibility, parentFolderId }, address)
+    const result = await window.goblin.folders.create(campaignId, { name, visibility, parentFolderId }, sessionId)
     if (!result.ok) {
       setError(result.error)
       return undefined
@@ -119,7 +127,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
 
   async function renameFolder(folderId: string, name: string): Promise<void> {
     if (!campaignId) return
-    const result = await window.goblin.folders.update(campaignId, folderId, { name }, address)
+    const result = await window.goblin.folders.update(campaignId, folderId, { name }, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -137,7 +145,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
       campaignId,
       folderId,
       { parentFolderId, ...(visibility ? { visibility } : {}) },
-      address
+      sessionId
     )
     if (!result.ok) {
       setError(result.error)
@@ -148,7 +156,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
 
   async function deleteFolder(folderId: string): Promise<void> {
     if (!campaignId) return
-    const result = await window.goblin.folders.remove(campaignId, folderId, address)
+    const result = await window.goblin.folders.remove(campaignId, folderId, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -171,7 +179,7 @@ export function useNotesWorkspace(address: string | undefined, campaignId: strin
     const result = await window.goblin.notes.create(
       campaignId,
       { title: source.title, bodyMarkdown: source.bodyMarkdown, visibility: targetVisibility, folderId: targetFolderId },
-      address
+      sessionId
     )
     if (!result.ok) {
       setError(result.error)

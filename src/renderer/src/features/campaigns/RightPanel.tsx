@@ -2,19 +2,22 @@ import { useState, type ReactNode } from 'react'
 import { ConnectedPlayersList } from './ConnectedPlayersList'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon } from './panelIcons'
+import type { CharacterSheet } from '@shared/ipc'
 
 // Extend this union as new tools land — dice roller, initiative tracker, etc.
 // The tab strip below already renders disabled placeholders for what's next.
 type RightPanelTab = 'players'
 
 interface RightPanelProps {
-  /** The DM's own loopback address once hosting is on — null while not hosting, since there's no one to show presence for. */
-  selfAddress: string | null
+  /** The hosted session id — null while not hosting, since there's no one to show presence for. */
+  sessionId: string | null
   campaignId: string
+  playerCharacters: Map<string, CharacterSheet>
+  onSelectPlayer: (character: CharacterSheet) => void
 }
 
 /** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. */
-export function RightPanel({ selfAddress, campaignId }: RightPanelProps): JSX.Element {
+export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPlayer }: RightPanelProps): JSX.Element {
   const [tab, setTab] = useState<RightPanelTab>('players')
 
   return (
@@ -35,7 +38,14 @@ export function RightPanel({ selfAddress, campaignId }: RightPanelProps): JSX.El
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          {tab === 'players' && <ConnectedPlayersList address={selfAddress} campaignId={campaignId} />}
+          {tab === 'players' && (
+            <ConnectedPlayersList
+              sessionId={sessionId}
+              campaignId={campaignId}
+              playerCharacters={playerCharacters}
+              onSelectPlayer={onSelectPlayer}
+            />
+          )}
         </div>
       </div>
     </ResizableSidebar>

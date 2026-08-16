@@ -15,6 +15,9 @@ export function getHostDb(userDataDir: string): DatabaseType {
       if (tableIsMissingColumn(database, 'notes', 'folder_id')) {
         database.exec('ALTER TABLE notes ADD COLUMN folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL')
       }
+      if (tableIsMissingColumn(database, 'notes', 'editor_user_ids')) {
+        database.exec("ALTER TABLE notes ADD COLUMN editor_user_ids TEXT NOT NULL DEFAULT '[]'")
+      }
     })
   }
   return db

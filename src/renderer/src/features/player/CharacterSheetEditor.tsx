@@ -14,6 +14,8 @@ interface CharacterSheetEditorProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData> & { name?: string }) => void
   onDelete: () => void
+  /** DM viewing a connected player's synced character — tabs stay switchable, but every field/button underneath is inert (native `inert`, not just visually disabled, so nothing can be typed/dragged/clicked into it) and there's no name field or Delete button, since this isn't your character to rename or remove. */
+  readOnly?: boolean
 }
 
 const TABS = ['Overview', 'Inventory', 'Class Table', 'Class Features', 'Background'] as const
@@ -26,7 +28,7 @@ interface PendingLevelUp {
 }
 
 /** Full D&D 5e stat block — keyed by character.id from the parent, so switching characters remounts this with fresh state. All tabs stay mounted (just hidden) rather than conditionally rendered, so a debounced edit mid-flight in a tab you switch away from still fires instead of being cancelled on unmount. */
-export function CharacterSheetEditor({ character, onSave, onDelete }: CharacterSheetEditorProps): JSX.Element {
+export function CharacterSheetEditor({ character, onSave, onDelete, readOnly }: CharacterSheetEditorProps): JSX.Element {
   const [tab, setTab] = useState<Tab>('Overview')
   const [nameDraft, setNameDraft] = useAutosaveDraft(character.name, (name) => onSave({ name }))
   const [pendingLevelUp, setPendingLevelUp] = useState<PendingLevelUp | null>(null)
@@ -38,7 +40,7 @@ export function CharacterSheetEditor({ character, onSave, onDelete }: CharacterS
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {pendingLevelUp && (
+      {pendingLevelUp && !readOnly && (
         <LevelUpPrompt
           character={character}
           className={pendingLevelUp.className}
@@ -59,38 +61,53 @@ export function CharacterSheetEditor({ character, onSave, onDelete }: CharacterS
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <input
-            value={nameDraft}
-            onChange={(e) => setNameDraft(() => e.target.value)}
-            style={{
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              fontFamily: 'var(--font-display)',
-              fontSize: 22,
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              width: '100%'
-            }}
-          />
+          {readOnly ? (
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 22,
+                fontWeight: 600,
+                color: 'var(--text-primary)'
+              }}
+            >
+              {character.name}
+            </div>
+          ) : (
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(() => e.target.value)}
+              style={{
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontFamily: 'var(--font-display)',
+                fontSize: 22,
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                width: '100%'
+              }}
+            />
+          )}
           {subtitle && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{subtitle}</div>}
         </div>
-        <button
-          type="button"
-          onClick={onDelete}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-muted)',
-            fontSize: 12,
-            cursor: 'pointer',
-            textDecoration: 'underline',
-            padding: 0,
-            flexShrink: 0
-          }}
-        >
-          Delete
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={onDelete}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 12,
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+              flexShrink: 0
+            }}
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       <div
@@ -123,7 +140,10 @@ export function CharacterSheetEditor({ character, onSave, onDelete }: CharacterS
         ))}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-5)' }}>
+      <div
+        className={readOnly ? 'gb-readonly-sheet' : undefined}
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-5)' }}
+      >
         <div style={{ display: tab === 'Overview' ? 'block' : 'none' }}>
           <OverviewTab
             character={character}

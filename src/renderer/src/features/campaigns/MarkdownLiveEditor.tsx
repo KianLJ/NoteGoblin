@@ -27,6 +27,9 @@ import type { Note } from '@shared/ipc'
 export interface MarkdownLiveEditorHandle {
   insertText: (text: string) => void
   focus: () => void
+  hasFocus: () => boolean
+  /** Replaces the whole document — for adopting an external update (e.g. someone else's edit arriving over a session), never called while the user is actively typing here. */
+  setContent: (value: string) => void
 }
 
 interface MarkdownLiveEditorProps {
@@ -343,6 +346,14 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
       },
       focus() {
         viewRef.current?.focus()
+      },
+      hasFocus() {
+        return viewRef.current?.hasFocus ?? false
+      },
+      setContent(value: string) {
+        const view = viewRef.current
+        if (!view) return
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
       }
     }))
 

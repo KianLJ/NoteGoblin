@@ -3,7 +3,6 @@ import { Button } from '../../ui/Button'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlusIcon } from '../campaigns/icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
-import { JoinCampaignPanel } from '../connect/JoinCampaignPanel'
 import type { Campaign, Folder, Note } from '@shared/ipc'
 import type { PlayerTabRef } from './usePlayerWorkspace'
 
@@ -12,7 +11,7 @@ interface PlayerSidebarProps {
   notes: Note[] | null
   folders: Folder[] | null
   activeTab: PlayerTabRef | null
-  myDisplayName: string
+  myUserId: string | null
   onSelectNote: (id: string) => void
   onCreateNote: (folderId: string | null) => void
   onCreateFolder: (name: string, parentFolderId: string | null) => Promise<string | undefined>
@@ -27,7 +26,6 @@ interface PlayerSidebarProps {
   /** Re-fetches the DM's active campaign — the closest thing to "catch up" if they switched tables after you connected, since there's no live push for that yet. */
   onResync: () => void
   connectedLabel: string | null
-  onConnected: (address: string, label: string) => void
   /** The character switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
   footer: ReactNode
 }
@@ -37,7 +35,7 @@ export function PlayerSidebar({
   notes,
   folders,
   activeTab,
-  myDisplayName,
+  myUserId,
   onSelectNote,
   onCreateNote,
   onCreateFolder,
@@ -51,7 +49,6 @@ export function PlayerSidebar({
   onPasteFolder,
   onResync,
   connectedLabel,
-  onConnected,
   footer
 }: PlayerSidebarProps): JSX.Element {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
@@ -85,12 +82,7 @@ export function PlayerSidebar({
           background: 'var(--bg-sunken)'
         }}
       >
-        <TableBar
-          activeCampaign={activeCampaign}
-          onResync={onResync}
-          connectedLabel={connectedLabel}
-          onConnected={onConnected}
-        />
+        <TableBar activeCampaign={activeCampaign} onResync={onResync} connectedLabel={connectedLabel} />
 
         {activeCampaign ? (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -102,7 +94,7 @@ export function PlayerSidebar({
               notes={notes ?? []}
               folders={folders ?? []}
               activeId={activeTab?.kind === 'note' ? activeTab.id : null}
-              myDisplayName={myDisplayName}
+              myUserId={myUserId}
               onSelectNote={onSelectNote}
               onCreateNote={onCreateNote}
               onCreateFolder={onCreateFolder}
@@ -122,7 +114,9 @@ export function PlayerSidebar({
         ) : (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2) 0' }}>
             <Section title="Campaign Notes">
-              <EmptyHint>{connectedLabel ? 'Pick a campaign above' : 'Connect to a table above'}</EmptyHint>
+              <EmptyHint>
+                {connectedLabel ? 'Pick a campaign above' : 'Join a friend’s game from the Friends menu'}
+              </EmptyHint>
             </Section>
           </div>
         )}
@@ -135,13 +129,11 @@ export function PlayerSidebar({
 function TableBar({
   activeCampaign,
   onResync,
-  connectedLabel,
-  onConnected
+  connectedLabel
 }: {
   activeCampaign: Campaign | null
   onResync: () => void
   connectedLabel: string | null
-  onConnected: (address: string, label: string) => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -229,12 +221,11 @@ function TableBar({
             </div>
           )}
 
-          <JoinCampaignPanel
-            onConnected={(address, label) => {
-              onConnected(address, label)
-              setOpen(false)
-            }}
-          />
+          {!connectedLabel && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+              Join a friend's game from the Friends menu in the top-right corner.
+            </p>
+          )}
         </div>
       )}
     </div>

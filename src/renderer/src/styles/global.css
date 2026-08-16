@@ -79,3 +79,17 @@ button {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
 }
+
+/* Read-only character sheet (viewing another player's) — disables only the
+   actual form controls/drag handles so scrolling, tab switching, and card
+   hover states underneath stay fully interactive; see CharacterSheetEditor's
+   readOnly prop. Deliberately not `inert` on the container, which blocks
+   hit-testing (and therefore scroll/hover) for the whole subtree. */
+.gb-readonly-sheet input,
+.gb-readonly-sheet textarea,
+.gb-readonly-sheet select,
+.gb-readonly-sheet button,
+.gb-readonly-sheet [contenteditable],
+.gb-readonly-sheet [draggable='true'] {
+  pointer-events: none;
+}

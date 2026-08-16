@@ -69,6 +69,10 @@ CREATE TABLE IF NOT EXISTS notes (
   -- notes are returned to every campaign member. Enforced server-side.
   visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared')),
   folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
+  -- JSON array of userIds the author has granted edit access to (title/body
+  -- only — visibility, folder, and this list itself stay author-only).
+  -- Meaningless on a 'dm'-visibility note since only the author can ever see it.
+  editor_user_ids TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

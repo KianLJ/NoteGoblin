@@ -30,6 +30,8 @@ export interface NoteJson {
   bodyMarkdown: string
   visibility: 'dm' | 'shared'
   folderId: string | null
+  /** userIds (besides the author) allowed to edit this note's title/body — granted by the author only. */
+  editorUserIds: string[]
   createdAt: string
   updatedAt: string
 }
@@ -65,6 +67,15 @@ function toCampaignJson(
   }
 }
 
+function parseEditorUserIds(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 function toNoteJson(userRepo: UserRepo, row: NoteRow): NoteJson {
   const author = userRepo.findById(row.author_user_id)
   return {
@@ -76,6 +87,7 @@ function toNoteJson(userRepo: UserRepo, row: NoteRow): NoteJson {
     bodyMarkdown: row.body_markdown,
     visibility: row.visibility,
     folderId: row.folder_id,
+    editorUserIds: parseEditorUserIds(row.editor_user_ids),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -252,7 +264,13 @@ export function updateNote(
   campaignId: string,
   noteId: string,
   userId: string,
-  input: { title?: unknown; bodyMarkdown?: unknown; folderId?: unknown; visibility?: unknown }
+  input: {
+    title?: unknown
+    bodyMarkdown?: unknown
+    folderId?: unknown
+    visibility?: unknown
+    editorUserIds?: unknown
+  }
 ): ServiceResult<NoteJson> {
   const userRepo = new UserRepo(db)
   const campaignRepo = new CampaignRepo(db)
@@ -263,8 +281,25 @@ export function updateNote(
   if (!note || note.campaign_id !== campaignId) {
     return { ok: false, status: 404, error: 'Note not found.' }
   }
-  if (note.author_user_id !== userId) {
-    return { ok: false, status: 403, error: 'Only the author can edit this note.' }
+  const isAuthor = note.author_user_id === userId
+  const isEditor = parseEditorUserIds(note.editor_user_ids).includes(userId)
+  if (!isAuthor && !isEditor) {
+    return { ok: false, status: 403, error: 'Only the author or an invited editor can edit this note.' }
+  }
+  // Content (title/body) is open to editors too, but visibility, folder
+  // placement, and the editor list itself stay author-only — an editor
+  // shouldn't be able to move a note out of the author's tree, flip it to
+  // DM-only, or grant/revoke someone else's access.
+  if (!isAuthor && ('visibility' in input || 'folderId' in input || 'editorUserIds' in input)) {
+    return { ok: false, status: 403, error: "Only the author can change this note's visibility, location, or editors." }
+  }
+
+  let editorUserIds: string[] | undefined
+  if ('editorUserIds' in input) {
+    if (!Array.isArray(input.editorUserIds) || !input.editorUserIds.every((id) => typeof id === 'string')) {
+      return { ok: false, status: 400, error: 'Invalid editor list.' }
+    }
+    editorUserIds = input.editorUserIds
   }
 
   let visibility: 'dm' | 'shared' | undefined
@@ -298,7 +333,8 @@ export function updateNote(
     title: typeof input.title === 'string' ? input.title.trim() : undefined,
     bodyMarkdown: typeof input.bodyMarkdown === 'string' ? input.bodyMarkdown : undefined,
     ...(folderId !== undefined ? { folderId } : {}),
-    ...(visibility ? { visibility } : {})
+    ...(visibility ? { visibility } : {}),
+    ...(editorUserIds !== undefined ? { editorUserIds } : {})
   })
   return { ok: true, data: toNoteJson(userRepo, updated as NoteRow) }
 }

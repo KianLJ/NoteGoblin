@@ -16,7 +16,7 @@ function sameTab(a: PlayerTabRef, b: PlayerTabRef): boolean {
  * Obsidian-style. Also owns campaign discovery/joining for the connected
  * host, since that's what decides which notes are even in scope.
  */
-export function usePlayerWorkspace(address: string | undefined) {
+export function usePlayerWorkspace(sessionId: string | undefined) {
   const [characters, setCharacters] = useState<CharacterSheet[] | null>(null)
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
@@ -31,10 +31,10 @@ export function usePlayerWorkspace(address: string | undefined) {
 
   useEffect(() => {
     setActiveCampaign(null)
-    if (!address) return
-    resyncActiveCampaign(address)
+    if (!sessionId) return
+    resyncActiveCampaign(sessionId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address])
+  }, [sessionId])
 
   useEffect(() => {
     if (!activeCampaign) {
@@ -44,7 +44,16 @@ export function usePlayerWorkspace(address: string | undefined) {
     }
     refreshNotes(activeCampaign.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, activeCampaign?.id])
+  }, [sessionId, activeCampaign?.id])
+
+  useEffect(() => {
+    if (!activeCampaign) return
+    const campaignId = activeCampaign.id
+    return window.goblin.campaigns.onChanged((event) => {
+      if (event.campaignId === campaignId) refreshNotes(campaignId)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCampaign?.id])
 
   /** Runs once at startup (see the mount effect below) — characters come back ordered most-recently-updated first, so opening the first one here means whichever character you were last working on is already up when you switch into player mode, instead of landing on an empty state. */
   function refreshCharacters(): void {
@@ -74,14 +83,14 @@ export function usePlayerWorkspace(address: string | undefined) {
   }
 
   function refreshNotes(campaignId: string): void {
-    window.goblin.notes.list(campaignId, address).then((result) => {
+    window.goblin.notes.list(campaignId, sessionId).then((result) => {
       if (!result.ok) {
         setError(result.error)
         return
       }
       setNotes(result.data)
     })
-    window.goblin.folders.list(campaignId, address).then((result) => {
+    window.goblin.folders.list(campaignId, sessionId).then((result) => {
       if (!result.ok) {
         setError(result.error)
         return
@@ -142,7 +151,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     const result = await window.goblin.notes.create(
       activeCampaign.id,
       { title, bodyMarkdown: '', visibility: 'shared', folderId },
-      address
+      sessionId
     )
     if (!result.ok) {
       setError(result.error)
@@ -154,10 +163,16 @@ export function usePlayerWorkspace(address: string | undefined) {
 
   async function saveNote(
     id: string,
-    patch: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' }
+    patch: {
+      title?: string
+      bodyMarkdown?: string
+      folderId?: string | null
+      visibility?: 'dm' | 'shared'
+      editorUserIds?: string[]
+    }
   ): Promise<void> {
     if (!activeCampaign) return
-    const result = await window.goblin.notes.update(activeCampaign.id, id, patch, address)
+    const result = await window.goblin.notes.update(activeCampaign.id, id, patch, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -167,7 +182,7 @@ export function usePlayerWorkspace(address: string | undefined) {
 
   async function deleteNote(id: string): Promise<void> {
     if (!activeCampaign) return
-    const result = await window.goblin.notes.remove(activeCampaign.id, id, address)
+    const result = await window.goblin.notes.remove(activeCampaign.id, id, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -182,7 +197,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     const result = await window.goblin.folders.create(
       activeCampaign.id,
       { name, visibility: 'shared', parentFolderId },
-      address
+      sessionId
     )
     if (!result.ok) {
       setError(result.error)
@@ -194,7 +209,7 @@ export function usePlayerWorkspace(address: string | undefined) {
 
   async function renameFolder(folderId: string, name: string): Promise<void> {
     if (!activeCampaign) return
-    const result = await window.goblin.folders.update(activeCampaign.id, folderId, { name }, address)
+    const result = await window.goblin.folders.update(activeCampaign.id, folderId, { name }, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -212,7 +227,7 @@ export function usePlayerWorkspace(address: string | undefined) {
       activeCampaign.id,
       folderId,
       { parentFolderId, ...(visibility ? { visibility } : {}) },
-      address
+      sessionId
     )
     if (!result.ok) {
       setError(result.error)
@@ -223,7 +238,7 @@ export function usePlayerWorkspace(address: string | undefined) {
 
   async function deleteFolder(folderId: string): Promise<void> {
     if (!activeCampaign) return
-    const result = await window.goblin.folders.remove(activeCampaign.id, folderId, address)
+    const result = await window.goblin.folders.remove(activeCampaign.id, folderId, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
@@ -244,7 +259,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     const result = await window.goblin.notes.create(
       activeCampaign.id,
       { title: source.title, bodyMarkdown: source.bodyMarkdown, visibility: targetVisibility, folderId: targetFolderId },
-      address
+      sessionId
     )
     if (!result.ok) {
       setError(result.error)
@@ -303,7 +318,7 @@ export function usePlayerWorkspace(address: string | undefined) {
     setActiveTab: openTab,
     openTab,
     closeTab,
-    resync: () => address && resyncActiveCampaign(address),
+    resync: () => sessionId && resyncActiveCampaign(sessionId),
     createCharacter,
     saveCharacter,
     deleteCharacter,
