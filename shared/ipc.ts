@@ -2,6 +2,7 @@
 // Grows as features (campaigns, characters, etc.) land in later build steps.
 
 import type { CharacterSheetData } from './dnd5e'
+import type { FriendRequest, FriendSummary, RelayNotification, RelayStatus } from './relay'
 
 export interface Identity {
   id: string
@@ -20,45 +21,18 @@ export interface IdentitySummary {
 
 export type LoginResult = { ok: true; identity: Identity } | { ok: false; error: string }
 
-export interface HostAddressOption {
-  address: string
-  kind: 'tailscale' | 'lan' | 'other'
-  inviteCode: string
-}
-
-export type HostingStatus =
+export type SessionStatus =
   | { hosting: false }
   | {
       hosting: true
-      fingerprint: string
-      addresses: HostAddressOption[]
+      sessionId: string
       /** Display name of whichever local identity actually started hosting — hosting is process-wide, so a different (e.g. switched-to test) identity can be looking at this without being the one who turned it on. */
       startedBy: string
       /** True only for the identity that started it — controls whether Stop Hosting is even offered, since stopping someone else's hosting from a different identity would be surprising/destructive. */
       isOwner: boolean
     }
 
-export type HostingStartResult =
-  | { ok: true; fingerprint: string; addresses: HostAddressOption[] }
-  | { ok: false; error: string }
-
-export type ProbeResult =
-  | { ok: true; fingerprint: string; status: 'new' | 'match' | 'mismatch'; previousFingerprint?: string }
-  | { ok: false; error: string }
-
-export type JoinResult = { ok: true; address: string; fingerprint: string } | { ok: false; error: string }
-
-/** Decoding a pasted invite code before connecting — lets the UI show what it found without committing to a probe/join yet. */
-export type DecodeInviteResult =
-  | { ok: true; address: string; fingerprint: string; label?: string }
-  | { ok: false; error: string }
-
-export interface KnownHostSummary {
-  address: string
-  label: string
-  certFingerprint: string
-  lastConnectedAt: string | null
-}
+export type SessionStartResult = { ok: true; sessionId: string } | { ok: false; error: string }
 
 export interface Campaign {
   id: string
@@ -78,6 +52,8 @@ export interface Note {
   bodyMarkdown: string
   visibility: 'dm' | 'shared'
   folderId: string | null
+  /** userIds (besides the author) granted edit access to title/bodyMarkdown — set by the author only, see campaignService.updateNote. */
+  editorUserIds: string[]
   createdAt: string
   updatedAt: string
 }
@@ -109,9 +85,21 @@ export interface PresencePlayer {
 }
 
 export interface PresenceUpdate {
-  address: string
+  sessionId: string
   campaignId: string
   players: PresencePlayer[]
+}
+
+export interface PlayerCharacterUpdate {
+  userId: string
+  /** null means they deselected, or (a plain disconnect) just dropped — either way, nothing to show for them anymore. */
+  character: CharacterSheet | null
+}
+
+/** Fired whenever any participant (DM or a fellow player) mutates notes/folders in a campaign — listeners just re-fetch rather than diffing a pushed payload. */
+export interface CampaignChangeEvent {
+  sessionId: string
+  campaignId: string
 }
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -136,68 +124,77 @@ export interface AppApi {
     /** Forgets a saved password without deleting the account itself. */
     forgetSaved: (id: string) => Promise<void>
   }
-  hosting: {
-    start: () => Promise<HostingStartResult>
+  // Sessions replace the old LAN/Tailscale hosting+invite-code flow entirely
+  // — connecting is now: start hosting, invite a friend (from the friends
+  // menu), they join by session id. No addresses, no certificates.
+  sessions: {
+    start: () => Promise<SessionStartResult>
     stop: () => Promise<void>
-    status: () => Promise<HostingStatus>
-    /** The loopback address (127.0.0.1:port) this app uses to talk to its own hosted server — not shown to players, just used internally to drive the DM's own campaign views through the same API a joining player uses. */
-    selfAddress: () => Promise<string | null>
+    status: () => Promise<SessionStatus>
+    /** DM-only — adds a friend (by their relay userId) to this session's allow-list. */
+    invite: (friendUserId: string) => Promise<ApiResult<void>>
+    join: (sessionId: string) => Promise<ApiResult<void>>
+    leave: () => Promise<void>
+    /** Fires when a joined session drops unexpectedly (DM closed the app, network dropped) — never for a manual `leave()` call. */
+    onDisconnected: (callback: (reason: 'dm-left' | 'connection-lost') => void) => () => void
   }
-  connections: {
-    probe: (address: string) => Promise<ProbeResult>
-    join: (address: string, label?: string) => Promise<JoinResult>
-    list: () => Promise<KnownHostSummary[]>
-    forget: (address: string) => Promise<void>
-    decodeInvite: (code: string) => Promise<DecodeInviteResult>
-  }
-  // Every method here takes an optional trailing `address`: omit it to work
+  // Every method here takes an optional trailing `sessionId`: omit it to work
   // directly against the DM's own campaign data (no network/hosting
-  // required), or pass a connected host's address to go over the network —
-  // used identically for the DM reaching their own running server and for a
-  // player reaching someone else's.
+  // required), or pass a joined session's id to go over the relay — used
+  // identically for the DM reaching their own campaign and for a player
+  // reaching the DM's.
   campaigns: {
-    list: (address?: string) => Promise<ApiResult<Campaign[]>>
-    create: (name: string, address?: string) => Promise<ApiResult<Campaign>>
-    join: (campaignId: string, address?: string) => Promise<ApiResult<Campaign>>
+    list: (sessionId?: string) => Promise<ApiResult<Campaign[]>>
+    create: (name: string, sessionId?: string) => Promise<ApiResult<Campaign>>
+    join: (campaignId: string, sessionId?: string) => Promise<ApiResult<Campaign>>
     /** Whatever campaign the DM currently has open — null if they haven't opened one. */
-    getActive: (address?: string) => Promise<ApiResult<Campaign | null>>
+    getActive: (sessionId?: string) => Promise<ApiResult<Campaign | null>>
     /** DM-only — sets which campaign connecting players auto-join. */
-    setActive: (campaignId: string, address?: string) => Promise<ApiResult<Campaign>>
+    setActive: (campaignId: string, sessionId?: string) => Promise<ApiResult<Campaign>>
     /** The player-side one-step join: auto-adds you to the DM's active campaign, no picking from a list. */
-    joinActive: (address?: string) => Promise<ApiResult<Campaign>>
+    joinActive: (sessionId?: string) => Promise<ApiResult<Campaign>>
+    /** Fires when another connected participant changes notes/folders in this campaign — re-fetch on receipt. Only meaningful while hosting or joined to a session. */
+    onChanged: (callback: (event: CampaignChangeEvent) => void) => () => void
   }
   notes: {
-    list: (campaignId: string, address?: string) => Promise<ApiResult<Note[]>>
+    list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Note[]>>
     create: (
       campaignId: string,
       input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared'; folderId?: string | null },
-      address?: string
+      sessionId?: string
     ) => Promise<ApiResult<Note>>
     update: (
       campaignId: string,
       noteId: string,
-      input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' },
-      address?: string
+      input: {
+        title?: string
+        bodyMarkdown?: string
+        folderId?: string | null
+        visibility?: 'dm' | 'shared'
+        /** Author-only — replaces the full grant list. */
+        editorUserIds?: string[]
+      },
+      sessionId?: string
     ) => Promise<ApiResult<Note>>
-    remove: (campaignId: string, noteId: string, address?: string) => Promise<ApiResult<void>>
+    remove: (campaignId: string, noteId: string, sessionId?: string) => Promise<ApiResult<void>>
   }
   folders: {
-    list: (campaignId: string, address?: string) => Promise<ApiResult<Folder[]>>
+    list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Folder[]>>
     create: (
       campaignId: string,
       input: { name: string; visibility: 'dm' | 'shared'; parentFolderId?: string | null },
-      address?: string
+      sessionId?: string
     ) => Promise<ApiResult<Folder>>
     update: (
       campaignId: string,
       folderId: string,
       input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' },
-      address?: string
+      sessionId?: string
     ) => Promise<ApiResult<Folder>>
-    remove: (campaignId: string, folderId: string, address?: string) => Promise<ApiResult<void>>
+    remove: (campaignId: string, folderId: string, sessionId?: string) => Promise<ApiResult<void>>
   }
   // Characters live entirely on your own device, owned by your local
-  // identity — campaign-independent, no address/network involved.
+  // identity — campaign-independent, no session/network involved.
   characters: {
     list: () => Promise<ApiResult<CharacterSheet[]>>
     create: (name: string, sheet: CharacterSheetData) => Promise<ApiResult<CharacterSheet>>
@@ -206,14 +203,46 @@ export interface AppApi {
       input: Partial<CharacterSheetData> & { name?: string }
     ) => Promise<ApiResult<CharacterSheet>>
     remove: (id: string) => Promise<ApiResult<void>>
+    /** Player-side: pushes your currently-selected character (or null) to the DM you're connected to — call whenever it changes, selection or edits alike. No-op while hosting (nothing to sync to yourself) or not in a joined session. */
+    syncSelected: (sessionId: string, character: CharacterSheet | null) => Promise<void>
+    /** DM-side: fires whenever a connected player's synced character changes — selection, an edit, or them disconnecting (character: null). Only meaningful while hosting. */
+    onPlayerCharacterChanged: (callback: (update: PlayerCharacterUpdate) => void) => () => void
   }
-  // Live "who's here" for a campaign, over the same WebSocket connection
-  // used for future real-time features (initiative, chat). Only meaningful
-  // for a host address you're actively connected to.
+  // Live "who's here" for a campaign. Only meaningful once you're hosting or
+  // have joined a session — sessionId identifies which one.
   presence: {
-    subscribe: (address: string, campaignId: string) => Promise<void>
-    selectCharacter: (address: string, characterName: string | null) => Promise<void>
+    subscribe: (sessionId: string, campaignId: string) => Promise<void>
+    selectCharacter: (sessionId: string, characterName: string | null) => Promise<void>
     onUpdate: (callback: (update: PresenceUpdate) => void) => () => void
+  }
+  // Friends/presence, backed by the relay (see relay/) rather than local
+  // storage. The relay account itself is transparent — it's the same
+  // credentials as identity.*, synced automatically on login/switch — so
+  // there's no separate relay login/register call here.
+  relay: {
+    status: () => Promise<RelayStatus>
+    /** Your own relay account id — null if not connected. This is the id notes/folders you author over a joined session get stamped with (see sessionHost.ts's dispatch()), distinct from your local identity id and (for a DM) your local host-db user id. */
+    myUserId: () => Promise<string | null>
+    friends: {
+      list: () => Promise<ApiResult<FriendSummary[]>>
+      listRequests: () => Promise<ApiResult<FriendRequest[]>>
+      /** status: 'requested' for a normal pending request, or 'accepted' if this merged with a request already waiting from them. */
+      sendRequest: (username: string) => Promise<ApiResult<{ status: 'requested' | 'accepted' }>>
+      accept: (userId: string) => Promise<ApiResult<void>>
+      decline: (userId: string) => Promise<ApiResult<void>>
+      remove: (userId: string) => Promise<ApiResult<void>>
+    }
+    /** Fires whenever presence or the friend graph might have changed — listeners just re-fetch friends.list()/listRequests() rather than trying to diff a pushed payload. */
+    onFriendsChanged: (callback: () => void) => () => void
+    // Persistent, generic notifications (friend requests, session invites, and
+    // eventually DM messages) — stored relay-side so they survive being
+    // offline, and pushed live over the same presence socket when online.
+    notifications: {
+      list: () => Promise<ApiResult<RelayNotification[]>>
+      markRead: (id: string) => Promise<ApiResult<void>>
+    }
+    /** Fires whenever a new notification arrives — listeners re-fetch notifications.list() rather than trying to diff a pushed payload, same convention as onFriendsChanged. */
+    onNotificationsChanged: (callback: () => void) => () => void
   }
   files: {
     /** Opens a native file picker and reads the chosen image back as a data: URI — see registerIpc.ts for why images are embedded rather than stored separately. */

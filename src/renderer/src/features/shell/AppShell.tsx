@@ -1,53 +1,101 @@
 import { useEffect, useRef, useState } from 'react'
 import { ModeToggle, type Mode } from './ModeToggle'
 import { WindowControls } from './WindowControls'
-import { HostingCorner } from '../connect/HostingCorner'
+import { FriendsMenu } from '../friends/FriendsMenu'
+import { NotificationToasts } from '../notifications/NotificationToasts'
+import { useNotifications } from '../notifications/useNotifications'
 import { CampaignWorkspace } from '../campaigns/CampaignWorkspace'
 import { WorkspaceHeaderBar } from '../campaigns/WorkspaceHeaderBar'
 import { useNotesWorkspace } from '../campaigns/useNotesWorkspace'
 import { PlayerWorkspaceBody } from '../player/PlayerWorkspaceBody'
 import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
-import type { Campaign, HostingStatus } from '@shared/ipc'
+import type { Campaign, CharacterSheet } from '@shared/ipc'
 
 interface AppShellProps {
   displayName: string
-}
-
-interface OpenWorkspace {
-  campaign: Campaign
-  /** undefined = the DM's own table (no network needed); set = a remote host address. */
-  address?: string
 }
 
 export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [mode, setMode] = useState<Mode>('dm')
 
   // --- DM side: one active campaign workspace, switched via CampaignSwitcher (lives in the sidebar footer) ---
-  const [activeWorkspace, setActiveWorkspace] = useState<OpenWorkspace | null>(null)
-  const workspace = useNotesWorkspace(activeWorkspace?.address, activeWorkspace?.campaign.id ?? null)
+  const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
+  const workspace = useNotesWorkspace(undefined, activeCampaign?.id ?? null)
   const dmAutoOpenedRef = useRef(false)
-  const [hostingSelfAddress, setHostingSelfAddress] = useState<string | null>(null)
+  const [hostedSessionId, setHostedSessionId] = useState<string | null>(null)
 
-  function handleHostingStatusChange(status: HostingStatus): void {
-    if (status.hosting) {
-      window.goblin.hosting.selfAddress().then(setHostingSelfAddress)
-    } else {
-      setHostingSelfAddress(null)
-    }
+  // Restore hosting state on mount (e.g. this window reloaded while another
+  // was already hosting isn't possible per-process, but this mirrors the old
+  // hosting-status check so a stale UI never disagrees with sessionHost.ts).
+  useEffect(() => {
+    window.goblin.sessions.status().then((status) => {
+      if (status.hosting) setHostedSessionId(status.sessionId)
+    })
+  }, [])
+
+  // --- Player side: characters (always available) + the joined session's campaigns/notes ---
+  const [joinedSession, setJoinedSession] = useState<{ sessionId: string; label: string } | null>(null)
+  const [disconnectMessage, setDisconnectMessage] = useState<string | null>(null)
+  const playerWorkspace = usePlayerWorkspace(joinedSession?.sessionId)
+
+  // Lifted here (rather than inside NotificationBell) so FriendsMenu's Join
+  // button can also be gated on it — a friend showing as "hosting" doesn't
+  // mean you've actually been invited to their session.
+  const notifications = useNotifications()
+  const invitedSessionIds = new Set(
+    notifications.notifications.filter((n) => n.kind === 'session-invite' && n.sessionId).map((n) => n.sessionId!)
+  )
+  function handleJoinedSession(sessionId: string, label: string): void {
+    setJoinedSession({ sessionId, label })
+    setMode('player')
   }
 
-  // --- Player side: characters (always available) + the connected table's campaigns/notes ---
-  const [connectedHost, setConnectedHost] = useState<{ address: string; label: string } | null>(null)
-  const playerWorkspace = usePlayerWorkspace(connectedHost?.address)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault()
+        setMode((m) => (m === 'dm' ? 'player' : 'dm'))
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // Your own relay account id — this is what a note/folder you author over a
+  // joined session gets stamped with as authorUserId (see sessionHost.ts's
+  // dispatch()), which is NOT the same id space as your local identity or
+  // (as the DM) your local host-db user id. Only the player side needs this:
+  // the DM's own authorUserId is always their campaign's dmUserId instead.
+  const [myRelayUserId, setMyRelayUserId] = useState<string | null>(null)
+  useEffect(() => {
+    function refresh(): void {
+      window.goblin.relay.myUserId().then(setMyRelayUserId)
+    }
+    refresh()
+    return window.goblin.relay.onFriendsChanged(refresh)
+  }, [])
+
+  // The DM closing their app (or a dropped connection) doesn't un-join us on
+  // its own — sessionClient.ts pushes this the moment the relay tells it the
+  // session died, so we can leave the table cleanly instead of sitting on a
+  // campaign we can no longer actually reach.
+  useEffect(() => {
+    return window.goblin.sessions.onDisconnected((reason) => {
+      window.goblin.sessions.leave()
+      setJoinedSession(null)
+      setDisconnectMessage(reason === 'dm-left' ? 'The DM disconnected.' : 'Lost connection to the DM.')
+      setTimeout(() => setDisconnectMessage(null), 6000)
+    })
+  }, [])
 
   // Auto-open the most recent DM campaign you're actually part of, once per
   // app session. There's no "back" to re-arm this from — once a campaign
   // exists it's always the active one, switching only happens via the
   // sidebar's CampaignSwitcher. (Player-side auto-open lives inside
-  // usePlayerWorkspace, keyed by connected address instead.)
+  // usePlayerWorkspace, keyed by joined session instead.)
   useEffect(() => {
-    if (activeWorkspace || mode !== 'dm' || dmAutoOpenedRef.current) return
+    if (activeCampaign || mode !== 'dm' || dmAutoOpenedRef.current) return
     dmAutoOpenedRef.current = true
     window.goblin.campaigns.list().then((result) => {
       if (!result.ok) return
@@ -57,34 +105,56 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       // gets auto-opened straight into *their* campaign in DM mode, showing
       // the DM's info under the wrong identity.
       const mine = result.data.filter((c) => c.myRole === 'dm')
-      if (mine.length > 0) setActiveWorkspace({ campaign: mine[0] })
+      if (mine.length > 0) setActiveCampaign(mine[0])
     })
-  }, [mode, activeWorkspace])
+  }, [mode, activeCampaign])
 
   // Whatever campaign the DM has open is "the table" — connecting players
-  // auto-join this instead of picking from a list themselves. Recorded
-  // server-side (host_state) so it's there for a player to discover the
-  // moment they connect, regardless of whether hosting was already running
-  // when the DM switched campaigns.
+  // auto-join this instead of picking from a list themselves. Recorded on
+  // the relay session so a player discovers it the moment they join.
   useEffect(() => {
-    if (!activeWorkspace) return
-    window.goblin.campaigns.setActive(activeWorkspace.campaign.id, activeWorkspace.address)
-  }, [activeWorkspace])
+    if (!activeCampaign) return
+    window.goblin.campaigns.setActive(activeCampaign.id)
+  }, [activeCampaign])
 
   // Player: subscribe to presence once connected to a campaign, and keep the
   // rest of the table updated about which character you're currently on.
   useEffect(() => {
-    if (!connectedHost || !playerWorkspace.activeCampaign) return
-    window.goblin.presence.subscribe(connectedHost.address, playerWorkspace.activeCampaign.id)
-  }, [connectedHost, playerWorkspace.activeCampaign])
+    if (!joinedSession || !playerWorkspace.activeCampaign) return
+    window.goblin.presence.subscribe(joinedSession.sessionId, playerWorkspace.activeCampaign.id)
+  }, [joinedSession, playerWorkspace.activeCampaign])
 
   useEffect(() => {
-    if (!connectedHost || !playerWorkspace.activeCampaign) return
+    if (!joinedSession || !playerWorkspace.activeCampaign) return
     window.goblin.presence.selectCharacter(
-      connectedHost.address,
+      joinedSession.sessionId,
       playerWorkspace.activeCharacter?.name ?? null
     )
-  }, [connectedHost, playerWorkspace.activeCampaign, playerWorkspace.activeCharacter])
+  }, [joinedSession, playerWorkspace.activeCampaign, playerWorkspace.activeCharacter])
+
+  // Same trigger as the presence name announcement above, but carries the
+  // whole sheet — re-fires on every edit too, since activeCharacter is a new
+  // object each time saveCharacter's setCharacters resolves, keeping the
+  // DM's view live rather than frozen at whatever it looked like on selection.
+  useEffect(() => {
+    if (!joinedSession) return
+    window.goblin.characters.syncSelected(joinedSession.sessionId, playerWorkspace.activeCharacter ?? null)
+  }, [joinedSession, playerWorkspace.activeCharacter])
+
+  // DM: every connected player's currently-selected character, kept live —
+  // used by RightPanel's ConnectedPlayersList to open one as a read-only tab.
+  const [playerCharacters, setPlayerCharacters] = useState<Map<string, CharacterSheet>>(new Map())
+  useEffect(() => {
+    return window.goblin.characters.onPlayerCharacterChanged(({ userId, character }) => {
+      setPlayerCharacters((prev) => {
+        const next = new Map(prev)
+        if (character) next.set(userId, character)
+        else next.delete(userId)
+        return next
+      })
+    })
+  }, [])
+  const [viewedPlayerCharacter, setViewedPlayerCharacter] = useState<CharacterSheet | null>(null)
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -107,10 +177,10 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
         >
           <ModeToggle mode={mode} onChange={setMode} />
 
-          {mode === 'dm' && activeWorkspace && (
+          {mode === 'dm' && activeCampaign && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
-              <WorkspaceHeaderBar campaign={activeWorkspace.campaign} workspace={workspace} />
+              <WorkspaceHeaderBar campaign={activeCampaign} workspace={workspace} />
             </>
           )}
 
@@ -132,31 +202,55 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           className="gb-no-drag"
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexShrink: 0 }}
         >
-          {mode === 'dm' && <HostingCorner onStatusChange={handleHostingStatusChange} />}
+          <FriendsMenu
+            mode={mode}
+            hostedSessionId={hostedSessionId}
+            onHostedSessionChange={setHostedSessionId}
+            invitedSessionIds={invitedSessionIds}
+            onJoinedSession={handleJoinedSession}
+          />
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{displayName}</span>
         </div>
 
         <WindowControls />
       </header>
 
+      {disconnectMessage && (
+        <div
+          style={{
+            padding: 'var(--space-2) var(--space-5)',
+            background: 'var(--danger-subtle, var(--bg-sunken))',
+            color: 'var(--danger)',
+            fontSize: 13,
+            flexShrink: 0
+          }}
+        >
+          {disconnectMessage}
+        </div>
+      )}
+
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {mode === 'dm' ? (
           <CampaignWorkspace
-            campaign={activeWorkspace?.campaign ?? null}
-            myDisplayName={displayName}
+            campaign={activeCampaign}
             workspace={workspace}
-            onSwitchCampaign={(campaign) => setActiveWorkspace({ campaign })}
-            hostingSelfAddress={hostingSelfAddress}
+            onSwitchCampaign={setActiveCampaign}
+            hostedSessionId={hostedSessionId}
+            playerCharacters={playerCharacters}
+            viewedPlayerCharacter={viewedPlayerCharacter}
+            onViewPlayerCharacter={setViewedPlayerCharacter}
           />
         ) : (
           <PlayerWorkspaceBody
             workspace={playerWorkspace}
-            myDisplayName={displayName}
-            connectedLabel={connectedHost?.label ?? null}
-            onConnected={(address, label) => setConnectedHost({ address, label })}
+            myUserId={myRelayUserId}
+            sessionId={joinedSession?.sessionId ?? null}
+            connectedLabel={joinedSession?.label ?? null}
           />
         )}
       </main>
+
+      <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
     </div>
   )
 }

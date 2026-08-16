@@ -5,20 +5,21 @@ import { getLocalDb } from '@server/db/localDb'
 import { getHostDb } from '@server/db/hostDb'
 import { IdentityRepo } from '@server/repositories/identityRepo'
 import { UserRepo } from '@server/repositories/userRepo'
-import { KnownHostRepo } from '@server/repositories/knownHostRepo'
-import { getOrCreateHostCertificate } from '@server/tls/certStore'
-import { getOrCreateSessionSecret } from '@server/auth/sessionSecret'
-import { signToken } from '@server/auth/token'
-import { startHostServer, DEFAULT_HOST_PORT, type HostServerHandle } from '@server/hostServer'
-import { probeAddress, authenticateWithHost } from '@server/net/connectToHost'
-import { friendlyConnectionError } from '@server/net/friendlyConnectionError'
-import { getLocalAddresses } from '@server/net/localAddresses'
-import { encodeInviteCode, decodeInviteCode } from '@server/net/inviteCode'
-import * as campaignClient from '@server/net/campaignClient'
 import * as campaignService from '@server/services/campaignService'
 import { CharacterRepo, type CharacterRow } from '@server/repositories/characterRepo'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
-import { subscribeToCampaign, announceSelectedCharacter } from './wsClient'
+import { syncRelayAccount } from './relaySync'
+import * as relayClient from '@server/relay/relayClient'
+import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId } from './relayState'
+import { queryOnline } from './relaySocket'
+import {
+  startSessionHost,
+  stopSessionHost,
+  inviteToSession,
+  subscribeDmPresence,
+  broadcastCampaignChanged
+} from './sessionHost'
+import { joinSession, leaveSession, sendRequest as sendSessionRequest } from './sessionClient'
 import {
   hasRememberedCredentials,
   loadLastActiveCredentials,
@@ -31,45 +32,29 @@ import {
 import {
   getCurrentIdentity,
   setCurrentIdentity,
-  getHostServerHandle,
-  setHostServerHandle,
-  getHostOwnerIdentityId,
-  setHostOwnerIdentityId,
-  getActiveConnection,
-  setActiveConnection,
-  clearActiveConnections,
-  type ActiveConnection
+  getHostedSession,
+  setHostedSession,
+  getJoinedSession,
+  setJoinedSession,
+  clearJoinedSession
 } from './appState'
 import type {
   Identity,
   LoginResult,
-  HostingStartResult,
-  HostingStatus,
-  HostAddressOption,
-  ProbeResult,
-  JoinResult,
-  KnownHostSummary,
-  DecodeInviteResult,
+  SessionStartResult,
+  SessionStatus,
   ApiResult,
   Campaign,
   Note,
   Folder,
   CharacterSheet
 } from '@shared/ipc'
-
-/** Every network-reachable (non-loopback) address this machine has, each with an invite code baked for it. Loopback is left out — it's only useful to the host's own process, never to a joining player. */
-function buildAddressOptions(handle: HostServerHandle): HostAddressOption[] {
-  return getLocalAddresses().map(({ ip, kind }) => {
-    const address = `${ip}:${handle.port}`
-    return { address, kind, inviteCode: encodeInviteCode(address, handle.fingerprint) }
-  })
-}
+import type { FriendRequest, FriendSummary, RelayNotification } from '@shared/relay'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const userDataDir = app.getPath('userData')
   const localDb = getLocalDb(userDataDir)
   const identityRepo = new IdentityRepo(localDb)
-  const knownHostRepo = new KnownHostRepo(localDb)
 
   ipcMain.handle('app:get-version', () => app.getVersion())
 
@@ -86,6 +71,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
           passwordHash: identityRepo.findByDisplayName(identity.displayName)!.password_hash,
           password
         })
+        void syncRelayAccount(identity.displayName, password, mainWindow)
         return { ok: true, identity }
       } catch (err) {
         return {
@@ -106,6 +92,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         passwordHash: identityRepo.findByDisplayName(identity.displayName)!.password_hash,
         password
       })
+      void syncRelayAccount(identity.displayName, password, mainWindow)
       return { ok: true, identity }
     }
   )
@@ -121,10 +108,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       const identity = getCurrentIdentity()
       if (!identity) return { ok: false, error: 'Log in first.' }
       const trimmed = newDisplayName.trim()
-      if (trimmed.length < 2) return { ok: false, error: 'Pick a display name with at least 2 characters.' }
+      if (trimmed.length < 3) return { ok: false, error: 'Pick a display name with at least 3 characters.' }
       try {
         identityRepo.rename(identity.id, trimmed)
         setCurrentIdentity({ ...identity, displayName: trimmed })
+        // Deliberately not re-syncing the relay account here — the relay
+        // session established under the old display name stays active
+        // (friends/presence keep working under that username) rather than
+        // registering a second, orphaned relay account under the new name.
         // Keep any saved "remember me" credentials pointing at the new name.
         if (isRemembered(userDataDir, identity.id)) {
           rememberIdentity(userDataDir, identity.id, trimmed, identity.password)
@@ -149,6 +140,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       await identityRepo.setPassword(identity.id, newPassword)
       const passwordHash = identityRepo.findByDisplayName(identity.displayName)!.password_hash
       setCurrentIdentity({ ...identity, passwordHash, password: newPassword })
+      void syncRelayAccount(identity.displayName, newPassword, mainWindow)
       if (isRemembered(userDataDir, identity.id)) {
         rememberIdentity(userDataDir, identity.id, identity.displayName, newPassword)
       }
@@ -168,6 +160,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       passwordHash: identityRepo.findByDisplayName(identity.displayName)!.password_hash,
       password: stored.password
     })
+    void syncRelayAccount(identity.displayName, stored.password, mainWindow)
     return { ok: true, identity }
   })
 
@@ -224,11 +217,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!identity) return { ok: false, error: 'Incorrect password.' }
 
       setCurrentIdentity({ ...identity, passwordHash: row.password_hash, password: resolvedPassword })
-      // Switching identities makes any cached host tokens/userIds belong to
-      // the wrong account — never let them leak across the switch. Hosting
+      void syncRelayAccount(identity.displayName, resolvedPassword, mainWindow)
+      // Switching identities makes a joined session's relay auth belong to
+      // the wrong account — never let it leak across the switch. Hosting
       // itself (if running) is untouched; it isn't tied to "who's currently
       // browsing" in this window.
-      clearActiveConnections()
+      clearJoinedSession()
 
       if (remember) rememberIdentity(userDataDir, identity.id, identity.displayName, resolvedPassword)
       else if (isRemembered(userDataDir, identity.id)) touchLastActive(userDataDir, identity.id)
@@ -244,205 +238,84 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
 
-  // --- Hosting ----------------------------------------------------------
-  // Whichever identity is current needs its own valid self-connection to
-  // reach the loopback address (127.0.0.1:<port>) — this is what the DM's
-  // own "connected players" presence subscription authenticates with. It
-  // used to only ever get set up once, for whichever identity happened to
-  // call hosting:start first; switching identities clears activeConnections
-  // entirely (so no identity's session token leaks into another's), which
-  // left every identity but that first one without a working self-address —
-  // their own DM view would throw "Not connected to that host" the moment
-  // it tried to subscribe to presence. Called from both hosting:start (so a
-  // freshly-started server has one immediately) and hosting:self-address
-  // (which is what actually re-runs on every mount/identity-switch once
-  // hosting is already running, since HostingCorner only calls
-  // hosting:start once and hosting:status/self-address afterward).
-  function ensureSelfConnection(handle: HostServerHandle): void {
-    const identity = getCurrentIdentity()
-    if (!identity) return
-    const address = `127.0.0.1:${handle.port}`
-    const hostDb = getHostDb(userDataDir)
-    const hostUserRepo = new UserRepo(hostDb)
-    const hostUser = hostUserRepo.ensureWithHash(identity.displayName, identity.passwordHash)
-    // Checked by *whose* connection this is, not just whether one exists —
-    // a test identity joining this same loopback address as a player (handy
-    // for same-machine testing) overwrites this map entry, since
-    // activeConnections is keyed by address alone. Without this check,
-    // switching back to the DM identity would wrongly think it's still
-    // provisioned and keep using the player's token.
-    if (getActiveConnection(address)?.userId === hostUser.id) return
-    const cert = getOrCreateHostCertificate(userDataDir)
-    const sessionSecret = getOrCreateSessionSecret(userDataDir)
-    const token = signToken(sessionSecret, hostUser.id)
-    setActiveConnection({ address, token, userId: hostUser.id, certPem: cert.cert })
-  }
-
-  ipcMain.handle('hosting:start', async (): Promise<HostingStartResult> => {
+  // --- Sessions -----------------------------------------------------------
+  // Replaces LAN/Tailscale hosting entirely: starting a session opens one WS
+  // to the relay's session room (sessionHost.ts); inviting a friend adds
+  // their relay userId to that session's allow-list; joining is just
+  // connecting to a session id you were invited to (sessionClient.ts).
+  ipcMain.handle('sessions:start', async (): Promise<SessionStartResult> => {
     const identity = getCurrentIdentity()
     if (!identity) return { ok: false, error: 'Log in first.' }
+    const relaySession = getRelaySession()
+    if (!relaySession) return { ok: false, error: 'Not connected to the relay yet — try again in a moment.' }
 
-    let handle = getHostServerHandle()
-    if (!handle) {
-      const hostDb = getHostDb(userDataDir)
-      const cert = getOrCreateHostCertificate(userDataDir)
-      const sessionSecret = getOrCreateSessionSecret(userDataDir)
-      try {
-        handle = await startHostServer({
-          db: hostDb,
-          cert: cert.cert,
-          key: cert.key,
-          fingerprint: cert.fingerprint,
-          sessionSecret
-        })
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException)?.code
-        const error =
-          code === 'EADDRINUSE'
-            ? `Port ${DEFAULT_HOST_PORT} is already in use — close whatever else is using it (or another NoteGoblin instance) and try again.`
-            : err instanceof Error
-              ? err.message
-              : 'Could not start hosting.'
-        return { ok: false, error }
-      }
-      setHostServerHandle(handle)
-      setHostOwnerIdentityId(identity.id)
-    }
+    const existing = getHostedSession()
+    if (existing) return { ok: true, sessionId: existing.sessionId }
 
-    ensureSelfConnection(handle)
-
-    return { ok: true, fingerprint: handle.fingerprint, addresses: buildAddressOptions(handle) }
+    const started = await startSessionHost(relaySession.token, relaySession.username, mainWindow)
+    if (!started.ok) return started
+    setHostedSession({ sessionId: started.sessionId, ownerIdentityId: identity.id })
+    return { ok: true, sessionId: started.sessionId }
   })
 
-  ipcMain.handle('hosting:stop', async (): Promise<void> => {
-    const handle = getHostServerHandle()
-    if (!handle) return
+  ipcMain.handle('sessions:stop', async (): Promise<void> => {
+    const hosted = getHostedSession()
+    if (!hosted) return
     // Only the identity that started hosting can stop it — otherwise
     // switching to a test identity to try the join flow could accidentally
     // shut down the actual DM's table out from under them.
     const identity = getCurrentIdentity()
-    const ownerId = getHostOwnerIdentityId()
-    if (ownerId && identity?.id !== ownerId) return
-    await handle.close()
-    setHostServerHandle(null)
+    if (identity?.id !== hosted.ownerIdentityId) return
+    stopSessionHost()
+    setHostedSession(null)
   })
 
-  ipcMain.handle('hosting:status', (): HostingStatus => {
-    const handle = getHostServerHandle()
-    if (!handle) return { hosting: false }
-    const ownerId = getHostOwnerIdentityId()
-    const owner = ownerId ? identityRepo.findById(ownerId) : undefined
+  ipcMain.handle('sessions:status', (): SessionStatus => {
+    const hosted = getHostedSession()
+    if (!hosted) return { hosting: false }
+    const owner = identityRepo.findById(hosted.ownerIdentityId)
     const identity = getCurrentIdentity()
     return {
       hosting: true,
-      fingerprint: handle.fingerprint,
-      addresses: buildAddressOptions(handle),
+      sessionId: hosted.sessionId,
       startedBy: owner?.display_name ?? 'someone else',
-      isOwner: !!identity && identity.id === ownerId
+      isOwner: !!identity && identity.id === hosted.ownerIdentityId
     }
   })
 
-  ipcMain.handle('hosting:self-address', (): string | null => {
-    const handle = getHostServerHandle()
-    if (!handle) return null
-    ensureSelfConnection(handle)
-    return `127.0.0.1:${handle.port}`
+  ipcMain.handle('sessions:invite', async (_event, friendUserId: string): Promise<ApiResult<void>> => {
+    const hosted = getHostedSession()
+    if (!hosted) return { ok: false, error: 'Not hosting.' }
+    const relaySession = getRelaySession()
+    if (!relaySession) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await inviteToSession(relaySession.token, friendUserId)
+    return result.ok ? { ok: true, data: undefined } : result
   })
 
-  // --- Joining other hosts ----------------------------------------------
-  ipcMain.handle('connections:probe', async (_event, address: string): Promise<ProbeResult> => {
-    try {
-      const probed = await probeAddress(address)
-      const known = knownHostRepo.findByAddress(address)
-      if (!known) return { ok: true, fingerprint: probed.fingerprint, status: 'new' }
-      if (known.certFingerprint === probed.fingerprint) {
-        return { ok: true, fingerprint: probed.fingerprint, status: 'match' }
-      }
-      return {
-        ok: true,
-        fingerprint: probed.fingerprint,
-        status: 'mismatch',
-        previousFingerprint: known.certFingerprint
-      }
-    } catch (err) {
-      return { ok: false, error: friendlyConnectionError(err) }
-    }
+  ipcMain.handle('sessions:join', async (_event, sessionId: string): Promise<ApiResult<void>> => {
+    const relaySession = getRelaySession()
+    if (!relaySession) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await joinSession(sessionId, relaySession.token, relaySession.username, mainWindow)
+    if (!result.ok) return result
+    setJoinedSession({ sessionId })
+    return { ok: true, data: undefined }
   })
 
-  ipcMain.handle(
-    'connections:join',
-    async (_event, address: string, label?: string): Promise<JoinResult> => {
-      const identity = getCurrentIdentity()
-      if (!identity) return { ok: false, error: 'Log in first.' }
-
-      try {
-        const probed = await probeAddress(address)
-        const auth = await authenticateWithHost(
-          address,
-          probed.certPem,
-          identity.displayName,
-          identity.password
-        )
-        if (!auth.ok) return { ok: false, error: auth.error }
-
-        const existingLabel = knownHostRepo.findByAddress(address)?.label
-        // A raw IP:port is meaningless to remember by — default to whichever
-        // DM's table this is instead. Only computed the first time a host is
-        // seen; an existing (auto- or user-set) label always wins after that.
-        let defaultLabel = address
-        if (!label?.trim() && !existingLabel) {
-          const campaignsResult = await campaignClient.listCampaigns(address, probed.certPem, auth.token)
-          const dmName = campaignsResult.ok ? campaignsResult.data.campaigns[0]?.dmDisplayName : undefined
-          if (dmName) defaultLabel = `${dmName}'s Table`
-        }
-        knownHostRepo.upsert({
-          address,
-          label: label?.trim() || existingLabel || defaultLabel,
-          certFingerprint: probed.fingerprint,
-          certPem: probed.certPem
-        })
-        setActiveConnection({
-          address,
-          token: auth.token,
-          userId: auth.userId,
-          certPem: probed.certPem
-        })
-
-        return { ok: true, address, fingerprint: probed.fingerprint }
-      } catch (err) {
-        return { ok: false, error: friendlyConnectionError(err) }
-      }
-    }
-  )
-
-  ipcMain.handle('connections:list', (): KnownHostSummary[] => {
-    return knownHostRepo.list().map((host) => ({
-      address: host.address,
-      label: host.label,
-      certFingerprint: host.certFingerprint,
-      lastConnectedAt: host.lastConnectedAt
-    }))
-  })
-
-  ipcMain.handle('connections:forget', (_event, address: string): void => {
-    knownHostRepo.remove(address)
-  })
-
-  ipcMain.handle('connections:decode-invite', (_event, code: string): DecodeInviteResult => {
-    const decoded = decodeInviteCode(code)
-    if (!decoded) return { ok: false, error: "That doesn't look like a valid invite code." }
-    return { ok: true, ...decoded }
+  ipcMain.handle('sessions:leave', async (): Promise<void> => {
+    leaveSession()
+    setJoinedSession(null)
   })
 
   // --- Campaigns & notes --------------------------------------------------
-  // Two ways to reach the same data: pass an `address` to go over the network
-  // (a player reaching some host, or the DM reaching their own server while
-  // it happens to be running), or omit it to work directly against the DM's
-  // own host database in-process — no network, no hosting required, so
-  // solo campaign prep doesn't depend on anyone being connected.
-  function requireConnection(address: string): ActiveConnection | { error: string } {
-    const connection = getActiveConnection(address)
-    return connection ?? { error: 'Not connected to that host.' }
+  // Two ways to reach the same data: pass a `sessionId` to go over the relay
+  // (a player reaching the DM they've joined, or the DM reaching their own
+  // hosted session), or omit it to work directly against the DM's own host
+  // database in-process — no network, no hosting required, so solo campaign
+  // prep doesn't depend on anyone being connected.
+  function requireJoinedSession(sessionId: string): { ok: false; error: string } | undefined {
+    const joined = getJoinedSession()
+    if (!joined || joined.sessionId !== sessionId) return { ok: false, error: 'Not connected to that session.' }
+    return undefined
   }
 
   /** The DM's own host-side account, ensured (not necessarily hosting) from their local identity's existing password hash — no plaintext needed, no server required. */
@@ -456,120 +329,106 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(
     'campaigns:list',
-    async (_event, address?: string): Promise<ApiResult<Campaign[]>> => {
-      if (!address) {
+    async (_event, sessionId?: string): Promise<ApiResult<Campaign[]>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.listCampaigns(me.db, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.listCampaigns(address, conn.certPem, conn.token)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.campaigns }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Campaign[]>('campaigns.list', {})
     }
   )
 
   ipcMain.handle(
     'campaigns:create',
-    async (_event, name: string, address?: string): Promise<ApiResult<Campaign>> => {
-      if (!address) {
+    async (_event, name: string, sessionId?: string): Promise<ApiResult<Campaign>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.createCampaign(me.db, me.userId, name)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.createCampaign(address, conn.certPem, conn.token, name)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.campaign }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Campaign>('campaigns.create', { name })
     }
   )
 
   ipcMain.handle(
     'campaigns:join',
-    async (_event, campaignId: string, address?: string): Promise<ApiResult<Campaign>> => {
-      if (!address) {
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Campaign>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.joinCampaign(me.db, campaignId, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.joinCampaign(address, conn.certPem, conn.token, campaignId)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.campaign }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Campaign>('campaigns.join', { campaignId })
     }
   )
 
   ipcMain.handle(
     'campaigns:get-active',
-    async (_event, address?: string): Promise<ApiResult<Campaign | null>> => {
-      if (!address) {
+    async (_event, sessionId?: string): Promise<ApiResult<Campaign | null>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.getActiveCampaign(me.db, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.getActiveCampaign(address, conn.certPem, conn.token)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.campaign }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Campaign | null>('campaigns.getActive', {})
     }
   )
 
   ipcMain.handle(
     'campaigns:set-active',
-    async (_event, campaignId: string, address?: string): Promise<ApiResult<Campaign>> => {
-      if (!address) {
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Campaign>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.setActiveCampaign(me.db, campaignId, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.setActiveCampaign(address, conn.certPem, conn.token, campaignId)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.campaign }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Campaign>('campaigns.setActive', { campaignId })
     }
   )
 
   ipcMain.handle(
     'campaigns:join-active',
-    async (_event, address?: string): Promise<ApiResult<Campaign>> => {
-      if (!address) {
+    async (_event, sessionId?: string): Promise<ApiResult<Campaign>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.joinActiveCampaign(me.db, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.joinActiveCampaign(address, conn.certPem, conn.token)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.campaign }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Campaign>('campaigns.joinActive', {})
     }
   )
 
   ipcMain.handle(
     'notes:list',
-    async (_event, campaignId: string, address?: string): Promise<ApiResult<Note[]>> => {
-      if (!address) {
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Note[]>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.listNotes(me.db, campaignId, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.listNotes(address, conn.certPem, conn.token, campaignId)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.notes }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Note[]>('notes.list', { campaignId })
     }
   )
 
@@ -579,25 +438,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       _event,
       campaignId: string,
       input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared'; folderId?: string | null },
-      address?: string
+      sessionId?: string
     ): Promise<ApiResult<Note>> => {
-      if (!address) {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.createNote(me.db, campaignId, me.userId, input)
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.createNote(
-        address,
-        conn.certPem,
-        conn.token,
-        campaignId,
-        input
-      )
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.note }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Note>('notes.create', { campaignId, input })
     }
   )
 
@@ -608,60 +460,49 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       campaignId: string,
       noteId: string,
       input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' },
-      address?: string
+      sessionId?: string
     ): Promise<ApiResult<Note>> => {
-      if (!address) {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.updateNote(me.db, campaignId, noteId, me.userId, input)
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.updateNote(
-        address,
-        conn.certPem,
-        conn.token,
-        campaignId,
-        noteId,
-        input
-      )
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.note }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Note>('notes.update', { campaignId, noteId, input })
     }
   )
 
   ipcMain.handle(
     'notes:remove',
-    async (_event, campaignId: string, noteId: string, address?: string): Promise<ApiResult<void>> => {
-      if (!address) {
+    async (_event, campaignId: string, noteId: string, sessionId?: string): Promise<ApiResult<void>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.deleteNote(me.db, campaignId, noteId, me.userId)
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
         return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.deleteNote(address, conn.certPem, conn.token, campaignId, noteId)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: undefined }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<void>('notes.remove', { campaignId, noteId })
     }
   )
 
   ipcMain.handle(
     'folders:list',
-    async (_event, campaignId: string, address?: string): Promise<ApiResult<Folder[]>> => {
-      if (!address) {
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Folder[]>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.listFolders(me.db, campaignId, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.listFolders(address, conn.certPem, conn.token, campaignId)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.folders }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Folder[]>('folders.list', { campaignId })
     }
   )
 
@@ -671,25 +512,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       _event,
       campaignId: string,
       input: { name: string; visibility: 'dm' | 'shared'; parentFolderId?: string | null },
-      address?: string
+      sessionId?: string
     ): Promise<ApiResult<Folder>> => {
-      if (!address) {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.createFolder(me.db, campaignId, me.userId, input)
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.createFolder(
-        address,
-        conn.certPem,
-        conn.token,
-        campaignId,
-        input
-      )
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.folder }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Folder>('folders.create', { campaignId, input })
     }
   )
 
@@ -700,43 +534,34 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       campaignId: string,
       folderId: string,
       input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' },
-      address?: string
+      sessionId?: string
     ): Promise<ApiResult<Folder>> => {
-      if (!address) {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.updateFolder(me.db, campaignId, folderId, me.userId, input)
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.updateFolder(
-        address,
-        conn.certPem,
-        conn.token,
-        campaignId,
-        folderId,
-        input
-      )
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: result.data.folder }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Folder>('folders.update', { campaignId, folderId, input })
     }
   )
 
   ipcMain.handle(
     'folders:remove',
-    async (_event, campaignId: string, folderId: string, address?: string): Promise<ApiResult<void>> => {
-      if (!address) {
+    async (_event, campaignId: string, folderId: string, sessionId?: string): Promise<ApiResult<void>> => {
+      if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.deleteFolder(me.db, campaignId, folderId, me.userId)
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
         return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
       }
-      const conn = requireConnection(address)
-      if ('error' in conn) return { ok: false, error: conn.error }
-      const result = await campaignClient.deleteFolder(address, conn.certPem, conn.token, campaignId, folderId)
-      if (!result.ok) return { ok: false, error: result.error }
-      return { ok: true, data: undefined }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<void>('folders.remove', { campaignId, folderId })
     }
   )
 
@@ -798,17 +623,118 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return { ok: true, data: undefined }
   })
 
+  ipcMain.handle(
+    'characters:sync-selected',
+    (_event, sessionId: string, character: CharacterSheet | null): void => {
+      if (getHostedSession()?.sessionId === sessionId) return // nothing to sync to yourself
+      void sendSessionRequest('characters.sync', { character })
+    }
+  )
+
   // --- Presence ---------------------------------------------------------
-  ipcMain.handle('presence:subscribe', (_event, address: string, campaignId: string): void => {
-    subscribeToCampaign(address, campaignId, mainWindow)
+  // sessionId tells us which of the two roles this call is: the DM viewing
+  // their own hosted session (handled entirely in-process, no network) or a
+  // player who joined someone else's (forwarded over the relay socket).
+  ipcMain.handle('presence:subscribe', (_event, sessionId: string, campaignId: string): void => {
+    if (getHostedSession()?.sessionId === sessionId) {
+      subscribeDmPresence(campaignId, mainWindow)
+    } else {
+      void sendSessionRequest('presence.subscribe', { campaignId })
+    }
   })
 
   ipcMain.handle(
     'presence:select-character',
-    (_event, address: string, characterName: string | null): void => {
-      announceSelectedCharacter(address, characterName)
+    (_event, sessionId: string, characterName: string | null): void => {
+      if (getHostedSession()?.sessionId === sessionId) {
+        // The DM doesn't announce a "selected character" for their own view —
+        // presence.subscribe already drives what ConnectedPlayersList shows.
+        return
+      }
+      void sendSessionRequest('presence.selectCharacter', { characterName })
     }
   )
+
+  // --- Relay / Friends -----------------------------------------------------
+  // The relay account is the same identity/password as identity.* (synced
+  // transparently in syncRelayAccount, see the identity handlers above) — no
+  // separate relay login/register surface here, just friend graph + presence.
+  ipcMain.handle('relay:status', () => getRelayStatus())
+
+  ipcMain.handle('relay:my-user-id', () => getRelaySession()?.userId ?? null)
+
+  ipcMain.handle('relay:friends:list', async (): Promise<ApiResult<FriendSummary[]>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await relayClient.getFriends(session.token)
+    if (!result.ok) return result
+    return {
+      ok: true,
+      data: result.data.friends.map((friend) => ({
+        ...friend,
+        online: isFriendOnline(friend.userId),
+        hostingSessionId: getFriendHostingSessionId(friend.userId)
+      }))
+    }
+  })
+
+  ipcMain.handle('relay:friends:list-requests', async (): Promise<ApiResult<FriendRequest[]>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await relayClient.getFriends(session.token)
+    if (!result.ok) return result
+    return { ok: true, data: result.data.incomingRequests }
+  })
+
+  ipcMain.handle(
+    'relay:friends:send-request',
+    async (_event, username: string): Promise<ApiResult<{ status: 'requested' | 'accepted' }>> => {
+      const session = getRelaySession()
+      if (!session) return { ok: false, error: 'Not connected to the relay.' }
+      const result = await relayClient.sendFriendRequest(session.token, username)
+      if (!result.ok) return result
+      return { ok: true, data: { status: result.data.status } }
+    }
+  )
+
+  ipcMain.handle('relay:friends:accept', async (_event, userId: string): Promise<ApiResult<void>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await relayClient.respondToRequest(session.token, userId, true)
+    if (!result.ok) return result
+    queryOnline([userId])
+    return { ok: true, data: undefined }
+  })
+
+  ipcMain.handle('relay:friends:decline', async (_event, userId: string): Promise<ApiResult<void>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await relayClient.respondToRequest(session.token, userId, false)
+    if (!result.ok) return result
+    return { ok: true, data: undefined }
+  })
+
+  ipcMain.handle('relay:friends:remove', async (_event, userId: string): Promise<ApiResult<void>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await relayClient.removeFriend(session.token, userId)
+    if (!result.ok) return result
+    return { ok: true, data: undefined }
+  })
+
+  ipcMain.handle('relay:notifications:list', async (): Promise<ApiResult<RelayNotification[]>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    return relayClient.getNotifications(session.token)
+  })
+
+  ipcMain.handle('relay:notifications:mark-read', async (_event, id: string): Promise<ApiResult<void>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await relayClient.markNotificationRead(session.token, id)
+    if (!result.ok) return result
+    return { ok: true, data: undefined }
+  })
 
   // --- Files --------------------------------------------------------------
   // Images are embedded as base64 data URIs directly in a note's markdown

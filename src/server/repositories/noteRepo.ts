@@ -11,6 +11,8 @@ export interface NoteRow {
   body_markdown: string
   visibility: NoteVisibility
   folder_id: string | null
+  /** JSON-encoded array of userIds — see NoteJson.editorUserIds for the parsed shape callers actually use. */
+  editor_user_ids: string
   created_at: string
   updated_at: string
 }
@@ -62,7 +64,13 @@ export class NoteRepo {
   /** `folderId` is tri-state: omit to leave unchanged, pass null to move to root, pass an id to move into that folder. */
   update(
     id: string,
-    input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: NoteVisibility }
+    input: {
+      title?: string
+      bodyMarkdown?: string
+      folderId?: string | null
+      visibility?: NoteVisibility
+      editorUserIds?: string[]
+    }
   ): NoteRow | undefined {
     const existing = this.findById(id)
     if (!existing) return undefined
@@ -70,11 +78,12 @@ export class NoteRepo {
     const bodyMarkdown = input.bodyMarkdown ?? existing.body_markdown
     const folderId: string | null = 'folderId' in input ? (input.folderId as string | null) : existing.folder_id
     const visibility = input.visibility ?? existing.visibility
+    const editorUserIds = input.editorUserIds ? JSON.stringify(input.editorUserIds) : existing.editor_user_ids
     this.db
       .prepare(
-        "UPDATE notes SET title = ?, body_markdown = ?, folder_id = ?, visibility = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+        "UPDATE notes SET title = ?, body_markdown = ?, folder_id = ?, visibility = ?, editor_user_ids = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
       )
-      .run(title, bodyMarkdown, folderId, visibility, id)
+      .run(title, bodyMarkdown, folderId, visibility, editorUserIds, id)
     return this.findById(id)
   }
 

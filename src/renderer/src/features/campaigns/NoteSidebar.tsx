@@ -9,7 +9,7 @@ interface NoteSidebarProps {
   folders: Folder[]
   isDm: boolean
   activeId: string | null
-  myDisplayName: string
+  myUserId: string | null
   /** null while there's no campaign open yet — tree still renders (empty), creation is a no-op until one exists. */
   campaignId: string | null
   onSelect: (id: string) => void
@@ -38,7 +38,7 @@ export function NoteSidebar({
   folders,
   isDm,
   activeId,
-  myDisplayName,
+  myUserId,
   campaignId,
   onSelect,
   onCreateNote,
@@ -142,7 +142,7 @@ export function NoteSidebar({
             notes={notes.filter((n) => n.visibility === 'shared')}
             folders={folders.filter((f) => f.visibility === 'shared')}
             activeId={activeId}
-            myDisplayName={myDisplayName}
+            myUserId={myUserId}
             onSelectNote={onSelect}
             onCreateNote={(folderId) => onCreateNote('shared', folderId)}
             onCreateFolder={(name, parentFolderId) => onCreateFolder('shared', name, parentFolderId)}
@@ -197,7 +197,7 @@ export function NoteSidebar({
                 notes={notes.filter((n) => n.visibility === 'dm')}
                 folders={folders.filter((f) => f.visibility === 'dm')}
                 activeId={activeId}
-                myDisplayName={myDisplayName}
+                myUserId={myUserId}
                 onSelectNote={onSelect}
                 onCreateNote={(folderId) => onCreateNote('dm', folderId)}
                 onCreateFolder={(name, parentFolderId) => onCreateFolder('dm', name, parentFolderId)}

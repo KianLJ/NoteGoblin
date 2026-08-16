@@ -96,8 +96,8 @@ interface NoteTreeSectionProps {
   notes: Note[]
   folders: Folder[]
   activeId: string | null
-  /** Rename/Delete/drag/cut only work for items you authored — compared by display name, since the server enforces the same author-only rule and this just avoids offering actions that would silently fail. */
-  myDisplayName: string
+  /** Rename/Delete/drag/cut only work for items you authored — compared by id against authorUserId, matching the same author-only rule the server enforces, so this just avoids offering actions that would silently fail. null while your own id isn't known yet (e.g. relay still connecting), which just means nothing appears owned yet. */
+  myUserId: string | null
   /** When true, this section stretches to fill its container's full height so right-click and drop targets cover the whole pane, not just where items are rendered. */
   fill?: boolean
   /** Shared across every section in the sidebar (lifted up) so Ctrl+C in one section and Ctrl+V in another — e.g. Shared to DM Only — works like cut/copy across folders in a file manager. */
@@ -142,7 +142,7 @@ export function NoteTreeSection({
   notes,
   folders,
   activeId,
-  myDisplayName,
+  myUserId,
   fill,
   clipboard,
   onSetClipboard,
@@ -283,8 +283,8 @@ export function NoteTreeSection({
   function handleCopyOrCut(mode: 'copy' | 'cut'): void {
     if (selected.size === 0) return
     const mine = [...selected].map(parseKey).filter((item) => {
-      if (item.kind === 'note') return notes.find((n) => n.id === item.id)?.authorDisplayName === myDisplayName
-      return folders.find((f) => f.id === item.id)?.authorDisplayName === myDisplayName
+      if (item.kind === 'note') return notes.find((n) => n.id === item.id)?.authorUserId === myUserId
+      return folders.find((f) => f.id === item.id)?.authorUserId === myUserId
     })
     if (mine.length === 0) return
     onSetClipboard(mine, mode)
@@ -445,7 +445,7 @@ export function NoteTreeSection({
         }
       })
     }
-    if (folder.authorDisplayName === myDisplayName) {
+    if (folder.authorUserId === myUserId) {
       items.push(
         { label: 'Cut', onSelect: () => onSetClipboard([{ kind: 'folder', id: folder.id }], 'cut') },
         { label: 'Copy', onSelect: () => onSetClipboard([{ kind: 'folder', id: folder.id }], 'copy') },
@@ -472,7 +472,7 @@ export function NoteTreeSection({
     e.preventDefault()
     e.stopPropagation()
     if (!selected.has(makeKey('note', note.id))) setSelected(new Set([makeKey('note', note.id)]))
-    if (note.authorDisplayName !== myDisplayName) return
+    if (note.authorUserId !== myUserId) return
     setMenu({
       x: e.clientX,
       y: e.clientY,
@@ -537,7 +537,7 @@ export function NoteTreeSection({
     const isRenaming = renamingFolderId === folder.id
     const isDragging = draggingKey === `folder:${folder.id}`
     const isDragOver = dragOverKey === `folder:${folder.id}`
-    const isMine = folder.authorDisplayName === myDisplayName
+    const isMine = folder.authorUserId === myUserId
     const isSelected = selected.has(makeKey('folder', folder.id))
     const isCutPending = clipboard?.mode === 'cut' && clipboard.items.some((i) => i.kind === 'folder' && i.id === folder.id)
     return (
@@ -620,7 +620,7 @@ export function NoteTreeSection({
     const isRenaming = renamingNoteId === note.id
     const active = note.id === activeId
     const isDragging = draggingKey === `note:${note.id}`
-    const isMine = note.authorDisplayName === myDisplayName
+    const isMine = note.authorUserId === myUserId
     const isSelected = selected.has(makeKey('note', note.id))
     const isCutPending = clipboard?.mode === 'cut' && clipboard.items.some((i) => i.kind === 'note' && i.id === note.id)
     return (
@@ -678,8 +678,28 @@ export function NoteTreeSection({
               style={{ fontSize: 13, padding: '1px 4px', flex: 1, minWidth: 0 }}
             />
           ) : (
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {note.title || 'Untitled'}
+            </span>
+          )}
+          {visibility === 'shared' && !isRenaming && (
+            <span
+              title={`Created by ${note.authorDisplayName}`}
+              style={{
+                flexShrink: 0,
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                background: 'var(--bg-sunken)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '1px 5px',
+                maxWidth: 80,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {note.authorDisplayName}
             </span>
           )}
         </button>

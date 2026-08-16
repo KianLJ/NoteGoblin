@@ -13,6 +13,8 @@ interface NoteEditorProps {
   onNavigateToNote: (noteId: string) => void
   /** Wikilink target didn't match anything — create a note with that title (in this note's own visibility) and open it. */
   onCreateAndLinkNote: (title: string) => void
+  /** True when the viewer is neither the author nor a granted editor — the server would reject a save anyway (see campaignService.updateNote), so the fields are made inert here too rather than silently discarding keystrokes on a failed autosave. */
+  readOnly?: boolean
 }
 
 const AUTOSAVE_DELAY_MS = 700
@@ -34,7 +36,14 @@ const TABLE_TEMPLATE = '\n| Header 1 | Header 2 |\n| --- | --- |\n| Cell | Cell 
  * string: fighting the field's own undo/edit state from React on every
  * keystroke is what broke Ctrl+Z originally.
  */
-export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndLinkNote }: NoteEditorProps): JSX.Element {
+export function NoteEditor({
+  note,
+  notes,
+  onSave,
+  onNavigateToNote,
+  onCreateAndLinkNote,
+  readOnly
+}: NoteEditorProps): JSX.Element {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.bodyMarkdown)
   const [mode, setMode] = useState<'write' | 'preview'>('write')
@@ -42,9 +51,17 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
   const [linkQuery, setLinkQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const editorRef = useRef<MarkdownLiveEditorHandle>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  const titleFocusedRef = useRef(false)
   const linkPickerRef = useRef<HTMLDivElement>(null)
   const knownTitlesRef = useRef<Set<string>>(new Set())
   const notesRef = useRef<Note[]>(notes)
+  // What we've last reconciled `note.title`/`note.bodyMarkdown` against —
+  // distinct from `title`/`body` (the locally-edited value) so an external
+  // update (someone else's edit arriving via campaigns.onChanged) can be told
+  // apart from our own save round-tripping back through the same prop.
+  const lastRemoteTitleRef = useRef(note.title)
+  const lastRemoteBodyRef = useRef(note.bodyMarkdown)
 
   const knownTitles = useMemo(() => new Set(notes.map((n) => (n.title || 'Untitled').toLowerCase())), [notes])
   knownTitlesRef.current = knownTitles
@@ -60,6 +77,28 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [])
+
+  // Adopts an external edit (title/body changed by someone else, pushed in
+  // via campaigns.onChanged → refresh) while this same note stays open —
+  // but only while the field isn't focused, so it never clobbers keystrokes
+  // that haven't autosaved yet. If you're mid-edit when it arrives, it's
+  // simply skipped; your own next save overwrites the server anyway.
+  useEffect(() => {
+    if (note.title !== lastRemoteTitleRef.current) {
+      lastRemoteTitleRef.current = note.title
+      if (!titleFocusedRef.current) {
+        setTitle(note.title)
+        if (titleInputRef.current) titleInputRef.current.value = note.title
+      }
+    }
+    if (note.bodyMarkdown !== lastRemoteBodyRef.current) {
+      lastRemoteBodyRef.current = note.bodyMarkdown
+      if (!editorRef.current?.hasFocus()) {
+        setBody(note.bodyMarkdown)
+        editorRef.current?.setContent(note.bodyMarkdown)
+      }
+    }
+  }, [note.title, note.bodyMarkdown])
 
   useEffect(() => {
     if (!linkPickerOpen) return
@@ -126,12 +165,21 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
         }}
       >
         <input
+          ref={titleInputRef}
+          readOnly={readOnly}
           defaultValue={note.title}
           onChange={(e) => {
+            if (readOnly) return
             setTitle(e.target.value)
             scheduleSave({ title: e.target.value })
           }}
-          onBlur={() => onSave({ title })}
+          onFocus={() => {
+            titleFocusedRef.current = true
+          }}
+          onBlur={() => {
+            titleFocusedRef.current = false
+            if (!readOnly) onSave({ title })
+          }}
           style={{
             border: 'none',
             outline: 'none',
@@ -145,6 +193,7 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
           }}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexShrink: 0 }}>
+          {readOnly && <span className="gb-badge">View only</span>}
           <span className={`gb-badge ${note.visibility === 'dm' ? 'gb-badge--danger' : 'gb-badge--success'}`}>
             {note.visibility === 'dm' ? 'DM Only' : 'Shared'}
           </span>
@@ -161,7 +210,7 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
           paddingBottom: 'var(--space-2)'
         }}
       >
-        {mode === 'write' && (
+        {mode === 'write' && !readOnly && (
           <>
             <ToolbarButton title="Insert image" onClick={() => void handleInsertImage()}>
               <ImageIcon />
@@ -229,7 +278,10 @@ export function NoteEditor({ note, notes, onSave, onNavigateToNote, onCreateAndL
         </ToolbarButton>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: mode === 'write' ? 'block' : 'none' }}>
+      <div
+        className={readOnly ? 'gb-readonly-sheet' : undefined}
+        style={{ flex: 1, minHeight: 0, display: mode === 'write' ? 'block' : 'none' }}
+      >
         <MarkdownLiveEditor
           ref={editorRef}
           defaultValue={note.bodyMarkdown}

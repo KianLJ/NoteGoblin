@@ -73,6 +73,28 @@ export class PasswordAccountRepo {
     return { id, displayName }
   }
 
+  /**
+   * Finds or creates an account at a caller-supplied id — used to seed a
+   * host's `users` row for a remote player from their relay identity
+   * (relay userId, relay username), which already proved who they are
+   * before ever reaching this host. No password hash is stored (empty
+   * string); these rows are never password-verified, since relay auth
+   * already happened at the session-join step.
+   */
+  ensureWithId(id: string, displayName: string): Account {
+    const existing = this.findById(id)
+    if (existing) return { id: existing.id, displayName: existing.display_name }
+    // display_name is UNIQUE, but this is a fresh row for an id we've never
+    // seen — if that name is already taken here (e.g. a stale row from an
+    // earlier/reset relay account under a different id), inserting under the
+    // real name would throw. Disambiguate instead of crashing the caller.
+    const name = this.findByDisplayName(displayName) ? `${displayName} (${id.slice(0, 4)})` : displayName
+    this.db
+      .prepare(`INSERT INTO ${this.table} (id, display_name, password_hash) VALUES (?, ?, '')`)
+      .run(id, name)
+    return { id, displayName: name }
+  }
+
   async verify(displayName: string, password: string): Promise<Account | null> {
     const row = this.findByDisplayName(displayName)
     if (!row) return null

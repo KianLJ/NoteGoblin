@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "notegoblin-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "Directory", "class_name": "Directory" },
+      { "name": "Presence", "class_name": "Presence" },
+      { "name": "Session", "class_name": "Session" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Directory", "Presence"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["Session"]
+    }
+  ],
+  "routes": [
+    { "pattern": "relay.notegoblin.uk", "custom_domain": true }
+  ]
+}

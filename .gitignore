@@ -9,8 +9,17 @@ Thumbs.db
 # runtime data — never commit a real user's campaign database, keys, or certs
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
 *.db
 *.pem
 *.key
 *.crt
 userdata/
+
+# relay (separate project, see relay/) — local dev/build state, not source
+relay/.partykit/
+relay/.wrangler/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

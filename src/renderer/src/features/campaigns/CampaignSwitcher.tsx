@@ -3,15 +3,13 @@ import { Button } from '../../ui/Button'
 import type { Campaign } from '@shared/ipc'
 
 interface CampaignSwitcherProps {
-  /** Omit for the DM's own table; pass a connected host's address for a remote table. */
-  address?: string
   canCreate: boolean
   current: Campaign | null
   onSelect: (campaign: Campaign) => void
 }
 
-/** Bottom-left "which campaign am I in" control — replaces the old always-visible campaign list with an Obsidian-style corner switcher. */
-export function CampaignSwitcher({ address, canCreate, current, onSelect }: CampaignSwitcherProps): JSX.Element {
+/** Bottom-left "which campaign am I in" control — replaces the old always-visible campaign list with an Obsidian-style corner switcher. Always the DM's own table; a joined session's campaigns are driven by the DM instead (see usePlayerWorkspace's auto-join). */
+export function CampaignSwitcher({ canCreate, current, onSelect }: CampaignSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -21,7 +19,7 @@ export function CampaignSwitcher({ address, canCreate, current, onSelect }: Camp
 
   useEffect(() => {
     if (open) refresh()
-  }, [open, address])
+  }, [open])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent): void {
@@ -32,7 +30,7 @@ export function CampaignSwitcher({ address, canCreate, current, onSelect }: Camp
   }, [])
 
   function refresh(): void {
-    window.goblin.campaigns.list(address).then((result) => {
+    window.goblin.campaigns.list().then((result) => {
       if (!result.ok) {
         setError(result.error)
         return
@@ -44,7 +42,7 @@ export function CampaignSwitcher({ address, canCreate, current, onSelect }: Camp
   async function createCampaign(): Promise<void> {
     if (!newName.trim()) return
     setError(null)
-    const result = await window.goblin.campaigns.create(newName.trim(), address)
+    const result = await window.goblin.campaigns.create(newName.trim())
     if (!result.ok) {
       setError(result.error)
       return
@@ -62,7 +60,7 @@ export function CampaignSwitcher({ address, canCreate, current, onSelect }: Camp
     }
     setBusyId(campaign.id)
     setError(null)
-    const result = await window.goblin.campaigns.join(campaign.id, address)
+    const result = await window.goblin.campaigns.join(campaign.id)
     setBusyId(null)
     if (!result.ok) {
       setError(result.error)

@@ -54,8 +54,11 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
       return
     }
 
-    if (username.trim().length < 2) {
-      setError('Pick a display name with at least 2 characters.')
+    if (username.trim().length < 3) {
+      // Matches the relay's own minimum (see relaySync.ts) — your device
+      // identity doubles as your relay/friends account, so a name too short
+      // for the relay would otherwise silently leave friends unavailable.
+      setError('Pick a display name with at least 3 characters.')
       return
     }
     if (password.length < 8) {

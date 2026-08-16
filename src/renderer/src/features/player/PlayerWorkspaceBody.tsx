@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PlayerSidebar } from './PlayerSidebar'
+import { PartySidebar } from './PartySidebar'
 import { CharacterSheetEditor } from './CharacterSheetEditor'
 import { CharacterCreationWizard } from './CharacterCreationWizard'
 import { CharacterSwitcher } from './CharacterSwitcher'
@@ -9,16 +10,18 @@ import type { PlayerWorkspace } from './usePlayerWorkspace'
 
 interface PlayerWorkspaceBodyProps {
   workspace: PlayerWorkspace
-  myDisplayName: string
+  /** Your own relay account id — null until the relay connects. This is what authorUserId on a note/folder you create gets stamped with (see sessionHost.ts's dispatch()), so it's what ownership checks in the sidebar compare against. */
+  myUserId: string | null
+  /** The joined session id — needed directly (not just via workspace) for PartySidebar's presence subscription. */
+  sessionId: string | null
   connectedLabel: string | null
-  onConnected: (address: string, label: string) => void
 }
 
 export function PlayerWorkspaceBody({
   workspace,
-  myDisplayName,
-  connectedLabel,
-  onConnected
+  myUserId,
+  sessionId,
+  connectedLabel
 }: PlayerWorkspaceBodyProps): JSX.Element {
   const {
     characters,
@@ -63,9 +66,11 @@ export function PlayerWorkspaceBody({
         <p
           style={{
             position: 'absolute',
+            zIndex: 10,
             color: 'var(--danger)',
             fontSize: 13,
-            padding: 'var(--space-2) var(--space-5)'
+            padding: 'var(--space-2) var(--space-5)',
+            background: 'var(--bg-surface)'
           }}
         >
           {error}
@@ -77,7 +82,7 @@ export function PlayerWorkspaceBody({
         notes={notes}
         folders={folders}
         activeTab={activeTab}
-        myDisplayName={myDisplayName}
+        myUserId={myUserId}
         onSelectNote={(id) => openTab({ kind: 'note', id })}
         onCreateNote={createNote}
         onCreateFolder={createFolder}
@@ -91,7 +96,6 @@ export function PlayerWorkspaceBody({
         onPasteFolder={duplicateFolder}
         onResync={resync}
         connectedLabel={connectedLabel}
-        onConnected={onConnected}
         footer={
           <>
             <CharacterSwitcher
@@ -118,6 +122,7 @@ export function PlayerWorkspaceBody({
             key={activeNote.id}
             note={activeNote}
             notes={notes ?? []}
+            readOnly={activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? '')}
             onSave={(patch) => saveNote(activeNote.id, patch)}
             onNavigateToNote={(id) => openTab({ kind: 'note', id })}
             onCreateAndLinkNote={(title) => createNote(null, title)}
@@ -141,6 +146,21 @@ export function PlayerWorkspaceBody({
           </div>
         )}
       </div>
+
+      {activeCampaign && (
+        <PartySidebar
+          sessionId={sessionId}
+          campaignId={activeCampaign.id}
+          myUserId={myUserId}
+          activeNote={activeNote}
+          onToggleEditor={(noteId, userId, grant) => {
+            const note = notes?.find((n) => n.id === noteId)
+            if (!note) return
+            const next = grant ? [...note.editorUserIds, userId] : note.editorUserIds.filter((id) => id !== userId)
+            saveNote(noteId, { editorUserIds: next })
+          }}
+        />
+      )}
     </div>
   )
 }

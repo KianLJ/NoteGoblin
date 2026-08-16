@@ -1,0 +1,17 @@
+{
+  "name": "notegoblin-relay",
+  "version": "0.1.0",
+  "description": "Cloudflare Workers relay backing NoteGoblin's friends menu (accounts, friend graph, presence, session tunneling), built on partyserver. Deploys independently of the Electron app.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260816.1",
+    "partyserver": "^0.5.10",
+    "typescript": "5.9.3",
+    "wrangler": "^4.123.0"
+  }
+}
