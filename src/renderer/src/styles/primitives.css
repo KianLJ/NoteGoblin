@@ -237,6 +237,74 @@
   border-bottom-color: var(--danger);
 }
 
+/* Rendered ```statblock fenced block — see statblock.ts. A bordered card
+   with an accent top edge, styled to read as a distinct "reference card"
+   sitting inside the surrounding note rather than more prose. */
+.gb-statblock {
+  border: 1px solid var(--border-subtle);
+  border-top: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+  padding: var(--space-4);
+  margin: 0 0 1em;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.gb-statblock-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.gb-statblock-subtitle {
+  font-style: italic;
+  color: var(--text-secondary);
+  margin-bottom: 0.3em;
+}
+.gb-statblock-rule {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0.6em 0;
+}
+.gb-statblock-line {
+  margin: 0.2em 0;
+}
+.gb-statblock-line strong {
+  color: var(--text-secondary);
+}
+.gb-statblock-abilities {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+  margin: 0.4em 0;
+}
+.gb-statblock-abilities th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 700;
+  padding-bottom: 2px;
+}
+.gb-statblock-abilities td {
+  padding: 2px 4px;
+}
+.gb-statblock-section {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border-subtle);
+  margin: 0.8em 0 0.4em;
+  padding-bottom: 2px;
+}
+.gb-statblock-entry {
+  margin: 0 0 0.5em;
+}
+.gb-statblock-entry-name {
+  font-weight: 700;
+  font-style: italic;
+}
+
 /* Live-preview decorations inside MarkdownLiveEditor (CodeMirror) — mirrors
    .gb-markdown's headings/links, applied inline to the same editable text. */
 .cm-live-h1,
