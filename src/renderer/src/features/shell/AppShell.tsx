@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ModeToggle, type Mode } from './ModeToggle'
 import { WindowControls } from './WindowControls'
+import { VersionBadge } from './VersionBadge'
 import { FriendsMenu } from '../friends/FriendsMenu'
 import { NotificationToasts } from '../notifications/NotificationToasts'
 import { useNotifications } from '../notifications/useNotifications'
@@ -268,6 +269,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       </main>
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
+      <VersionBadge />
     </div>
   )
 }

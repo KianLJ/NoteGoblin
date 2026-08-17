@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { Mark } from '../../ui/Mark'
 import { WindowControls } from '../shell/WindowControls'
+import { VersionBadge } from '../shell/VersionBadge'
 import type { Identity } from '@shared/ipc'
 
 interface LoginScreenProps {
@@ -99,6 +100,7 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
         <div style={{ position: 'absolute', top: 0, right: 0 }}>
           <WindowControls />
         </div>
+        <VersionBadge />
       </div>
     )
   }
@@ -231,6 +233,8 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
           )}
         </p>
       </form>
+
+      <VersionBadge />
     </div>
   )
 }
