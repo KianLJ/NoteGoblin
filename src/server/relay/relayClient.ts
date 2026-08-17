@@ -89,3 +89,12 @@ export function adminListAccounts(token: string): Promise<ClientResult<AdminAcco
 export function adminRemoveAccount(token: string, userId: string): Promise<ClientResult<{ ok: true }>> {
   return call('/admin/accounts/remove', 'POST', token, { userId })
 }
+
+/** Renames an account and/or resets its password — never sends or receives the actual password value beyond `newPassword` going in one direction; the relay hashes it, this call's response never carries a password or its hash back. */
+export function adminUpdateAccount(
+  token: string,
+  userId: string,
+  input: { username?: string; newPassword?: string }
+): Promise<ClientResult<{ ok: true; username: string }>> {
+  return call('/admin/accounts/update', 'POST', token, { userId, ...input })
+}

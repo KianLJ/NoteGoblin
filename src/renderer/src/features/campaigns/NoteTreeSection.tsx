@@ -9,6 +9,8 @@ import {
 } from 'react'
 import type { Folder, Note } from '@shared/ipc'
 import { ContextMenu, type ContextMenuItem, type ContextMenuState } from '../../ui/ContextMenu'
+import { Modal } from '../../ui/Modal'
+import { Button } from '../../ui/Button'
 import {
   ChevronRightIcon,
   CollapseAllIcon,
@@ -70,9 +72,9 @@ function descendantFolderIds(folders: Folder[], rootId: string): string[] {
   return result
 }
 
-/** Confirms an irreversible batch delete, naming how many notes/folders are actually involved once folder subtrees are counted. Notes-only deletes don't confirm (matches the existing single-note Delete, which never has). */
-function confirmDelete(folders: Folder[], notes: Note[], folderIds: string[], noteIds: string[]): boolean {
-  if (folderIds.length === 0) return true
+/** Whether an irreversible batch delete needs confirming, and the message to show if so — names how many notes/folders are actually involved once folder subtrees are counted. Notes-only deletes never confirm (matches the existing single-note Delete, which never has); returns null in that case. */
+function describeDelete(folders: Folder[], notes: Note[], folderIds: string[], noteIds: string[]): string | null {
+  if (folderIds.length === 0) return null
   const allFolderIds = new Set(folderIds)
   for (const id of folderIds) descendantFolderIds(folders, id).forEach((d) => allFolderIds.add(d))
   const noteIdSet = new Set(noteIds)
@@ -83,7 +85,7 @@ function confirmDelete(folders: Folder[], notes: Note[], folderIds: string[], no
   const noteCount = noteIdSet.size
   const parts: string[] = [`${folderCount} folder${folderCount === 1 ? '' : 's'}`]
   if (noteCount > 0) parts.unshift(`${noteCount} note${noteCount === 1 ? '' : 's'}`)
-  return window.confirm(`Delete ${parts.join(' and ')}? This can't be undone.`)
+  return `Delete ${parts.join(' and ')}? This can't be undone.`
 }
 
 interface NoteTreeSectionProps {
@@ -96,8 +98,10 @@ interface NoteTreeSectionProps {
   notes: Note[]
   folders: Folder[]
   activeId: string | null
-  /** Rename/Delete/drag/cut only work for items you authored — compared by id against authorUserId, matching the same author-only rule the server enforces, so this just avoids offering actions that would silently fail. null while your own id isn't known yet (e.g. relay still connecting), which just means nothing appears owned yet. */
+  /** Rename/Cut/Copy only ever work for items you authored — compared by id against authorUserId, matching the same author-only rule the server enforces, so this just avoids offering actions that would silently fail. Delete/move additionally work for the DM on a party item they didn't author (see `isDm`), same exception the server makes. null while your own id isn't known yet (e.g. relay still connecting), which just means nothing appears owned yet. */
   myUserId: string | null
+  /** True only for the DM's own sections (Party Notes/DM Only) — grants delete/move (not rename/cut/copy) on items authored by someone else, matching campaignService's DM exception. Never true for a 'private' section since the DM has no standing there at all. */
+  isDm?: boolean
   /** When true, this section stretches to fill its container's full height so right-click and drop targets cover the whole pane, not just where items are rendered. */
   fill?: boolean
   /** Shared across every section in the sidebar (lifted up) so Ctrl+C in one section and Ctrl+V in another — e.g. Shared to DM Only — works like cut/copy across folders in a file manager. */
@@ -143,6 +147,7 @@ export function NoteTreeSection({
   folders,
   activeId,
   myUserId,
+  isDm,
   fill,
   clipboard,
   onSetClipboard,
@@ -170,6 +175,7 @@ export function NoteTreeSection({
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [pendingDelete, setPendingDelete] = useState<{ message: string; folderIds: string[]; noteIds: string[] } | null>(null)
   const lastSelectedKeyRef = useRef<string | null>(null)
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map())
   const sortMenuRef = useRef<HTMLDivElement>(null)
@@ -262,15 +268,23 @@ export function NoteTreeSection({
     }
   }
 
+  function performDelete(folderIds: string[], noteIds: string[]): void {
+    noteIds.forEach(onDeleteNote)
+    folderIds.forEach(onDeleteFolder)
+    setSelected(new Set())
+  }
+
   function deleteSelected(): void {
     const items = [...selected].map(parseKey)
     const folderIds = items.filter((i) => i.kind === 'folder').map((i) => i.id)
     const noteIds = items.filter((i) => i.kind === 'note').map((i) => i.id)
     if (folderIds.length === 0 && noteIds.length === 0) return
-    if (!confirmDelete(folders, notes, folderIds, noteIds)) return
-    noteIds.forEach(onDeleteNote)
-    folderIds.forEach(onDeleteFolder)
-    setSelected(new Set())
+    const message = describeDelete(folders, notes, folderIds, noteIds)
+    if (message) {
+      setPendingDelete({ message, folderIds, noteIds })
+      return
+    }
+    performDelete(folderIds, noteIds)
   }
 
   /** Paste lands inside the single selected folder, if exactly one is selected — otherwise at this section's root. */
@@ -445,7 +459,8 @@ export function NoteTreeSection({
         }
       })
     }
-    if (folder.authorUserId === myUserId) {
+    const isMine = folder.authorUserId === myUserId
+    if (isMine) {
       items.push(
         { label: 'Cut', onSelect: () => onSetClipboard([{ kind: 'folder', id: folder.id }], 'cut') },
         { label: 'Copy', onSelect: () => onSetClipboard([{ kind: 'folder', id: folder.id }], 'copy') },
@@ -455,15 +470,19 @@ export function NoteTreeSection({
             setRenamingFolderId(folder.id)
             setRenameValue(folder.name)
           }
-        },
-        {
-          label: 'Delete',
-          danger: true,
-          onSelect: () => {
-            if (confirmDelete(folders, notes, [folder.id], [])) onDeleteFolder(folder.id)
-          }
         }
       )
+    }
+    if (isMine || isDm) {
+      items.push({
+        label: 'Delete',
+        danger: true,
+        onSelect: () => {
+          const message = describeDelete(folders, notes, [folder.id], [])
+          if (message) setPendingDelete({ message, folderIds: [folder.id], noteIds: [] })
+          else onDeleteFolder(folder.id)
+        }
+      })
     }
     setMenu({ x: e.clientX, y: e.clientY, items })
   }
@@ -472,11 +491,11 @@ export function NoteTreeSection({
     e.preventDefault()
     e.stopPropagation()
     if (!selected.has(makeKey('note', note.id))) setSelected(new Set([makeKey('note', note.id)]))
-    if (note.authorUserId !== myUserId) return
-    setMenu({
-      x: e.clientX,
-      y: e.clientY,
-      items: [
+    const isMine = note.authorUserId === myUserId
+    if (!isMine && !isDm) return
+    const items: ContextMenuItem[] = []
+    if (isMine) {
+      items.push(
         { label: 'Cut', onSelect: () => onSetClipboard([{ kind: 'note', id: note.id }], 'cut') },
         { label: 'Copy', onSelect: () => onSetClipboard([{ kind: 'note', id: note.id }], 'copy') },
         {
@@ -485,10 +504,11 @@ export function NoteTreeSection({
             setRenamingNoteId(note.id)
             setRenameValue(note.title)
           }
-        },
-        { label: 'Delete', danger: true, onSelect: () => onDeleteNote(note.id) }
-      ]
-    })
+        }
+      )
+    }
+    items.push({ label: 'Delete', danger: true, onSelect: () => onDeleteNote(note.id) })
+    setMenu({ x: e.clientX, y: e.clientY, items })
   }
 
   function commitFolderRename(): void {
@@ -538,13 +558,14 @@ export function NoteTreeSection({
     const isDragging = draggingKey === `folder:${folder.id}`
     const isDragOver = dragOverKey === `folder:${folder.id}`
     const isMine = folder.authorUserId === myUserId
+    const canManage = isMine || !!isDm
     const isSelected = selected.has(makeKey('folder', folder.id))
     const isCutPending = clipboard?.mode === 'cut' && clipboard.items.some((i) => i.kind === 'folder' && i.id === folder.id)
     return (
       <div key={folder.id}>
         <div
           tabIndex={0}
-          draggable={!isRenaming && isMine}
+          draggable={!isRenaming && canManage}
           title={isMine ? undefined : `Created by ${folder.authorDisplayName}`}
           onDragStart={(e) => handleDragStart(e, { kind: 'folder', id: folder.id })}
           onDragEnd={handleDragEnd}
@@ -601,8 +622,28 @@ export function NoteTreeSection({
               style={{ fontSize: 13, padding: '1px 4px', flex: 1, minWidth: 0 }}
             />
           ) : (
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {folder.name}
+            </span>
+          )}
+          {visibility === 'shared' && !isRenaming && (
+            <span
+              title={`Created by ${folder.authorDisplayName}`}
+              style={{
+                flexShrink: 0,
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                background: 'var(--bg-sunken)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '1px 5px',
+                maxWidth: 80,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {folder.authorDisplayName}
             </span>
           )}
         </div>
@@ -621,6 +662,7 @@ export function NoteTreeSection({
     const active = note.id === activeId
     const isDragging = draggingKey === `note:${note.id}`
     const isMine = note.authorUserId === myUserId
+    const canManage = isMine || !!isDm
     const isSelected = selected.has(makeKey('note', note.id))
     const isCutPending = clipboard?.mode === 'cut' && clipboard.items.some((i) => i.kind === 'note' && i.id === note.id)
     return (
@@ -630,7 +672,7 @@ export function NoteTreeSection({
           if (el) rowRefs.current.set(note.id, el)
           else rowRefs.current.delete(note.id)
         }}
-        draggable={!isRenaming && isMine}
+        draggable={!isRenaming && canManage}
         onDragStart={(e) => handleDragStart(e, { kind: 'note', id: note.id })}
         onDragEnd={handleDragEnd}
         onContextMenu={(e) => openNoteMenu(e, note)}
@@ -826,6 +868,29 @@ export function NoteTreeSection({
       </div>
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
+
+      {pendingDelete && (
+        <Modal onClose={() => setPendingDelete(null)} width={360}>
+          <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 var(--space-4)' }}>
+            {pendingDelete.message}
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+            <Button variant="secondary" onClick={() => setPendingDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+              onClick={() => {
+                performDelete(pendingDelete.folderIds, pendingDelete.noteIds)
+                setPendingDelete(null)
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

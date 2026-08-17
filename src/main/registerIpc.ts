@@ -812,6 +812,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return { ok: true, data: undefined }
   })
 
+  ipcMain.handle(
+    'relay:admin:update-account',
+    async (
+      _event,
+      userId: string,
+      input: { username?: string; newPassword?: string }
+    ): Promise<ApiResult<{ username: string }>> => {
+      const session = getRelaySession()
+      if (!session) return { ok: false, error: 'Not connected to the relay.' }
+      const result = await relayClient.adminUpdateAccount(session.token, userId, input)
+      if (!result.ok) return result
+      return { ok: true, data: { username: result.data.username } }
+    }
+  )
+
   // --- Files --------------------------------------------------------------
   // Images are embedded as base64 data URIs directly in a note's markdown
   // rather than stored/served separately — notes already sync to remote

@@ -13,16 +13,17 @@ interface NoteSidebarProps {
   /** null while there's no campaign open yet — tree still renders (empty), creation is a no-op until one exists. */
   campaignId: string | null
   onSelect: (id: string) => void
-  onCreateNote: (visibility: 'dm' | 'shared' | 'private', folderId: string | null) => void
-  onCreateFolder: (
-    visibility: 'dm' | 'shared' | 'private',
-    name: string,
-    parentFolderId: string | null
-  ) => Promise<string | undefined>
+  onCreateNote: (visibility: 'dm' | 'shared', folderId: string | null) => void
+  onCreateFolder: (visibility: 'dm' | 'shared', name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
   onDeleteNote: (noteId: string) => void
   onRenameFolder: (folderId: string, name: string) => void
   onDeleteFolder: (folderId: string) => void
+  // These four are passed straight through to NoteTreeSection (shared with
+  // PlayerSidebar, which still needs 'private'), so they stay typed for the
+  // full union even though a DM's own sections here only ever pass
+  // 'dm'/'shared' — narrowing them would break assignability, not runtime
+  // behavior.
   onMoveNote: (noteId: string, folderId: string | null, visibility: 'dm' | 'shared' | 'private') => void
   onMoveFolder: (folderId: string, parentFolderId: string | null, visibility: 'dm' | 'shared' | 'private') => void
   onPasteNote: (sourceNoteId: string, targetFolderId: string | null, targetVisibility: 'dm' | 'shared' | 'private') => void
@@ -32,60 +33,6 @@ interface NoteSidebarProps {
 }
 
 const MIN_PANE_HEIGHT = 60
-
-/** A drag-to-resize pane height, dragged from a divider below it — `splitRef` is the shared container both drag math and the resize-clamp effect measure against. */
-function useSplitHeight(
-  splitRef: React.RefObject<HTMLDivElement>,
-  initial: number
-): [number, () => void, (next: number | ((prev: number) => number)) => void] {
-  const [height, setHeight] = useState(initial)
-  const [dragging, setDragging] = useState(false)
-
-  useEffect(() => {
-    if (!dragging) return
-    function handleMove(e: PointerEvent): void {
-      if (!splitRef.current) return
-      const rect = splitRef.current.getBoundingClientRect()
-      const raw = e.clientY - rect.top
-      setHeight(Math.min(rect.height - MIN_PANE_HEIGHT, Math.max(MIN_PANE_HEIGHT, raw)))
-    }
-    function handleUp(): void {
-      setDragging(false)
-    }
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
-    return () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', handleUp)
-    }
-  }, [dragging, splitRef])
-
-  return [height, () => setDragging(true), setHeight]
-}
-
-function Divider({ onStartDrag }: { onStartDrag: () => void }): JSX.Element {
-  return (
-    <div
-      onPointerDown={(e) => {
-        e.preventDefault()
-        onStartDrag()
-      }}
-      title="Drag to resize"
-      style={{ height: 6, flexShrink: 0, cursor: 'row-resize', position: 'relative' }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: 2,
-          left: 0,
-          right: 0,
-          height: 1,
-          background: 'var(--border-subtle)'
-        }}
-      />
-    </div>
-  )
-}
 
 export function NoteSidebar({
   notes,
@@ -108,34 +55,52 @@ export function NoteSidebar({
   footer
 }: NoteSidebarProps): JSX.Element {
   const storageBase = campaignId ?? 'none'
+  const [partyHeight, setPartyHeight] = useState(240)
+  const [dragging, setDragging] = useState(false)
   const splitRef = useRef<HTMLDivElement>(null)
-  // Lifted above every section so Ctrl+C in one and Ctrl+V in another works,
-  // the same way dragging across them does.
+  // Lifted above both sections so Ctrl+C in Party Notes and Ctrl+V in DM
+  // Only (or vice versa) works, the same way dragging across them does.
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
-  const [partyHeight, startPartyDrag, setPartyHeight] = useSplitHeight(splitRef, 200)
-  const [privateHeight, startPrivateDrag, setPrivateHeight] = useSplitHeight(splitRef, 160)
 
-  // partyHeight/privateHeight are fixed pixel values chosen (by default or by
-  // dragging) against whatever the split's available height was at the time —
-  // they never otherwise reconcile against the container. Without this,
-  // shrinking the window (or the sidebar) below that combined value leaves
-  // the two fixed-height panes still claiming their old heights
-  // (flexShrink: 0), pushing the DM Only pane below them — and visually, the
-  // footer below that — out of their normal, "locked" position instead of
-  // the split just compressing. Re-clamp both on every resize, keeping the
-  // bottom (DM Only) pane's flex:1 share above the floor.
+  // Same window-level-listener approach as ResizableSidebar's horizontal
+  // handle, for the same reason: pointer capture on a thin handle is
+  // unreliable during a fast drag.
+  useEffect(() => {
+    if (!dragging) return
+    function handleMove(e: PointerEvent): void {
+      if (!splitRef.current) return
+      const rect = splitRef.current.getBoundingClientRect()
+      const raw = e.clientY - rect.top
+      setPartyHeight(Math.min(rect.height - MIN_PANE_HEIGHT, Math.max(MIN_PANE_HEIGHT, raw)))
+    }
+    function handleUp(): void {
+      setDragging(false)
+    }
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+  }, [dragging])
+
+  // partyHeight is a fixed pixel value chosen (by default or by dragging)
+  // against whatever the split's available height was at the time — it never
+  // otherwise reconciles against the container. Without this, shrinking the
+  // window (or the sidebar) below that value leaves the Party pane still
+  // claiming its old height (flexShrink: 0), pushing the divider/DM Only pane
+  // — and visually, the footer below them — out of their normal, "locked"
+  // position instead of the split just compressing. Re-clamp on every resize.
   useEffect(() => {
     const el = splitRef.current
     if (!el) return
     const observer = new ResizeObserver(() => {
       const height = el.getBoundingClientRect().height
-      const maxCombined = Math.max(MIN_PANE_HEIGHT * 2, height - MIN_PANE_HEIGHT)
-      setPartyHeight((prev) => Math.min(prev, maxCombined - MIN_PANE_HEIGHT))
-      setPrivateHeight((prev) => Math.min(prev, maxCombined - MIN_PANE_HEIGHT))
+      setPartyHeight((prev) => Math.min(prev, Math.max(MIN_PANE_HEIGHT, height - MIN_PANE_HEIGHT)))
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [setPartyHeight, setPrivateHeight])
+  }, [])
 
   return (
     <ResizableSidebar
@@ -174,6 +139,7 @@ export function NoteSidebar({
             title="Party Notes"
             storageKey={`${storageBase}:shared`}
             visibility="shared"
+            isDm={isDm}
             fill
             notes={notes.filter((n) => n.visibility === 'shared')}
             folders={folders.filter((f) => f.visibility === 'shared')}
@@ -198,37 +164,30 @@ export function NoteSidebar({
 
         {isDm && (
           <>
-            <Divider onStartDrag={startPartyDrag} />
-
-            <div style={{ height: privateHeight, minHeight: 0, overflowY: 'auto', flexShrink: 0 }}>
-              <NoteTreeSection
-                title="Private Notes"
-                headerIcon={<LockIcon />}
-                storageKey={`${storageBase}:private`}
-                visibility="private"
-                fill
-                notes={notes.filter((n) => n.visibility === 'private' && n.authorUserId === myUserId)}
-                folders={folders.filter((f) => f.visibility === 'private' && f.authorUserId === myUserId)}
-                activeId={activeId}
-                myUserId={myUserId}
-                onSelectNote={onSelect}
-                onCreateNote={(folderId) => onCreateNote('private', folderId)}
-                onCreateFolder={(name, parentFolderId) => onCreateFolder('private', name, parentFolderId)}
-                onRenameNote={onRenameNote}
-                onDeleteNote={onDeleteNote}
-                onRenameFolder={onRenameFolder}
-                onDeleteFolder={onDeleteFolder}
-                onMoveNote={onMoveNote}
-                onMoveFolder={onMoveFolder}
-                onPasteNote={onPasteNote}
-                onPasteFolder={onPasteFolder}
-                clipboard={clipboard}
-                onSetClipboard={(items: ClipboardItem[], mode) => setClipboard({ items, mode })}
-                onClearClipboard={() => setClipboard(null)}
+            <div
+              onPointerDown={(e) => {
+                e.preventDefault()
+                setDragging(true)
+              }}
+              title="Drag to resize"
+              style={{
+                height: 6,
+                flexShrink: 0,
+                cursor: 'row-resize',
+                position: 'relative'
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: 0,
+                  right: 0,
+                  height: 1,
+                  background: 'var(--border-subtle)'
+                }}
               />
             </div>
-
-            <Divider onStartDrag={startPrivateDrag} />
 
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <NoteTreeSection
@@ -236,6 +195,7 @@ export function NoteSidebar({
                 headerIcon={<LockIcon />}
                 storageKey={`${storageBase}:dm`}
                 visibility="dm"
+                isDm={isDm}
                 fill
                 notes={notes.filter((n) => n.visibility === 'dm')}
                 folders={folders.filter((f) => f.visibility === 'dm')}
