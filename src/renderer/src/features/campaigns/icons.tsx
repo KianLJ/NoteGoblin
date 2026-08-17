@@ -225,3 +225,18 @@ export function PencilIcon(): JSX.Element {
     </svg>
   )
 }
+
+/** Insert statblock — a shield, for a monster/NPC reference card. */
+export function StatblockIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M8 1.6 13.4 3.6v4.1c0 3.4-2.2 6.1-5.4 7-3.2-.9-5.4-3.6-5.4-7V3.6L8 1.6Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <path d="M8 5v4M6 7h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  )
+}

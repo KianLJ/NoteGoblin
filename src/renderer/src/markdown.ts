@@ -2,6 +2,7 @@ import { Marked, type Tokens } from 'marked'
 import DOMPurify from 'dompurify'
 import { WIKILINK_PATTERN, wikilinkAlias, wikilinkTarget } from './wikilink'
 import { resolveImageSrc } from './imageSrc'
+import { parseStatblock, renderStatblockHtml } from './statblock'
 
 /** A minimal Obsidian-style wikilink token — `[[Target]]`/`[[Target|Alias]]` or `[Target]`/`[Target|Alias]`. */
 interface WikilinkToken extends Tokens.Generic {
@@ -13,7 +14,7 @@ interface WikilinkToken extends Tokens.Generic {
 const WIKILINK_START_RE = /\[/
 const WIKILINK_TOKEN_RE = new RegExp(`^(?:${WIKILINK_PATTERN})`)
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
@@ -48,6 +49,18 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
           const src = escapeHtml(resolveImageSrc(campaignId, href))
           const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
           return `<img src="${src}" alt="${escapeHtml(text)}"${titleAttr}>`
+        },
+        // A ```statblock fenced block renders as a formatted D&D stat block
+        // card (see statblock.ts) instead of a plain code block — anything
+        // else falls back to the same bare <pre><code> marked's own default
+        // renderer would produce.
+        code({ text, lang }: Tokens.Code): string {
+          if ((lang ?? '').trim().toLowerCase() === 'statblock') {
+            return renderStatblockHtml(parseStatblock(text))
+          }
+          const langName = (lang ?? '').trim().split(/\s+/)[0]
+          const langClass = langName ? ` class="language-${escapeHtml(langName)}"` : ''
+          return `<pre><code${langClass}>${escapeHtml(text)}</code></pre>`
         }
       },
       extensions: [

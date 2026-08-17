@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import type { Note } from '@shared/ipc'
 import { renderNoteMarkdown } from '../../markdown'
 import { MarkdownLiveEditor, type MarkdownLiveEditorHandle } from './MarkdownLiveEditor'
-import { EyeIcon, ImageIcon, LinkIcon, PencilIcon, TableIcon } from './icons'
+import { EyeIcon, ImageIcon, LinkIcon, PencilIcon, StatblockIcon, TableIcon } from './icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 
 interface NoteEditorProps {
@@ -22,6 +22,33 @@ interface NoteEditorProps {
 
 const AUTOSAVE_DELAY_MS = 700
 const TABLE_TEMPLATE = '\n| Header 1 | Header 2 |\n| --- | --- |\n| Cell | Cell |\n| Cell | Cell |\n'
+const STATBLOCK_TEMPLATE = `
+\`\`\`statblock
+name: Goblin
+size: Small
+type: humanoid (goblinoid)
+alignment: neutral evil
+ac: 15 (leather armor, shield)
+hp: 7 (2d6)
+speed: 30 ft.
+str: 8
+dex: 14
+con: 10
+int: 10
+wis: 8
+cha: 8
+skills: Stealth +6
+senses: darkvision 60 ft., passive Perception 9
+languages: Common, Goblin
+cr: 1/4
+traits:
+  - name: Nimble Escape
+    desc: The goblin can take the Disengage or Hide action as a bonus action on each of its turns.
+actions:
+  - name: Scimitar
+    desc: Melee Weapon Attack. +4 to hit, reach 5 ft., one target. Hit 5 (1d6 + 2) slashing damage.
+\`\`\`
+`
 
 /** Plain whitespace-split count, same rough definition every text editor uses — not trying to be markdown-aware (strip syntax, skip image data URIs, etc.), just a rough sense of how much is here. */
 function wordCount(text: string): number {
@@ -312,6 +339,9 @@ export function NoteEditor({
             </div>
             <ToolbarButton title="Insert table" onClick={() => insertText(TABLE_TEMPLATE)}>
               <TableIcon />
+            </ToolbarButton>
+            <ToolbarButton title="Insert statblock" onClick={() => insertText(STATBLOCK_TEMPLATE)}>
+              <StatblockIcon />
             </ToolbarButton>
             <div style={{ width: 1, height: 18, background: 'var(--border-subtle)', margin: '0 4px' }} />
           </>
