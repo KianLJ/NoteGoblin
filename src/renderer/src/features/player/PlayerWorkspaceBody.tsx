@@ -32,7 +32,6 @@ export function PlayerWorkspaceBody({
     activeCharacter,
     activeNote,
     openTab,
-    resync,
     createCharacter,
     saveCharacter,
     deleteCharacter,
@@ -64,6 +63,8 @@ export function PlayerWorkspaceBody({
 
       {error && (
         <p
+          key={error}
+          className="gb-toast-fade"
           style={{
             position: 'absolute',
             zIndex: 10,
@@ -94,7 +95,6 @@ export function PlayerWorkspaceBody({
         onMoveFolder={moveFolder}
         onPasteNote={duplicateNote}
         onPasteFolder={duplicateFolder}
-        onResync={resync}
         connectedLabel={connectedLabel}
         footer={
           <>
@@ -142,7 +142,7 @@ export function PlayerWorkspaceBody({
           >
             {connectedLabel
               ? 'Select a character or a note to get started'
-              : 'Select a character, or connect to a table from the sidebar'}
+              : 'Select a character, or join a friend’s game from the Friends menu'}
           </div>
         )}
       </div>

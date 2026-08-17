@@ -17,3 +17,10 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+# electron-updater's feed — publishing (uploading the built installer + the
+# latest.yml update manifest it generates) requires a GH_TOKEN env var with
+# repo scope; just building normally (no --publish flag) never touches this.
+publish:
+  provider: github
+  owner: KianLJ
+  repo: NoteGoblin

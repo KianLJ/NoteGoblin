@@ -14,6 +14,14 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   const [openTabs, setOpenTabs] = useState<string[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
 
+  // Auto-dismiss — an error toast that sits there forever just gets in the
+  // way of the sidebar/editor beneath it once you've read it.
+  useEffect(() => {
+    if (!error) return
+    const timer = setTimeout(() => setError(null), 5000)
+    return () => clearTimeout(timer)
+  }, [error])
+
   useEffect(() => {
     if (!campaignId) {
       setNotes(null)

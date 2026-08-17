@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button } from '../../ui/Button'
+import { useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlusIcon } from '../campaigns/icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
@@ -23,8 +22,7 @@ interface PlayerSidebarProps {
   onMoveFolder: (folderId: string, parentFolderId: string | null, visibility: 'dm' | 'shared') => void
   onPasteNote: (sourceNoteId: string, targetFolderId: string | null, targetVisibility: 'dm' | 'shared') => void
   onPasteFolder: (sourceFolderId: string, targetParentId: string | null, targetVisibility: 'dm' | 'shared') => void
-  /** Re-fetches the DM's active campaign — the closest thing to "catch up" if they switched tables after you connected, since there's no live push for that yet. */
-  onResync: () => void
+  /** Whether you're connected to a session at all — connection status/resync itself now lives in the Friends menu, this just decides which empty-state hint to show. */
   connectedLabel: string | null
   /** The character switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
   footer: ReactNode
@@ -47,7 +45,6 @@ export function PlayerSidebar({
   onMoveFolder,
   onPasteNote,
   onPasteFolder,
-  onResync,
   connectedLabel,
   footer
 }: PlayerSidebarProps): JSX.Element {
@@ -82,8 +79,6 @@ export function PlayerSidebar({
           background: 'var(--bg-sunken)'
         }}
       >
-        <TableBar activeCampaign={activeCampaign} onResync={onResync} connectedLabel={connectedLabel} />
-
         {activeCampaign ? (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             <NoteTreeSection
@@ -115,120 +110,13 @@ export function PlayerSidebar({
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2) 0' }}>
             <Section title="Campaign Notes">
               <EmptyHint>
-                {connectedLabel ? 'Pick a campaign above' : 'Join a friend’s game from the Friends menu'}
+                {connectedLabel ? "Waiting for the DM's campaign" : 'Join a friend’s game from the Friends menu'}
               </EmptyHint>
             </Section>
           </div>
         )}
       </div>
     </ResizableSidebar>
-  )
-}
-
-/** Connection context — deliberately separate from the note/character "file" sections below, since it's not a file, it's the table you're sitting at. Which campaign you're in is entirely the DM's call (see the active-campaign auto-join in usePlayerWorkspace) — this just shows where you landed, with a manual re-sync in case the DM switches tables after you've connected. */
-function TableBar({
-  activeCampaign,
-  onResync,
-  connectedLabel
-}: {
-  activeCampaign: Campaign | null
-  onResync: () => void
-  connectedLabel: string | null
-}): JSX.Element {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  return (
-    <div
-      ref={containerRef}
-      style={{ position: 'relative', borderBottom: '1px solid var(--border-subtle)', padding: 'var(--space-2)' }}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 6,
-          width: '100%',
-          background: 'var(--bg-surface-raised)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '6px 8px',
-          cursor: 'pointer',
-          textAlign: 'left'
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            color: connectedLabel ? 'var(--text-primary)' : 'var(--text-muted)'
-          }}
-        >
-          {activeCampaign ? activeCampaign.name : connectedLabel ? connectedLabel : 'Not connected'}
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>▾</span>
-      </button>
-
-      {open && (
-        <div
-          className="gb-card"
-          style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 'var(--space-2)', width: 300, zIndex: 20 }}
-        >
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-            {connectedLabel ? `Connected: ${connectedLabel}` : 'Not connected'}
-          </div>
-
-          {connectedLabel && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 6,
-                marginBottom: 'var(--space-3)'
-              }}
-            >
-              <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {activeCampaign ? (
-                  <>
-                    Playing <strong>{activeCampaign.name}</strong>
-                  </>
-                ) : (
-                  "The DM hasn't started a session yet"
-                )}
-              </span>
-              <Button
-                variant="secondary"
-                onClick={onResync}
-                title="Catch up if the DM switched campaigns"
-                style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
-              >
-                Sync
-              </Button>
-            </div>
-          )}
-
-          {!connectedLabel && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-              Join a friend's game from the Friends menu in the top-right corner.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
   )
 }
 

@@ -1,6 +1,14 @@
-import { app, shell, BrowserWindow, session } from 'electron'
+import { app, shell, BrowserWindow, dialog, session } from 'electron'
 import { join } from 'path'
+// electron-updater is CommonJS — our main bundle is ESM (package.json has
+// "type": "module"), and Node's ESM loader doesn't do the static named-export
+// analysis a bundler would, so `import { autoUpdater } from 'electron-updater'`
+// throws a SyntaxError at module load (crashing every launch, not just when
+// actually checking for updates). Default-import the whole module instead.
+import electronUpdater from 'electron-updater'
 import { registerIpcHandlers } from './registerIpc'
+
+const { autoUpdater } = electronUpdater
 
 const isDev = !app.isPackaged
 
@@ -64,6 +72,44 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+/**
+ * Checks GitHub Releases (see electron-builder.yml's `publish` block) for a
+ * newer version, downloads it silently in the background if found, and asks
+ * before restarting to apply it — never interrupts an active session
+ * unprompted. No-op in dev (unpackaged runs have nothing to update, and
+ * electron-updater errors immediately without a real app.getAppPath()
+ * update metadata file anyway).
+ */
+function checkForUpdates(): void {
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = false
+
+  autoUpdater.on('update-downloaded', () => {
+    dialog
+      .showMessageBox({
+        type: 'info',
+        buttons: ['Restart now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+        message: 'A new version of NoteGoblin is ready.',
+        detail: 'Restart to finish installing it — your campaigns and notes are untouched either way.'
+      })
+      .then((result) => {
+        if (result.response === 0) autoUpdater.quitAndInstall()
+      })
+  })
+
+  // Silent by design — a missed check (offline, no release yet, etc.) isn't
+  // worth interrupting anyone over; it just quietly tries again next launch.
+  autoUpdater.on('error', (err) => {
+    console.error('Update check failed:', err)
+  })
+
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('Update check failed:', err)
+  })
+}
+
 app.whenReady().then(() => {
   if (!isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -80,6 +126,8 @@ app.whenReady().then(() => {
 
   const mainWindow = createWindow()
   registerIpcHandlers(mainWindow)
+
+  if (!isDev) checkForUpdates()
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

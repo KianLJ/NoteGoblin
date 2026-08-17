@@ -62,6 +62,7 @@ function AccountSettingsForm(): JSX.Element {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredMode())
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
   const [adminOpen, setAdminOpen] = useState(false)
@@ -164,7 +165,7 @@ function AccountSettingsForm(): JSX.Element {
 
   return (
     <div>
-      <h3 style={{ fontSize: 14, margin: '0 0 var(--space-2)' }}>Account</h3>
+      <h3 style={{ fontSize: 14, margin: '0 0 var(--space-2)' }}>Profile</h3>
 
       <label className="gb-label" htmlFor="settings-display-name">
         Display name
@@ -185,12 +186,8 @@ function AccountSettingsForm(): JSX.Element {
       </div>
       {nameError && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{nameError}</p>}
       {nameSaved && <p style={{ color: 'var(--success)', fontSize: 12 }}>Saved.</p>}
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
-        This only renames your identity on this device — hosts you've already joined under the old
-        name won't follow automatically.
-      </p>
 
-      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
+      <hr className="gb-divider" style={{ margin: 'var(--space-3) 0 var(--space-2)' }} />
 
       <button
         type="button"
@@ -327,18 +324,47 @@ function AccountSettingsForm(): JSX.Element {
 
       <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 13 }}>Remember this login</span>
-        <Button variant="secondary" onClick={toggleRemembered}>
-          {remembered ? 'Forget' : 'Remember'}
-        </Button>
-      </div>
+      <button
+        type="button"
+        onClick={() => setAccountOpen((o) => !o)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          margin: '0 0 var(--space-2)',
+          cursor: 'pointer'
+        }}
+      >
+        <span
+          style={{
+            display: 'flex',
+            transform: accountOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 100ms',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <ChevronRightIcon />
+        </span>
+        <h3 style={{ fontSize: 14, margin: 0 }}>Account</h3>
+      </button>
+      {accountOpen && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+            <span style={{ fontSize: 13 }}>Remember this account</span>
+            <Button variant="secondary" onClick={toggleRemembered}>
+              {remembered ? 'Forget' : 'Remember'}
+            </Button>
+          </div>
 
-      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
-
-      <Button variant="secondary" onClick={signOut} disabled={signingOut} style={{ width: '100%' }}>
-        {signingOut ? 'Signing out…' : 'Sign out'}
-      </Button>
+          <Button variant="secondary" onClick={signOut} disabled={signingOut} style={{ width: '100%' }}>
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </Button>
+        </>
+      )}
 
       {identity.displayName.trim().toLowerCase() === 'kyonk' && (
         <>
