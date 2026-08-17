@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { EditorState, type Extension, type Range } from '@codemirror/state'
+import { Compartment, EditorState, type Extension, type Range } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -40,6 +40,8 @@ interface MarkdownLiveEditorProps {
   notesRef: { current: Note[] }
   onChange: (value: string) => void
   onWikilinkClick: (target: string) => void
+  /** Blocks actual document edits at the CodeMirror level (no cursor, no typing, paste rejected) — not a CSS overlay, which only stops mouse-driven interaction and leaves keyboard input (e.g. Tab-focusing in) still able to "type" locally even though nothing would ever save. Reconfigurable live via a Compartment since editorUserIds can change while a note's already open. */
+  readOnly?: boolean
 }
 
 const MAX_LINK_SUGGESTIONS = 20
@@ -281,9 +283,10 @@ const imagePasteHandler = EditorView.domEventHandlers({
 })
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
-  function MarkdownLiveEditor({ defaultValue, knownTitlesRef, notesRef, onChange, onWikilinkClick }, ref) {
+  function MarkdownLiveEditor({ defaultValue, knownTitlesRef, notesRef, onChange, onWikilinkClick, readOnly }, ref) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
+    const readOnlyCompartment = useRef(new Compartment()).current
 
     useEffect(() => {
       if (!containerRef.current) return
@@ -291,6 +294,7 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
         state: EditorState.create({
           doc: defaultValue,
           extensions: [
+            readOnlyCompartment.of(EditorView.editable.of(!readOnly)),
             history(),
             closeBrackets(),
             autocompletion({ override: [noteLinkCompletionSource(notesRef)] }),
@@ -336,6 +340,15 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
       // old textarea did.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    // readOnly CAN change without a remount — e.g. the author grants you
+    // edit access via the party sidebar while you already have the note
+    // open — so reconfigure the live view instead of only reading it once.
+    useEffect(() => {
+      const view = viewRef.current
+      if (!view) return
+      view.dispatch({ effects: readOnlyCompartment.reconfigure(EditorView.editable.of(!readOnly)) })
+    }, [readOnly, readOnlyCompartment])
 
     useImperativeHandle(ref, () => ({
       insertText(text: string) {

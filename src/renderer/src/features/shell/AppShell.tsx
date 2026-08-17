@@ -169,7 +169,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       })
     })
   }, [])
-  const [viewedPlayerCharacter, setViewedPlayerCharacter] = useState<CharacterSheet | null>(null)
+  const [viewedPlayerUserId, setViewedPlayerUserId] = useState<string | null>(null)
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -255,8 +255,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             onSwitchCampaign={setActiveCampaign}
             hostedSessionId={hostedSessionId}
             playerCharacters={playerCharacters}
-            viewedPlayerCharacter={viewedPlayerCharacter}
-            onViewPlayerCharacter={setViewedPlayerCharacter}
+            viewedPlayerUserId={viewedPlayerUserId}
+            onViewPlayerUserId={setViewedPlayerUserId}
           />
         ) : (
           <PlayerWorkspaceBody

@@ -13,7 +13,7 @@ interface RightPanelProps {
   sessionId: string | null
   campaignId: string
   playerCharacters: Map<string, CharacterSheet>
-  onSelectPlayer: (character: CharacterSheet) => void
+  onSelectPlayer: (userId: string) => void
 }
 
 /** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. */

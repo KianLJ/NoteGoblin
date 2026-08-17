@@ -16,9 +16,9 @@ interface CampaignWorkspaceProps {
   hostedSessionId?: string | null
   /** Every connected player's currently-selected character, kept live — passed through to RightPanel's ConnectedPlayersList so clicking a player opens their sheet below. */
   playerCharacters: Map<string, CharacterSheet>
-  /** Set when viewing a player's character (read-only) instead of a note — takes over the main pane until closed or a note is opened. */
-  viewedPlayerCharacter: CharacterSheet | null
-  onViewPlayerCharacter: (character: CharacterSheet | null) => void
+  /** Whose character is being viewed (read-only) instead of a note, if anyone — takes over the main pane until closed or a note is opened. Deliberately just the id, not the character itself: deriving it fresh from playerCharacters on every render (below) is what keeps the read-only view live instead of frozen at whatever it looked like at the moment you clicked. */
+  viewedPlayerUserId: string | null
+  onViewPlayerUserId: (userId: string | null) => void
 }
 
 /** Sidebar + editor + (once a campaign is open) right panel — the tab strip lives in AppShell's header now (see WorkspaceHeaderBar), not here. */
@@ -28,9 +28,10 @@ export function CampaignWorkspace({
   onSwitchCampaign,
   hostedSessionId,
   playerCharacters,
-  viewedPlayerCharacter,
-  onViewPlayerCharacter
+  viewedPlayerUserId,
+  onViewPlayerUserId
 }: CampaignWorkspaceProps): JSX.Element {
+  const viewedPlayerCharacter = viewedPlayerUserId ? (playerCharacters.get(viewedPlayerUserId) ?? null) : null
   const {
     notes,
     folders,
@@ -75,7 +76,7 @@ export function CampaignWorkspace({
         myUserId={campaign?.dmUserId ?? null}
         campaignId={campaign?.id ?? null}
         onSelect={(id) => {
-          onViewPlayerCharacter(null)
+          onViewPlayerUserId(null)
           openNote(id)
         }}
         onCreateNote={(visibility, folderId) => createNote(visibility, folderId)}
@@ -114,7 +115,7 @@ export function CampaignWorkspace({
               <span>Viewing {viewedPlayerCharacter.name}'s sheet — read only</span>
               <button
                 type="button"
-                onClick={() => onViewPlayerCharacter(null)}
+                onClick={() => onViewPlayerUserId(null)}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}
               >
                 Close
@@ -148,9 +149,11 @@ export function CampaignWorkspace({
             key={activeNote.id}
             note={activeNote}
             notes={notes ?? []}
-            readOnly={
-              activeNote.authorUserId !== campaign?.dmUserId && !activeNote.editorUserIds.includes(campaign?.dmUserId ?? '')
-            }
+            // The DM always has edit power over notes in their own campaign
+            // (this workspace only ever shows campaigns they DM) — matches
+            // the same blanket allowance campaignService.updateNote grants
+            // server-side, so this is just keeping the UI from offering a
+            // save that would otherwise actually succeed.
             onSave={(patch) => saveNote(activeNote.id, patch)}
             onNavigateToNote={openNote}
             onCreateAndLinkNote={(title) => createNote(activeNote.visibility, null, title)}
@@ -176,7 +179,7 @@ export function CampaignWorkspace({
           sessionId={hostedSessionId ?? null}
           campaignId={campaign.id}
           playerCharacters={playerCharacters}
-          onSelectPlayer={onViewPlayerCharacter}
+          onSelectPlayer={onViewPlayerUserId}
         />
       )}
     </div>

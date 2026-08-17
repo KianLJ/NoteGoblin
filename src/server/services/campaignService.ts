@@ -283,12 +283,16 @@ export function updateNote(
   }
   const isAuthor = note.author_user_id === userId
   const isEditor = parseEditorUserIds(note.editor_user_ids).includes(userId)
-  if (!isAuthor && !isEditor) {
-    return { ok: false, status: 403, error: 'Only the author or an invited editor can edit this note.' }
+  // The DM runs the table and can always step in on a shared note — a 'dm'
+  // visibility note is already only ever authored by the DM (isAuthor covers
+  // it), so this only ever adds anything for a player-authored shared note.
+  const isDm = campaignRepo.findById(note.campaign_id)?.dm_user_id === userId
+  if (!isAuthor && !isEditor && !isDm) {
+    return { ok: false, status: 403, error: 'Only the author, an invited editor, or the DM can edit this note.' }
   }
-  // Content (title/body) is open to editors too, but visibility, folder
-  // placement, and the editor list itself stay author-only — an editor
-  // shouldn't be able to move a note out of the author's tree, flip it to
+  // Content (title/body) is open to editors and the DM too, but visibility,
+  // folder placement, and the editor list itself stay author-only — nobody
+  // else should be able to move a note out of the author's tree, flip it to
   // DM-only, or grant/revoke someone else's access.
   if (!isAuthor && ('visibility' in input || 'folderId' in input || 'editorUserIds' in input)) {
     return { ok: false, status: 403, error: "Only the author can change this note's visibility, location, or editors." }
