@@ -4,7 +4,7 @@ import { GearIcon } from './icons'
 import { ChevronRightIcon } from '../campaigns/icons'
 import { ColorTokenEditor } from './ColorTokenEditor'
 import { emitIdentitySwitched } from '../auth/identityEvents'
-import { getStoredMode, setThemeMode, type ThemeMode } from '../../theme'
+import { FONT_CHOICES, getStoredFontId, getStoredMode, setFont, setThemeMode, type ThemeMode } from '../../theme'
 import type { Identity } from '@shared/ipc'
 import type { AdminAccountSummary } from '@shared/relay'
 
@@ -60,6 +60,7 @@ function AccountSettingsForm(): JSX.Element {
   const [remembered, setRemembered] = useState<boolean | null>(null)
 
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredMode())
+  const [fontId, setFontIdState] = useState<string>(() => getStoredFontId())
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
@@ -83,6 +84,11 @@ function AccountSettingsForm(): JSX.Element {
   function chooseThemeMode(mode: ThemeMode): void {
     setThemeMode(mode)
     setThemeModeState(mode)
+  }
+
+  function chooseFont(id: string): void {
+    setFont(id)
+    setFontIdState(id)
   }
 
   useEffect(() => {
@@ -301,6 +307,30 @@ function AccountSettingsForm(): JSX.Element {
                 }}
               >
                 {mode}
+              </button>
+            ))}
+          </div>
+          <label className="gb-label">Font</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 'var(--space-3)' }}>
+            {FONT_CHOICES.map((font) => (
+              <button
+                key={font.id}
+                type="button"
+                onClick={() => chooseFont(font.id)}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  background: fontId === font.id ? 'var(--accent-subtle)' : 'transparent',
+                  color: fontId === font.id ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  fontSize: 13,
+                  fontFamily: font.display,
+                  fontWeight: fontId === font.id ? 700 : 400,
+                  textAlign: 'left',
+                  cursor: 'pointer'
+                }}
+              >
+                {font.label}
               </button>
             ))}
           </div>

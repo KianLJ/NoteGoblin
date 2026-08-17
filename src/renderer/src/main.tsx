@@ -1,11 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import { initTheme } from './theme'
+import { applyFont, getStoredFontId, initTheme } from './theme'
 import './styles/global.css'
 import './styles/primitives.css'
 
 initTheme()
+applyFont(getStoredFontId())
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
