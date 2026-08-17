@@ -23,6 +23,15 @@ export interface FriendRequest {
 
 export type RelayStatus = 'connected' | 'connecting' | 'unavailable'
 
+/** One row in the admin account-management screen — see relay/src/directory.ts's /admin/accounts. */
+export interface AdminAccountSummary {
+  userId: string
+  username: string
+  friendCount: number
+  incomingRequestCount: number
+  outgoingRequestCount: number
+}
+
 /** Generic enough to grow a 'message' kind later for DM/private messaging without reshaping this store — see relay/src/directory.ts. */
 export interface RelayNotification {
   id: string

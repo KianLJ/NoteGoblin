@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { Mark } from '../../ui/Mark'
+import { WindowControls } from '../shell/WindowControls'
 import type { Identity } from '@shared/ipc'
 
 interface LoginScreenProps {
@@ -11,6 +12,10 @@ type Stage = 'checking' | 'returning' | 'create'
 
 export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element {
   const [stage, setStage] = useState<Stage>('checking')
+  // Whether ANY local identity exists on this device — independent of
+  // `stage`, since stage can be manually toggled to 'create' even when
+  // accounts already exist, but there's no "back to login" to offer if none do.
+  const [hasAnyAccounts, setHasAnyAccounts] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -28,10 +33,18 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
         }
       }
       const hasAny = await window.goblin.identity.hasAny()
+      setHasAnyAccounts(hasAny)
       setStage(hasAny ? 'returning' : 'create')
       // eslint-disable-next-line react-hooks/exhaustive-deps
     })()
   }, [])
+
+  function switchStage(next: Stage): void {
+    setStage(next)
+    setError(null)
+    setPassword('')
+    setConfirmPassword('')
+  }
 
   async function applyRememberPreference(): Promise<void> {
     await window.goblin.identity.remember(rememberMe)
@@ -81,7 +94,13 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
   }
 
   if (stage === 'checking') {
-    return <div className="gb-drag" style={{ minHeight: '100vh' }} />
+    return (
+      <div className="gb-drag" style={{ minHeight: '100vh' }}>
+        <div style={{ position: 'absolute', top: 0, right: 0 }}>
+          <WindowControls />
+        </div>
+      </div>
+    )
   }
 
   const returning = stage === 'returning'
@@ -97,6 +116,10 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
         padding: 'var(--space-6)'
       }}
     >
+      <div style={{ position: 'absolute', top: 0, right: 0 }}>
+        <WindowControls />
+      </div>
+
       <form
         onSubmit={handleSubmit}
         className="gb-card gb-no-drag"
@@ -185,6 +208,28 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
         <Button type="submit" variant="primary" disabled={submitting} style={{ width: '100%' }}>
           {submitting ? 'Please wait…' : returning ? 'Log in' : 'Create identity'}
         </Button>
+
+        <p style={{ textAlign: 'center', marginTop: 'var(--space-3)', marginBottom: 0, fontSize: 13 }}>
+          {returning ? (
+            <button
+              type="button"
+              onClick={() => switchStage('create')}
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}
+            >
+              Create a new identity instead
+            </button>
+          ) : (
+            hasAnyAccounts && (
+              <button
+                type="button"
+                onClick={() => switchStage('returning')}
+                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}
+              >
+                Log in instead
+              </button>
+            )
+          )}
+        </p>
       </form>
     </div>
   )

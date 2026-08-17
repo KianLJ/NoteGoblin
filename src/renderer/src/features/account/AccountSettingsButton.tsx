@@ -3,9 +3,10 @@ import { Button } from '../../ui/Button'
 import { GearIcon } from './icons'
 import { ChevronRightIcon } from '../campaigns/icons'
 import { ColorTokenEditor } from './ColorTokenEditor'
-import { AccountSwitcher } from './AccountSwitcher'
+import { emitIdentitySwitched } from '../auth/identityEvents'
 import { getStoredMode, setThemeMode, type ThemeMode } from '../../theme'
 import type { Identity } from '@shared/ipc'
+import type { AdminAccountSummary } from '@shared/relay'
 
 /** Bottom-left gear button, next to the campaign switcher — lets you view/edit your local identity's display name and password, and manage remembered login. */
 export function AccountSettingsButton(): JSX.Element {
@@ -59,7 +60,14 @@ function AccountSettingsForm(): JSX.Element {
   const [remembered, setRemembered] = useState<boolean | null>(null)
 
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredMode())
+  const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [adminError, setAdminError] = useState<string | null>(null)
+  const [adminAccounts, setAdminAccounts] = useState<AdminAccountSummary[] | null>(null)
+  const [adminBusyId, setAdminBusyId] = useState<string | null>(null)
 
   function chooseThemeMode(mode: ThemeMode): void {
     setThemeMode(mode)
@@ -120,6 +128,36 @@ function AccountSettingsForm(): JSX.Element {
     if (result.ok) setRemembered(next)
   }
 
+  async function signOut(): Promise<void> {
+    setSigningOut(true)
+    await window.goblin.identity.signOut()
+    emitIdentitySwitched(null)
+  }
+
+  async function loadAdminAccounts(): Promise<void> {
+    setAdminError(null)
+    const result = await window.goblin.relay.admin.listAccounts()
+    if (!result.ok) {
+      setAdminError(result.error)
+      setAdminAccounts(null)
+      return
+    }
+    setAdminAccounts(result.data)
+  }
+
+  async function removeAdminAccount(account: AdminAccountSummary): Promise<void> {
+    if (!window.confirm(`Delete the relay account "${account.username}"? This can't be undone.`)) return
+    setAdminBusyId(account.userId)
+    setAdminError(null)
+    const result = await window.goblin.relay.admin.removeAccount(account.userId)
+    setAdminBusyId(null)
+    if (!result.ok) {
+      setAdminError(result.error)
+      return
+    }
+    setAdminAccounts((prev) => prev?.filter((a) => a.userId !== account.userId) ?? prev)
+  }
+
   if (!identity) {
     return <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
   }
@@ -154,37 +192,63 @@ function AccountSettingsForm(): JSX.Element {
 
       <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
 
-      <AccountSwitcher />
-
-      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
-
-      <h3 style={{ fontSize: 14, margin: '0 0 var(--space-2)' }}>Appearance</h3>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
-        {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => chooseThemeMode(mode)}
-            style={{
-              flex: 1,
-              padding: '6px 0',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-subtle)',
-              background: themeMode === mode ? 'var(--accent-subtle)' : 'transparent',
-              color: themeMode === mode ? 'var(--accent-hover)' : 'var(--text-secondary)',
-              fontSize: 12,
-              fontWeight: themeMode === mode ? 700 : 400,
-              cursor: 'pointer',
-              textTransform: 'capitalize'
-            }}
-          >
-            {mode}
-          </button>
-        ))}
-      </div>
-      <div style={{ marginBottom: 'var(--space-3)' }}>
-        <ColorTokenEditor themeMode={themeMode} />
-      </div>
+      <button
+        type="button"
+        onClick={() => setAppearanceOpen((o) => !o)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          margin: '0 0 var(--space-2)',
+          cursor: 'pointer'
+        }}
+      >
+        <span
+          style={{
+            display: 'flex',
+            transform: appearanceOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 100ms',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <ChevronRightIcon />
+        </span>
+        <h3 style={{ fontSize: 14, margin: 0 }}>Appearance</h3>
+      </button>
+      {appearanceOpen && (
+        <>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
+            {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => chooseThemeMode(mode)}
+                style={{
+                  flex: 1,
+                  padding: '6px 0',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  background: themeMode === mode ? 'var(--accent-subtle)' : 'transparent',
+                  color: themeMode === mode ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  fontSize: 12,
+                  fontWeight: themeMode === mode ? 700 : 400,
+                  cursor: 'pointer',
+                  textTransform: 'capitalize'
+                }}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <ColorTokenEditor themeMode={themeMode} />
+          </div>
+        </>
+      )}
 
       <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
 
@@ -269,6 +333,106 @@ function AccountSettingsForm(): JSX.Element {
           {remembered ? 'Forget' : 'Remember'}
         </Button>
       </div>
+
+      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
+
+      <Button variant="secondary" onClick={signOut} disabled={signingOut} style={{ width: '100%' }}>
+        {signingOut ? 'Signing out…' : 'Sign out'}
+      </Button>
+
+      {identity.displayName.trim().toLowerCase() === 'kyonk' && (
+        <>
+          <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
+
+          <button
+            type="button"
+            onClick={() => {
+              setAdminOpen((o) => {
+                const next = !o
+                if (next && adminAccounts === null) void loadAdminAccounts()
+                return next
+              })
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              width: '100%',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              margin: '0 0 var(--space-2)',
+              cursor: 'pointer'
+            }}
+          >
+            <span
+              style={{
+                display: 'flex',
+                transform: adminOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 100ms',
+                color: 'var(--text-muted)'
+              }}
+            >
+              <ChevronRightIcon />
+            </span>
+            <h3 style={{ fontSize: 14, margin: 0 }}>Relay admin</h3>
+          </button>
+          {adminOpen && (
+            <>
+              {adminAccounts === null ? (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading…</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' }}>
+                  {adminAccounts.length === 0 ? (
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No accounts.</p>
+                  ) : (
+                    adminAccounts.map((account) => (
+                      <div
+                        key={account.userId}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {account.username}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            {account.friendCount} friend{account.friendCount === 1 ? '' : 's'}
+                            {account.incomingRequestCount > 0 && ` · ${account.incomingRequestCount} incoming`}
+                            {account.outgoingRequestCount > 0 && ` · ${account.outgoingRequestCount} outgoing`}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAdminAccount(account)}
+                          disabled={adminBusyId === account.userId}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--danger)',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            flexShrink: 0
+                          }}
+                        >
+                          {adminBusyId === account.userId ? '…' : 'Delete'}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+              {adminError && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{adminError}</p>}
+            </>
+          )}
+        </>
+      )}
     </div>
   )
 }

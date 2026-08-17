@@ -16,7 +16,8 @@ const api: AppApi = {
     remember: (remember) => ipcRenderer.invoke('identity:remember', remember),
     list: () => ipcRenderer.invoke('identity:list'),
     switch: (id, password, remember) => ipcRenderer.invoke('identity:switch', id, password, remember),
-    forgetSaved: (id) => ipcRenderer.invoke('identity:forget-saved', id)
+    forgetSaved: (id) => ipcRenderer.invoke('identity:forget-saved', id),
+    signOut: () => ipcRenderer.invoke('identity:sign-out')
   },
   sessions: {
     start: () => ipcRenderer.invoke('sessions:start'),
@@ -109,6 +110,10 @@ const api: AppApi = {
       const listener = (): void => callback()
       ipcRenderer.on('relay:notifications-changed', listener)
       return () => ipcRenderer.removeListener('relay:notifications-changed', listener)
+    },
+    admin: {
+      listAccounts: () => ipcRenderer.invoke('relay:admin:list-accounts'),
+      removeAccount: (userId) => ipcRenderer.invoke('relay:admin:remove-account', userId)
     }
   },
   files: {
