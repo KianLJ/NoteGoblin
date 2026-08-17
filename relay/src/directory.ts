@@ -95,6 +95,14 @@ export class Directory extends Server<Env> {
     ) {
       return this.handleAdminRemoveAccount(req)
     }
+    if (
+      req.method === 'POST' &&
+      action === 'update' &&
+      segments[segments.length - 2] === 'accounts' &&
+      segments[segments.length - 3] === 'admin'
+    ) {
+      return this.handleAdminUpdateAccount(req)
+    }
 
     if (req.method === 'POST' && action === 'register') return this.handleRegister(req)
     if (req.method === 'POST' && action === 'login') return this.handleLogin(req)
@@ -403,6 +411,44 @@ export class Directory extends Server<Env> {
     ])
 
     return json({ ok: true })
+  }
+
+  /** Renames an account and/or resets its password on the admin's say-so — never reads or returns the password itself, only ever hashes a new one going in. Renaming updates the `username:*` reverse-lookup key (used by login/register to find an account by name) so the account stays reachable under its new name; the old key is freed for reuse. */
+  private async handleAdminUpdateAccount(req: Request): Promise<Response> {
+    if (!(await this.isAdmin(req))) return json({ error: 'Unauthorized' }, 401)
+    const body = (await req.json().catch(() => null)) as
+      | { userId?: string; username?: string; newPassword?: string }
+      | null
+    if (!body?.userId) return badRequest('userId is required')
+
+    const account = await this.ctx.storage.get<StoredAccount>(`user:${body.userId}`)
+    if (!account) return badRequest('No such account')
+
+    let username = account.username
+    if (typeof body.username === 'string' && body.username.trim().length > 0) {
+      const nextUsername = normalizeUsername(body.username)
+      if (nextUsername.length < 3) return badRequest('username must be at least 3 characters')
+      if (nextUsername !== account.username) {
+        const existingId = await this.ctx.storage.get<string>(`username:${nextUsername}`)
+        if (existingId && existingId !== account.id) return badRequest('username is already taken')
+      }
+      username = nextUsername
+    }
+
+    let passwordHash = account.passwordHash
+    if (typeof body.newPassword === 'string' && body.newPassword.length > 0) {
+      if (body.newPassword.length < 8) return badRequest('password must be at least 8 characters')
+      passwordHash = await hashPassword(body.newPassword)
+    }
+
+    const updated: StoredAccount = { ...account, username, passwordHash }
+    await this.ctx.storage.put(`user:${account.id}`, updated)
+    if (username !== account.username) {
+      await this.ctx.storage.delete(`username:${account.username}`)
+      await this.ctx.storage.put(`username:${username}`, account.id)
+    }
+
+    return json({ ok: true, username })
   }
 
   /** Called by other rooms (e.g. session.ts on invite) that want to notify a user but don't own account data themselves — deliberately unauthenticated, same trust model as handleInternalFriendIds. */

@@ -113,7 +113,8 @@ const api: AppApi = {
     },
     admin: {
       listAccounts: () => ipcRenderer.invoke('relay:admin:list-accounts'),
-      removeAccount: (userId) => ipcRenderer.invoke('relay:admin:remove-account', userId)
+      removeAccount: (userId) => ipcRenderer.invoke('relay:admin:remove-account', userId),
+      updateAccount: (userId, input) => ipcRenderer.invoke('relay:admin:update-account', userId, input)
     }
   },
   files: {

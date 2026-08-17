@@ -97,7 +97,18 @@ export function FriendsMenu({
       setActionError(result.error)
       return
     }
+    // Just a transient "it worked" confirmation, not a permanent lock — the
+    // relay's invite is idempotent, so re-inviting the same friend (e.g.
+    // after they left the session) needs to stay clickable, not stuck
+    // showing "Invited" for the rest of the hosting session.
     setInvitedIds((prev) => new Set(prev).add(friendUserId))
+    setTimeout(() => {
+      setInvitedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(friendUserId)
+        return next
+      })
+    }, 2500)
   }
 
   async function join(friendUserId: string, friendUsername: string, sessionId: string): Promise<void> {

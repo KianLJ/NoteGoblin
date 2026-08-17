@@ -69,6 +69,10 @@ function AccountSettingsForm(): JSX.Element {
   const [adminError, setAdminError] = useState<string | null>(null)
   const [adminAccounts, setAdminAccounts] = useState<AdminAccountSummary[] | null>(null)
   const [adminBusyId, setAdminBusyId] = useState<string | null>(null)
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
+  const [editUsername, setEditUsername] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
 
   const [vaultOpen, setVaultOpen] = useState(false)
   const [vaultPath, setVaultPathState] = useState<string | null | undefined>(undefined)
@@ -181,6 +185,41 @@ function AccountSettingsForm(): JSX.Element {
       return
     }
     setAdminAccounts((prev) => prev?.filter((a) => a.userId !== account.userId) ?? prev)
+  }
+
+  function startEditAdminAccount(account: AdminAccountSummary): void {
+    setEditingAccountId(account.userId)
+    setEditUsername(account.username)
+    setEditPassword('')
+    setEditError(null)
+  }
+
+  async function saveAdminAccountEdit(account: AdminAccountSummary): Promise<void> {
+    const trimmedUsername = editUsername.trim()
+    if (trimmedUsername.length < 3) {
+      setEditError('Display name must be at least 3 characters.')
+      return
+    }
+    if (editPassword && editPassword.length < 8) {
+      setEditError('New password must be at least 8 characters.')
+      return
+    }
+    setAdminBusyId(account.userId)
+    setEditError(null)
+    const input: { username?: string; newPassword?: string } = {}
+    if (trimmedUsername !== account.username) input.username = trimmedUsername
+    if (editPassword) input.newPassword = editPassword
+    const result = await window.goblin.relay.admin.updateAccount(account.userId, input)
+    setAdminBusyId(null)
+    if (!result.ok) {
+      setEditError(result.error)
+      return
+    }
+    setAdminAccounts((prev) =>
+      prev?.map((a) => (a.userId === account.userId ? { ...a, username: result.data.username } : a)) ?? prev
+    )
+    setEditingAccountId(null)
+    setEditPassword('')
   }
 
   if (!identity) {
@@ -505,42 +544,104 @@ function AccountSettingsForm(): JSX.Element {
                     <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No accounts.</p>
                   ) : (
                     adminAccounts.map((account) => (
-                      <div
-                        key={account.userId}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {account.username}
+                      <div key={account.userId} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {account.username}
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              {account.friendCount} friend{account.friendCount === 1 ? '' : 's'}
+                              {account.incomingRequestCount > 0 && ` · ${account.incomingRequestCount} incoming`}
+                              {account.outgoingRequestCount > 0 && ` · ${account.outgoingRequestCount} outgoing`}
+                            </div>
                           </div>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                            {account.friendCount} friend{account.friendCount === 1 ? '' : 's'}
-                            {account.incomingRequestCount > 0 && ` · ${account.incomingRequestCount} incoming`}
-                            {account.outgoingRequestCount > 0 && ` · ${account.outgoingRequestCount} outgoing`}
+                          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                editingAccountId === account.userId
+                                  ? setEditingAccountId(null)
+                                  : startEditAdminAccount(account)
+                              }
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--text-muted)',
+                                fontSize: 11,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {editingAccountId === account.userId ? 'Cancel' : 'Edit'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeAdminAccount(account)}
+                              disabled={adminBusyId === account.userId}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--danger)',
+                                fontSize: 11,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {adminBusyId === account.userId ? '…' : 'Delete'}
+                            </button>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => removeAdminAccount(account)}
-                          disabled={adminBusyId === account.userId}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--danger)',
-                            fontSize: 11,
-                            cursor: 'pointer',
-                            flexShrink: 0
-                          }}
-                        >
-                          {adminBusyId === account.userId ? '…' : 'Delete'}
-                        </button>
+                        {editingAccountId === account.userId && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 4,
+                              padding: 'var(--space-2)',
+                              background: 'var(--bg-sunken)',
+                              borderRadius: 'var(--radius-sm)'
+                            }}
+                          >
+                            <label className="gb-label" htmlFor={`admin-username-${account.userId}`}>
+                              Display name
+                            </label>
+                            <input
+                              id={`admin-username-${account.userId}`}
+                              className="gb-input"
+                              value={editUsername}
+                              onChange={(e) => setEditUsername(e.target.value)}
+                              style={{ fontSize: 12 }}
+                            />
+                            <label className="gb-label" htmlFor={`admin-password-${account.userId}`}>
+                              New password (leave blank to keep current)
+                            </label>
+                            <input
+                              id={`admin-password-${account.userId}`}
+                              type="password"
+                              className="gb-input"
+                              placeholder="New password"
+                              autoComplete="new-password"
+                              value={editPassword}
+                              onChange={(e) => setEditPassword(e.target.value)}
+                              style={{ fontSize: 12 }}
+                            />
+                            <Button
+                              variant="secondary"
+                              onClick={() => saveAdminAccountEdit(account)}
+                              disabled={adminBusyId === account.userId}
+                              style={{ fontSize: 11, marginTop: 2 }}
+                            >
+                              {adminBusyId === account.userId ? 'Saving…' : 'Save'}
+                            </Button>
+                            {editError && <p style={{ color: 'var(--danger)', fontSize: 11, margin: 0 }}>{editError}</p>}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}

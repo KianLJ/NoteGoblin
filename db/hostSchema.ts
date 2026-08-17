@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS folders (
   author_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   parent_folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
-  visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared')),
+  visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared', 'private')),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS notes (
   body_markdown TEXT NOT NULL DEFAULT '',
   -- 'dm' notes are only ever returned to their author (the DM); 'shared'
   -- notes are returned to every campaign member. Enforced server-side.
-  visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared')),
+  visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared', 'private')),
   folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
   -- JSON array of userIds the author has granted edit access to (title/body
   -- only — visibility, folder, and this list itself stay author-only).

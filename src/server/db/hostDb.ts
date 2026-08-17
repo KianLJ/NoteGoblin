@@ -5,6 +5,59 @@ import { HOST_SCHEMA } from '../../../db/hostSchema'
 
 let db: DatabaseType | null = null
 
+/**
+ * SQLite CHECK constraints are baked into a table's CREATE statement and
+ * can't be altered in place — the only way to widen one on an existing
+ * database is to rebuild the table. Used to add 'private' to notes/folders'
+ * visibility CHECK after that tier shipped; a no-op once a database is
+ * already on the new constraint (checked via sqlite_master, not a flag) or
+ * genuinely a fresh install (table doesn't exist yet — the schema exec right
+ * after this repair step creates it correctly from the start).
+ */
+function rebuildVisibilityCheck(database: DatabaseType, table: 'notes' | 'folders'): void {
+  const row = database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(table) as { sql: string } | undefined
+  if (!row || row.sql.includes("'private'")) return
+
+  const createSql =
+    table === 'notes'
+      ? `CREATE TABLE notes (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          author_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          body_markdown TEXT NOT NULL DEFAULT '',
+          visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared', 'private')),
+          folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
+          editor_user_ids TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+          updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )`
+      : `CREATE TABLE folders (
+          id TEXT PRIMARY KEY,
+          campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          author_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          parent_folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
+          visibility TEXT NOT NULL DEFAULT 'dm' CHECK (visibility IN ('dm', 'shared', 'private')),
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+          updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )`
+
+  const tmpTable = `${table}_pre_private_migration`
+  const wasForeignKeysOn = (database.pragma('foreign_keys', { simple: true }) as number) === 1
+  database.pragma('foreign_keys = OFF')
+  const migrate = database.transaction(() => {
+    database.exec(`ALTER TABLE ${table} RENAME TO ${tmpTable}`)
+    database.exec(createSql)
+    database.exec(`INSERT INTO ${table} SELECT * FROM ${tmpTable}`)
+    database.exec(`DROP TABLE ${tmpTable}`)
+  })
+  migrate()
+  if (wasForeignKeysOn) database.pragma('foreign_keys = ON')
+}
+
 /** Opens the singleton host database (the campaigns this installation hosts). */
 export function getHostDb(userDataDir: string): DatabaseType {
   if (!db) {
@@ -18,6 +71,8 @@ export function getHostDb(userDataDir: string): DatabaseType {
       if (tableIsMissingColumn(database, 'notes', 'editor_user_ids')) {
         database.exec("ALTER TABLE notes ADD COLUMN editor_user_ids TEXT NOT NULL DEFAULT '[]'")
       }
+      rebuildVisibilityCheck(database, 'notes')
+      rebuildVisibilityCheck(database, 'folders')
     })
   }
   return db

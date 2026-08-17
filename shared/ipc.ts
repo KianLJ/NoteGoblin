@@ -252,6 +252,11 @@ export interface AppApi {
     admin: {
       listAccounts: () => Promise<ApiResult<AdminAccountSummary[]>>
       removeAccount: (userId: string) => Promise<ApiResult<void>>
+      /** Renames an account and/or resets its password — never reads or returns the current password, only ever sets a new one. Omit whichever field isn't changing. */
+      updateAccount: (
+        userId: string,
+        input: { username?: string; newPassword?: string }
+      ) => Promise<ApiResult<{ username: string }>>
     }
   }
   files: {

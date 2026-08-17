@@ -524,8 +524,16 @@ export function updateFolder(
   if (!folder || folder.campaign_id !== campaignId) {
     return { ok: false, status: 404, error: 'Folder not found.' }
   }
-  if (folder.author_user_id !== userId) {
-    return { ok: false, status: 403, error: 'Only the author can edit this folder.' }
+  const isAuthor = folder.author_user_id === userId
+  // Same DM exception as notes — the DM can reorganize a party folder's
+  // place in the tree, but not rename it, change its visibility, or touch
+  // a 'private' folder at all (no DM standing there, ever).
+  const isDm = campaignRepo.findById(folder.campaign_id)?.dm_user_id === userId && folder.visibility !== 'private'
+  if (!isAuthor && !isDm) {
+    return { ok: false, status: 403, error: 'Only the author or the DM can edit this folder.' }
+  }
+  if (!isAuthor && ('name' in input || 'visibility' in input)) {
+    return { ok: false, status: 403, error: "Only the author can rename or change this folder's visibility." }
   }
 
   let visibility: 'dm' | 'shared' | 'private' | undefined
@@ -576,13 +584,15 @@ export function deleteFolder(
   folderId: string,
   userId: string
 ): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
   const folderRepo = makeFolderRepo(db)
   const folder = folderRepo.findById(folderId)
   if (!folder || folder.campaign_id !== campaignId) {
     return { ok: false, status: 404, error: 'Folder not found.' }
   }
-  if (folder.author_user_id !== userId) {
-    return { ok: false, status: 403, error: 'Only the author can delete this folder.' }
+  const isDm = campaignRepo.findById(folder.campaign_id)?.dm_user_id === userId && folder.visibility !== 'private'
+  if (folder.author_user_id !== userId && !isDm) {
+    return { ok: false, status: 403, error: 'Only the author or the DM can delete this folder.' }
   }
   folderRepo.remove(folder.id)
   return { ok: true, data: undefined }
