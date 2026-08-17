@@ -10,13 +10,15 @@ interface ClassTableDraft {
 interface ClassTableTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
+  readOnly?: boolean
 }
 
 /** Read-only curated progression for each of the character's recognized classes, shown in full (levels 1-20) so you can see what's coming — unlocked levels (at or below the character's current level) are highlighted, locked ones are dimmed. Plus an editable table for homebrew/custom classes or levels the curated data doesn't cover. Both feed the level-up prompt (see shared/dnd5e's curatedFeaturesForLevelUp and CharacterSheetEditor's custom-feature filtering). */
-export function ClassTableTab({ character, onSave }: ClassTableTabProps): JSX.Element {
+export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProps): JSX.Element {
   const [draft, setDraft] = useAutosaveDraft<ClassTableDraft>(
     { customClassFeatures: character.customClassFeatures },
-    onSave
+    onSave,
+    readOnly
   )
 
   function patch(fields: Partial<ClassTableDraft>): void {

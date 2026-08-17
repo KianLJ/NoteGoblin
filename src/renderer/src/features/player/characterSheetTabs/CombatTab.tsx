@@ -24,6 +24,7 @@ interface CombatDraft {
 interface CombatTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
+  readOnly?: boolean
 }
 
 const ACTION_TYPES: { id: ActionType; label: string }[] = [
@@ -58,7 +59,7 @@ function customWeaponFields(attack: Attack): DetailField[] {
 }
 
 /** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Spells reuses the standalone SpellsTab component (it owns its own autosave draft); both inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at the other panel. */
-export function CombatTab({ character, onSave }: CombatTabProps): JSX.Element {
+export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.Element {
   const isCaster =
     character.spellcastingAbility !== null ||
     character.classes.some((c) => CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())?.spellcastingAbility)
@@ -69,7 +70,7 @@ export function CombatTab({ character, onSave }: CombatTabProps): JSX.Element {
   const [listSearch, setListSearch] = useState('')
   const [listDamageTypeFilter, setListDamageTypeFilter] = useState('all')
   const [pickerDamageTypeFilter, setPickerDamageTypeFilter] = useState('all')
-  const [draft, setDraft] = useAutosaveDraft<CombatDraft>({ attacks: character.attacks }, onSave)
+  const [draft, setDraft] = useAutosaveDraft<CombatDraft>({ attacks: character.attacks }, onSave, readOnly)
 
   function patch(fields: Partial<CombatDraft>): void {
     setDraft((prev) => ({ ...prev, ...fields }))
@@ -263,7 +264,7 @@ export function CombatTab({ character, onSave }: CombatTabProps): JSX.Element {
 
       {isCaster && (
         <div style={{ display: innerTab === 'Spells' ? 'block' : 'none' }}>
-          <SpellsTab character={character} onSave={onSave} />
+          <SpellsTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
       )}
     </div>

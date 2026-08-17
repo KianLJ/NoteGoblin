@@ -148,20 +148,21 @@ export function CharacterSheetEditor({ character, onSave, onDelete, readOnly }: 
           <OverviewTab
             character={character}
             onSave={onSave}
+            readOnly={readOnly}
             onLevelUp={(className, fromLevel, toLevel) => setPendingLevelUp({ className, fromLevel, toLevel })}
           />
         </div>
         <div style={{ display: tab === 'Inventory' ? 'block' : 'none' }}>
-          <InventoryTab character={character} onSave={onSave} />
+          <InventoryTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
         <div style={{ display: tab === 'Class Table' ? 'block' : 'none' }}>
-          <ClassTableTab character={character} onSave={onSave} />
+          <ClassTableTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
         <div style={{ display: tab === 'Class Features' ? 'block' : 'none' }}>
-          <ClassFeaturesTab character={character} onSave={onSave} />
+          <ClassFeaturesTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
         <div style={{ display: tab === 'Background' ? 'block' : 'none' }}>
-          <BackgroundTab character={character} onSave={onSave} />
+          <BackgroundTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
       </div>
     </div>

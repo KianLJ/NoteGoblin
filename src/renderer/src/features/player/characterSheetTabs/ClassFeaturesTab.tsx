@@ -10,11 +10,12 @@ interface ClassFeaturesDraft {
 interface ClassFeaturesTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
+  readOnly?: boolean
 }
 
 /** Racial traits, class features, and feats you've actually picked up — separate from the reference-only Class Table tab. The level-up prompt appends here when you accept a suggested feature. */
-export function ClassFeaturesTab({ character, onSave }: ClassFeaturesTabProps): JSX.Element {
-  const [draft, setDraft] = useAutosaveDraft<ClassFeaturesDraft>({ features: character.features }, onSave)
+export function ClassFeaturesTab({ character, onSave, readOnly }: ClassFeaturesTabProps): JSX.Element {
+  const [draft, setDraft] = useAutosaveDraft<ClassFeaturesDraft>({ features: character.features }, onSave, readOnly)
 
   function patch(fields: Partial<ClassFeaturesDraft>): void {
     setDraft((prev) => ({ ...prev, ...fields }))

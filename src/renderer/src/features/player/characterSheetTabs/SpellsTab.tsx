@@ -38,6 +38,7 @@ interface SpellsDraft {
 interface SpellsTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
+  readOnly?: boolean
 }
 
 const ACTION_TYPES: { id: ActionType; label: string }[] = [
@@ -71,14 +72,15 @@ function customSpellFields(spell: Spell): DetailField[] {
   return fields
 }
 
-export function SpellsTab({ character, onSave }: SpellsTabProps): JSX.Element {
+export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.Element {
   const [draft, setDraft] = useAutosaveDraft<SpellsDraft>(
     {
       spellcastingAbility: character.spellcastingAbility,
       spellSlots: character.spellSlots,
       spells: character.spells
     },
-    onSave
+    onSave,
+    readOnly
   )
   const [formOpen, setFormOpen] = useState(false)
   const [editingSpell, setEditingSpell] = useState<Spell | null>(null)

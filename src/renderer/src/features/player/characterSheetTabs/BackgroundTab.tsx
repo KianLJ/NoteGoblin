@@ -18,11 +18,12 @@ interface BackgroundDraft {
 interface BackgroundTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
+  readOnly?: boolean
 }
 
 const APPEARANCE_FIELDS: (keyof Appearance)[] = ['age', 'height', 'weight', 'eyes', 'skin', 'hair']
 
-export function BackgroundTab({ character, onSave }: BackgroundTabProps): JSX.Element {
+export function BackgroundTab({ character, onSave, readOnly }: BackgroundTabProps): JSX.Element {
   const [draft, setDraft] = useAutosaveDraft<BackgroundDraft>(
     {
       background: character.background,
@@ -35,7 +36,8 @@ export function BackgroundTab({ character, onSave }: BackgroundTabProps): JSX.El
       backstory: character.backstory,
       notes: character.notes
     },
-    onSave
+    onSave,
+    readOnly
   )
 
   function patch(fields: Partial<BackgroundDraft>): void {

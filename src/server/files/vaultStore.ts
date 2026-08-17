@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { v4 as uuid } from 'uuid'
 import { getVaultPath } from './vaultConfig'
 import { parseNote, serializeNote, type NoteFrontmatter } from './frontmatter'
@@ -141,6 +141,16 @@ export function findCampaignDir(id: string): { dir: string; json: CampaignFileJs
     if (json?.id === id) return { dir, json }
   }
   return null
+}
+
+/** Which campaign (if any) owns a changed path — used by the vault file watcher (see registerIpc.ts) to know which campaign to refresh after an edit made outside the app (Explorer, Obsidian, git, …). Just checks the top-level campaign-folder segment rather than walking up from the file; that's all a change notification needs. */
+export function campaignIdForVaultPath(absPath: string): string | null {
+  const root = vaultRoot()
+  const rel = relative(root, absPath)
+  if (!rel || rel.startsWith('..')) return null
+  const topSegment = rel.split(sep)[0]
+  const json = readCampaignJson(join(root, topSegment))
+  return json?.id ?? null
 }
 
 function toCampaignRow(json: CampaignFileJson): CampaignFileRow {
@@ -326,8 +336,23 @@ function walkSection(
         } catch {
           continue
         }
-        const parsed = parseNote(raw)
-        if (!parsed) continue
+        let parsed = parseNote(raw)
+        if (!parsed) {
+          // A .md file with no (or foreign) frontmatter — e.g. copied in
+          // from an Obsidian vault or some other tool — rather than hide it
+          // from the sidebar entirely, adopt it: stamp our frontmatter on
+          // top now, treating whatever was already in the file as the body.
+          // From this point on it's a normal tracked note.
+          const owner = privateOwnerUserId(rel) ?? dmUserId
+          const now = new Date().toISOString()
+          const fm: NoteFrontmatter = { id: uuid(), authorUserId: owner, editorUserIds: [], createdAt: now, updatedAt: now }
+          try {
+            writeFileSync(absPath, serializeNote(fm, raw), 'utf8')
+          } catch {
+            continue
+          }
+          parsed = { frontmatter: fm, body: raw }
+        }
         notes.push({
           id: parsed.frontmatter.id,
           campaign_id: campaignId,

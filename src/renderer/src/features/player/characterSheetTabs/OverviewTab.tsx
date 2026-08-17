@@ -50,6 +50,7 @@ interface OverviewTabProps {
   onSave: (patch: Partial<CharacterSheetData>) => void
   /** Fired when a class's level is raised (not lowered) — CharacterSheetEditor uses this to pop the level-up prompt with whatever the class table has for the levels just gained. */
   onLevelUp?: (className: string, fromLevel: number, toLevel: number) => void
+  readOnly?: boolean
 }
 
 const CLASS_NAMES = CLASSES.map((c) => c.name)
@@ -59,7 +60,7 @@ function resetAllSlots(slots: Record<number, { total: number; used: number }>): 
   return Object.fromEntries(Object.entries(slots).map(([lvl, s]) => [lvl, { ...s, used: 0 }]))
 }
 
-export function OverviewTab({ character, onSave, onLevelUp }: OverviewTabProps): JSX.Element {
+export function OverviewTab({ character, onSave, onLevelUp, readOnly }: OverviewTabProps): JSX.Element {
   const [customRows, setCustomRows] = useState<Set<number>>(new Set())
   const [shortRestOpen, setShortRestOpen] = useState(false)
   const [draft, setDraft] = useAutosaveDraft<OverviewDraft>(
@@ -77,7 +78,8 @@ export function OverviewTab({ character, onSave, onLevelUp }: OverviewTabProps):
       deathSaves: character.deathSaves,
       hitDiceUsed: character.hitDiceUsed
     },
-    onSave
+    onSave,
+    readOnly
   )
 
   function patch(fields: Partial<OverviewDraft>): void {
@@ -560,7 +562,7 @@ export function OverviewTab({ character, onSave, onLevelUp }: OverviewTabProps):
 
         <div>
           <div className="gb-label">Combat</div>
-          <CombatTab character={character} onSave={onSave} />
+          <CombatTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
       </div>
 

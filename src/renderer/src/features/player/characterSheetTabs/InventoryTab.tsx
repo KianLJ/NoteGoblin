@@ -27,6 +27,7 @@ interface InventoryDraft {
 interface InventoryTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
+  readOnly?: boolean
 }
 
 const EQUIPMENT_CATEGORIES: EquipmentCategory[] = ['Weapon', 'Armor', 'Adventuring Gear', 'Tools', 'Mounts and Vehicles']
@@ -67,10 +68,11 @@ function customItemFields(item: EquipmentItem): DetailField[] {
   return fields
 }
 
-export function InventoryTab({ character, onSave }: InventoryTabProps): JSX.Element {
+export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps): JSX.Element {
   const [draft, setDraft] = useAutosaveDraft<InventoryDraft>(
     { currency: character.currency, equipment: character.equipment },
-    onSave
+    onSave,
+    readOnly
   )
   const [formOpen, setFormOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<EquipmentItem | null>(null)
