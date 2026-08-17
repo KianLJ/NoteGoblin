@@ -721,7 +721,6 @@ export interface DeathSaves {
 // retroactively raising max HP, per the 5e rule).
 export interface CharacterSheetData {
   race: string
-  subrace: string
   classes: ClassLevel[]
   background: string
   alignment: string
@@ -761,7 +760,6 @@ export interface CharacterSheetData {
 export function emptyCharacterSheet(): CharacterSheetData {
   return {
     race: '',
-    subrace: '',
     classes: [],
     background: '',
     alignment: '',

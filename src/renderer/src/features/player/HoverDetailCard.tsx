@@ -39,9 +39,14 @@ export function HoverDetailCard({ title, subtitle, fields, description, extra, c
   const posRef = useRef(pos)
   posRef.current = pos
 
+  // Defaults to the cursor's right, but flips to its left when there isn't
+  // room — e.g. weapon/spell rows in the right-side panel, where clamping
+  // the card to stay on-screen used to land it right on top of the row's
+  // own buttons (prepare/edit/delete) instead of actually moving out of
+  // the way of them.
   function handleMove(e: React.MouseEvent): void {
-    const maxX = window.innerWidth - CARD_WIDTH - 8
-    const x = Math.min(e.clientX + OFFSET, Math.max(8, maxX))
+    const spaceRight = window.innerWidth - e.clientX - OFFSET
+    const x = spaceRight >= CARD_WIDTH + 8 ? e.clientX + OFFSET : Math.max(8, e.clientX - OFFSET - CARD_WIDTH)
     setPos({ x, y: e.clientY + OFFSET })
   }
 

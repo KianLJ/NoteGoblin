@@ -32,6 +32,7 @@ export function PlayerWorkspaceBody({
     activeCharacter,
     activeNote,
     openTab,
+    navigateToNote,
     createCharacter,
     saveCharacter,
     deleteCharacter,
@@ -124,7 +125,8 @@ export function PlayerWorkspaceBody({
             notes={notes ?? []}
             readOnly={activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? '')}
             onSave={(patch) => saveNote(activeNote.id, patch)}
-            onNavigateToNote={(id) => openTab({ kind: 'note', id })}
+            onNavigateToNote={navigateToNote}
+            onOpenInNewTab={(id) => openTab({ kind: 'note', id })}
             onCreateAndLinkNote={(title) => createNote(activeNote.visibility, null, title)}
           />
         ) : (

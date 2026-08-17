@@ -146,7 +146,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
   }
 
   return (
-    <Modal onClose={onClose} width={640}>
+    <Modal onClose={onClose} width={640} dismissible={false}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         <div>
           <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 22 }}>Create Character</h2>

@@ -120,7 +120,12 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
     setSlotUsed(spell.level, used + 1)
   }
 
+  // The highest spell level the character's classes/level actually reach —
+  // 0 (cantrips only) if they have no slots at all yet.
+  const maxCastableLevel = slotLevels.length > 0 ? Math.max(...slotLevels) : 0
+
   function addFromCompendium(spell: CompendiumSpell): void {
+    if (spell.level > maxCastableLevel) return
     if (spell.level > 0 && atSpellCap) return
     patch({
       spells: [
@@ -159,7 +164,12 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
       {formOpen && (
-        <CustomSpellForm initial={editingSpell ?? undefined} onSave={handleFormSave} onClose={() => setFormOpen(false)} />
+        <CustomSpellForm
+          initial={editingSpell ?? undefined}
+          maxLevel={maxCastableLevel}
+          onSave={handleFormSave}
+          onClose={() => setFormOpen(false)}
+        />
       )}
 
       <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -317,7 +327,17 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
         )}
         <div style={{ marginTop: 8 }}>
           <CompendiumPicker
-            search={(q) => searchSpells(q, 30, atSpellCap ? CANTRIPS : pickerLevelFilter === 'all' ? SPELLS : SPELLS.filter((s) => s.level === pickerLevelFilter))}
+            search={(q) =>
+              searchSpells(
+                q,
+                30,
+                atSpellCap
+                  ? CANTRIPS
+                  : SPELLS.filter(
+                      (s) => s.level <= maxCastableLevel && (pickerLevelFilter === 'all' || s.level === pickerLevelFilter)
+                    )
+              )
+            }
             getLabel={(s: CompendiumSpell) => s.name}
             getSublabel={(s: CompendiumSpell) => spellLevelLabel(s.level)}
             onPick={addFromCompendium}
@@ -332,7 +352,7 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
                 onChange={(e) => setPickerLevelFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
               >
                 <option value="all">All Levels</option>
-                {SPELL_LEVEL_OPTIONS.map((lvl) => (
+                {SPELL_LEVEL_OPTIONS.filter((lvl) => lvl <= maxCastableLevel).map((lvl) => (
                   <option key={lvl} value={lvl}>
                     {spellLevelLabel(lvl)}
                   </option>

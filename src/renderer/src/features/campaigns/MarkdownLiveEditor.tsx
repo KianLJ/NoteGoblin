@@ -40,6 +40,8 @@ interface MarkdownLiveEditorProps {
   notesRef: { current: Note[] }
   onChange: (value: string) => void
   onWikilinkClick: (target: string) => void
+  /** Right-click on a resolved wikilink — omit to leave right-click doing nothing special. */
+  onWikilinkContextMenu?: (target: string, x: number, y: number) => void
   /** Blocks actual document edits at the CodeMirror level (no cursor, no typing, paste rejected) — not a CSS overlay, which only stops mouse-driven interaction and leaves keyboard input (e.g. Tab-focusing in) still able to "type" locally even though nothing would ever save. Reconfigurable live via a Compartment since editorUserIds can change while a note's already open. */
   readOnly?: boolean
 }
@@ -235,7 +237,11 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>): Decoratio
   return Decoration.set(ranges, true)
 }
 
-function livePreviewExtension(knownTitlesRef: { current: Set<string> }, onWikilinkClick: (target: string) => void): Extension[] {
+function livePreviewExtension(
+  knownTitlesRef: { current: Set<string> },
+  onWikilinkClick: (target: string) => void,
+  onWikilinkContextMenu?: (target: string, x: number, y: number) => void
+): Extension[] {
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet
@@ -260,6 +266,13 @@ function livePreviewExtension(knownTitlesRef: { current: Set<string> }, onWikili
       event.preventDefault()
       onWikilinkClick(el.dataset.wikilink as string)
       view.focus()
+      return true
+    },
+    contextmenu(event) {
+      const el = (event.target as HTMLElement).closest<HTMLElement>('[data-wikilink]')
+      if (!el || !onWikilinkContextMenu) return false
+      event.preventDefault()
+      onWikilinkContextMenu(el.dataset.wikilink as string, event.clientX, event.clientY)
       return true
     }
   })
@@ -353,7 +366,10 @@ const imageDropHandler = EditorView.domEventHandlers({
 })
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
-  function MarkdownLiveEditor({ defaultValue, knownTitlesRef, notesRef, onChange, onWikilinkClick, readOnly }, ref) {
+  function MarkdownLiveEditor(
+    { defaultValue, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, readOnly },
+    ref
+  ) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const readOnlyCompartment = useRef(new Compartment()).current
@@ -371,7 +387,7 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
             markdown(),
             EditorView.lineWrapping,
-            livePreviewExtension(knownTitlesRef, onWikilinkClick),
+            livePreviewExtension(knownTitlesRef, onWikilinkClick, onWikilinkContextMenu),
             EditorView.updateListener.of((update) => {
               if (update.docChanged) onChange(update.state.doc.toString())
             }),
