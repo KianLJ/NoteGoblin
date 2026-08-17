@@ -25,6 +25,14 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   const [tabs, setTabs] = useState<PlayerTabRef[]>([])
   const [activeTab, setActiveTabState] = useState<PlayerTabRef | null>(null)
 
+  // Auto-dismiss — an error toast that sits there forever just gets in the
+  // way of the sidebar/editor beneath it once you've read it.
+  useEffect(() => {
+    if (!error) return
+    const timer = setTimeout(() => setError(null), 5000)
+    return () => clearTimeout(timer)
+  }, [error])
+
   useEffect(() => {
     refreshCharacters()
   }, [])

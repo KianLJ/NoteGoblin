@@ -10,6 +10,11 @@ interface FriendsMenuProps {
   onJoinedSession: (sessionId: string, label: string) => void
   /** Session ids we've actually been invited to (from session-invite notifications) — a friend showing as "hosting" via presence alone doesn't mean the DM has invited us yet, so Join stays hidden until it's in here. */
   invitedSessionIds: Set<string>
+  /** Player-mode connection status — was its own separate dropdown (PlayerSidebar's TableBar) until it moved in here, since "who am I connected to" and "who can I connect to" are the same concern. null while not connected. */
+  connectedLabel: string | null
+  /** The DM's active campaign name, once known — null right after joining, before the auto-join round-trip resolves. */
+  activeCampaignName: string | null
+  onResync: () => void
 }
 
 /** Friends list + presence + session hosting/joining, all backed by the relay — no IP addresses or invite codes anymore. */
@@ -18,7 +23,10 @@ export function FriendsMenu({
   hostedSessionId,
   onHostedSessionChange,
   onJoinedSession,
-  invitedSessionIds
+  invitedSessionIds,
+  connectedLabel,
+  activeCampaignName,
+  onResync
 }: FriendsMenuProps): JSX.Element {
   const { status, friends, incomingRequests, error, sendRequest, accept, decline, remove } = useFriends()
   const [open, setOpen] = useState(false)
@@ -162,6 +170,46 @@ export function FriendsMenu({
                 style={{ fontSize: 11, padding: '2px 8px' }}
               >
                 {hostingBusy ? '…' : hostedSessionId ? 'Stop Hosting' : 'Start Hosting'}
+              </Button>
+            </div>
+          )}
+
+          {mode === 'player' && connectedLabel && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 6,
+                marginBottom: 'var(--space-3)',
+                paddingBottom: 'var(--space-2)',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  color: 'var(--text-secondary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {activeCampaignName ? (
+                  <>
+                    Playing <strong>{activeCampaignName}</strong>
+                  </>
+                ) : (
+                  `Connected: ${connectedLabel}`
+                )}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={onResync}
+                title="Catch up if the DM switched campaigns"
+                style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
+              >
+                Sync
               </Button>
             </div>
           )}

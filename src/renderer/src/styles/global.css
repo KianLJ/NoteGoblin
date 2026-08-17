@@ -93,3 +93,19 @@ button {
 .gb-readonly-sheet [draggable='true'] {
   pointer-events: none;
 }
+
+/* Workspace error toast — stays fully readable, then fades over the last
+   second before its backing state clears (matches the 5s auto-dismiss timer
+   in useNotesWorkspace.ts/usePlayerWorkspace.ts) instead of just vanishing. */
+@keyframes gb-fade-out {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.gb-toast-fade {
+  animation: gb-fade-out 5s ease forwards;
+}

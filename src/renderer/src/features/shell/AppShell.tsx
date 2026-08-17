@@ -51,16 +51,30 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     setMode('player')
   }
 
+  // Locks the mode you're NOT currently using once you're mid-session, so
+  // Ctrl+Tab (and the toggle itself) can't accidentally step away from a
+  // hosted or joined game — DM is locked while you've joined someone else's
+  // session, Player is locked while you're hosting your own.
+  const lockedMode: Mode | undefined = hostedSessionId ? 'player' : joinedSession ? 'dm' : undefined
+  const lockedReason = hostedSessionId
+    ? 'Stop hosting to switch to Player mode.'
+    : joinedSession
+      ? 'Leave the session to switch to DM mode.'
+      : undefined
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault()
-        setMode((m) => (m === 'dm' ? 'player' : 'dm'))
+        setMode((m) => {
+          const next = m === 'dm' ? 'player' : 'dm'
+          return next === lockedMode ? m : next
+        })
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [lockedMode])
 
   // Your own relay account id — this is what a note/folder you author over a
   // joined session gets stamped with as authorUserId (see sessionHost.ts's
@@ -175,7 +189,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           className="gb-no-drag"
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0, flexShrink: 1 }}
         >
-          <ModeToggle mode={mode} onChange={setMode} />
+          <ModeToggle mode={mode} onChange={setMode} disabledMode={lockedMode} disabledReason={lockedReason} />
 
           {mode === 'dm' && activeCampaign && (
             <>
@@ -208,6 +222,9 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             onHostedSessionChange={setHostedSessionId}
             invitedSessionIds={invitedSessionIds}
             onJoinedSession={handleJoinedSession}
+            connectedLabel={joinedSession?.label ?? null}
+            activeCampaignName={playerWorkspace.activeCampaign?.name ?? null}
+            onResync={playerWorkspace.resync}
           />
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{displayName}</span>
         </div>

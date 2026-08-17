@@ -52,6 +52,8 @@ export function CampaignWorkspace({
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       {error && (
         <p
+          key={error}
+          className="gb-toast-fade"
           style={{
             position: 'absolute',
             zIndex: 10,
