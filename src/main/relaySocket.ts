@@ -8,8 +8,76 @@ let socket: WebSocket | null = null
 let currentToken: string | null = null
 let pendingHostingSessionId: string | null = null
 
+// A dropped connection (NAT/router idle timeout, wifi blip, laptop sleep —
+// all completely normal over a real internet connection, unlike the
+// localhost testing this was originally built against) used to just leave
+// the client silently "unavailable" forever, since nothing ever called
+// connectPresence() again on its own. Friend requests/notifications would
+// then only arrive whenever something else happened to reconnect (e.g. an
+// app restart) — which is exactly the "significant delay" bug this fixes.
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempt = 0
+let intentionalDisconnect = false
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+const HEARTBEAT_INTERVAL_MS = 25_000
+const MAX_RECONNECT_DELAY_MS = 30_000
+
 function wsUrl(): string {
   return RELAY_URL.replace(/^http/, 'ws') + RELAY_PRESENCE_PATH
+}
+
+function clearReconnectTimer(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+}
+
+function stopHeartbeat(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+}
+
+/** Idle WebSocket ping — mostly to stop NATs/routers on the client's end from silently killing the connection for looking inactive, and to surface a dead connection faster than waiting on a TCP-level timeout. */
+function startHeartbeat(ws: WebSocket): void {
+  stopHeartbeat()
+  heartbeatTimer = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) ws.ping()
+  }, HEARTBEAT_INTERVAL_MS)
+}
+
+function scheduleReconnect(window: BrowserWindow): void {
+  if (reconnectTimer || intentionalDisconnect || !currentToken) return
+  const delay = Math.min(1000 * 2 ** reconnectAttempt, MAX_RECONNECT_DELAY_MS)
+  reconnectAttempt += 1
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    if (currentToken && !intentionalDisconnect) connectPresence(currentToken, window)
+  }, delay)
+}
+
+/** Tears down the current socket without touching reconnect state — used both by a deliberate disconnectPresence() and internally by connectPresence() when replacing a stale socket, which should NOT count as "intentional" (that would block the very reconnect it's about to start). */
+function teardownSocket(): void {
+  if (socket) {
+    // Closing a socket that's still CONNECTING makes `ws` emit an 'error'
+    // event ("WebSocket was closed before the connection was established").
+    // With no listener left after removeAllListeners(), Node treats that as
+    // an uncaught exception and crashes the whole main process — so a
+    // swallow-everything listener has to go back on before removing the
+    // real ones, not after.
+    socket.removeAllListeners()
+    socket.on('error', () => {})
+    try {
+      socket.close()
+    } catch {
+      /* already closing/closed */
+    }
+  }
+  socket = null
+  stopHeartbeat()
 }
 
 export function connectPresence(token: string, window: BrowserWindow): void {
@@ -20,7 +88,9 @@ export function connectPresence(token: string, window: BrowserWindow): void {
   ) {
     return
   }
-  disconnectPresence()
+  teardownSocket()
+  clearReconnectTimer()
+  intentionalDisconnect = false
   currentToken = token
   setRelayStatus('connecting')
 
@@ -29,7 +99,9 @@ export function connectPresence(token: string, window: BrowserWindow): void {
 
   ws.on('open', () => {
     if (socket !== ws) return
+    reconnectAttempt = 0
     setRelayStatus('connected')
+    startHeartbeat(ws)
     // Re-announce hosting status across a reconnect (e.g. relay blipped mid-session).
     if (pendingHostingSessionId !== null) {
       ws.send(JSON.stringify({ type: 'set-hosting', sessionId: pendingHostingSessionId }))
@@ -79,32 +151,23 @@ export function connectPresence(token: string, window: BrowserWindow): void {
   ws.on('close', () => {
     if (socket === ws) {
       socket = null
+      stopHeartbeat()
       setRelayStatus('unavailable')
       window.webContents.send('relay:friends-changed')
+      scheduleReconnect(window)
     }
   })
   ws.on('error', () => {
-    // Dropped/unreachable relay — friends just stop updating until connectPresence() is called again (e.g. next identity check-in).
+    // Dropped/unreachable relay — the 'close' handler (which always follows)
+    // is what schedules the reconnect; nothing else to do here.
   })
 }
 
 export function disconnectPresence(): void {
-  if (socket) {
-    // Closing a socket that's still CONNECTING makes `ws` emit an 'error'
-    // event ("WebSocket was closed before the connection was established").
-    // With no listener left after removeAllListeners(), Node treats that as
-    // an uncaught exception and crashes the whole main process — so a
-    // swallow-everything listener has to go back on before removing the
-    // real ones, not after.
-    socket.removeAllListeners()
-    socket.on('error', () => {})
-    try {
-      socket.close()
-    } catch {
-      /* already closing/closed */
-    }
-  }
-  socket = null
+  intentionalDisconnect = true
+  clearReconnectTimer()
+  reconnectAttempt = 0
+  teardownSocket()
   currentToken = null
   setRelayStatus('unavailable')
 }
