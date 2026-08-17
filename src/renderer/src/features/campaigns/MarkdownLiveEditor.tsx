@@ -22,6 +22,7 @@ import {
   type CompletionSource
 } from '@codemirror/autocomplete'
 import { WIKILINK_PATTERN, wikilinkIsDouble, wikilinkTarget } from '../../wikilink'
+import { resolveImageSrc } from '../../imageSrc'
 import type { Note } from '@shared/ipc'
 
 export interface MarkdownLiveEditorHandle {
@@ -34,6 +35,8 @@ export interface MarkdownLiveEditorHandle {
 
 interface MarkdownLiveEditorProps {
   defaultValue: string
+  /** For rewriting a relative (real vault file) image src to vault-asset:// — see resolveImageSrc. */
+  campaignId: string
   /** Read via a ref rather than passed by value so a rebuild (triggered by typing/selection, not by this changing) always sees the latest set without needing its own dispatch pipeline. */
   knownTitlesRef: { current: Set<string> }
   /** Same ref pattern — feeds the note-link autocomplete popup with the current title list without a dispatch pipeline. */
@@ -134,7 +137,7 @@ class ImageWidget extends WidgetType {
  * of standard markdown, lezer's parser doesn't know about it — see
  * wikilink.ts) on every doc/selection change.
  */
-function buildDecorations(view: EditorView, knownTitles: Set<string>): DecorationSet {
+function buildDecorations(view: EditorView, knownTitles: Set<string>, campaignId: string): DecorationSet {
   const state = view.state
   const doc = state.doc
   const tree = syntaxTree(state)
@@ -215,7 +218,7 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>): Decoratio
         // itself can still be changed.
         continue
       }
-      ranges.push(Decoration.replace({ widget: new ImageWidget(src, alt) }).range(from, altTextEnd))
+      ranges.push(Decoration.replace({ widget: new ImageWidget(resolveImageSrc(campaignId, src), alt) }).range(from, altTextEnd))
     }
 
     // Fallback for a broken image tag — e.g. one of the brackets around
@@ -239,6 +242,7 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>): Decoratio
 
 function livePreviewExtension(
   knownTitlesRef: { current: Set<string> },
+  campaignId: string,
   onWikilinkClick: (target: string) => void,
   onWikilinkContextMenu?: (target: string, x: number, y: number) => void
 ): Extension[] {
@@ -246,11 +250,11 @@ function livePreviewExtension(
     class {
       decorations: DecorationSet
       constructor(view: EditorView) {
-        this.decorations = buildDecorations(view, knownTitlesRef.current)
+        this.decorations = buildDecorations(view, knownTitlesRef.current, campaignId)
       }
       update(update: ViewUpdate): void {
         if (update.docChanged || update.selectionSet || update.viewportChanged) {
-          this.decorations = buildDecorations(update.view, knownTitlesRef.current)
+          this.decorations = buildDecorations(update.view, knownTitlesRef.current, campaignId)
         }
       }
     },
@@ -367,7 +371,7 @@ const imageDropHandler = EditorView.domEventHandlers({
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
   function MarkdownLiveEditor(
-    { defaultValue, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, readOnly },
+    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, readOnly },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
@@ -387,7 +391,7 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
             markdown(),
             EditorView.lineWrapping,
-            livePreviewExtension(knownTitlesRef, onWikilinkClick, onWikilinkContextMenu),
+            livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu),
             EditorView.updateListener.of((update) => {
               if (update.docChanged) onChange(update.state.doc.toString())
             }),

@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, dialog, session } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, dialog, protocol, session } from 'electron'
+import { join, extname } from 'path'
+import { readFile } from 'node:fs/promises'
 // electron-updater is CommonJS — our main bundle is ESM (package.json has
 // "type": "module"), and Node's ESM loader doesn't do the static named-export
 // analysis a bundler would, so `import { autoUpdater } from 'electron-updater'`
@@ -7,6 +8,7 @@ import { join } from 'path'
 // actually checking for updates). Default-import the whole module instead.
 import electronUpdater from 'electron-updater'
 import { registerIpcHandlers } from './registerIpc'
+import { resolveVaultAssetPath } from '@server/files/vaultStore'
 
 const { autoUpdater } = electronUpdater
 
@@ -23,6 +25,26 @@ const isDev = !app.isPackaged
 const hasExplicitUserDataDir = process.argv.some((arg) => arg.startsWith('--user-data-dir'))
 if (isDev && !hasExplicitUserDataDir) {
   app.setPath('userData', `${app.getPath('userData')}-dev`)
+}
+
+// A note referencing `![art](images/dragon.png)` — a real file someone
+// dropped into the vault folder, not a pasted data: URI — resolves through
+// this custom scheme instead of a raw file:// path (which the renderer's own
+// CSP wouldn't allow and which offers no chance to check the path stays
+// inside the right campaign's folder). Must be registered before the app is
+// ready; the actual protocol.handle() call happens once it is, below.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'vault-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false } }
+])
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp'
 }
 
 function createWindow(): BrowserWindow {
@@ -117,12 +139,27 @@ app.whenReady().then(() => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: vault-asset:;"
           ]
         }
       })
     })
   }
+
+  protocol.handle('vault-asset', async (request) => {
+    try {
+      const url = new URL(request.url)
+      const campaignId = url.hostname
+      const relativePath = decodeURIComponent(url.pathname.replace(/^\//, ''))
+      const absPath = resolveVaultAssetPath(campaignId, relativePath)
+      if (!absPath) return new Response('Not found', { status: 404 })
+      const data = await readFile(absPath)
+      const mime = IMAGE_MIME_BY_EXT[extname(absPath).toLowerCase()] ?? 'application/octet-stream'
+      return new Response(new Uint8Array(data), { headers: { 'content-type': mime } })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+  })
 
   const mainWindow = createWindow()
   registerIpcHandlers(mainWindow)

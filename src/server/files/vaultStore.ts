@@ -153,6 +153,33 @@ export function campaignIdForVaultPath(absPath: string): string | null {
   return json?.id ?? null
 }
 
+/**
+ * Resolves a `vault-asset://<campaignId>/<relativePath>` request (see the
+ * protocol handler in main/index.ts) to an actual file on disk — a real
+ * image someone dropped straight into the vault folder, referenced from a
+ * note as `![art](images/dragon.png)`, rather than a pasted/embedded
+ * data: URI. Rejects anything that would escape the campaign's own
+ * directory (`..` segments) rather than trusting a path that ultimately
+ * came from note content. Returns null (→ the caller responds 404) for any
+ * campaign not found, no vault configured, or the file not existing.
+ */
+export function resolveVaultAssetPath(campaignId: string, relativePath: string): string | null {
+  if (!getVaultPath()) return null
+  const found = findCampaignDir(campaignId)
+  if (!found) return null
+  const segments = relativePath.split('/').filter(Boolean)
+  if (segments.some((s) => s === '..' || s === '.')) return null
+  const absPath = join(found.dir, ...segments)
+  const dirWithSep = found.dir.endsWith(sep) ? found.dir : found.dir + sep
+  if (!absPath.startsWith(dirWithSep)) return null
+  try {
+    if (!statSync(absPath).isFile()) return null
+  } catch {
+    return null
+  }
+  return absPath
+}
+
 function toCampaignRow(json: CampaignFileJson): CampaignFileRow {
   return { id: json.id, name: json.name, dm_user_id: json.dmUserId, created_at: json.createdAt }
 }
