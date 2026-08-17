@@ -23,3 +23,6 @@ relay/.wrangler/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# electron-builder auto-loads this for GH_TOKEN (release publishing) — never commit it
+electron-builder.env
