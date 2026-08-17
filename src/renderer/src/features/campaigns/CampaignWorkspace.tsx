@@ -12,6 +12,8 @@ interface CampaignWorkspaceProps {
   campaign: Campaign | null
   workspace: NotesWorkspace
   onSwitchCampaign: (campaign: Campaign) => void
+  /** Fired when the currently-open campaign gets deleted from the switcher — drops back to "no campaign open" instead of continuing to show one that no longer exists. */
+  onCampaignDeleted: () => void
   /** The session id once hosting is on — passed through so RightPanel can show live presence. */
   hostedSessionId?: string | null
   /** Every connected player's currently-selected character, kept live — passed through to RightPanel's ConnectedPlayersList so clicking a player opens their sheet below. */
@@ -26,6 +28,7 @@ export function CampaignWorkspace({
   campaign,
   workspace,
   onSwitchCampaign,
+  onCampaignDeleted,
   hostedSessionId,
   playerCharacters,
   viewedPlayerUserId,
@@ -92,7 +95,7 @@ export function CampaignWorkspace({
         onPasteFolder={duplicateFolder}
         footer={
           <>
-            <CampaignSwitcher canCreate current={campaign} onSelect={onSwitchCampaign} />
+            <CampaignSwitcher canCreate current={campaign} onSelect={onSwitchCampaign} onCurrentDeleted={onCampaignDeleted} />
             <AccountSettingsButton />
           </>
         }

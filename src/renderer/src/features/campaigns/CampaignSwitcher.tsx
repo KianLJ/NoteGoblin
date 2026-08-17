@@ -1,20 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
+import { Modal } from '../../ui/Modal'
 import type { Campaign } from '@shared/ipc'
 
 interface CampaignSwitcherProps {
   canCreate: boolean
   current: Campaign | null
   onSelect: (campaign: Campaign) => void
+  /** Fired after deleting whichever campaign is currently open, so the parent can drop it from view instead of continuing to show a now-nonexistent campaign. */
+  onCurrentDeleted: () => void
 }
 
 /** Bottom-left "which campaign am I in" control — replaces the old always-visible campaign list with an Obsidian-style corner switcher. Always the DM's own table; a joined session's campaigns are driven by the DM instead (see usePlayerWorkspace's auto-join). */
-export function CampaignSwitcher({ canCreate, current, onSelect }: CampaignSwitcherProps): JSX.Element {
+export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDeleted }: CampaignSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<Campaign | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -50,6 +56,43 @@ export function CampaignSwitcher({ canCreate, current, onSelect }: CampaignSwitc
     setNewName('')
     setOpen(false)
     onSelect(result.data)
+  }
+
+  function startRename(campaign: Campaign): void {
+    setRenamingId(campaign.id)
+    setRenameValue(campaign.name)
+  }
+
+  async function commitRename(campaign: Campaign): Promise<void> {
+    const trimmed = renameValue.trim()
+    setRenamingId(null)
+    if (!trimmed || trimmed === campaign.name) return
+    setBusyId(campaign.id)
+    setError(null)
+    const result = await window.goblin.campaigns.rename(campaign.id, trimmed)
+    setBusyId(null)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setCampaigns((prev) => prev?.map((c) => (c.id === campaign.id ? result.data : c)) ?? prev)
+    if (current?.id === campaign.id) onSelect(result.data)
+  }
+
+  async function confirmDeleteCampaign(): Promise<void> {
+    if (!pendingDelete) return
+    const campaign = pendingDelete
+    setPendingDelete(null)
+    setBusyId(campaign.id)
+    setError(null)
+    const result = await window.goblin.campaigns.delete(campaign.id)
+    setBusyId(null)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setCampaigns((prev) => prev?.filter((c) => c.id !== campaign.id) ?? prev)
+    if (current?.id === campaign.id) onCurrentDeleted()
   }
 
   async function selectCampaign(campaign: Campaign): Promise<void> {
@@ -105,44 +148,109 @@ export function CampaignSwitcher({ canCreate, current, onSelect }: CampaignSwitc
                 overflowY: 'auto'
               }}
             >
-              {campaigns.map((campaign) => (
-                <button
-                  key={campaign.id}
-                  type="button"
-                  onClick={() => selectCampaign(campaign)}
-                  disabled={busyId === campaign.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 6,
-                    padding: '6px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: 'none',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    background: current?.id === campaign.id ? 'var(--accent-subtle)' : 'transparent',
-                    color: 'var(--text-primary)',
-                    fontSize: 13
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {campaign.name}
-                  </span>
-                  <span
-                    className={`gb-badge ${campaign.myRole === 'dm' ? 'gb-badge--accent' : ''}`}
-                    style={{ fontSize: 10, flexShrink: 0 }}
+              {campaigns.map((campaign) =>
+                renamingId === campaign.id ? (
+                  <input
+                    key={campaign.id}
+                    autoFocus
+                    className="gb-input"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={() => commitRename(campaign)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename(campaign)
+                      if (e.key === 'Escape') setRenamingId(null)
+                    }}
+                    style={{ fontSize: 13, padding: '5px 8px' }}
+                  />
+                ) : (
+                  <div
+                    key={campaign.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      borderRadius: 'var(--radius-sm)',
+                      background: current?.id === campaign.id ? 'var(--accent-subtle)' : 'transparent'
+                    }}
                   >
-                    {busyId === campaign.id
-                      ? '…'
-                      : campaign.myRole === 'dm'
-                        ? 'DM'
-                        : campaign.myRole === 'player'
-                          ? 'Player'
-                          : 'Join'}
-                  </span>
-                </button>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => selectCampaign(campaign)}
+                      disabled={busyId === campaign.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 6,
+                        flex: 1,
+                        minWidth: 0,
+                        padding: '6px 8px',
+                        border: 'none',
+                        background: 'none',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        color: 'var(--text-primary)',
+                        fontSize: 13
+                      }}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {campaign.name}
+                      </span>
+                      <span
+                        className={`gb-badge ${campaign.myRole === 'dm' ? 'gb-badge--accent' : ''}`}
+                        style={{ fontSize: 10, flexShrink: 0 }}
+                      >
+                        {busyId === campaign.id
+                          ? '…'
+                          : campaign.myRole === 'dm'
+                            ? 'DM'
+                            : campaign.myRole === 'player'
+                              ? 'Player'
+                              : 'Join'}
+                      </span>
+                    </button>
+                    {campaign.myRole === 'dm' && (
+                      <>
+                        <button
+                          type="button"
+                          title="Rename campaign"
+                          onClick={() => startRename(campaign)}
+                          disabled={busyId === campaign.id}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                            padding: '2px 4px'
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete campaign"
+                          onClick={() => setPendingDelete(campaign)}
+                          disabled={busyId === campaign.id}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--danger)',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                            padding: '2px 4px 2px 0'
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )
+              )}
             </div>
           )}
 
@@ -178,6 +286,27 @@ export function CampaignSwitcher({ canCreate, current, onSelect }: CampaignSwitc
           {current ? current.name : canCreate ? '+ Add a campaign' : 'No campaign yet'}
         </span>
       </button>
+
+      {pendingDelete && (
+        <Modal onClose={() => setPendingDelete(null)} width={360}>
+          <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 var(--space-4)' }}>
+            Delete "{pendingDelete.name}"? Every note, folder, character, and message in it goes with it. This can't
+            be undone.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+            <Button variant="secondary" onClick={() => setPendingDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+              onClick={confirmDeleteCampaign}
+            >
+              Delete
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

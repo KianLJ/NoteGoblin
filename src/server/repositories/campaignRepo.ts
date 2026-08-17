@@ -34,6 +34,16 @@ export class CampaignRepo {
     return this.findById(id)!
   }
 
+  update(id: string, name: string): CampaignRow | undefined {
+    this.db.prepare('UPDATE campaigns SET name = ? WHERE id = ?').run(name, id)
+    return this.findById(id)
+  }
+
+  /** Cascades via the campaigns table's foreign keys (campaign_members, folders, notes, characters, initiative_entries, messages all reference campaign_id ON DELETE CASCADE) — deleting this one row is enough. */
+  remove(id: string): void {
+    this.db.prepare('DELETE FROM campaigns WHERE id = ?').run(id)
+  }
+
   addMember(campaignId: string, userId: string, role: CampaignRole): void {
     this.db
       .prepare(

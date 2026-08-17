@@ -211,6 +211,22 @@ export class CampaignFileRepo {
     const found = findCampaignDir(campaignId)
     return found?.json.members.find((m) => m.userId === userId)?.role ?? null
   }
+
+  /** Renames the campaign's display name only — the on-disk folder name is chosen once at creation and stays put, so existing note paths/links never move underneath anyone just because the campaign got renamed. */
+  update(id: string, name: string): CampaignFileRow | undefined {
+    const found = findCampaignDir(id)
+    if (!found) return undefined
+    const json: CampaignFileJson = { ...found.json, name }
+    writeCampaignJson(found.dir, json)
+    return toCampaignRow(json)
+  }
+
+  /** Deletes the whole campaign folder — every note, folder, and the campaign.json itself. Irreversible; callers are expected to have already confirmed with the user. */
+  remove(id: string): void {
+    const found = findCampaignDir(id)
+    if (!found) return
+    rmSync(found.dir, { recursive: true, force: true })
+  }
 }
 
 // ---------------------------------------------------------------------------
