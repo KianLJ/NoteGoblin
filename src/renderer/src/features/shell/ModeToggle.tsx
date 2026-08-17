@@ -1,5 +1,4 @@
-import { CrownIcon } from './icons'
-import { UserIcon } from '../player/icons'
+import { DmModeIcon, PlayerModeIcon } from './icons'
 
 export type Mode = 'dm' | 'player'
 
@@ -12,8 +11,8 @@ interface ModeToggleProps {
 }
 
 const OPTIONS: Array<{ mode: Mode; label: string; icon: JSX.Element }> = [
-  { mode: 'dm', label: 'DM Mode', icon: <CrownIcon /> },
-  { mode: 'player', label: 'Player Mode', icon: <UserIcon /> }
+  { mode: 'dm', label: 'DM Mode', icon: <DmModeIcon /> },
+  { mode: 'player', label: 'Player Mode', icon: <PlayerModeIcon /> }
 ]
 
 export function ModeToggle({ mode, onChange, disabledMode, disabledReason }: ModeToggleProps): JSX.Element {

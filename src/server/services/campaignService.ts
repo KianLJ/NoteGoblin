@@ -363,12 +363,26 @@ export function updateNote(
   if (!isAuthor && !isEditor && !isDm) {
     return { ok: false, status: 403, error: 'Only the author, an invited editor, or the DM can edit this note.' }
   }
-  // Content (title/body) is open to editors and the DM too, but visibility,
-  // folder placement, and the editor list itself stay author-only — nobody
-  // else should be able to move a note out of the author's tree, flip it to
-  // DM-only, or grant/revoke someone else's access.
-  if (!isAuthor && ('visibility' in input || 'folderId' in input || 'editorUserIds' in input)) {
-    return { ok: false, status: 403, error: "Only the author can change this note's visibility, location, or editors." }
+  // The editor list stays author-only — nobody else should be able to
+  // grant/revoke someone else's access.
+  if (!isAuthor && 'editorUserIds' in input) {
+    return { ok: false, status: 403, error: "Only the author can change this note's editors." }
+  }
+  // Actually reassigning visibility (not just re-sending the current value —
+  // the sidebar's drag/drop always includes a `visibility` field, even for a
+  // move within the same section) stays author-only too, same reasoning:
+  // nobody else should be able to flip a note to DM-only or pull it out of
+  // its author's private notes.
+  const visibilityActuallyChanging = 'visibility' in input && input.visibility !== note.visibility
+  if (!isAuthor && visibilityActuallyChanging) {
+    return { ok: false, status: 403, error: "Only the author can change this note's visibility." }
+  }
+  // Moving a note between folders (without changing its visibility) is
+  // reorganizing the tree, not touching who can see or edit it — the DM
+  // should be able to do that on a party note the same way they can edit
+  // its content, same exclusion for 'private' notes as everywhere else.
+  if (!isAuthor && !isDm && 'folderId' in input) {
+    return { ok: false, status: 403, error: 'Only the author or the DM can move this note.' }
   }
 
   let editorUserIds: string[] | undefined
@@ -422,13 +436,17 @@ export function deleteNote(
   noteId: string,
   userId: string
 ): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
   const noteRepo = makeNoteRepo(db)
   const note = noteRepo.findById(noteId)
   if (!note || note.campaign_id !== campaignId) {
     return { ok: false, status: 404, error: 'Note not found.' }
   }
-  if (note.author_user_id !== userId) {
-    return { ok: false, status: 403, error: 'Only the author can delete this note.' }
+  // Same DM exception as editing/moving — excluded for 'private' notes, the
+  // DM never gets a foothold on those.
+  const isDm = campaignRepo.findById(note.campaign_id)?.dm_user_id === userId && note.visibility !== 'private'
+  if (note.author_user_id !== userId && !isDm) {
+    return { ok: false, status: 403, error: 'Only the author or the DM can delete this note.' }
   }
   noteRepo.remove(note.id)
   return { ok: true, data: undefined }

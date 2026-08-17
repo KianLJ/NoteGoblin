@@ -1,10 +1,12 @@
 import { app, dialog, ipcMain, type BrowserWindow } from 'electron'
+import { existsSync, watch, type FSWatcher } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { basename, extname } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { getLocalDb } from '@server/db/localDb'
 import { getHostDb } from '@server/db/hostDb'
 import { getVaultPath, setVaultPath, initVaultConfig } from '@server/files/vaultConfig'
 import { migrateSqliteCampaignsToVault } from '@server/files/migration'
+import { campaignIdForVaultPath } from '@server/files/vaultStore'
 import { IdentityRepo } from '@server/repositories/identityRepo'
 import { UserRepo } from '@server/repositories/userRepo'
 import * as campaignService from '@server/services/campaignService'
@@ -53,11 +55,56 @@ import type {
 } from '@shared/ipc'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification } from '@shared/relay'
 
+// --- Vault file watcher ------------------------------------------------
+// In vault mode, notes/folders are real files — someone can add, rename, or
+// delete them from outside the app entirely (Explorer, Obsidian, git, a
+// sync tool). Without this, the sidebar would only ever reflect the app's
+// own writes, going stale the moment anything else touched the folder.
+// Reuses the exact same 'ws:campaign-changed' refetch signal notes/folders
+// mutations already send after an in-app edit (see broadcastCampaignChanged
+// in sessionHost.ts) — the renderer doesn't care which caused it.
+let vaultWatcher: FSWatcher | null = null
+
+function startVaultWatcher(mainWindow: BrowserWindow): void {
+  vaultWatcher?.close()
+  vaultWatcher = null
+  const root = getVaultPath()
+  if (!root || !existsSync(root)) return
+  const pendingCampaignIds = new Set<string>()
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    vaultWatcher = watch(root, { recursive: true }, (_event, filename) => {
+      if (!filename) return
+      const campaignId = campaignIdForVaultPath(join(root, filename))
+      if (!campaignId) return
+      pendingCampaignIds.add(campaignId)
+      if (debounceTimer) clearTimeout(debounceTimer)
+      // A single save can fire several raw fs events (write, then rename,
+      // then a metadata touch) — coalesce them into one refetch per burst
+      // instead of hammering the renderer.
+      debounceTimer = setTimeout(() => {
+        for (const campaignId of pendingCampaignIds) {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+          }
+          if (getHostedSession()) broadcastCampaignChanged(campaignId)
+        }
+        pendingCampaignIds.clear()
+      }, 400)
+    })
+  } catch {
+    // Recursive fs.watch isn't supported on every platform/filesystem —
+    // the vault still works fine, external edits just won't live-refresh
+    // until the campaign is reopened or the app restarts.
+  }
+}
+
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const userDataDir = app.getPath('userData')
   const localDb = getLocalDb(userDataDir)
   const identityRepo = new IdentityRepo(localDb)
   initVaultConfig(userDataDir)
+  startVaultWatcher(mainWindow)
 
   ipcMain.handle('app:get-version', () => app.getVersion())
 
@@ -832,6 +879,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       }
       const vaultPath = result.filePaths[0]
       setVaultPath(vaultPath)
+      startVaultWatcher(mainWindow)
       try {
         const migrated = migrateSqliteCampaignsToVault(getHostDb(userDataDir))
         return { ok: true, data: { vaultPath, migrated } }
