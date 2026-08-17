@@ -5,7 +5,7 @@ interface ConnectedPlayersListProps {
   sessionId: string | null
   campaignId: string
   playerCharacters: Map<string, CharacterSheet>
-  onSelectPlayer: (character: CharacterSheet) => void
+  onSelectPlayer: (userId: string) => void
 }
 
 export function ConnectedPlayersList({
@@ -48,7 +48,7 @@ export function ConnectedPlayersList({
         return (
           <div
             key={player.userId}
-            onClick={character ? () => onSelectPlayer(character) : undefined}
+            onClick={character ? () => onSelectPlayer(player.userId) : undefined}
             title={character ? `View ${character.name}'s sheet` : undefined}
             style={{
               padding: 'var(--space-2) var(--space-3)',

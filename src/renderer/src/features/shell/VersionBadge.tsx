@@ -16,7 +16,7 @@ export function VersionBadge(): JSX.Element | null {
       style={{
         position: 'fixed',
         bottom: 4,
-        left: 6,
+        right: 6,
         fontSize: 10,
         color: 'var(--text-muted)',
         opacity: 0.6,

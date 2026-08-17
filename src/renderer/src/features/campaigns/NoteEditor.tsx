@@ -278,10 +278,7 @@ export function NoteEditor({
         </ToolbarButton>
       </div>
 
-      <div
-        className={readOnly ? 'gb-readonly-sheet' : undefined}
-        style={{ flex: 1, minHeight: 0, display: mode === 'write' ? 'block' : 'none' }}
-      >
+      <div style={{ flex: 1, minHeight: 0, display: mode === 'write' ? 'block' : 'none' }}>
         <MarkdownLiveEditor
           ref={editorRef}
           defaultValue={note.bodyMarkdown}
@@ -289,6 +286,7 @@ export function NoteEditor({
           notesRef={notesRef}
           onChange={handleBodyChange}
           onWikilinkClick={resolveWikilink}
+          readOnly={readOnly}
         />
       </div>
       {mode === 'preview' && (
