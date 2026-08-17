@@ -199,3 +199,60 @@ export function initTheme(): void {
     if (getStoredMode() === 'system') applyTheme('system')
   })
 }
+
+export interface FontChoice {
+  id: string
+  label: string
+  /** Headings/titles. */
+  display: string
+  /** Everything else — body text, inputs, UI chrome. */
+  body: string
+}
+
+// System-only stacks, no bundled/downloaded font files or external font
+// services — the CSP's style-src/font-src don't allow those, and it keeps
+// every choice actually available on whatever OS this happens to run on.
+export const FONT_CHOICES: FontChoice[] = [
+  {
+    id: 'classic',
+    label: 'Classic',
+    display: "'Cambria', 'Iowan Old Style', 'Georgia', serif",
+    body: "'Segoe UI Variable', 'Segoe UI', -apple-system, sans-serif"
+  },
+  {
+    id: 'modern',
+    label: 'Modern Sans',
+    display: "'Segoe UI Variable', 'Segoe UI', -apple-system, sans-serif",
+    body: "'Segoe UI Variable', 'Segoe UI', -apple-system, sans-serif"
+  },
+  {
+    id: 'storybook',
+    label: 'Storybook Serif',
+    display: "'Georgia', 'Iowan Old Style', 'Times New Roman', serif",
+    body: "'Georgia', 'Iowan Old Style', 'Times New Roman', serif"
+  },
+  {
+    id: 'typewriter',
+    label: 'Typewriter',
+    display: "'Consolas', 'Courier New', monospace",
+    body: "'Consolas', 'Courier New', monospace"
+  }
+]
+
+const FONT_KEY = 'gb-font-choice'
+
+export function getStoredFontId(): string {
+  const stored = localStorage.getItem(FONT_KEY)
+  return FONT_CHOICES.some((f) => f.id === stored) ? (stored as string) : FONT_CHOICES[0].id
+}
+
+export function applyFont(id: string): void {
+  const choice = FONT_CHOICES.find((f) => f.id === id) ?? FONT_CHOICES[0]
+  document.documentElement.style.setProperty('--font-display', choice.display)
+  document.documentElement.style.setProperty('--font-body', choice.body)
+}
+
+export function setFont(id: string): void {
+  localStorage.setItem(FONT_KEY, id)
+  applyFont(id)
+}
