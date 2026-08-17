@@ -419,6 +419,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
 
+  // DM-only, always local — you can only rename/delete your own campaign,
+  // which always lives in your own host db, so there's no session-relay
+  // path to mirror here (unlike list/create/join, which a joined player also
+  // calls against the DM's campaign over the relay).
+  ipcMain.handle('campaigns:rename', async (_event, campaignId: string, name: string): Promise<ApiResult<Campaign>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = campaignService.renameCampaign(me.db, campaignId, me.userId, name)
+    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+  })
+
+  ipcMain.handle('campaigns:delete', async (_event, campaignId: string): Promise<ApiResult<void>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = campaignService.deleteCampaign(me.db, campaignId, me.userId)
+    return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+  })
+
   ipcMain.handle(
     'campaigns:join',
     async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Campaign>> => {

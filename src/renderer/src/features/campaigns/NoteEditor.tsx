@@ -23,6 +23,16 @@ interface NoteEditorProps {
 const AUTOSAVE_DELAY_MS = 700
 const TABLE_TEMPLATE = '\n| Header 1 | Header 2 |\n| --- | --- |\n| Cell | Cell |\n| Cell | Cell |\n'
 
+/** Plain whitespace-split count, same rough definition every text editor uses — not trying to be markdown-aware (strip syntax, skip image data URIs, etc.), just a rough sense of how much is here. */
+function wordCount(text: string): number {
+  const trimmed = text.trim()
+  return trimmed ? trimmed.split(/\s+/).length : 0
+}
+
+function formatCount(n: number): string {
+  return n.toLocaleString()
+}
+
 /**
  * Keyed by note.id from the parent, so switching notes remounts this with
  * fresh local state instead of leaking edits between files.
@@ -167,6 +177,15 @@ export function NoteEditor({
     handleWikilinkContextMenu(link.dataset.wikilink as string, e.clientX, e.clientY)
   }
 
+  const currentWordCount = useMemo(() => wordCount(body), [body])
+  // Substitutes the live `body` for this note's own contribution — `notes`
+  // carries everyone's last-saved content, so without this the total would
+  // lag your own still-unsaved keystrokes by up to the autosave delay.
+  const campaignWordCount = useMemo(
+    () => notes.reduce((sum, n) => sum + wordCount(n.id === note.id ? body : n.bodyMarkdown), 0),
+    [notes, note.id, body]
+  )
+
   const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles), [body, knownTitles])
   const linkableNotes = useMemo(
     () =>
@@ -177,7 +196,7 @@ export function NoteEditor({
   )
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--space-5)' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 'var(--space-5)', position: 'relative' }}>
       <div
         style={{
           display: 'flex',
@@ -329,6 +348,23 @@ export function NoteEditor({
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
         by {note.authorDisplayName}
+      </div>
+
+      <div
+        title={`${formatCount(currentWordCount)} words in this note — ${formatCount(campaignWordCount)} across the whole campaign`}
+        style={{
+          position: 'absolute',
+          bottom: 'var(--space-2)',
+          right: 'var(--space-3)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          background: 'var(--bg-surface)',
+          padding: '1px 6px',
+          borderRadius: 'var(--radius-sm)',
+          pointerEvents: 'none'
+        }}
+      >
+        {formatCount(currentWordCount)} words · {formatCount(campaignWordCount)} campaign
       </div>
 
       <ContextMenu state={linkMenu} onClose={() => setLinkMenu(null)} />

@@ -29,6 +29,8 @@ interface CampaignRepoLike {
   list(): CampaignRow[]
   findById(id: string): CampaignRow | undefined
   create(name: string, dmUserId: string): CampaignRow
+  update(id: string, name: string): CampaignRow | undefined
+  remove(id: string): void
   addMember(campaignId: string, userId: string, role: CampaignRole): void
   getRole(campaignId: string, userId: string): CampaignRole | null
 }
@@ -223,6 +225,44 @@ export function createCampaign(
   const campaignRepo = makeCampaignRepo(db)
   const row = campaignRepo.create(name.trim(), dmUserId)
   return { ok: true, data: toCampaignJson(userRepo, campaignRepo, row, dmUserId) }
+}
+
+/** Only the DM (campaign owner) can rename their own campaign. */
+export function renameCampaign(
+  db: DatabaseType,
+  campaignId: string,
+  userId: string,
+  name: string
+): ServiceResult<CampaignJson> {
+  if (typeof name !== 'string' || name.trim().length < 2) {
+    return { ok: false, status: 400, error: 'Give your campaign a name (2+ characters).' }
+  }
+  const userRepo = new UserRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const row = campaignRepo.findById(campaignId)
+  if (!row) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (row.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can rename this campaign.' }
+  const updated = campaignRepo.update(campaignId, name.trim())
+  return { ok: true, data: toCampaignJson(userRepo, campaignRepo, updated as CampaignRow, userId) }
+}
+
+/** Only the DM (campaign owner) can delete their own campaign — irreversible, everything in it (notes, folders, characters, messages, initiative) goes with it. The client is expected to have already confirmed with the user. */
+export function deleteCampaign(db: DatabaseType, campaignId: string, userId: string): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
+  const row = campaignRepo.findById(campaignId)
+  if (!row) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (row.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can delete this campaign.' }
+  campaignRepo.remove(campaignId)
+  // Characters/initiative/messages always stay in SQLite regardless of vault
+  // mode (see the file-storage note atop this file) — in SQLite mode the
+  // campaigns row's own ON DELETE CASCADE already cleaned these up, so this
+  // is a harmless no-op there; in vault mode campaignRepo.remove() only
+  // deleted the vault folder, so this is the only place these actually get
+  // cleaned up.
+  db.prepare('DELETE FROM characters WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM initiative_entries WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM messages WHERE campaign_id = ?').run(campaignId)
+  return { ok: true, data: undefined }
 }
 
 export function joinCampaign(

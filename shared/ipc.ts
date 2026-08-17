@@ -148,6 +148,10 @@ export interface AppApi {
   campaigns: {
     list: (sessionId?: string) => Promise<ApiResult<Campaign[]>>
     create: (name: string, sessionId?: string) => Promise<ApiResult<Campaign>>
+    /** DM-only, always local (no sessionId) — you can only rename your own campaign. */
+    rename: (campaignId: string, name: string) => Promise<ApiResult<Campaign>>
+    /** DM-only, always local — irreversible, deletes every note/folder/character/message/initiative entry in it. The client is expected to confirm with the user first. */
+    delete: (campaignId: string) => Promise<ApiResult<void>>
     join: (campaignId: string, sessionId?: string) => Promise<ApiResult<Campaign>>
     /** Whatever campaign the DM currently has open — null if they haven't opened one. */
     getActive: (sessionId?: string) => Promise<ApiResult<Campaign | null>>

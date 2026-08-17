@@ -253,6 +253,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             campaign={activeCampaign}
             workspace={workspace}
             onSwitchCampaign={setActiveCampaign}
+            onCampaignDeleted={() => setActiveCampaign(null)}
             hostedSessionId={hostedSessionId}
             playerCharacters={playerCharacters}
             viewedPlayerUserId={viewedPlayerUserId}
