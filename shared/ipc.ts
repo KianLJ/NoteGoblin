@@ -50,7 +50,7 @@ export interface Note {
   authorDisplayName: string
   title: string
   bodyMarkdown: string
-  visibility: 'dm' | 'shared'
+  visibility: 'dm' | 'shared' | 'private'
   folderId: string | null
   /** userIds (besides the author) granted edit access to title/bodyMarkdown — set by the author only, see campaignService.updateNote. */
   editorUserIds: string[]
@@ -58,7 +58,7 @@ export interface Note {
   updatedAt: string
 }
 
-/** Folders share notes' 'dm'/'shared' visibility split — a folder's own visibility (not its contents') gates who sees it, so Shared Notes and DM Only are two independent trees. */
+/** Folders share notes' 'dm'/'shared'/'private' visibility split — a folder's own visibility (not its contents') gates who sees it, so Party Notes, Private Notes, and DM Only are three independent trees. */
 export interface Folder {
   id: string
   campaignId: string
@@ -66,7 +66,7 @@ export interface Folder {
   authorDisplayName: string
   name: string
   parentFolderId: string | null
-  visibility: 'dm' | 'shared'
+  visibility: 'dm' | 'shared' | 'private'
   createdAt: string
   updatedAt: string
 }
@@ -162,7 +162,7 @@ export interface AppApi {
     list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Note[]>>
     create: (
       campaignId: string,
-      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared'; folderId?: string | null },
+      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared' | 'private'; folderId?: string | null },
       sessionId?: string
     ) => Promise<ApiResult<Note>>
     update: (
@@ -172,7 +172,7 @@ export interface AppApi {
         title?: string
         bodyMarkdown?: string
         folderId?: string | null
-        visibility?: 'dm' | 'shared'
+        visibility?: 'dm' | 'shared' | 'private'
         /** Author-only — replaces the full grant list. */
         editorUserIds?: string[]
       },
@@ -184,13 +184,13 @@ export interface AppApi {
     list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Folder[]>>
     create: (
       campaignId: string,
-      input: { name: string; visibility: 'dm' | 'shared'; parentFolderId?: string | null },
+      input: { name: string; visibility: 'dm' | 'shared' | 'private'; parentFolderId?: string | null },
       sessionId?: string
     ) => Promise<ApiResult<Folder>>
     update: (
       campaignId: string,
       folderId: string,
-      input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' },
+      input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' | 'private' },
       sessionId?: string
     ) => Promise<ApiResult<Folder>>
     remove: (campaignId: string, folderId: string, sessionId?: string) => Promise<ApiResult<void>>

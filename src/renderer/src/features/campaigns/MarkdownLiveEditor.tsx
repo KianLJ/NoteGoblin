@@ -86,6 +86,8 @@ function noteLinkCompletionSource(notesRef: { current: Note[] }): CompletionSour
 
 const WIKILINK_RE = new RegExp(WIKILINK_PATTERN, 'g')
 const IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g
+/** Bare `data:` payload, valid image syntax or not — see the fallback pass below. */
+const DATA_URI_RE = /data:[^\s)\]]{40,}/g
 
 function selectionOverlaps(state: EditorState, from: number, to: number): boolean {
   return state.selection.ranges.some((r) => r.from <= to && r.to >= from)
@@ -193,9 +195,11 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>): Decoratio
 
     IMAGE_RE.lastIndex = 0
     let imageMatch: RegExpExecArray | null
+    const imageSpansOnLine: Array<[number, number]> = []
     while ((imageMatch = IMAGE_RE.exec(line.text))) {
       const from = line.from + imageMatch.index
       const to = from + imageMatch[0].length
+      imageSpansOnLine.push([from, to])
       const alt = imageMatch[1]
       const src = imageMatch[2]
       // "![alt]" — the visible part even while editing this line.
@@ -210,6 +214,21 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>): Decoratio
         continue
       }
       ranges.push(Decoration.replace({ widget: new ImageWidget(src, alt) }).range(from, altTextEnd))
+    }
+
+    // Fallback for a broken image tag — e.g. one of the brackets around
+    // "![alt]" got deleted mid-edit, so IMAGE_RE above no longer matches.
+    // Still hide any bare data: URI payload on the line even without valid
+    // syntax around it; otherwise the full base64 payload (which can run to
+    // hundreds of KB) gets dumped onto the screen as an unreadable wall of
+    // text until the syntax is fixed.
+    DATA_URI_RE.lastIndex = 0
+    let dataMatch: RegExpExecArray | null
+    while ((dataMatch = DATA_URI_RE.exec(line.text))) {
+      const from = line.from + dataMatch.index
+      const to = from + dataMatch[0].length
+      if (imageSpansOnLine.some(([s, e]) => from < e && to > s)) continue
+      ranges.push(Decoration.replace({}).range(from, to))
     }
   }
 

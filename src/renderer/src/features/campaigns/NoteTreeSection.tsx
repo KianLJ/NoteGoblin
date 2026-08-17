@@ -92,7 +92,7 @@ interface NoteTreeSectionProps {
   /** Scopes localStorage persistence (collapsed folders) — pass something unique per campaign+section, e.g. `${campaignId}:dm`. */
   storageKey: string
   /** This section's own visibility — stamped onto anything dropped/pasted in from a differently-visible section, so crossing sections actually changes what a note/folder is visible to, not just where it sits. */
-  visibility: 'dm' | 'shared'
+  visibility: 'dm' | 'shared' | 'private'
   notes: Note[]
   folders: Folder[]
   activeId: string | null
@@ -111,10 +111,10 @@ interface NoteTreeSectionProps {
   onDeleteNote: (noteId: string) => void
   onRenameFolder: (folderId: string, name: string) => void
   onDeleteFolder: (folderId: string) => void
-  onMoveNote: (noteId: string, folderId: string | null, visibility: 'dm' | 'shared') => void
-  onMoveFolder: (folderId: string, parentFolderId: string | null, visibility: 'dm' | 'shared') => void
-  onPasteNote: (sourceNoteId: string, targetFolderId: string | null, targetVisibility: 'dm' | 'shared') => void
-  onPasteFolder: (sourceFolderId: string, targetParentId: string | null, targetVisibility: 'dm' | 'shared') => void
+  onMoveNote: (noteId: string, folderId: string | null, visibility: 'dm' | 'shared' | 'private') => void
+  onMoveFolder: (folderId: string, parentFolderId: string | null, visibility: 'dm' | 'shared' | 'private') => void
+  onPasteNote: (sourceNoteId: string, targetFolderId: string | null, targetVisibility: 'dm' | 'shared' | 'private') => void
+  onPasteFolder: (sourceFolderId: string, targetParentId: string | null, targetVisibility: 'dm' | 'shared' | 'private') => void
 }
 
 function loadCollapsed(key: string): Set<string> {

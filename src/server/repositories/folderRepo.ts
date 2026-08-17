@@ -1,7 +1,7 @@
 import type { Database as DatabaseType } from 'better-sqlite3'
 import { v4 as uuid } from 'uuid'
 
-export type FolderVisibility = 'dm' | 'shared'
+export type FolderVisibility = 'dm' | 'shared' | 'private'
 
 export interface FolderRow {
   id: string
@@ -17,13 +17,13 @@ export interface FolderRow {
 export class FolderRepo {
   constructor(private db: DatabaseType) {}
 
-  /** Same visibility rule as notes: 'shared' folders go to every campaign member, 'dm' folders only to their author. */
+  /** Same visibility rule as notes: 'shared' (party) folders go to every campaign member, 'dm' and 'private' folders only to their author. */
   listVisibleTo(campaignId: string, userId: string): FolderRow[] {
     return this.db
       .prepare(
         `SELECT * FROM folders
          WHERE campaign_id = ?
-           AND (visibility = 'shared' OR (visibility = 'dm' AND author_user_id = ?))
+           AND (visibility = 'shared' OR ((visibility = 'dm' OR visibility = 'private') AND author_user_id = ?))
          ORDER BY name COLLATE NOCASE`
       )
       .all(campaignId, userId) as FolderRow[]

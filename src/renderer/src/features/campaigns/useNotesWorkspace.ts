@@ -74,7 +74,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   }
 
   async function createNote(
-    visibility: 'dm' | 'shared',
+    visibility: 'dm' | 'shared' | 'private',
     folderId: string | null = null,
     title: string = 'Untitled'
   ): Promise<void> {
@@ -95,7 +95,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
 
   async function saveNote(
     noteId: string,
-    patch: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' }
+    patch: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' | 'private' }
   ): Promise<void> {
     if (!campaignId) return
     const result = await window.goblin.notes.update(campaignId, noteId, patch, sessionId)
@@ -118,7 +118,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   }
 
   async function createFolder(
-    visibility: 'dm' | 'shared',
+    visibility: 'dm' | 'shared' | 'private',
     name: string,
     parentFolderId: string | null = null
   ): Promise<string | undefined> {
@@ -146,7 +146,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   async function moveFolder(
     folderId: string,
     parentFolderId: string | null,
-    visibility?: 'dm' | 'shared'
+    visibility?: 'dm' | 'shared' | 'private'
   ): Promise<void> {
     if (!campaignId) return
     const result = await window.goblin.folders.update(
@@ -178,7 +178,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   async function duplicateNote(
     sourceId: string,
     targetFolderId: string | null,
-    targetVisibility: 'dm' | 'shared'
+    targetVisibility: 'dm' | 'shared' | 'private'
   ): Promise<void> {
     if (!campaignId) return
     const source = notes?.find((n) => n.id === sourceId)
@@ -200,7 +200,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   async function duplicateFolder(
     sourceId: string,
     targetParentId: string | null,
-    targetVisibility: 'dm' | 'shared'
+    targetVisibility: 'dm' | 'shared' | 'private'
   ): Promise<void> {
     if (!campaignId) return
     const sourceFolders = folders ?? []

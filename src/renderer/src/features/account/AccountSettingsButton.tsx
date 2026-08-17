@@ -26,7 +26,7 @@ export function AccountSettingsButton(): JSX.Element {
       {open && (
         <div
           className="gb-card"
-          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 300 }}
+          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 300, zIndex: 200 }}
         >
           <AccountSettingsForm />
         </div>

@@ -194,8 +194,12 @@ export function NoteEditor({
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexShrink: 0 }}>
           {readOnly && <span className="gb-badge">View only</span>}
-          <span className={`gb-badge ${note.visibility === 'dm' ? 'gb-badge--danger' : 'gb-badge--success'}`}>
-            {note.visibility === 'dm' ? 'DM Only' : 'Shared'}
+          <span
+            className={`gb-badge ${
+              note.visibility === 'dm' ? 'gb-badge--danger' : note.visibility === 'private' ? 'gb-badge--accent' : 'gb-badge--success'
+            }`}
+          >
+            {note.visibility === 'dm' ? 'DM Only' : note.visibility === 'private' ? 'Private' : 'Party'}
           </span>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import type { Database as DatabaseType } from 'better-sqlite3'
 import { v4 as uuid } from 'uuid'
 
-export type NoteVisibility = 'dm' | 'shared'
+export type NoteVisibility = 'dm' | 'shared' | 'private'
 
 export interface NoteRow {
   id: string
@@ -20,13 +20,13 @@ export interface NoteRow {
 export class NoteRepo {
   constructor(private db: DatabaseType) {}
 
-  /** 'shared' notes go to every campaign member; 'dm' notes only ever come back to the user who wrote them. */
+  /** 'shared' (party) notes go to every campaign member; 'dm' and 'private' notes only ever come back to the user who wrote them — not even the DM sees another member's private notes. */
   listVisibleTo(campaignId: string, userId: string): NoteRow[] {
     return this.db
       .prepare(
         `SELECT * FROM notes
          WHERE campaign_id = ?
-           AND (visibility = 'shared' OR (visibility = 'dm' AND author_user_id = ?))
+           AND (visibility = 'shared' OR ((visibility = 'dm' OR visibility = 'private') AND author_user_id = ?))
          ORDER BY updated_at DESC`
       )
       .all(campaignId, userId) as NoteRow[]

@@ -153,12 +153,16 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     closeTab({ kind: 'character', id })
   }
 
-  async function createNote(folderId: string | null = null, title: string = 'Untitled'): Promise<void> {
+  async function createNote(
+    visibility: 'dm' | 'shared' | 'private',
+    folderId: string | null = null,
+    title: string = 'Untitled'
+  ): Promise<void> {
     if (!activeCampaign) return
     setError(null)
     const result = await window.goblin.notes.create(
       activeCampaign.id,
-      { title, bodyMarkdown: '', visibility: 'shared', folderId },
+      { title, bodyMarkdown: '', visibility, folderId },
       sessionId
     )
     if (!result.ok) {
@@ -175,7 +179,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       title?: string
       bodyMarkdown?: string
       folderId?: string | null
-      visibility?: 'dm' | 'shared'
+      visibility?: 'dm' | 'shared' | 'private'
       editorUserIds?: string[]
     }
   ): Promise<void> {
@@ -199,12 +203,16 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     closeTab({ kind: 'note', id })
   }
 
-  async function createFolder(name: string, parentFolderId: string | null = null): Promise<string | undefined> {
+  async function createFolder(
+    visibility: 'dm' | 'shared' | 'private',
+    name: string,
+    parentFolderId: string | null = null
+  ): Promise<string | undefined> {
     if (!activeCampaign) return undefined
     setError(null)
     const result = await window.goblin.folders.create(
       activeCampaign.id,
-      { name, visibility: 'shared', parentFolderId },
+      { name, visibility, parentFolderId },
       sessionId
     )
     if (!result.ok) {
@@ -228,7 +236,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   async function moveFolder(
     folderId: string,
     parentFolderId: string | null,
-    visibility?: 'dm' | 'shared'
+    visibility?: 'dm' | 'shared' | 'private'
   ): Promise<void> {
     if (!activeCampaign) return
     const result = await window.goblin.folders.update(
@@ -258,7 +266,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   async function duplicateNote(
     sourceId: string,
     targetFolderId: string | null,
-    targetVisibility: 'dm' | 'shared'
+    targetVisibility: 'dm' | 'shared' | 'private'
   ): Promise<void> {
     if (!activeCampaign) return
     const source = notes?.find((n) => n.id === sourceId)
@@ -280,7 +288,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   async function duplicateFolder(
     sourceId: string,
     targetParentId: string | null,
-    targetVisibility: 'dm' | 'shared'
+    targetVisibility: 'dm' | 'shared' | 'private'
   ): Promise<void> {
     if (!activeCampaign) return
     const sourceFolders = folders ?? []
@@ -291,7 +299,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     async function copySubtree(folderId: string, parentId: string | null): Promise<void> {
       const original = sourceFolders.find((f) => f.id === folderId)
       if (!original) return
-      const newId = await createFolder(original.name, parentId)
+      const newId = await createFolder(targetVisibility, original.name, parentId)
       if (!newId) return
       for (const child of sourceFolders.filter((f) => f.parentFolderId === folderId)) {
         await copySubtree(child.id, newId)
