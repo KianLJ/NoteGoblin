@@ -70,6 +70,12 @@ function AccountSettingsForm(): JSX.Element {
   const [adminAccounts, setAdminAccounts] = useState<AdminAccountSummary[] | null>(null)
   const [adminBusyId, setAdminBusyId] = useState<string | null>(null)
 
+  const [vaultOpen, setVaultOpen] = useState(false)
+  const [vaultPath, setVaultPathState] = useState<string | null | undefined>(undefined)
+  const [vaultBusy, setVaultBusy] = useState(false)
+  const [vaultError, setVaultError] = useState<string | null>(null)
+  const [vaultMigrated, setVaultMigrated] = useState<{ campaigns: number; notes: number; folders: number } | null>(null)
+
   function chooseThemeMode(mode: ThemeMode): void {
     setThemeMode(mode)
     setThemeModeState(mode)
@@ -144,6 +150,24 @@ function AccountSettingsForm(): JSX.Element {
       return
     }
     setAdminAccounts(result.data)
+  }
+
+  async function loadVaultPath(): Promise<void> {
+    setVaultPathState(await window.goblin.files.getVaultPath())
+  }
+
+  async function chooseVaultFolder(): Promise<void> {
+    setVaultError(null)
+    setVaultMigrated(null)
+    setVaultBusy(true)
+    const result = await window.goblin.files.chooseVaultFolder()
+    setVaultBusy(false)
+    if (!result.ok) {
+      if (result.error !== 'Cancelled.') setVaultError(result.error)
+      return
+    }
+    setVaultPathState(result.data.vaultPath)
+    setVaultMigrated(result.data.migrated)
   }
 
   async function removeAdminAccount(account: AdminAccountSummary): Promise<void> {
@@ -363,6 +387,74 @@ function AccountSettingsForm(): JSX.Element {
           <Button variant="secondary" onClick={signOut} disabled={signingOut} style={{ width: '100%' }}>
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>
+        </>
+      )}
+
+      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
+
+      <button
+        type="button"
+        onClick={() => {
+          setVaultOpen((o) => {
+            const next = !o
+            if (next && vaultPath === undefined) void loadVaultPath()
+            return next
+          })
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          margin: '0 0 var(--space-2)',
+          cursor: 'pointer'
+        }}
+      >
+        <span
+          style={{
+            display: 'flex',
+            transform: vaultOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 100ms',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <ChevronRightIcon />
+        </span>
+        <h3 style={{ fontSize: 14, margin: 0 }}>Notes Folder</h3>
+      </button>
+      {vaultOpen && (
+        <>
+          {vaultPath ? (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', wordBreak: 'break-all', marginBottom: 'var(--space-2)' }}>
+                Your campaigns are stored as real files in:
+                <br />
+                <span style={{ color: 'var(--text-primary)' }}>{vaultPath}</span>
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
+                Each campaign gets its own folder — notes are plain .md files you can open, copy, or share directly.
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
+              Campaigns currently live in NoteGoblin's internal storage. Choose a folder to store them as real files
+              instead — your existing campaigns will be copied over automatically (nothing is deleted).
+            </p>
+          )}
+          <Button variant="secondary" onClick={chooseVaultFolder} disabled={vaultBusy} style={{ width: '100%' }}>
+            {vaultBusy ? 'Migrating…' : vaultPath ? 'Choose a different folder…' : 'Choose folder…'}
+          </Button>
+          {vaultError && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{vaultError}</p>}
+          {vaultMigrated && (
+            <p style={{ color: 'var(--success)', fontSize: 12, marginTop: 4 }}>
+              Copied {vaultMigrated.campaigns} campaign{vaultMigrated.campaigns === 1 ? '' : 's'},{' '}
+              {vaultMigrated.notes} note{vaultMigrated.notes === 1 ? '' : 's'}, and {vaultMigrated.folders} folder
+              {vaultMigrated.folders === 1 ? '' : 's'}.
+            </p>
+          )}
         </>
       )}
 

@@ -1,8 +1,10 @@
 import type { Database as DatabaseType } from 'better-sqlite3'
-import { CampaignRepo, type CampaignRow } from '../repositories/campaignRepo'
+import { CampaignRepo, type CampaignRole, type CampaignRow } from '../repositories/campaignRepo'
 import { NoteRepo, type NoteRow } from '../repositories/noteRepo'
 import { FolderRepo, type FolderRow } from '../repositories/folderRepo'
 import { UserRepo } from '../repositories/userRepo'
+import { getVaultPath } from '../files/vaultConfig'
+import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
 
 /**
  * Campaign/note logic shared by two callers: the host's HTTP API (for remote
@@ -11,6 +13,76 @@ import { UserRepo } from '../repositories/userRepo'
  * require the network server to be running at all). Both operate on the same
  * host SQLite file, so nothing needs to sync between them.
  */
+
+/**
+ * Campaigns/notes/folders switch to file-backed storage the moment a vault
+ * folder is configured (see vaultConfig.ts) — everything below stays
+ * unaware of which one it's actually talking to, since CampaignFileRepo/
+ * NoteFileRepo/FolderFileRepo return rows shaped exactly like their SQLite
+ * counterparts. The one exception is the active-campaign pointer
+ * (host_state) and users, which always stay in SQLite regardless of vault
+ * mode — see getActiveCampaign/setActiveCampaign/joinActiveCampaign below,
+ * which use `db`'s own CampaignRepo directly for that pointer rather than
+ * going through makeCampaignRepo.
+ */
+interface CampaignRepoLike {
+  list(): CampaignRow[]
+  findById(id: string): CampaignRow | undefined
+  create(name: string, dmUserId: string): CampaignRow
+  addMember(campaignId: string, userId: string, role: CampaignRole): void
+  getRole(campaignId: string, userId: string): CampaignRole | null
+}
+
+interface NoteRepoLike {
+  listVisibleTo(campaignId: string, userId: string): NoteRow[]
+  findById(id: string): NoteRow | undefined
+  create(input: {
+    campaignId: string
+    authorUserId: string
+    title: string
+    bodyMarkdown: string
+    visibility: NoteRow['visibility']
+    folderId: string | null
+  }): NoteRow
+  update(
+    id: string,
+    input: {
+      title?: string
+      bodyMarkdown?: string
+      folderId?: string | null
+      visibility?: NoteRow['visibility']
+      editorUserIds?: string[]
+    }
+  ): NoteRow | undefined
+  remove(id: string): void
+}
+
+interface FolderRepoLike {
+  listVisibleTo(campaignId: string, userId: string): FolderRow[]
+  findById(id: string): FolderRow | undefined
+  create(input: {
+    campaignId: string
+    authorUserId: string
+    name: string
+    parentFolderId: string | null
+    visibility: FolderRow['visibility']
+  }): FolderRow
+  update(id: string, input: { name?: string; parentFolderId?: string | null }): FolderRow | undefined
+  setVisibilityCascade(rootId: string, visibility: FolderRow['visibility']): void
+  remove(id: string): void
+}
+
+function makeCampaignRepo(db: DatabaseType): CampaignRepoLike {
+  return getVaultPath() ? new CampaignFileRepo() : new CampaignRepo(db)
+}
+
+function makeNoteRepo(db: DatabaseType): NoteRepoLike {
+  return getVaultPath() ? new NoteFileRepo() : new NoteRepo(db)
+}
+
+function makeFolderRepo(db: DatabaseType): FolderRepoLike {
+  return getVaultPath() ? new FolderFileRepo() : new FolderRepo(db)
+}
 
 export interface CampaignJson {
   id: string
@@ -52,7 +124,7 @@ export type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: numb
 
 function toCampaignJson(
   userRepo: UserRepo,
-  campaignRepo: CampaignRepo,
+  campaignRepo: CampaignRepoLike,
   row: CampaignRow,
   viewerUserId: string
 ): CampaignJson {
@@ -110,7 +182,7 @@ function toFolderJson(userRepo: UserRepo, row: FolderRow): FolderJson {
 
 /** A note/folder's folderId must point at a real folder in the same campaign with matching visibility — otherwise a 'dm' note could hide inside a 'shared' folder (or vice versa) and leak across the visibility boundary. */
 function validateFolderId(
-  folderRepo: FolderRepo,
+  folderRepo: FolderRepoLike,
   campaignId: string,
   visibility: 'dm' | 'shared' | 'private',
   folderId: string | null
@@ -123,7 +195,7 @@ function validateFolderId(
 }
 
 /** Walks up from `startFolderId` through parent_folder_id — true if `candidateId` is `startFolderId` itself or any ancestor of it. Used to stop a folder being dragged into its own subtree. */
-function isSelfOrDescendant(folderRepo: FolderRepo, candidateId: string, startFolderId: string): boolean {
+function isSelfOrDescendant(folderRepo: FolderRepoLike, candidateId: string, startFolderId: string): boolean {
   let current: string | null = startFolderId
   while (current) {
     if (current === candidateId) return true
@@ -134,7 +206,7 @@ function isSelfOrDescendant(folderRepo: FolderRepo, candidateId: string, startFo
 
 export function listCampaigns(db: DatabaseType, viewerUserId: string): ServiceResult<CampaignJson[]> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
   const rows = campaignRepo.list()
   return { ok: true, data: rows.map((row) => toCampaignJson(userRepo, campaignRepo, row, viewerUserId)) }
 }
@@ -148,7 +220,7 @@ export function createCampaign(
     return { ok: false, status: 400, error: 'Give your campaign a name (2+ characters).' }
   }
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
   const row = campaignRepo.create(name.trim(), dmUserId)
   return { ok: true, data: toCampaignJson(userRepo, campaignRepo, row, dmUserId) }
 }
@@ -159,18 +231,18 @@ export function joinCampaign(
   userId: string
 ): ServiceResult<CampaignJson> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
   const row = campaignRepo.findById(campaignId)
   if (!row) return { ok: false, status: 404, error: 'Campaign not found.' }
   campaignRepo.addMember(row.id, userId, 'player')
   return { ok: true, data: toCampaignJson(userRepo, campaignRepo, row, userId) }
 }
 
-/** Whatever campaign the DM currently has open — `null` if they haven't opened one (or aren't hosting anything yet). Not membership-gated: this is the discovery step a connecting player uses *before* they're necessarily a member of anything. */
+/** Whatever campaign the DM currently has open — `null` if they haven't opened one (or aren't hosting anything yet). Not membership-gated: this is the discovery step a connecting player uses *before* they're necessarily a member of anything. The active-campaign pointer itself (host_state) always stays in SQLite regardless of vault mode — it's local app state, not campaign content — so it goes through `db`'s own CampaignRepo directly rather than makeCampaignRepo. */
 export function getActiveCampaign(db: DatabaseType, viewerUserId: string): ServiceResult<CampaignJson | null> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
-  const activeId = campaignRepo.getActiveCampaignId()
+  const campaignRepo = makeCampaignRepo(db)
+  const activeId = new CampaignRepo(db).getActiveCampaignId()
   if (!activeId) return { ok: true, data: null }
   const row = campaignRepo.findById(activeId)
   if (!row) return { ok: true, data: null }
@@ -184,18 +256,17 @@ export function setActiveCampaign(
   userId: string
 ): ServiceResult<CampaignJson> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
   const row = campaignRepo.findById(campaignId)
   if (!row) return { ok: false, status: 404, error: 'Campaign not found.' }
   if (row.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can set the active campaign.' }
-  campaignRepo.setActiveCampaignId(row.id)
+  new CampaignRepo(db).setActiveCampaignId(row.id)
   return { ok: true, data: toCampaignJson(userRepo, campaignRepo, row, userId) }
 }
 
 /** A connecting player's one-step join — auto-adds them to whatever campaign the DM currently has active, instead of making them pick one from a list. */
 export function joinActiveCampaign(db: DatabaseType, userId: string): ServiceResult<CampaignJson> {
-  const campaignRepo = new CampaignRepo(db)
-  const activeId = campaignRepo.getActiveCampaignId()
+  const activeId = new CampaignRepo(db).getActiveCampaignId()
   if (!activeId) return { ok: false, status: 404, error: "The DM hasn't started a session yet." }
   return joinCampaign(db, activeId, userId)
 }
@@ -206,8 +277,8 @@ export function listNotes(
   userId: string
 ): ServiceResult<NoteJson[]> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
-  const noteRepo = new NoteRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const noteRepo = makeNoteRepo(db)
   const campaign = campaignRepo.findById(campaignId)
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
   if (!campaignRepo.getRole(campaign.id, userId)) {
@@ -224,9 +295,9 @@ export function createNote(
   input: { title: unknown; bodyMarkdown: unknown; visibility: unknown; folderId?: unknown }
 ): ServiceResult<NoteJson> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
-  const noteRepo = new NoteRepo(db)
-  const folderRepo = new FolderRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const noteRepo = makeNoteRepo(db)
+  const folderRepo = makeFolderRepo(db)
 
   const campaign = campaignRepo.findById(campaignId)
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
@@ -273,9 +344,9 @@ export function updateNote(
   }
 ): ServiceResult<NoteJson> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
-  const noteRepo = new NoteRepo(db)
-  const folderRepo = new FolderRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const noteRepo = makeNoteRepo(db)
+  const folderRepo = makeFolderRepo(db)
 
   const note = noteRepo.findById(noteId)
   if (!note || note.campaign_id !== campaignId) {
@@ -351,7 +422,7 @@ export function deleteNote(
   noteId: string,
   userId: string
 ): ServiceResult<void> {
-  const noteRepo = new NoteRepo(db)
+  const noteRepo = makeNoteRepo(db)
   const note = noteRepo.findById(noteId)
   if (!note || note.campaign_id !== campaignId) {
     return { ok: false, status: 404, error: 'Note not found.' }
@@ -369,8 +440,8 @@ export function listFolders(
   userId: string
 ): ServiceResult<FolderJson[]> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
-  const folderRepo = new FolderRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const folderRepo = makeFolderRepo(db)
   const campaign = campaignRepo.findById(campaignId)
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
   if (!campaignRepo.getRole(campaign.id, userId)) {
@@ -387,8 +458,8 @@ export function createFolder(
   input: { name: unknown; visibility: unknown; parentFolderId?: unknown }
 ): ServiceResult<FolderJson> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
-  const folderRepo = new FolderRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const folderRepo = makeFolderRepo(db)
 
   const campaign = campaignRepo.findById(campaignId)
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
@@ -428,8 +499,8 @@ export function updateFolder(
   input: { name?: unknown; parentFolderId?: unknown; visibility?: unknown }
 ): ServiceResult<FolderJson> {
   const userRepo = new UserRepo(db)
-  const campaignRepo = new CampaignRepo(db)
-  const folderRepo = new FolderRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const folderRepo = makeFolderRepo(db)
 
   const folder = folderRepo.findById(folderId)
   if (!folder || folder.campaign_id !== campaignId) {
@@ -487,7 +558,7 @@ export function deleteFolder(
   folderId: string,
   userId: string
 ): ServiceResult<void> {
-  const folderRepo = new FolderRepo(db)
+  const folderRepo = makeFolderRepo(db)
   const folder = folderRepo.findById(folderId)
   if (!folder || folder.campaign_id !== campaignId) {
     return { ok: false, status: 404, error: 'Folder not found.' }

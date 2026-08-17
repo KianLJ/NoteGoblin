@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
 import { getLocalDb } from '@server/db/localDb'
 import { getHostDb } from '@server/db/hostDb'
+import { getVaultPath, setVaultPath, initVaultConfig } from '@server/files/vaultConfig'
+import { migrateSqliteCampaignsToVault } from '@server/files/migration'
 import { IdentityRepo } from '@server/repositories/identityRepo'
 import { UserRepo } from '@server/repositories/userRepo'
 import * as campaignService from '@server/services/campaignService'
@@ -55,6 +57,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const userDataDir = app.getPath('userData')
   const localDb = getLocalDb(userDataDir)
   const identityRepo = new IdentityRepo(localDb)
+  initVaultConfig(userDataDir)
 
   ipcMain.handle('app:get-version', () => app.getVersion())
 
@@ -805,6 +808,38 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return { ok: true, data: { dataUrl, fileName: basename(filePath) } }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : 'Could not read that file.' }
+      }
+    }
+  )
+
+  ipcMain.handle('files:get-vault-path', (): string | null => getVaultPath())
+
+  // Opting into local file storage: pick a folder, then copy every existing
+  // SQLite campaign into it as files (see migration.ts). Safe to run more
+  // than once — already-migrated campaigns are skipped — and never deletes
+  // the SQLite data, so choosing a different folder later doesn't lose
+  // anything that was only ever in the old one.
+  ipcMain.handle(
+    'files:choose-vault-folder',
+    async (): Promise<ApiResult<{ vaultPath: string; migrated: { campaigns: number; notes: number; folders: number } }>> => {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Choose a folder for your notes',
+        properties: ['openDirectory', 'createDirectory']
+      })
+      mainWindow.focus()
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, error: 'Cancelled.' }
+      }
+      const vaultPath = result.filePaths[0]
+      setVaultPath(vaultPath)
+      try {
+        const migrated = migrateSqliteCampaignsToVault(getHostDb(userDataDir))
+        return { ok: true, data: { vaultPath, migrated } }
+      } catch (err) {
+        // The folder is still set even if migration hit an error partway —
+        // whatever did copy over is real, safely-skippable-on-retry data,
+        // not a reason to silently fall back to SQLite mode.
+        return { ok: false, error: err instanceof Error ? err.message : 'Could not migrate your existing campaigns.' }
       }
     }
   )

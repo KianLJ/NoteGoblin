@@ -117,7 +117,9 @@ const api: AppApi = {
     }
   },
   files: {
-    pickImage: () => ipcRenderer.invoke('files:pick-image')
+    pickImage: () => ipcRenderer.invoke('files:pick-image'),
+    getVaultPath: () => ipcRenderer.invoke('files:get-vault-path'),
+    chooseVaultFolder: () => ipcRenderer.invoke('files:choose-vault-folder')
   },
   windowControls: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
