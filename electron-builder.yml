@@ -24,3 +24,8 @@ publish:
   provider: github
   owner: KianLJ
   repo: NoteGoblin
+  # electron-builder defaults to creating GitHub releases as drafts (meant
+  # for a human to review and publish manually) — drafts are invisible to
+  # electron-updater's feed, so without this, `release:win` would silently
+  # upload a release nobody's installed app can ever see. Publish outright.
+  releaseType: release
