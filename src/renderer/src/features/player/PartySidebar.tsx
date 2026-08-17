@@ -28,7 +28,10 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
     })
   }, [sessionId, campaignId, myUserId])
 
-  const canManage = !!activeNote && activeNote.authorUserId === myUserId
+  // Private notes never appear in anyone else's list regardless of editorUserIds
+  // (see noteRepo.listVisibleTo), so granting access to one would be a no-op —
+  // don't offer the control at all.
+  const canManage = !!activeNote && activeNote.authorUserId === myUserId && activeNote.visibility !== 'private'
 
   return (
     <ResizableSidebar defaultWidth={220} handleSide="left">

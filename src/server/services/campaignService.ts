@@ -28,7 +28,7 @@ export interface NoteJson {
   authorDisplayName: string
   title: string
   bodyMarkdown: string
-  visibility: 'dm' | 'shared'
+  visibility: 'dm' | 'shared' | 'private'
   folderId: string | null
   /** userIds (besides the author) allowed to edit this note's title/body — granted by the author only. */
   editorUserIds: string[]
@@ -43,7 +43,7 @@ export interface FolderJson {
   authorDisplayName: string
   name: string
   parentFolderId: string | null
-  visibility: 'dm' | 'shared'
+  visibility: 'dm' | 'shared' | 'private'
   createdAt: string
   updatedAt: string
 }
@@ -112,7 +112,7 @@ function toFolderJson(userRepo: UserRepo, row: FolderRow): FolderJson {
 function validateFolderId(
   folderRepo: FolderRepo,
   campaignId: string,
-  visibility: 'dm' | 'shared',
+  visibility: 'dm' | 'shared' | 'private',
   folderId: string | null
 ): { error: string } | { ok: true } {
   if (folderId === null) return { ok: true }
@@ -238,7 +238,7 @@ export function createNote(
   if (typeof title !== 'string' || title.trim().length === 0) {
     return { ok: false, status: 400, error: 'A note needs a title.' }
   }
-  if (visibility !== 'dm' && visibility !== 'shared') {
+  if (visibility !== 'dm' && visibility !== 'shared' && visibility !== 'private') {
     return { ok: false, status: 400, error: 'Invalid visibility.' }
   }
   if (visibility === 'dm' && campaign.dm_user_id !== userId) {
@@ -283,10 +283,12 @@ export function updateNote(
   }
   const isAuthor = note.author_user_id === userId
   const isEditor = parseEditorUserIds(note.editor_user_ids).includes(userId)
-  // The DM runs the table and can always step in on a shared note — a 'dm'
-  // visibility note is already only ever authored by the DM (isAuthor covers
-  // it), so this only ever adds anything for a player-authored shared note.
-  const isDm = campaignRepo.findById(note.campaign_id)?.dm_user_id === userId
+  // The DM runs the table and can always step in on a party (shared) note —
+  // a 'dm' visibility note is already only ever authored by the DM (isAuthor
+  // covers it), so this only ever adds anything for a player-authored party
+  // note. 'private' notes are excluded entirely — not even the DM can see or
+  // edit another member's private notes.
+  const isDm = campaignRepo.findById(note.campaign_id)?.dm_user_id === userId && note.visibility !== 'private'
   if (!isAuthor && !isEditor && !isDm) {
     return { ok: false, status: 403, error: 'Only the author, an invited editor, or the DM can edit this note.' }
   }
@@ -306,9 +308,9 @@ export function updateNote(
     editorUserIds = input.editorUserIds
   }
 
-  let visibility: 'dm' | 'shared' | undefined
+  let visibility: 'dm' | 'shared' | 'private' | undefined
   if ('visibility' in input) {
-    if (input.visibility !== 'dm' && input.visibility !== 'shared') {
+    if (input.visibility !== 'dm' && input.visibility !== 'shared' && input.visibility !== 'private') {
       return { ok: false, status: 400, error: 'Invalid visibility.' }
     }
     if (input.visibility === 'dm' && campaignRepo.findById(note.campaign_id)?.dm_user_id !== userId) {
@@ -398,7 +400,7 @@ export function createFolder(
   if (typeof name !== 'string' || name.trim().length === 0) {
     return { ok: false, status: 400, error: 'A folder needs a name.' }
   }
-  if (visibility !== 'dm' && visibility !== 'shared') {
+  if (visibility !== 'dm' && visibility !== 'shared' && visibility !== 'private') {
     return { ok: false, status: 400, error: 'Invalid visibility.' }
   }
   if (visibility === 'dm' && campaign.dm_user_id !== userId) {
@@ -437,9 +439,9 @@ export function updateFolder(
     return { ok: false, status: 403, error: 'Only the author can edit this folder.' }
   }
 
-  let visibility: 'dm' | 'shared' | undefined
+  let visibility: 'dm' | 'shared' | 'private' | undefined
   if ('visibility' in input) {
-    if (input.visibility !== 'dm' && input.visibility !== 'shared') {
+    if (input.visibility !== 'dm' && input.visibility !== 'shared' && input.visibility !== 'private') {
       return { ok: false, status: 400, error: 'Invalid visibility.' }
     }
     if (input.visibility === 'dm' && campaignRepo.findById(folder.campaign_id)?.dm_user_id !== userId) {

@@ -125,7 +125,7 @@ export function PlayerWorkspaceBody({
             readOnly={activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? '')}
             onSave={(patch) => saveNote(activeNote.id, patch)}
             onNavigateToNote={(id) => openTab({ kind: 'note', id })}
-            onCreateAndLinkNote={(title) => createNote(null, title)}
+            onCreateAndLinkNote={(title) => createNote(activeNote.visibility, null, title)}
           />
         ) : (
           <div

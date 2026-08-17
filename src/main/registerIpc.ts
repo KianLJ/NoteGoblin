@@ -449,7 +449,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     async (
       _event,
       campaignId: string,
-      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared'; folderId?: string | null },
+      input: { title: string; bodyMarkdown: string; visibility: 'dm' | 'shared' | 'private'; folderId?: string | null },
       sessionId?: string
     ): Promise<ApiResult<Note>> => {
       if (!sessionId) {
@@ -471,7 +471,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       _event,
       campaignId: string,
       noteId: string,
-      input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' },
+      input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' | 'private' },
       sessionId?: string
     ): Promise<ApiResult<Note>> => {
       if (!sessionId) {
@@ -523,7 +523,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     async (
       _event,
       campaignId: string,
-      input: { name: string; visibility: 'dm' | 'shared'; parentFolderId?: string | null },
+      input: { name: string; visibility: 'dm' | 'shared' | 'private'; parentFolderId?: string | null },
       sessionId?: string
     ): Promise<ApiResult<Folder>> => {
       if (!sessionId) {
@@ -545,7 +545,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       _event,
       campaignId: string,
       folderId: string,
-      input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' },
+      input: { name?: string; parentFolderId?: string | null; visibility?: 'dm' | 'shared' | 'private' },
       sessionId?: string
     ): Promise<ApiResult<Folder>> => {
       if (!sessionId) {
