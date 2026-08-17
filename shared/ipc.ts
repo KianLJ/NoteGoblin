@@ -257,6 +257,12 @@ export interface AppApi {
   files: {
     /** Opens a native file picker and reads the chosen image back as a data: URI — see registerIpc.ts for why images are embedded rather than stored separately. */
     pickImage: () => Promise<ApiResult<{ dataUrl: string; fileName: string }>>
+    /** The folder your campaigns/notes are stored in as real files, if you've opted in — null means everything's still in the internal SQLite database. */
+    getVaultPath: () => Promise<string | null>
+    /** Opens a native folder picker, then copies every existing SQLite campaign into the chosen folder as files (safe to re-run; nothing already-migrated is duplicated, nothing in SQLite is deleted). From then on, campaigns/notes/folders read and write through the files instead. */
+    chooseVaultFolder: () => Promise<
+      ApiResult<{ vaultPath: string; migrated: { campaigns: number; notes: number; folders: number } }>
+    >
   }
   /** The window is frame:false with a fully custom titlebar (see main/index.ts) — these replace the native minimize/maximize/close buttons. */
   windowControls: {
