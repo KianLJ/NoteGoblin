@@ -5,6 +5,8 @@ import type { Spell } from '@shared/dnd5e'
 
 interface CustomSpellFormProps {
   initial?: Spell
+  /** Levels above this are hidden from the Level picker when creating a new spell — the character can't prepare/know a spell above what their slots actually reach yet. Not applied when editing an already-prepared spell (its existing level stays selectable). Leave undefined for no cap. */
+  maxLevel?: number
   onSave: (spell: Omit<Spell, 'id' | 'compendiumId'>) => void
   onClose: () => void
 }
@@ -12,7 +14,8 @@ interface CustomSpellFormProps {
 const SPELL_LEVELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 /** Full-screen form for a homebrew spell — every field the SRD compendium view shows (casting time, range, components, duration, etc.), not just a name and a description box, so the hover tooltip has real structured fields to show for custom spells too, the same as compendium-linked ones. */
-export function CustomSpellForm({ initial, onSave, onClose }: CustomSpellFormProps): JSX.Element {
+export function CustomSpellForm({ initial, maxLevel, onSave, onClose }: CustomSpellFormProps): JSX.Element {
+  const availableLevels = initial ? SPELL_LEVELS : SPELL_LEVELS.filter((lvl) => lvl === 0 || maxLevel === undefined || lvl <= maxLevel)
   const [name, setName] = useState(initial?.name ?? '')
   const [level, setLevel] = useState(initial?.level ?? 0)
   const [school, setSchool] = useState(initial?.school ?? '')
@@ -53,7 +56,7 @@ export function CustomSpellForm({ initial, onSave, onClose }: CustomSpellFormPro
           </Field>
           <Field label="Level">
             <select className="gb-input" value={level} onChange={(e) => setLevel(Number(e.target.value))}>
-              {SPELL_LEVELS.map((lvl) => (
+              {availableLevels.map((lvl) => (
                 <option key={lvl} value={lvl}>
                   {lvl === 0 ? 'Cantrip' : lvl}
                 </option>

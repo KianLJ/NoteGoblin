@@ -445,7 +445,15 @@ export function NoteTreeSection({
   function openFolderMenu(e: ReactMouseEvent, folder: Folder): void {
     e.preventDefault()
     e.stopPropagation()
-    if (!selected.has(makeKey('folder', folder.id))) setSelected(new Set([makeKey('folder', folder.id)]))
+    const key = makeKey('folder', folder.id)
+    // If this folder was already part of a bigger selection, right-clicking
+    // it acts on that whole selection (Cut/Copy/Delete) instead of
+    // collapsing down to just this one row — otherwise a shift-selected
+    // batch could only ever be deleted one item at a time via this menu.
+    const wasAlreadySelected = selected.has(key)
+    if (!wasAlreadySelected) setSelected(new Set([key]))
+    const multi = wasAlreadySelected && selected.size > 1
+
     const items: ContextMenuItem[] = [
       { label: 'New Note', icon: <NewNoteIcon />, onSelect: () => onCreateNote(folder.id) },
       { label: 'New Folder', icon: <NewFolderIcon />, onSelect: () => void handleCreateFolder(folder.id) }
@@ -454,7 +462,7 @@ export function NoteTreeSection({
       items.push({
         label: 'Paste',
         onSelect: () => {
-          setSelected(new Set([makeKey('folder', folder.id)]))
+          if (!wasAlreadySelected) setSelected(new Set([key]))
           handlePaste()
         }
       })
@@ -462,22 +470,34 @@ export function NoteTreeSection({
     const isMine = folder.authorUserId === myUserId
     if (isMine) {
       items.push(
-        { label: 'Cut', onSelect: () => onSetClipboard([{ kind: 'folder', id: folder.id }], 'cut') },
-        { label: 'Copy', onSelect: () => onSetClipboard([{ kind: 'folder', id: folder.id }], 'copy') },
         {
+          label: multi ? `Cut ${selected.size}` : 'Cut',
+          onSelect: () => (multi ? handleCopyOrCut('cut') : onSetClipboard([{ kind: 'folder', id: folder.id }], 'cut'))
+        },
+        {
+          label: multi ? `Copy ${selected.size}` : 'Copy',
+          onSelect: () => (multi ? handleCopyOrCut('copy') : onSetClipboard([{ kind: 'folder', id: folder.id }], 'copy'))
+        }
+      )
+      if (!multi) {
+        items.push({
           label: 'Rename',
           onSelect: () => {
             setRenamingFolderId(folder.id)
             setRenameValue(folder.name)
           }
-        }
-      )
+        })
+      }
     }
     if (isMine || isDm) {
       items.push({
-        label: 'Delete',
+        label: multi ? `Delete ${selected.size}` : 'Delete',
         danger: true,
         onSelect: () => {
+          if (multi) {
+            deleteSelected()
+            return
+          }
           const message = describeDelete(folders, notes, [folder.id], [])
           if (message) setPendingDelete({ message, folderIds: [folder.id], noteIds: [] })
           else onDeleteFolder(folder.id)
@@ -490,24 +510,39 @@ export function NoteTreeSection({
   function openNoteMenu(e: ReactMouseEvent, note: Note): void {
     e.preventDefault()
     e.stopPropagation()
-    if (!selected.has(makeKey('note', note.id))) setSelected(new Set([makeKey('note', note.id)]))
+    const key = makeKey('note', note.id)
+    const wasAlreadySelected = selected.has(key)
+    if (!wasAlreadySelected) setSelected(new Set([key]))
+    const multi = wasAlreadySelected && selected.size > 1
     const isMine = note.authorUserId === myUserId
-    if (!isMine && !isDm) return
+    if (!isMine && !isDm && !multi) return
     const items: ContextMenuItem[] = []
     if (isMine) {
       items.push(
-        { label: 'Cut', onSelect: () => onSetClipboard([{ kind: 'note', id: note.id }], 'cut') },
-        { label: 'Copy', onSelect: () => onSetClipboard([{ kind: 'note', id: note.id }], 'copy') },
         {
+          label: multi ? `Cut ${selected.size}` : 'Cut',
+          onSelect: () => (multi ? handleCopyOrCut('cut') : onSetClipboard([{ kind: 'note', id: note.id }], 'cut'))
+        },
+        {
+          label: multi ? `Copy ${selected.size}` : 'Copy',
+          onSelect: () => (multi ? handleCopyOrCut('copy') : onSetClipboard([{ kind: 'note', id: note.id }], 'copy'))
+        }
+      )
+      if (!multi) {
+        items.push({
           label: 'Rename',
           onSelect: () => {
             setRenamingNoteId(note.id)
             setRenameValue(note.title)
           }
-        }
-      )
+        })
+      }
     }
-    items.push({ label: 'Delete', danger: true, onSelect: () => onDeleteNote(note.id) })
+    items.push({
+      label: multi ? `Delete ${selected.size}` : 'Delete',
+      danger: true,
+      onSelect: () => (multi ? deleteSelected() : onDeleteNote(note.id))
+    })
     setMenu({ x: e.clientX, y: e.clientY, items })
   }
 

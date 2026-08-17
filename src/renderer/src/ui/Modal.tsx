@@ -4,22 +4,25 @@ interface ModalProps {
   onClose: () => void
   children: ReactNode
   width?: number
+  /** Set false for a flow with real progress to lose (e.g. a multi-step wizard) — disables Escape and backdrop-click, so the only way out is whatever explicit close/cancel control the content itself provides. Defaults true (close on Escape or backdrop click), matching every existing caller. */
+  dismissible?: boolean
 }
 
-/** Fixed-position overlay + centered gb-card panel — for flows that need real focus (wizards, confirmations), unlike the corner popovers used elsewhere (CharacterSwitcher, TableBar). Closes on Escape or backdrop click. */
-export function Modal({ onClose, children, width = 560 }: ModalProps): JSX.Element {
+/** Fixed-position overlay + centered gb-card panel — for flows that need real focus (wizards, confirmations), unlike the corner popovers used elsewhere (CharacterSwitcher, TableBar). Closes on Escape or backdrop click unless `dismissible={false}`. */
+export function Modal({ onClose, children, width = 560, dismissible = true }: ModalProps): JSX.Element {
   useEffect(() => {
+    if (!dismissible) return
     function handleKeyDown(e: KeyboardEvent): void {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [onClose, dismissible])
 
   return (
     <div
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (dismissible && e.target === e.currentTarget) onClose()
       }}
       style={{
         position: 'fixed',

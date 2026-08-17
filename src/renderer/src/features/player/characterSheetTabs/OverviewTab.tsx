@@ -32,7 +32,6 @@ import { AbilityIcon, HeartIcon, HitDiceIcon, InitiativeIcon, MoonIcon, ShieldIc
 
 interface OverviewDraft {
   race: string
-  subrace: string
   classes: ClassLevel[]
   experiencePoints: number
   abilityScores: AbilityScores
@@ -66,7 +65,6 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
   const [draft, setDraft] = useAutosaveDraft<OverviewDraft>(
     {
       race: character.race,
-      subrace: character.subrace,
       classes: character.classes,
       experiencePoints: character.experiencePoints,
       abilityScores: character.abilityScores,
@@ -227,9 +225,6 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         <HeaderField label="Race">
           <input className="gb-input" style={boxedInputStyle} value={draft.race} onChange={(e) => patch({ race: e.target.value })} />
         </HeaderField>
-        <HeaderField label="Subrace">
-          <input className="gb-input" style={boxedInputStyle} value={draft.subrace} onChange={(e) => patch({ subrace: e.target.value })} />
-        </HeaderField>
 
         <HeaderField label="Class">
           <select
@@ -283,21 +278,14 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
             onChange={(e) => updateClass(0, { level: Number(e.target.value) })}
           />
         </HeaderField>
-        {primary?.subclass !== undefined ? (
-          <HeaderField label="Subclass">
-            <input
-              className="gb-input"
-              style={boxedInputStyle}
-              value={primary.subclass}
-              onChange={(e) => updateClass(0, { subclass: e.target.value })}
-              autoFocus
-            />
-          </HeaderField>
-        ) : (
-          <Button variant="ghost" style={{ fontSize: 11, padding: '5px 8px' }} onClick={() => updateClass(0, { subclass: '' })}>
-            + Subclass
-          </Button>
-        )}
+        <HeaderField label="Subclass">
+          <input
+            className="gb-input"
+            style={boxedInputStyle}
+            value={primary?.subclass ?? ''}
+            onChange={(e) => updateClass(0, { subclass: e.target.value })}
+          />
+        </HeaderField>
 
         <Divider />
 

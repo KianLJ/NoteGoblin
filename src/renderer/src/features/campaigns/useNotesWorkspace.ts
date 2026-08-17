@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Folder, Note } from '@shared/ipc'
 
 /**
@@ -7,12 +7,35 @@ import type { Folder, Note } from '@shared/ipc'
  * this is a no-op) so both the header's tab strip and the sidebar/editor body
  * share a single source of truth instead of each fetching independently.
  */
+
+function tabsStorageKey(campaignId: string): string {
+  return `gb-open-tabs:${campaignId}`
+}
+
+function loadPersistedTabs(campaignId: string): { openTabs: string[]; activeId: string | null } {
+  try {
+    const raw = localStorage.getItem(tabsStorageKey(campaignId))
+    if (!raw) return { openTabs: [], activeId: null }
+    const parsed = JSON.parse(raw) as { openTabs?: unknown; activeId?: unknown }
+    const openTabs = Array.isArray(parsed.openTabs) ? parsed.openTabs.filter((id): id is string => typeof id === 'string') : []
+    const activeId = typeof parsed.activeId === 'string' ? parsed.activeId : null
+    return { openTabs, activeId }
+  } catch {
+    return { openTabs: [], activeId: null }
+  }
+}
+
 export function useNotesWorkspace(sessionId: string | undefined, campaignId: string | null) {
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [folders, setFolders] = useState<Folder[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [openTabs, setOpenTabs] = useState<string[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  // Which campaign's persisted tabs have already been restored this session
+  // — restoring is a one-time thing per campaign switch, not something that
+  // should re-run (and stomp on whatever you have open) every time a live
+  // 'campaigns.onChanged' event triggers a background refresh.
+  const restoredForRef = useRef<string | null>(null)
 
   // Auto-dismiss — an error toast that sits there forever just gets in the
   // way of the sidebar/editor beneath it once you've read it.
@@ -31,6 +54,13 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
       setError(null)
       return
     }
+    // Clear immediately on switching to a different campaign — otherwise the
+    // previous campaign's tabs stay in state (just silently unresolvable)
+    // until this campaign's own persisted tabs get restored below.
+    if (restoredForRef.current !== campaignId) {
+      setOpenTabs([])
+      setActiveId(null)
+    }
     refresh(campaignId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, campaignId])
@@ -43,6 +73,14 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId])
 
+  // Persist whenever the open tabs (or which one's active) actually change —
+  // so they survive closing and reopening the app, not just switching
+  // screens within one run of it.
+  useEffect(() => {
+    if (!campaignId || restoredForRef.current !== campaignId) return
+    localStorage.setItem(tabsStorageKey(campaignId), JSON.stringify({ openTabs, activeId }))
+  }, [campaignId, openTabs, activeId])
+
   function refresh(id: string): void {
     window.goblin.notes.list(id, sessionId).then((result) => {
       if (!result.ok) {
@@ -50,6 +88,14 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
         return
       }
       setNotes(result.data)
+      if (restoredForRef.current !== id) {
+        restoredForRef.current = id
+        const persisted = loadPersistedTabs(id)
+        const validIds = new Set(result.data.map((n) => n.id))
+        const restoredTabs = persisted.openTabs.filter((tabId) => validIds.has(tabId))
+        setOpenTabs(restoredTabs)
+        setActiveId(persisted.activeId && restoredTabs.includes(persisted.activeId) ? persisted.activeId : (restoredTabs[restoredTabs.length - 1] ?? null))
+      }
     })
     window.goblin.folders.list(id, sessionId).then((result) => {
       if (!result.ok) {
@@ -62,6 +108,16 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
 
   function openNote(noteId: string): void {
     setOpenTabs((tabs) => (tabs.includes(noteId) ? tabs : [...tabs, noteId]))
+    setActiveId(noteId)
+  }
+
+  /** Wikilink navigation replaces the active tab's slot instead of always adding a new one — the "preview tab" pattern (VS Code, Obsidian): clicking through a chain of links doesn't leave a trail of tabs behind. Switches to the target's existing tab instead of duplicating it if it's already open. Explicit "open in new tab" still goes through openNote. */
+  function navigateToNote(noteId: string): void {
+    setOpenTabs((tabs) => {
+      if (tabs.includes(noteId)) return tabs
+      if (activeId === null) return [...tabs, noteId]
+      return tabs.map((id) => (id === activeId ? noteId : id))
+    })
     setActiveId(noteId)
   }
 
@@ -238,6 +294,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     activeId,
     setActiveId,
     openNote,
+    navigateToNote,
     closeTab,
     createNote,
     saveNote,

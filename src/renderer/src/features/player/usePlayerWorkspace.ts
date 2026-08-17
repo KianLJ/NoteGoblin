@@ -113,6 +113,17 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     setActiveTabState(ref)
   }
 
+  /** Wikilink navigation replaces the active tab's slot instead of always adding a new one (the "preview tab" pattern) — switches to the target's existing tab instead of duplicating it if it's already open. Explicit "open in new tab" still goes through openTab. */
+  function navigateToNote(noteId: string): void {
+    const ref: PlayerTabRef = { kind: 'note', id: noteId }
+    setTabs((prev) => {
+      if (prev.some((t) => sameTab(t, ref))) return prev
+      if (!activeTab) return [...prev, ref]
+      return prev.map((t) => (sameTab(t, activeTab) ? ref : t))
+    })
+    setActiveTabState(ref)
+  }
+
   function closeTab(ref: PlayerTabRef): void {
     setTabs((prev) => {
       const next = prev.filter((t) => !sameTab(t, ref))
@@ -333,6 +344,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     activeTab,
     setActiveTab: openTab,
     openTab,
+    navigateToNote,
     closeTab,
     resync: () => sessionId && resyncActiveCampaign(sessionId),
     createCharacter,

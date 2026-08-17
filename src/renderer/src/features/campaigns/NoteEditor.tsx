@@ -3,14 +3,17 @@ import type { Note } from '@shared/ipc'
 import { renderNoteMarkdown } from '../../markdown'
 import { MarkdownLiveEditor, type MarkdownLiveEditorHandle } from './MarkdownLiveEditor'
 import { EyeIcon, ImageIcon, LinkIcon, PencilIcon, TableIcon } from './icons'
+import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 
 interface NoteEditorProps {
   note: Note
   /** Every note currently visible to you, across all sections — resolves [[Title]] wikilinks and feeds the link picker. Excludes nothing by visibility since you can only ever see what you're already allowed to. */
   notes: Note[]
   onSave: (patch: { title?: string; bodyMarkdown?: string }) => void
-  /** Wikilink target matched an existing note by title — open it. */
+  /** Wikilink target matched an existing note by title — navigates by replacing the active tab (the "preview tab" pattern), not adding a new one. */
   onNavigateToNote: (noteId: string) => void
+  /** Right-click a wikilink > "Open in new tab" — the explicit escape hatch for when you actually want a real, separate tab instead of reusing the active one. */
+  onOpenInNewTab: (noteId: string) => void
   /** Wikilink target didn't match anything — create a note with that title (in this note's own visibility) and open it. */
   onCreateAndLinkNote: (title: string) => void
   /** True when the viewer is neither the author nor a granted editor — the server would reject a save anyway (see campaignService.updateNote), so the fields are made inert here too rather than silently discarding keystrokes on a failed autosave. */
@@ -41,6 +44,7 @@ export function NoteEditor({
   notes,
   onSave,
   onNavigateToNote,
+  onOpenInNewTab,
   onCreateAndLinkNote,
   readOnly
 }: NoteEditorProps): JSX.Element {
@@ -48,6 +52,7 @@ export function NoteEditor({
   const [body, setBody] = useState(note.bodyMarkdown)
   const [mode, setMode] = useState<'write' | 'preview'>('write')
   const [linkPickerOpen, setLinkPickerOpen] = useState(false)
+  const [linkMenu, setLinkMenu] = useState<ContextMenuState | null>(null)
   const [linkQuery, setLinkQuery] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const editorRef = useRef<MarkdownLiveEditorHandle>(null)
@@ -131,8 +136,12 @@ export function NoteEditor({
     setLinkQuery('')
   }
 
+  function findWikilinkTarget(target: string): Note | undefined {
+    return notes.find((n) => (n.title || 'Untitled').toLowerCase() === target.toLowerCase())
+  }
+
   function resolveWikilink(target: string): void {
-    const match = notes.find((n) => (n.title || 'Untitled').toLowerCase() === target.toLowerCase())
+    const match = findWikilinkTarget(target)
     if (match) onNavigateToNote(match.id)
     else onCreateAndLinkNote(target)
   }
@@ -142,6 +151,20 @@ export function NoteEditor({
     if (!link) return
     e.preventDefault()
     resolveWikilink(link.dataset.wikilink as string)
+  }
+
+  /** Right-click on a resolved wikilink — a broken one has no target to open, so no menu. */
+  function handleWikilinkContextMenu(target: string, x: number, y: number): void {
+    const match = findWikilinkTarget(target)
+    if (!match) return
+    setLinkMenu({ x, y, items: [{ label: 'Open in new tab', onSelect: () => onOpenInNewTab(match.id) }] })
+  }
+
+  function handlePreviewContextMenu(e: ReactMouseEvent<HTMLDivElement>): void {
+    const link = (e.target as HTMLElement).closest<HTMLElement>('[data-wikilink]')
+    if (!link) return
+    e.preventDefault()
+    handleWikilinkContextMenu(link.dataset.wikilink as string, e.clientX, e.clientY)
   }
 
   const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles), [body, knownTitles])
@@ -290,6 +313,7 @@ export function NoteEditor({
           notesRef={notesRef}
           onChange={handleBodyChange}
           onWikilinkClick={resolveWikilink}
+          onWikilinkContextMenu={handleWikilinkContextMenu}
           readOnly={readOnly}
         />
       </div>
@@ -297,6 +321,7 @@ export function NoteEditor({
         <div
           className="gb-markdown"
           onClick={handlePreviewClick}
+          onContextMenu={handlePreviewContextMenu}
           style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
@@ -305,6 +330,8 @@ export function NoteEditor({
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
         by {note.authorDisplayName}
       </div>
+
+      <ContextMenu state={linkMenu} onClose={() => setLinkMenu(null)} />
     </div>
   )
 }

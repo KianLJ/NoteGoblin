@@ -38,6 +38,7 @@ export function CampaignWorkspace({
     error,
     activeNote,
     openNote,
+    navigateToNote,
     createNote,
     saveNote,
     deleteNote,
@@ -155,7 +156,8 @@ export function CampaignWorkspace({
             // server-side, so this is just keeping the UI from offering a
             // save that would otherwise actually succeed.
             onSave={(patch) => saveNote(activeNote.id, patch)}
-            onNavigateToNote={openNote}
+            onNavigateToNote={navigateToNote}
+            onOpenInNewTab={openNote}
             onCreateAndLinkNote={(title) => createNote(activeNote.visibility, null, title)}
           />
         ) : (
