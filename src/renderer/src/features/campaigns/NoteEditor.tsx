@@ -186,7 +186,7 @@ export function NoteEditor({
     [notes, note.id, body]
   )
 
-  const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles), [body, knownTitles])
+  const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles, note.campaignId), [body, knownTitles, note.campaignId])
   const linkableNotes = useMemo(
     () =>
       notes
@@ -328,6 +328,7 @@ export function NoteEditor({
         <MarkdownLiveEditor
           ref={editorRef}
           defaultValue={note.bodyMarkdown}
+          campaignId={note.campaignId}
           knownTitlesRef={knownTitlesRef}
           notesRef={notesRef}
           onChange={handleBodyChange}

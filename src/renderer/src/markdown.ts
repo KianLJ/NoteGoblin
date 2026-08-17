@@ -1,6 +1,7 @@
 import { Marked, type Tokens } from 'marked'
 import DOMPurify from 'dompurify'
 import { WIKILINK_PATTERN, wikilinkAlias, wikilinkTarget } from './wikilink'
+import { resolveImageSrc } from './imageSrc'
 
 /** A minimal Obsidian-style wikilink token — `[[Target]]`/`[[Target|Alias]]` or `[Target]`/`[Target|Alias]`. */
 interface WikilinkToken extends Tokens.Generic {
@@ -33,11 +34,22 @@ function escapeHtml(value: string): string {
  * default export) so the wikilink extension's `knownTitles` closure never
  * leaks between notes.
  */
-export function renderNoteMarkdown(source: string, knownTitles: Set<string>): string {
+export function renderNoteMarkdown(source: string, knownTitles: Set<string>, campaignId: string): string {
   try {
     const instance = new Marked({ gfm: true, breaks: true })
 
     instance.use({
+      renderer: {
+        // Rewrites a relative image src (a real file in the vault, not a
+        // pasted data: URI) to vault-asset:// so it actually resolves — see
+        // resolveImageSrc for why this only ever works for whoever has the
+        // vault locally.
+        image({ href, title, text }: Tokens.Image): string {
+          const src = escapeHtml(resolveImageSrc(campaignId, href))
+          const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
+          return `<img src="${src}" alt="${escapeHtml(text)}"${titleAttr}>`
+        }
+      },
       extensions: [
         {
           name: 'wikilink',
@@ -78,7 +90,15 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>): st
       console.error('DOMPurify.sanitize is unavailable; rendering markdown as plain text.')
       return `<pre>${escapeHtml(source)}</pre>`
     }
-    return DOMPurify.sanitize(html, { ADD_ATTR: ['data-wikilink'], ALLOW_DATA_ATTR: true })
+    return DOMPurify.sanitize(html, {
+      ADD_ATTR: ['data-wikilink'],
+      ALLOW_DATA_ATTR: true,
+      // DOMPurify's default URI allowlist doesn't know about vault-asset: —
+      // extend it (default schemes + vault-asset) rather than dropping the
+      // allowlist entirely, so a vault-referenced image's src survives
+      // sanitization instead of getting silently stripped.
+      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|vault-asset|data):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i
+    })
   } catch (err) {
     console.error('Markdown rendering failed:', err)
     return `<pre>${escapeHtml(source)}</pre>`
