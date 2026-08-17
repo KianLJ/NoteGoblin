@@ -263,10 +263,51 @@ function livePreviewExtension(knownTitlesRef: { current: Set<string> }, onWikili
       return true
     }
   })
-  return [plugin, clickHandler, imagePasteHandler]
+  return [plugin, clickHandler, imagePasteHandler, imageDropHandler]
 }
 
 const MAX_PASTED_IMAGE_BYTES = 8 * 1024 * 1024
+
+/** Reads an image file as a data: URI, resolving to its markdown (`![alt](data:...)`) or null if it's over the size cap. */
+function readImageMarkdown(file: File): Promise<string | null> {
+  if (file.size > MAX_PASTED_IMAGE_BYTES) {
+    console.error(`"${file.name}" is too large (max 8 MB) — try a smaller image, or insert it as a file instead.`)
+    return Promise.resolve(null)
+  }
+  const alt = file.name.replace(/\.[^.]+$/, '') || 'Pasted image'
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result
+      resolve(typeof dataUrl === 'string' ? `![${alt}](${dataUrl})` : null)
+    }
+    reader.onerror = () => resolve(null)
+    reader.readAsDataURL(file)
+  })
+}
+
+/** Inserts one dropped/pasted image's markdown at `pos` — the current selection if `pos` is undefined. */
+async function insertImageFile(view: EditorView, file: File, pos?: number): Promise<void> {
+  const insert = await readImageMarkdown(file)
+  if (insert === null) return
+  if (pos === undefined) {
+    view.dispatch(view.state.replaceSelection(insert))
+  } else {
+    view.dispatch({ changes: { from: pos, insert }, selection: { anchor: pos + insert.length } })
+  }
+}
+
+/** Inserts several dropped files' markdown one after another, each on its own line, starting at `pos` — sequential (not parallel) so each insert's position accounts for the ones before it instead of racing to the same stale offset. */
+async function insertImageFiles(view: EditorView, files: File[], pos: number): Promise<void> {
+  let at = pos
+  for (const file of files) {
+    const markdown = await readImageMarkdown(file)
+    if (markdown === null) continue
+    const insert = at === pos ? markdown : `\n${markdown}`
+    view.dispatch({ changes: { from: at, insert }, selection: { anchor: at + insert.length } })
+    at += insert.length
+  }
+}
 
 /**
  * Without this, pasting an actual image (e.g. a screenshot) falls through
@@ -279,6 +320,7 @@ const MAX_PASTED_IMAGE_BYTES = 8 * 1024 * 1024
  */
 const imagePasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
+    if (!view.contentDOM.isContentEditable) return false
     const items = event.clipboardData?.items
     if (!items) return false
     const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'))
@@ -286,17 +328,26 @@ const imagePasteHandler = EditorView.domEventHandlers({
     const file = imageItem.getAsFile()
     if (!file) return false
     event.preventDefault()
-    if (file.size > MAX_PASTED_IMAGE_BYTES) {
-      console.error('Pasted image is too large (max 8 MB) — try a smaller one, or insert it as a file instead.')
-      return true
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result
-      if (typeof dataUrl !== 'string') return
-      view.dispatch(view.state.replaceSelection(`![Pasted image](${dataUrl})`))
-    }
-    reader.readAsDataURL(file)
+    void insertImageFile(view, file)
+    return true
+  }
+})
+
+/** Dragging an image file (from the OS file explorer, a browser, etc.) onto the editor embeds it at the drop position, same markdown as paste/the toolbar's file picker. */
+const imageDropHandler = EditorView.domEventHandlers({
+  dragover(event) {
+    if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return false
+    event.preventDefault()
+    return false
+  },
+  drop(event, view) {
+    if (!view.contentDOM.isContentEditable) return false
+    const files = Array.from(event.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'))
+    if (files.length === 0) return false
+    event.preventDefault()
+    const coords = view.posAtCoords({ x: event.clientX, y: event.clientY })
+    const pos = coords ?? view.state.selection.main.head
+    void insertImageFiles(view, files, pos)
     return true
   }
 })
