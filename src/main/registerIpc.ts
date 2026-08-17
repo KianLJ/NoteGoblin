@@ -8,7 +8,7 @@ import { UserRepo } from '@server/repositories/userRepo'
 import * as campaignService from '@server/services/campaignService'
 import { CharacterRepo, type CharacterRow } from '@server/repositories/characterRepo'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
-import { syncRelayAccount } from './relaySync'
+import { syncRelayAccount, changeRelayPassword, clearRelaySession } from './relaySync'
 import * as relayClient from '@server/relay/relayClient'
 import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId } from './relayState'
 import { queryOnline } from './relaySocket'
@@ -49,7 +49,7 @@ import type {
   Folder,
   CharacterSheet
 } from '@shared/ipc'
-import type { FriendRequest, FriendSummary, RelayNotification } from '@shared/relay'
+import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification } from '@shared/relay'
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const userDataDir = app.getPath('userData')
@@ -102,6 +102,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return identity ? { id: identity.id, displayName: identity.displayName } : null
   })
 
+  ipcMain.handle('identity:sign-out', (): void => {
+    const identity = getCurrentIdentity()
+    stopSessionHost()
+    leaveSession()
+    clearJoinedSession()
+    clearRelaySession()
+    setCurrentIdentity(null)
+    // "Remember me" existing on this identity would otherwise just silently
+    // auto-log back in on next launch, defeating the point of signing out.
+    if (identity) forgetRememberedIdentity(userDataDir, identity.id)
+  })
+
   ipcMain.handle(
     'identity:update-display-name',
     (_event, newDisplayName: string): LoginResult => {
@@ -140,7 +152,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       await identityRepo.setPassword(identity.id, newPassword)
       const passwordHash = identityRepo.findByDisplayName(identity.displayName)!.password_hash
       setCurrentIdentity({ ...identity, passwordHash, password: newPassword })
-      void syncRelayAccount(identity.displayName, newPassword, mainWindow)
+      void changeRelayPassword(identity.displayName, currentPassword, newPassword, mainWindow)
       if (isRemembered(userDataDir, identity.id)) {
         rememberIdentity(userDataDir, identity.id, identity.displayName, newPassword)
       }
@@ -732,6 +744,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const session = getRelaySession()
     if (!session) return { ok: false, error: 'Not connected to the relay.' }
     const result = await relayClient.markNotificationRead(session.token, id)
+    if (!result.ok) return result
+    return { ok: true, data: undefined }
+  })
+
+  ipcMain.handle('relay:admin:list-accounts', async (): Promise<ApiResult<AdminAccountSummary[]>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    return relayClient.adminListAccounts(session.token)
+  })
+
+  ipcMain.handle('relay:admin:remove-account', async (_event, userId: string): Promise<ApiResult<void>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await relayClient.adminRemoveAccount(session.token, userId)
     if (!result.ok) return result
     return { ok: true, data: undefined }
   })

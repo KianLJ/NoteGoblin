@@ -2,7 +2,7 @@
 // Grows as features (campaigns, characters, etc.) land in later build steps.
 
 import type { CharacterSheetData } from './dnd5e'
-import type { FriendRequest, FriendSummary, RelayNotification, RelayStatus } from './relay'
+import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification, RelayStatus } from './relay'
 
 export interface Identity {
   id: string
@@ -123,6 +123,8 @@ export interface AppApi {
     switch: (id: string, password: string | undefined, remember: boolean) => Promise<LoginResult>
     /** Forgets a saved password without deleting the account itself. */
     forgetSaved: (id: string) => Promise<void>
+    /** Ends the current session (stops hosting/leaves a joined session, disconnects the relay, forgets any remembered password for this identity) and returns to the login screen. */
+    signOut: () => Promise<void>
   }
   // Sessions replace the old LAN/Tailscale hosting+invite-code flow entirely
   // — connecting is now: start hosting, invite a friend (from the friends
@@ -243,6 +245,14 @@ export interface AppApi {
     }
     /** Fires whenever a new notification arrives — listeners re-fetch notifications.list() rather than trying to diff a pushed payload, same convention as onFriendsChanged. */
     onNotificationsChanged: (callback: () => void) => () => void
+    // Relay account management — uses your own relay session under the
+    // hood, same as everything else here; the relay itself only allows this
+    // for one specific admin username (see Directory.isAdmin), so this is a
+    // normal 401 for anyone else, not something gated client-side.
+    admin: {
+      listAccounts: () => Promise<ApiResult<AdminAccountSummary[]>>
+      removeAccount: (userId: string) => Promise<ApiResult<void>>
+    }
   }
   files: {
     /** Opens a native file picker and reads the chosen image back as a data: URI — see registerIpc.ts for why images are embedded rather than stored separately. */

@@ -1,4 +1,4 @@
-import type { FriendRequest, RelayNotification } from '@shared/relay'
+import type { AdminAccountSummary, FriendRequest, RelayNotification } from '@shared/relay'
 import { RELAY_URL, RELAY_DIRECTORY_PATH } from './relayConfig'
 
 /** {userId, username} only — the directory doesn't know who's online, that's presence.ts's job. Callers merge in online status separately (see registerIpc.ts). */
@@ -43,6 +43,10 @@ export function login(username: string, password: string): Promise<ClientResult<
   return call('/login', 'POST', undefined, { username, password })
 }
 
+export function changePassword(token: string, newPassword: string): Promise<ClientResult<{ ok: true }>> {
+  return call('/change-password', 'POST', token, { newPassword })
+}
+
 export function getFriends(
   token: string
 ): Promise<ClientResult<{ friends: DirectoryFriend[]; incomingRequests: FriendRequest[] }>> {
@@ -75,4 +79,13 @@ export function getNotifications(token: string): Promise<ClientResult<RelayNotif
 
 export function markNotificationRead(token: string, id: string): Promise<ClientResult<{ ok: true }>> {
   return call('/notifications/read', 'POST', token, { id })
+}
+
+/** Same bearer token as every other authenticated call — the relay gates these to one specific username (ADMIN_USERNAME) server-side, see Directory.isAdmin. A non-admin token gets a normal 401. */
+export function adminListAccounts(token: string): Promise<ClientResult<AdminAccountSummary[]>> {
+  return call('/admin/accounts', 'GET', token)
+}
+
+export function adminRemoveAccount(token: string, userId: string): Promise<ClientResult<{ ok: true }>> {
+  return call('/admin/accounts/remove', 'POST', token, { userId })
 }

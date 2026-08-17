@@ -59,6 +59,14 @@ export class Directory extends Server<Env> {
     return 'dev-insecure-secret-do-not-deploy-with-this'
   }
 
+  /** Admin access rides on the caller's own normal signed session token (same as every other authenticated endpoint) — just gated to one specific relay username, set via `wrangler secret put ADMIN_USERNAME`. Never leave ADMIN_USERNAME unset in production or this always fails closed. */
+  private async isAdmin(req: Request): Promise<boolean> {
+    const adminUsername = this.env.ADMIN_USERNAME
+    if (!adminUsername) return false
+    const account = await this.authenticate(req)
+    return account?.username === normalizeUsername(adminUsername)
+  }
+
   private async authenticate(req: Request): Promise<StoredAccount | null> {
     const authHeader = req.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) return null
@@ -73,9 +81,25 @@ export class Directory extends Server<Env> {
     const segments = url.pathname.split('/').filter(Boolean)
     const action = segments[segments.length - 1]
 
+    // Admin routes first and specifically — 'remove' and 'accounts' as bare
+    // last-segment checks below are broad enough to otherwise swallow
+    // /admin/accounts/remove and /admin/accounts too.
+    if (req.method === 'GET' && action === 'accounts' && segments[segments.length - 2] === 'admin') {
+      return this.handleAdminListAccounts(req)
+    }
+    if (
+      req.method === 'POST' &&
+      action === 'remove' &&
+      segments[segments.length - 2] === 'accounts' &&
+      segments[segments.length - 3] === 'admin'
+    ) {
+      return this.handleAdminRemoveAccount(req)
+    }
+
     if (req.method === 'POST' && action === 'register') return this.handleRegister(req)
     if (req.method === 'POST' && action === 'login') return this.handleLogin(req)
     if (req.method === 'GET' && action === 'me') return this.handleMe(req)
+    if (req.method === 'POST' && action === 'change-password') return this.handleChangePassword(req)
     if (req.method === 'GET' && action === 'friends') return this.handleListFriends(req)
     if (req.method === 'POST' && action === 'request') return this.handleSendRequest(req)
     if (req.method === 'POST' && action === 'accept') return this.handleRespondRequest(req, true)
@@ -140,6 +164,19 @@ export class Directory extends Server<Env> {
     const account = await this.authenticate(req)
     if (!account) return json({ error: 'Unauthorized' }, 401)
     return json({ userId: account.id, username: account.username })
+  }
+
+  /** Keeps the relay account's password in step with the local device identity's — without this, changing your local password silently strands the relay account on the old one (next sync tries login-with-new-password, fails, then register-with-new-password, fails too since the username's already taken — a dead end with no way back in short of an admin clearing the account). */
+  private async handleChangePassword(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const body = (await req.json().catch(() => null)) as { newPassword?: string } | null
+    if (!body?.newPassword || body.newPassword.length < 8) {
+      return badRequest('newPassword must be at least 8 characters')
+    }
+    const passwordHash = await hashPassword(body.newPassword)
+    await this.ctx.storage.put(`user:${account.id}`, { ...account, passwordHash })
+    return json({ ok: true })
   }
 
   private async handleListFriends(req: Request): Promise<Response> {
@@ -296,6 +333,75 @@ export class Directory extends Server<Env> {
     const notifications = (await this.ctx.storage.get<Notification[]>(`notifications:${account.id}`)) ?? []
     const next = notifications.map((n) => (n.id === body.id ? { ...n, read: true } : n))
     await this.ctx.storage.put(`notifications:${account.id}`, next)
+    return json({ ok: true })
+  }
+
+  /** Every account on the relay, for the admin screen — no passwordHash, just enough to identify and act on a row (username, friend count, pending request counts). */
+  private async handleAdminListAccounts(req: Request): Promise<Response> {
+    if (!(await this.isAdmin(req))) return json({ error: 'Unauthorized' }, 401)
+
+    const accounts = await this.ctx.storage.list<StoredAccount>({ prefix: 'user:' })
+    const rows = await Promise.all(
+      [...accounts.values()].map(async (account) => {
+        const friends = (await this.ctx.storage.get<string[]>(`friends:${account.id}`)) ?? []
+        const requests = (await this.ctx.storage.get<FriendRequests>(`friendReq:${account.id}`)) ?? {
+          incoming: [],
+          outgoing: []
+        }
+        return {
+          userId: account.id,
+          username: account.username,
+          friendCount: friends.length,
+          incomingRequestCount: requests.incoming.length,
+          outgoingRequestCount: requests.outgoing.length
+        }
+      })
+    )
+    rows.sort((a, b) => a.username.localeCompare(b.username))
+    return json(rows)
+  }
+
+  /** Deletes an account entirely and cleans up every reference to it — the other side of each friendship, both directions of any pending request, and its own notifications/friend graph. Irreversible; there's no confirmation step here, the client is expected to have already gotten one from the admin. */
+  private async handleAdminRemoveAccount(req: Request): Promise<Response> {
+    if (!(await this.isAdmin(req))) return json({ error: 'Unauthorized' }, 401)
+    const body = (await req.json().catch(() => null)) as { userId?: string } | null
+    if (!body?.userId) return badRequest('userId is required')
+
+    const account = await this.ctx.storage.get<StoredAccount>(`user:${body.userId}`)
+    if (!account) return badRequest('No such account')
+
+    const friends = (await this.ctx.storage.get<string[]>(`friends:${account.id}`)) ?? []
+    for (const friendId of friends) {
+      const theirFriends = (await this.ctx.storage.get<string[]>(`friends:${friendId}`)) ?? []
+      await this.ctx.storage.put(
+        `friends:${friendId}`,
+        theirFriends.filter((id) => id !== account.id)
+      )
+    }
+
+    const requests = (await this.ctx.storage.get<FriendRequests>(`friendReq:${account.id}`)) ?? {
+      incoming: [],
+      outgoing: []
+    }
+    for (const otherId of [...requests.incoming, ...requests.outgoing]) {
+      const theirRequests = (await this.ctx.storage.get<FriendRequests>(`friendReq:${otherId}`)) ?? {
+        incoming: [],
+        outgoing: []
+      }
+      await this.ctx.storage.put(`friendReq:${otherId}`, {
+        incoming: theirRequests.incoming.filter((id) => id !== account.id),
+        outgoing: theirRequests.outgoing.filter((id) => id !== account.id)
+      })
+    }
+
+    await this.ctx.storage.delete([
+      `user:${account.id}`,
+      `username:${account.username}`,
+      `friends:${account.id}`,
+      `friendReq:${account.id}`,
+      `notifications:${account.id}`
+    ])
+
     return json({ ok: true })
   }
 
