@@ -1,8 +1,28 @@
 import type { CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import { CLASSES, CLASS_LEVEL_FEATURES, CLASS_RESOURCES, abilityModifier, type Ability, type CharacterSheetData, type CustomClassFeature } from '@shared/dnd5e'
-import { spellSlotsForClassLevel, spellsKnownForClassLevel } from '@shared/compendium'
+import {
+  CLASSES,
+  CLASS_LEVEL_FEATURES,
+  CLASS_RESOURCES,
+  abilityModifier,
+  type Ability,
+  type AsiSlotChoice,
+  type CharacterSheetData,
+  type CustomClassFeature
+} from '@shared/dnd5e'
+import { FEATS, spellSlotsForClassLevel, spellsKnownForClassLevel } from '@shared/compendium'
 import { useAutosaveDraft } from '../useAutosaveDraft'
+
+/** A short human summary of one resolved ASI slot — "+2 STR", "+1 STR, +1 DEX", or the feat's name. */
+function asiChoiceSummary(choice: AsiSlotChoice): string {
+  if (choice.kind === 'ability' && choice.abilityIncreases) {
+    return Object.entries(choice.abilityIncreases)
+      .map(([ability, amount]) => `+${amount} ${ability.toUpperCase()}`)
+      .join(', ')
+  }
+  const feat = FEATS.find((f) => f.id === choice.featId)
+  return feat ? `Feat: ${feat.name}` : 'Feat'
+}
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th']
 
@@ -47,6 +67,17 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
         // slots/resources still step up on "blank" levels (e.g. a wizard's spell slots growing between feature
         // levels), and the user asked to see the whole progression, not just where a feature happens to land.
         const levels = Array.from({ length: 20 }, (_, i) => i + 1)
+        const classIndex = character.classes.findIndex((k) => k.className === c.className)
+
+        function removeAsiChoice(id: string): void {
+          onSave({ asiSlotChoices: character.asiSlotChoices.filter((s) => s.id !== id) })
+        }
+        function removeSubclassFeatureChoice(id: string): void {
+          onSave({ subclassFeatureChoices: character.subclassFeatureChoices.filter((s) => s.id !== id) })
+        }
+        function clearSubclass(): void {
+          onSave({ classes: character.classes.map((k, i) => (i === classIndex ? { ...k, subclass: undefined } : k)) })
+        }
         return (
           <div key={c.className}>
             <div className="gb-label">
@@ -65,7 +96,21 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
                   const hasSlots = slots.some((n) => n > 0)
                   const known = cls.spellcastingAbility ? spellsKnownForClassLevel(cls.id, level) : null
                   const resources = resourceDefs.filter((r) => r.minLevel <= level)
-                  const hasStats = features.length > 0 || hasSlots || known !== null || resources.length > 0
+                  const resolvedAsi = character.asiSlotChoices.find(
+                    (s) => s.level === level && s.className.toLowerCase() === c.className.toLowerCase()
+                  )
+                  const resolvedFeatureChoices = character.subclassFeatureChoices.filter(
+                    (s) => s.level === level && s.className.toLowerCase() === c.className.toLowerCase()
+                  )
+                  const isSubclassPick = level === cls.subclassLevel && !!c.subclass
+                  const hasStats =
+                    features.length > 0 ||
+                    hasSlots ||
+                    known !== null ||
+                    resources.length > 0 ||
+                    !!resolvedAsi ||
+                    resolvedFeatureChoices.length > 0 ||
+                    isSubclassPick
                   if (!hasStats) return null
                   return (
                     <div
@@ -94,6 +139,20 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
                           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{f.name}</span>
                           <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{f.description}</div>
                         </div>
+                      ))}
+
+                      {isSubclassPick && !readOnly && (
+                        <ResolvedChoiceRow label={`Subclass: ${c.subclass}`} onChange={clearSubclass} />
+                      )}
+                      {resolvedAsi && !readOnly && (
+                        <ResolvedChoiceRow label={`Ability Score Improvement: ${asiChoiceSummary(resolvedAsi)}`} onChange={() => removeAsiChoice(resolvedAsi.id)} />
+                      )}
+                      {resolvedFeatureChoices.map((choice) => (
+                        <ResolvedChoiceRow
+                          key={choice.id}
+                          label={`${choice.featureName}: ${choice.chosenName}`}
+                          onChange={() => removeSubclassFeatureChoice(choice.id)}
+                        />
                       ))}
 
                       {(hasSlots || known !== null) && (
@@ -192,6 +251,32 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** One resolved level-up decision, with a "Change" button to clear it — clearing just deletes the underlying record, the same as removing it from wherever else it's editable (Overview's ability hover for an ASI, Features' chips for everything else); the inline chooser reappears there afterward so the player can re-pick. */
+function ResolvedChoiceRow({ label, onChange }: { label: string; onChange: () => void }): JSX.Element {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>{label}</span>
+      <button
+        type="button"
+        onClick={onChange}
+        title="Clear this choice so you can pick again"
+        style={{
+          background: 'none',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-sm)',
+          color: 'var(--text-muted)',
+          cursor: 'pointer',
+          fontSize: 10,
+          padding: '2px 6px',
+          flexShrink: 0
+        }}
+      >
+        Change
+      </button>
     </div>
   )
 }

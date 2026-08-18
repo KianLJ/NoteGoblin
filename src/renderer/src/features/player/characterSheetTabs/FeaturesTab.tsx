@@ -2,13 +2,19 @@ import { useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
   CLASSES,
+  ELDRITCH_INVOCATIONS,
+  METAMAGIC_OPTIONS,
+  PACT_BOON_OPTIONS,
   RACES,
   RACE_TRAIT_DESCRIPTIONS,
   SUBCLASS_CHOICE_FEATURE_NAME,
   activeFeatIds,
   asiSlotLevelsUpToLevel,
   curatedFeaturesForLevelUp,
+  eldritchInvocationSlotCountAtLevel,
   fightingStyleSlotLevelsUpToLevel,
+  metamagicSlotCountAtLevel,
+  metamagicSlotUnlockLevel,
   resourcesForCharacter,
   type AsiSlotChoice,
   type CharacterSheetData,
@@ -18,6 +24,7 @@ import {
 } from '@shared/dnd5e'
 import {
   FEATS,
+  SPELLS,
   effectiveAbilityScores,
   groupedSubclassFeaturesForLevelUp,
   isActivatableResource,
@@ -29,7 +36,15 @@ import {
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { useAutosaveDraft } from '../useAutosaveDraft'
-import { AsiSlotChooser, FightingStyleChooser, SubclassChooser } from '../AsiChoosers'
+import { AsiSlotChooser, FightingStyleChooser, NamedOptionChooser, SubclassChooser } from '../AsiChoosers'
+
+/** Warlock Mystic Arcanum — one specific spell of each level, chosen once each at 11th/13th/15th/17th, castable once per long rest without a slot. featureName matches the curated CLASS_LEVEL_FEATURES entry exactly, so resolving one both marks that row done and drives the chip/chooser below. */
+const MYSTIC_ARCANUM_LEVELS = [
+  { charLevel: 11, spellLevel: 6, featureName: 'Mystic Arcanum (6th level)' },
+  { charLevel: 13, spellLevel: 7, featureName: 'Mystic Arcanum (7th level)' },
+  { charLevel: 15, spellLevel: 8, featureName: 'Mystic Arcanum (8th level)' },
+  { charLevel: 17, spellLevel: 9, featureName: 'Mystic Arcanum (9th level)' }
+]
 
 interface ResourcesDraft {
   resourceUsed: Record<string, number>
@@ -174,16 +189,6 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
     onSave({ activeBuffs: [...character.activeBuffs, resourceId] })
   }
 
-  function rest(kinds: Array<'short' | 'long'>): void {
-    setResourceDraft((prev) => {
-      const next = { ...prev.resourceUsed }
-      for (const r of resources) {
-        if (kinds.includes(r.recharge)) next[r.id] = 0
-      }
-      return { resourceUsed: next }
-    })
-  }
-
   function updateFeature(id: string, fields: Partial<Feature>): void {
     setFeatureDraft((prev) => ({ features: prev.features.map((f) => (f.id === id ? { ...f, ...fields } : f)) }))
   }
@@ -220,18 +225,8 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
       {resources.length > 0 && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <div className="gb-label" style={{ margin: 0 }}>
-              Class Resources
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <Button variant="secondary" onClick={() => rest(['short'])} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
-                Short Rest
-              </Button>
-              <Button variant="secondary" onClick={() => rest(['short', 'long'])} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
-                Long Rest
-              </Button>
-            </div>
+          <div className="gb-label" style={{ margin: '0 0 4px' }}>
+            Class Resources
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
@@ -254,7 +249,10 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
                         {r.className}
                       </span>
                     </div>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 var(--space-2)' }}>{r.description}</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 4px' }}>{r.description}</p>
+                    <p style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 var(--space-2)' }}>
+                      Recharges: {r.currentRecharge === 'short' ? 'Short or Long Rest' : 'Long Rest'}
+                    </p>
 
                     {r.kind === 'uses' ? (
                       <UsesTracker
@@ -443,13 +441,76 @@ function ClassFeatureSection({
 
   const subclassChoiceFeatureName = SUBCLASS_CHOICE_FEATURE_NAME[cls.id]
   const isDivineSmiteClass = cls.id === 'paladin' && classLevel.level >= 2
+  const isMetamagicClass = cls.id === 'sorcerer'
+  const isPactBoonClass = cls.id === 'warlock'
+  const isWizardClass = cls.id === 'wizard'
   const curated = curatedFeaturesForLevelUp(classLevel.className, 0, classLevel.level).filter(
     (f) =>
       f.name !== 'Ability Score Improvement' &&
       f.name !== 'Fighting Style' &&
       f.name !== subclassChoiceFeatureName &&
-      !(isDivineSmiteClass && f.name === 'Divine Smite')
+      !(isDivineSmiteClass && f.name === 'Divine Smite') &&
+      !(isMetamagicClass && f.name === 'Metamagic') &&
+      !(isPactBoonClass && f.name === 'Pact Boon') &&
+      !(isPactBoonClass && f.name === 'Eldritch Invocations') &&
+      !(isPactBoonClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
+      !(isWizardClass && f.name === 'Spell Mastery') &&
+      !(isWizardClass && f.name === 'Signature Spells')
   )
+  const resolvedMetamagic = isMetamagicClass
+    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Metamagic' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    : []
+  const unresolvedMetamagicCount = isMetamagicClass ? Math.max(0, metamagicSlotCountAtLevel(classLevel.level) - resolvedMetamagic.length) : 0
+  const resolvedPactBoon = isPactBoonClass
+    ? character.subclassFeatureChoices.find((c) => c.featureName === 'Pact Boon' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    : undefined
+  const pactBoonUnresolved = isPactBoonClass && classLevel.level >= 3 && !resolvedPactBoon
+  const resolvedInvocations = isPactBoonClass
+    ? character.subclassFeatureChoices.filter(
+        (c) => c.featureName === 'Eldritch Invocation' && c.className.toLowerCase() === classLevel.className.toLowerCase()
+      )
+    : []
+  const knownSpellIds = new Set(character.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
+  const availableInvocations = isPactBoonClass
+    ? ELDRITCH_INVOCATIONS.filter(
+        (o) =>
+          o.level <= classLevel.level &&
+          (!o.prereqPact || o.prereqPact === resolvedPactBoon?.chosenName) &&
+          (!o.prereqSpell || knownSpellIds.has(o.prereqSpell)) &&
+          !resolvedInvocations.some((r) => r.chosenName === o.name)
+      )
+    : []
+  const unresolvedInvocationCount = isPactBoonClass
+    ? Math.max(0, Math.min(eldritchInvocationSlotCountAtLevel(classLevel.level) - resolvedInvocations.length, availableInvocations.length))
+    : 0
+  const unresolvedMysticArcana = isPactBoonClass
+    ? MYSTIC_ARCANUM_LEVELS.filter(
+        (m) =>
+          classLevel.level >= m.charLevel &&
+          !character.subclassFeatureChoices.some(
+            (c) => c.featureName === m.featureName && c.className.toLowerCase() === classLevel.className.toLowerCase()
+          )
+      )
+    : []
+  const resolvedMysticArcana = isPactBoonClass
+    ? character.subclassFeatureChoices.filter(
+        (c) => MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === c.featureName) && c.className.toLowerCase() === classLevel.className.toLowerCase()
+      )
+    : []
+  // Spell Mastery/Signature Spells pick from the wizard's OWN known spells (not the full compendium) — a spell has
+  // to actually be in the spellbook before it can be designated "always castable without a slot."
+  const knownSpellsByLevel = (lvl: number): { name: string; description: string }[] =>
+    character.spells.filter((s) => s.level === lvl).map((s) => ({ name: s.name, description: s.description }))
+  const resolvedSpellMastery = isWizardClass
+    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Spell Mastery' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    : []
+  const spellMasteryUnresolvedLevels = isWizardClass && classLevel.level >= 18 ? [1, 2].filter((lvl) => !resolvedSpellMastery.some((c) => knownSpellsByLevel(lvl).some((s) => s.name === c.chosenName))) : []
+  const resolvedSignatureSpells = isWizardClass
+    ? character.subclassFeatureChoices.filter(
+        (c) => c.featureName === 'Signature Spells' && c.className.toLowerCase() === classLevel.className.toLowerCase()
+      )
+    : []
+  const unresolvedSignatureSpellsCount = isWizardClass && classLevel.level >= 20 ? Math.max(0, 2 - resolvedSignatureSpells.length) : 0
   const subclassOptions = subclassesForClass(cls.id)
   const chosenSubclass = subclassOptions.find((s) => s.name === classLevel.subclass)
   const groupedSubclassFeatures =
@@ -472,6 +533,18 @@ function ClassFeatureSection({
     unresolvedAsiLevels.length === 0 &&
     unresolvedFightingStyleLevels.length === 0 &&
     customFeatures.length === 0 &&
+    resolvedMetamagic.length === 0 &&
+    unresolvedMetamagicCount === 0 &&
+    !resolvedPactBoon &&
+    !pactBoonUnresolved &&
+    resolvedInvocations.length === 0 &&
+    unresolvedInvocationCount === 0 &&
+    unresolvedMysticArcana.length === 0 &&
+    resolvedMysticArcana.length === 0 &&
+    spellMasteryUnresolvedLevels.length === 0 &&
+    resolvedSpellMastery.length === 0 &&
+    unresolvedSignatureSpellsCount === 0 &&
+    resolvedSignatureSpells.length === 0 &&
     !(classLevel.level >= cls.subclassLevel)
 
   if (nothingYet) return null
@@ -513,6 +586,61 @@ function ClassFeatureSection({
                 />
               )
             })}
+          {resolvedMetamagic.map((choice) => {
+            const option = METAMAGIC_OPTIONS.find((o) => o.name === choice.chosenName)
+            return (
+              <InfoChip
+                key={choice.id}
+                title={choice.chosenName}
+                subtitle={`Metamagic — ${classLevel.className} ${choice.level}`}
+                description={option?.description ?? ''}
+                accent
+                onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
+              />
+            )
+          })}
+          {resolvedPactBoon && (
+            <InfoChip
+              title={resolvedPactBoon.chosenName}
+              subtitle={`Pact Boon — ${classLevel.className} ${resolvedPactBoon.level}`}
+              description={PACT_BOON_OPTIONS.find((o) => o.name === resolvedPactBoon.chosenName)?.description ?? ''}
+              accent
+              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(resolvedPactBoon.id)}
+            />
+          )}
+          {resolvedInvocations.map((choice) => {
+            const option = ELDRITCH_INVOCATIONS.find((o) => o.name === choice.chosenName)
+            return (
+              <InfoChip
+                key={choice.id}
+                title={choice.chosenName}
+                subtitle={`Eldritch Invocation — ${classLevel.className} ${choice.level}`}
+                description={option?.description ?? ''}
+                accent
+                onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
+              />
+            )
+          })}
+          {resolvedMysticArcana.map((choice) => (
+            <InfoChip
+              key={choice.id}
+              title={choice.chosenName}
+              subtitle={`${choice.featureName} — ${classLevel.className} ${choice.level}`}
+              description={SPELLS.find((s) => s.name === choice.chosenName)?.description ?? ''}
+              accent
+              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
+            />
+          ))}
+          {[...resolvedSpellMastery, ...resolvedSignatureSpells].map((choice) => (
+            <InfoChip
+              key={choice.id}
+              title={choice.chosenName}
+              subtitle={`${choice.featureName} — ${classLevel.className} ${choice.level}`}
+              description={character.spells.find((s) => s.name === choice.chosenName)?.description ?? ''}
+              accent
+              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
+            />
+          ))}
           {customFeatures.map((f) => (
             <InfoChip key={f.id} title={f.name} subtitle={`${classLevel.className} ${f.level} (custom)`} description={f.description} />
           ))}
@@ -579,9 +707,103 @@ function ClassFeatureSection({
             key={`asi:${level}`}
             classLabel={classLevel.className}
             level={level}
-            abilityScores={character.abilityScores}
+            abilityScores={effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)}
             readOnly={readOnly}
             onResolve={(entry) => onResolveAsi(entry)}
+          />
+        ))}
+
+        {Array.from({ length: unresolvedMetamagicCount }).map((_, i) => (
+          <NamedOptionChooser
+            key={`metamagic:${resolvedMetamagic.length + i}`}
+            classLabel={classLevel.className}
+            level={metamagicSlotUnlockLevel(resolvedMetamagic.length + i)}
+            featureName="Metamagic"
+            options={METAMAGIC_OPTIONS}
+            excludeNames={resolvedMetamagic.map((c) => c.chosenName)}
+            readOnly={readOnly}
+            onChoose={(chosenName) =>
+              onResolveSubclassFeatureChoice({
+                className: classLevel.className,
+                level: metamagicSlotUnlockLevel(resolvedMetamagic.length + i),
+                featureName: 'Metamagic',
+                chosenName
+              })
+            }
+          />
+        ))}
+
+        {pactBoonUnresolved && (
+          <NamedOptionChooser
+            classLabel={classLevel.className}
+            level={3}
+            featureName="Pact Boon"
+            options={PACT_BOON_OPTIONS}
+            excludeNames={[]}
+            readOnly={readOnly}
+            onChoose={(chosenName) =>
+              onResolveSubclassFeatureChoice({ className: classLevel.className, level: 3, featureName: 'Pact Boon', chosenName })
+            }
+          />
+        )}
+
+        {Array.from({ length: unresolvedInvocationCount }).map((_, i) => (
+          <NamedOptionChooser
+            key={`invocation:${resolvedInvocations.length + i}`}
+            classLabel={classLevel.className}
+            level={classLevel.level}
+            featureName="Eldritch Invocation"
+            options={availableInvocations}
+            excludeNames={[]}
+            readOnly={readOnly}
+            onChoose={(chosenName) =>
+              onResolveSubclassFeatureChoice({ className: classLevel.className, level: classLevel.level, featureName: 'Eldritch Invocation', chosenName })
+            }
+          />
+        ))}
+
+        {unresolvedMysticArcana.map((m) => (
+          <NamedOptionChooser
+            key={m.featureName}
+            classLabel={classLevel.className}
+            level={m.charLevel}
+            featureName={m.featureName}
+            options={SPELLS.filter((s) => s.level === m.spellLevel && s.classes.some((c) => c.toLowerCase() === classLevel.className.toLowerCase())).map(
+              (s) => ({ name: s.name, description: s.description })
+            )}
+            excludeNames={[]}
+            readOnly={readOnly}
+            onChoose={(chosenName) =>
+              onResolveSubclassFeatureChoice({ className: classLevel.className, level: m.charLevel, featureName: m.featureName, chosenName })
+            }
+          />
+        ))}
+
+        {spellMasteryUnresolvedLevels.map((lvl) => (
+          <NamedOptionChooser
+            key={`spell-mastery:${lvl}`}
+            classLabel={classLevel.className}
+            level={18}
+            featureName={`Spell Mastery (${lvl === 1 ? '1st' : '2nd'}-level spell)`}
+            options={knownSpellsByLevel(lvl)}
+            excludeNames={[]}
+            readOnly={readOnly}
+            onChoose={(chosenName) => onResolveSubclassFeatureChoice({ className: classLevel.className, level: 18, featureName: 'Spell Mastery', chosenName })}
+          />
+        ))}
+
+        {Array.from({ length: unresolvedSignatureSpellsCount }).map((_, i) => (
+          <NamedOptionChooser
+            key={`signature-spell:${resolvedSignatureSpells.length + i}`}
+            classLabel={classLevel.className}
+            level={20}
+            featureName="Signature Spells"
+            options={knownSpellsByLevel(3).filter((s) => !resolvedSignatureSpells.some((r) => r.chosenName === s.name))}
+            excludeNames={[]}
+            readOnly={readOnly}
+            onChoose={(chosenName) =>
+              onResolveSubclassFeatureChoice({ className: classLevel.className, level: 20, featureName: 'Signature Spells', chosenName })
+            }
           />
         ))}
       </div>

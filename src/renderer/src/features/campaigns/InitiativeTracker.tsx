@@ -4,6 +4,7 @@ import { activeFeatIds, computeMaxHp } from '@shared/dnd5e'
 import { effectiveAbilityScores, computeArmorClassFromEquipment } from '@shared/compendium'
 import {
   emptyInitiativeState,
+  emptyCombatant,
   sortedByInitiative,
   computeEncounterDifficulty,
   DIFFICULTY_LABELS,
@@ -21,6 +22,24 @@ interface InitiativeTrackerProps {
 }
 
 const STORAGE_KEY = 'gb-saved-encounters'
+
+const STATUS_EFFECT_PRESETS = [
+  'Blinded',
+  'Charmed',
+  'Concentrating',
+  'Deafened',
+  'Frightened',
+  'Grappled',
+  'Incapacitated',
+  'Invisible',
+  'Paralyzed',
+  'Petrified',
+  'Poisoned',
+  'Prone',
+  'Restrained',
+  'Stunned',
+  'Unconscious'
+]
 
 interface SavedEncounter {
   id: string
@@ -57,7 +76,8 @@ function playerToCombatant(userId: string, character: CharacterSheet): Combatant
     maxHp: computeMaxHp(character.classes, character.abilityScores),
     currentHp: character.currentHp,
     ac: computeArmorClassFromEquipment(character.equipment, effScores, featIds),
-    userId
+    userId,
+    ...emptyCombatant()
   }
 }
 
@@ -73,7 +93,8 @@ function monsterToCombatant(monster: BestiaryMonster): Combatant {
     maxHp,
     currentHp: maxHp,
     ac: acMatch ? Number(acMatch[1]) : 10,
-    monsterIndex: monster.index
+    monsterIndex: monster.index,
+    ...emptyCombatant()
   }
 }
 
@@ -98,6 +119,23 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
     if (sessionId) void window.goblin.initiative.broadcast(state)
   }, [state, sessionId])
 
+  // A player rolling/entering their own initiative (see PlayerInitiativeView.tsx) arrives here rather than
+  // being editable on their end of the combatant list — this is the one write path into a DM-owned combatant
+  // a player has, so it's applied by userId rather than combatant id (which the player never sees).
+  useEffect(() => {
+    return window.goblin.initiative.onPlayerSet(({ userId, initiative }) => {
+      setState((prev) => ({
+        ...prev,
+        combatants: prev.combatants.map((c) => (c.kind === 'player' && c.userId === userId ? { ...c, initiative } : c))
+      }))
+    })
+  }, [])
+
+  const allMonstersForQuickAdd = useMemo(
+    () => [...loadCustomMonsters(), ...BESTIARY].sort((a, b) => a.name.localeCompare(b.name)),
+    []
+  )
+
   const ordered = sortedByInitiative(state.combatants)
   const inCombat = state.turnIndex >= 0
 
@@ -107,6 +145,42 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
 
   function updateCombatant(id: string, fields: Partial<Combatant>): void {
     patch({ combatants: state.combatants.map((c) => (c.id === id ? { ...c, ...fields } : c)) })
+  }
+
+  /** HP changes need to touch deathSaves too — crossing down to 0 starts tracking them (players only; a monster just dies), crossing back above 0 (a heal) clears whatever was rolled so far. */
+  function setCombatantHp(id: string, value: number): void {
+    patch({
+      combatants: state.combatants.map((c) => {
+        if (c.id !== id) return c
+        if (c.kind !== 'player') return { ...c, currentHp: value }
+        if (value <= 0 && c.deathSaves === null) return { ...c, currentHp: value, deathSaves: { successes: 0, failures: 0 } }
+        if (value > 0 && c.deathSaves !== null) return { ...c, currentHp: value, deathSaves: null }
+        return { ...c, currentHp: value }
+      })
+    })
+  }
+
+  function bumpDeathSave(id: string, kind: 'successes' | 'failures', delta: number): void {
+    patch({
+      combatants: state.combatants.map((c) => {
+        if (c.id !== id || !c.deathSaves) return c
+        const next = Math.min(3, Math.max(0, c.deathSaves[kind] + delta))
+        return { ...c, deathSaves: { ...c.deathSaves, [kind]: next } }
+      })
+    })
+  }
+
+  function addStatusEffect(id: string, effect: string): void {
+    if (!effect.trim()) return
+    patch({
+      combatants: state.combatants.map((c) =>
+        c.id === id && !c.statusEffects.includes(effect) ? { ...c, statusEffects: [...c.statusEffects, effect] } : c
+      )
+    })
+  }
+
+  function removeStatusEffect(id: string, effect: string): void {
+    patch({ combatants: state.combatants.map((c) => (c.id === id ? { ...c, statusEffects: c.statusEffects.filter((e) => e !== effect) } : c)) })
   }
 
   function removeCombatant(id: string): void {
@@ -164,6 +238,23 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
             <Button variant="secondary" onClick={addMissingPlayers} style={{ fontSize: 11, padding: '3px 8px' }}>
               + Add Players
             </Button>
+            <select
+              className="gb-input"
+              value=""
+              onChange={(e) => {
+                const monster = allMonstersForQuickAdd.find((m) => m.index === e.target.value)
+                if (monster) patch({ combatants: [...state.combatants, monsterToCombatant(monster)] })
+              }}
+              style={{ fontSize: 11, padding: '3px 4px', maxWidth: 130 }}
+              title="Add an enemy"
+            >
+              <option value="">+ Add Enemy…</option>
+              {allMonstersForQuickAdd.map((m) => (
+                <option key={m.index} value={m.index}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
             {!inCombat ? (
               <Button variant="primary" onClick={startCombat} disabled={state.combatants.length === 0} style={{ fontSize: 11, padding: '3px 8px' }}>
                 Start Combat
@@ -176,6 +267,14 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
             <Button variant="ghost" onClick={clearAll} style={{ fontSize: 11, padding: '3px 8px' }}>
               Clear
             </Button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={state.deathSavesPrivate}
+                onChange={(e) => patch({ deathSavesPrivate: e.target.checked })}
+              />
+              Private death saves
+            </label>
           </div>
 
           {inCombat && (
@@ -221,6 +320,11 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
                 <strong style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.name}
                 </strong>
+                {c.currentHp <= 0 && (
+                  <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)' }}>
+                    Dead
+                  </span>
+                )}
                 <span className="gb-badge" style={{ fontSize: 10 }}>
                   {c.kind === 'player' ? 'PC' : 'Monster'}
                 </span>
@@ -235,7 +339,7 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
                     type="number"
                     className="gb-input"
                     value={c.currentHp}
-                    onChange={(e) => updateCombatant(c.id, { currentHp: Number(e.target.value) })}
+                    onChange={(e) => setCombatantHp(c.id, Number(e.target.value))}
                     style={{ width: 44, fontSize: 11, padding: '2px 4px' }}
                   />
                   / {c.maxHp}
@@ -250,6 +354,40 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
                     style={{ width: 36, fontSize: 11, padding: '2px 4px' }}
                   />
                 </label>
+              </div>
+
+              {c.deathSaves && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+                  <DeathSaveRow label="Success" count={c.deathSaves.successes} color="var(--success)" onChange={(delta) => bumpDeathSave(c.id, 'successes', delta)} />
+                  <DeathSaveRow label="Fail" count={c.deathSaves.failures} color="var(--danger)" onChange={(delta) => bumpDeathSave(c.id, 'failures', delta)} />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                {c.statusEffects.map((effect) => (
+                  <span key={effect} className="gb-badge" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+                    {effect}
+                    <button
+                      type="button"
+                      onClick={() => removeStatusEffect(c.id, effect)}
+                      style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <select
+                  value=""
+                  onChange={(e) => addStatusEffect(c.id, e.target.value)}
+                  style={{ fontSize: 10, padding: '2px 3px', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}
+                >
+                  <option value="">+ Status…</option>
+                  {STATUS_EFFECT_PRESETS.filter((s) => !c.statusEffects.includes(s)).map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           ))}
@@ -511,6 +649,34 @@ function EncounterBuilder({
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/** Three clickable pips — clicking pip N fills up through it (count = N+1), clicking the currently-topmost filled pip again empties it back down by one, same toggle idiom as a rating widget. */
+function DeathSaveRow({ label, count, color, onChange }: { label: string; count: number; color: string; onChange: (delta: number) => void }): JSX.Element {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+      <span>{label}</span>
+      {[0, 1, 2].map((i) => {
+        const newCount = count === i + 1 ? i : i + 1
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onChange(newCount - count)}
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              border: `1px solid ${color}`,
+              background: i < count ? color : 'transparent',
+              cursor: 'pointer',
+              padding: 0
+            }}
+          />
+        )
+      })}
     </div>
   )
 }

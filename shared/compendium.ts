@@ -15,6 +15,7 @@ import subclassesData from './data/srd-subclasses.json'
 import subclassFeaturesData from './data/srd-subclass-features.json'
 import featsData from './data/srd-feats.json'
 import {
+  ABILITIES,
   CLASSES,
   CLASS_RESOURCES,
   abilityModifier,
@@ -202,8 +203,18 @@ function resolveFeatEffects(featIds: string[]): FeatEffect[] {
  * see activeAsiSlotChoices in shared/dnd5e.ts — so lowering a class's level
  * automatically drops whatever that slot granted.
  */
+const ABILITY_SCORE_CAP = 20
+
 export function effectiveAbilityScores(base: AbilityScores, classes: ClassLevel[], asiSlotChoices: AsiSlotChoice[]): AbilityScores {
   const result = { ...base }
+  // Epic Boon feats are the SRD's explicit exception to the usual 20 cap —
+  // tracked separately and added back in after capping everything else, so
+  // an Epic Boon can push an already-capped 20 up further, but an ordinary
+  // ASI/feat increase never can (regardless of which order they were taken
+  // in — capping first, then adding Epic Boon bonuses, sidesteps any
+  // order-dependence a running per-increment cap would have).
+  const epicBoonBonus: Partial<Record<Ability, number>> = {}
+
   for (const slot of activeAsiSlotChoices(classes, asiSlotChoices)) {
     if (slot.kind === 'ability' && slot.abilityIncreases) {
       for (const [ability, amount] of Object.entries(slot.abilityIncreases) as [Ability, number][]) {
@@ -212,12 +223,17 @@ export function effectiveAbilityScores(base: AbilityScores, classes: ClassLevel[
     } else if (slot.kind === 'feat' && slot.chosenAbility) {
       const feat = FEATS.find((f) => f.id === slot.featId)
       const choice = feat?.effects?.find((e): e is Extract<FeatEffect, { kind: 'abilityScoreChoice' }> => e.kind === 'abilityScoreChoice')
-      if (choice) result[slot.chosenAbility] += choice.amount
+      if (choice) {
+        if (feat?.category === 'Epic Boon') epicBoonBonus[slot.chosenAbility] = (epicBoonBonus[slot.chosenAbility] ?? 0) + choice.amount
+        else result[slot.chosenAbility] += choice.amount
+      }
     }
   }
   for (const effect of resolveFeatEffects(activeFeatIds(classes, asiSlotChoices))) {
     if (effect.kind === 'abilityScore') result[effect.ability] += effect.amount
   }
+  for (const { id } of ABILITIES) result[id] = Math.min(ABILITY_SCORE_CAP, result[id])
+  for (const [ability, amount] of Object.entries(epicBoonBonus) as [Ability, number][]) result[ability] += amount
   return result
 }
 
@@ -574,6 +590,31 @@ export function knownSpellsLimit(classes: ClassLevel[]): number | null {
     total += known
   }
   return isKnownCaster ? total : null
+}
+
+/** Cantrips known at 1st level, per class — grows by 1 at 4th level and again at 10th (every SRD cantrip-using class follows this same three-tier shape). Paladin and Ranger aren't listed since neither gets cantrips. */
+const CANTRIPS_KNOWN_AT_LEVEL_1: Record<string, number> = {
+  bard: 2,
+  cleric: 3,
+  druid: 2,
+  sorcerer: 4,
+  warlock: 2,
+  wizard: 3
+}
+
+/** Same shape as knownSpellsLimit, but for cantrips — which every cantrip-using class caps separately from its leveled "spells known"/prepared limit. */
+export function cantripsKnownLimit(classes: ClassLevel[]): number | null {
+  let total = 0
+  let isCantripCaster = false
+  for (const c of classes) {
+    const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
+    if (!cls) continue
+    const base = CANTRIPS_KNOWN_AT_LEVEL_1[cls.id]
+    if (base === undefined) continue
+    isCantripCaster = true
+    total += base + (c.level >= 10 ? 2 : c.level >= 4 ? 1 : 0)
+  }
+  return isCantripCaster ? total : null
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ABILITIES, type Ability, type AsiSlotChoice } from '@shared/dnd5e'
+import { ABILITIES, type Ability, type AsiSlotChoice, type NamedOption } from '@shared/dnd5e'
 import { FEATS, meetsFeatPrerequisite, type FeatEffect } from '@shared/compendium'
 import { Button } from '../../ui/Button'
 
@@ -210,6 +210,64 @@ export function FightingStyleChooser({
       {FIGHTING_STYLE_FEATS.find((f) => f.id === featId)?.desc && (
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{FIGHTING_STYLE_FEATS.find((f) => f.id === featId)!.desc}</p>
       )}
+    </div>
+  )
+}
+
+/**
+ * A generic "pick one from a fixed named list" chooser — used for Sorcerer
+ * Metamagic (rendered once per still-open pick, since the count grows with
+ * level — see metamagicSlotCountAtLevel) and Warlock Pact Boon (a single
+ * pick). Writes through the same subclassFeatureChoices mechanism a real
+ * subclass feature choice does; despite the name, that field is just "a
+ * resolved named choice for a named feature at a level," which fits any of
+ * these class-table choices equally well.
+ */
+export function NamedOptionChooser({
+  classLabel,
+  level,
+  featureName,
+  options,
+  excludeNames,
+  readOnly,
+  onChoose
+}: {
+  classLabel: string
+  level: number
+  featureName: string
+  options: NamedOption[]
+  /** Names already picked for an earlier slot of this same feature — hidden here so the same option can't be chosen twice. */
+  excludeNames: string[]
+  readOnly?: boolean
+  onChoose: (name: string) => void
+}): JSX.Element {
+  const available = options.filter((o) => !excludeNames.includes(o.name))
+  const [name, setName] = useState(available[0]?.name ?? '')
+  const selected = available.find((o) => o.name === name) ?? available[0]
+
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+      <strong>
+        {featureName} — {classLabel} {level}
+      </strong>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <select className="gb-input" value={selected?.name ?? ''} onChange={(e) => setName(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
+          {available.map((o) => (
+            <option key={o.name} value={o.name}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="primary"
+          onClick={() => selected && onChoose(selected.name)}
+          disabled={readOnly || !selected}
+          style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}
+        >
+          Choose
+        </Button>
+      </div>
+      {selected?.description && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selected.description}</p>}
     </div>
   )
 }

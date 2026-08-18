@@ -12,8 +12,8 @@ import {
   type Spell
 } from '@shared/dnd5e'
 import {
-  CANTRIPS,
   SPELLS,
+  cantripsKnownLimit,
   effectiveAbilityScores,
   getSpellById,
   knownSpellsLimit,
@@ -102,10 +102,17 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
   // A feat that boosts the spellcasting ability should raise DC/attack/prepared-count the same way an ASI does — see shared/compendium.ts's effectiveAbilityScores.
   const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
 
-  // Prepared casters (Cleric/Druid/Wizard/Paladin) and known casters (Bard/Sorcerer/Warlock/Ranger) use different SRD rules, but from here they collapse into the same thing: a cap on how many leveled spells you can have on your list at once. Cantrips never count against either.
+  // Prepared casters (Cleric/Druid/Wizard/Paladin) and known casters (Bard/Sorcerer/Warlock/Ranger) use different SRD rules, but from here they collapse into the same thing: a cap on how many leveled spells you can have on your list at once.
   const spellCap = preparedSpellLimit(character.classes, effScores) ?? knownSpellsLimit(character.classes)
   const leveledSpellCount = draft.spells.filter((s) => s.level > 0).length
   const atSpellCap = spellCap !== null && leveledSpellCount >= spellCap
+
+  // Cantrips known is a separate cap from leveled spells — every cantrip-using class tracks the two independently.
+  const cantripCap = cantripsKnownLimit(character.classes)
+  const cantripCount = draft.spells.filter((s) => s.level === 0).length
+  const atCantripCap = cantripCap !== null && cantripCount >= cantripCap
+
+  const knownCompendiumSpellIds = new Set(draft.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
 
   function setSlotUsed(level: number, used: number): void {
     const total = slotTotals[level] ?? 0
@@ -131,6 +138,8 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
   function addFromCompendium(spell: CompendiumSpell): void {
     if (spell.level > maxCastableLevel) return
     if (spell.level > 0 && atSpellCap) return
+    if (spell.level === 0 && atCantripCap) return
+    if (knownCompendiumSpellIds.has(spell.id)) return
     patch({
       spells: [
         ...draft.spells,
@@ -198,6 +207,7 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
           </>
         )}
         {spellCap !== null && <Stat label="Spells Known" value={`${leveledSpellCount} / ${spellCap}`} />}
+        {cantripCap !== null && <Stat label="Cantrips Known" value={`${cantripCount} / ${cantripCap}`} />}
       </div>
 
       {slotLevels.length > 0 && (
@@ -326,7 +336,12 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
         </div>
         {atSpellCap && (
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-            Spell limit reached ({leveledSpellCount}/{spellCap}) — cantrips are still unlimited.
+            Spell limit reached ({leveledSpellCount}/{spellCap}).
+          </p>
+        )}
+        {atCantripCap && (
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+            Cantrip limit reached ({cantripCount}/{cantripCap}).
           </p>
         )}
         <div style={{ marginTop: 8 }}>
@@ -335,15 +350,17 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
               searchSpells(
                 q,
                 30,
-                atSpellCap
-                  ? CANTRIPS
-                  : SPELLS.filter(
-                      (s) => s.level <= maxCastableLevel && (pickerLevelFilter === 'all' || s.level === pickerLevelFilter)
-                    )
+                SPELLS.filter((s) => {
+                  if (s.level > maxCastableLevel) return false
+                  if (pickerLevelFilter !== 'all' && s.level !== pickerLevelFilter) return false
+                  if (s.level === 0 && atCantripCap) return false
+                  if (s.level > 0 && atSpellCap) return false
+                  return !knownCompendiumSpellIds.has(s.id)
+                })
               )
             }
             getLabel={(s: CompendiumSpell) => s.name}
-            getSublabel={(s: CompendiumSpell) => spellLevelLabel(s.level)}
+            getSublabel={(s: CompendiumSpell) => `${spellLevelLabel(s.level)} · ${s.classes.join(', ')}`}
             onPick={addFromCompendium}
             onAddCustom={openCreateForm}
             buttonLabel="+ Add Spell"

@@ -27,6 +27,7 @@ export type RequestKind =
   | 'presence.selectCharacter'
   | 'characters.sync'
   | 'characters.getPlayerCharacter'
+  | 'initiative.setMine'
 
 export interface RequestFrame {
   reqId: string

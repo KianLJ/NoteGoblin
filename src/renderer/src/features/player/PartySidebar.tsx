@@ -54,12 +54,13 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
           <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
         </div>
 
-        {tab === 'initiative' ? (
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            <PlayerInitiativeView sessionId={sessionId} />
-          </div>
-        ) : (
-          <>
+        {/* Both stay mounted (hidden via CSS) rather than conditionally rendered — PlayerInitiativeView only
+            accumulates its state from live pushes (no fetch-on-mount), so unmounting it on every tab switch
+            used to throw away whatever it had seen until the DM's next edit pushed a fresh copy. */}
+        <div style={{ display: tab === 'initiative' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <PlayerInitiativeView sessionId={sessionId} />
+        </div>
+        <div style={{ display: tab === 'initiative' ? 'none' : 'contents' }}>
             {canManage && (
               <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
                 Grant edit access to "{activeNote!.title || 'Untitled'}"
@@ -130,8 +131,7 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
             })}
               </div>
             )}
-          </>
-        )}
+        </div>
       </div>
     </ResizableSidebar>
   )

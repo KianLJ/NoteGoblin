@@ -96,6 +96,12 @@ export interface InitiativeUpdate {
   state: PlayerVisibleInitiativeState
 }
 
+/** DM-side push — a connected player just set their own initiative roll (see InitiativeTracker.tsx). */
+export interface PlayerInitiativeUpdate {
+  userId: string
+  initiative: number | null
+}
+
 export interface PlayerCharacterUpdate {
   userId: string
   /** null means they deselected, or (a plain disconnect) just dropped — either way, nothing to show for them anymore. */
@@ -257,6 +263,10 @@ export interface AppApi {
   initiative: {
     broadcast: (state: InitiativeState) => Promise<void>
     onUpdate: (callback: (update: InitiativeUpdate) => void) => () => void
+    /** Player-only — sets your own initiative on the DM's tracker. */
+    setMine: (initiative: number | null) => Promise<void>
+    /** DM-only — fires when a connected player sets their own initiative. */
+    onPlayerSet: (callback: (update: PlayerInitiativeUpdate) => void) => () => void
   }
   // Friends/presence, backed by the relay (see relay/) rather than local
   // storage. The relay account itself is transparent — it's the same
