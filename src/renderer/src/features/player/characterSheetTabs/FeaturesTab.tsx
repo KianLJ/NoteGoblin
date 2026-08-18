@@ -32,20 +32,29 @@ import {
 import {
   FEATS,
   SPELLS,
+  buildAsiSlotResolutionPatch,
   circleSpellLevelsUpToLevel,
   effectiveAbilityScores,
   getSpellById,
   groupedSubclassFeaturesForLevelUp,
   isActivatableResource,
+  spellLevelLabel,
+  spellSlotsForClassLevel,
   spellSlotsForClasses,
   subclassesForClass,
-  type FeatEffect,
-  type SubclassFeatureOption
+  type FeatEffect
 } from '@shared/compendium'
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { useAutosaveDraft } from '../useAutosaveDraft'
-import { AsiSlotChooser, FightingStyleChooser, NamedOptionChooser, SubclassChooser } from '../AsiChoosers'
+import {
+  AsiSlotChooser,
+  FavoredEnemyChooser,
+  FightingStyleChooser,
+  NamedOptionChooser,
+  SubclassChooser,
+  SubclassFeatureOptionChooser
+} from '../AsiChoosers'
 
 /** Warlock Mystic Arcanum — one specific spell of each level, chosen once each at 11th/13th/15th/17th, castable once per long rest without a slot. featureName matches the curated CLASS_LEVEL_FEATURES entry exactly, so resolving one both marks that row done and drives the chip/chooser below. */
 const MYSTIC_ARCANUM_LEVELS = [
@@ -204,29 +213,8 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
     setFeatureDraft((prev) => ({ features: prev.features.map((f) => (f.id === id ? { ...f, ...fields } : f)) }))
   }
 
-  /**
-   * A feat with a `spellChoice` effect (Magic Initiate) resolves through
-   * this same ASI/feat flow (see AsiSlotChooser), but needs two extra
-   * side effects beyond just recording the choice: the picked spells
-   * become real, castable entries on character.spells (marked `free` so
-   * they don't eat into the class's normal known/prepared cap), and if the
-   * character had no spellcasting ability at all yet (a non-caster taking
-   * the feat), this is what turns that on automatically instead of making
-   * them separately hit the "+ Enable Spellcasting" button.
-   */
   function resolveAsiSlot(entry: Omit<AsiSlotChoice, 'id'>): void {
-    const patch: Partial<CharacterSheetData> = { asiSlotChoices: [...character.asiSlotChoices, { id: crypto.randomUUID(), ...entry }] }
-    if (entry.kind === 'feat' && entry.chosenSpellIds?.length) {
-      const known = new Set(character.spells.map((s) => s.compendiumId).filter(Boolean))
-      const granted: Spell[] = entry.chosenSpellIds
-        .filter((id) => !known.has(id))
-        .map((id) => getSpellById(id))
-        .filter((s): s is NonNullable<typeof s> => !!s)
-        .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action', compendiumId: s.id, free: true }))
-      patch.spells = [...character.spells, ...granted]
-      if (!character.spellcastingAbility && entry.chosenAbility) patch.spellcastingAbility = entry.chosenAbility
-    }
-    onSave(patch)
+    onSave(buildAsiSlotResolutionPatch(character, entry))
   }
 
   function removeAsiSlot(id: string): void {
@@ -476,6 +464,7 @@ function ClassFeatureSection({
   const isMetamagicClass = cls.id === 'sorcerer'
   const isPactBoonClass = cls.id === 'warlock'
   const isWizardClass = cls.id === 'wizard'
+  const isBardClass = cls.id === 'bard'
   const curated = curatedFeaturesForLevelUp(classLevel.className, 0, classLevel.level).filter(
     (f) =>
       f.name !== 'Ability Score Improvement' &&
@@ -487,7 +476,8 @@ function ClassFeatureSection({
       !(isPactBoonClass && f.name === 'Eldritch Invocations') &&
       !(isPactBoonClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
       !(isWizardClass && f.name === 'Spell Mastery') &&
-      !(isWizardClass && f.name === 'Signature Spells')
+      !(isWizardClass && f.name === 'Signature Spells') &&
+      !(isBardClass && f.name === 'Magical Secrets')
   )
   const resolvedMetamagic = isMetamagicClass
     ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Metamagic' && c.className.toLowerCase() === classLevel.className.toLowerCase())
@@ -543,6 +533,21 @@ function ClassFeatureSection({
       )
     : []
   const unresolvedSignatureSpellsCount = isWizardClass && classLevel.level >= 20 ? Math.max(0, 2 - resolvedSignatureSpells.length) : 0
+
+  // Bard Magical Secrets — 2 spells of any level you can cast (any class list) at 14th, 2 more at 18th; they
+  // don't count against your normal spells known (RAW), so granted picks are marked `free`, same treatment
+  // as Magic Initiate's/Circle Spells' grants.
+  const resolvedMagicalSecrets = isBardClass
+    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Magical Secrets' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    : []
+  // Two picks unlock at 14th level, two more at 18th — the level each still-open pick unlocked at, in order.
+  const magicalSecretsSlotLevels = isBardClass
+    ? [...(classLevel.level >= 14 ? [14, 14] : []), ...(classLevel.level >= 18 ? [18, 18] : [])]
+    : []
+  const unresolvedMagicalSecretsLevels = magicalSecretsSlotLevels.slice(resolvedMagicalSecrets.length)
+  const bardMaxSpellLevel = isBardClass
+    ? spellSlotsForClassLevel(cls.id, classLevel.level).reduce((max, count, i) => (count > 0 ? i + 1 : max), 0)
+    : 0
   const subclassOptions = subclassesForClass(cls.id)
   const chosenSubclass = subclassOptions.find((s) => s.name === classLevel.subclass)
   const groupedSubclassFeatures =
@@ -616,6 +621,8 @@ function ClassFeatureSection({
     unresolvedFavoredTerrainSlots.length === 0 &&
     ungrantedCircleSpellLevels.length === 0 &&
     grantedCircleSpellLevels.length === 0 &&
+    resolvedMagicalSecrets.length === 0 &&
+    unresolvedMagicalSecretsLevels.length === 0 &&
     !(classLevel.level >= cls.subclassLevel)
 
   if (nothingYet) return null
@@ -722,7 +729,12 @@ function ClassFeatureSection({
               key={choice.id}
               title={choice.chosenName}
               subtitle={`Favored Enemy — ${classLevel.className} ${choice.level}`}
-              description={FAVORED_ENEMY_OPTIONS.find((o) => o.name === choice.chosenName)?.description ?? ''}
+              description={
+                (choice.chosenName.startsWith('Humanoids')
+                  ? FAVORED_ENEMY_OPTIONS.find((o) => o.name.startsWith('Humanoids'))
+                  : FAVORED_ENEMY_OPTIONS.find((o) => o.name === choice.chosenName)
+                )?.description ?? ''
+              }
               accent
               onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
             />
@@ -749,6 +761,19 @@ function ClassFeatureSection({
                   accent
                 />
               ))}
+          {resolvedMagicalSecrets.map((choice) => {
+            const compendium = SPELLS.find((s) => s.name === choice.chosenName)
+            return (
+              <InfoChip
+                key={choice.id}
+                title={choice.chosenName}
+                subtitle={`Magical Secrets — ${classLevel.className} ${choice.level}`}
+                description={compendium?.description ?? ''}
+                accent
+                onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
+              />
+            )
+          })}
           {customFeatures.map((f) => (
             <InfoChip key={f.id} title={f.name} subtitle={`${classLevel.className} ${f.level} (custom)`} description={f.description} />
           ))}
@@ -822,11 +847,10 @@ function ClassFeatureSection({
         ))}
 
         {unresolvedFavoredEnemySlots.map((level) => (
-          <NamedOptionChooser
+          <FavoredEnemyChooser
             key={`favored-enemy:${level}`}
             classLabel={classLevel.className}
             level={level}
-            featureName="Favored Enemy"
             options={FAVORED_ENEMY_OPTIONS}
             excludeNames={resolvedFavoredEnemies.map((c) => c.chosenName)}
             readOnly={readOnly}
@@ -868,6 +892,31 @@ function ClassFeatureSection({
                 subclassFeatureChoices: [
                   ...character.subclassFeatureChoices,
                   { id: crypto.randomUUID(), className: classLevel.className, level, featureName: 'Circle Spells', chosenName: names.join(', ') }
+                ]
+              })
+            }}
+          />
+        ))}
+
+        {unresolvedMagicalSecretsLevels.map((level, i) => (
+          <MagicalSecretsChooser
+            key={`magical-secrets:${resolvedMagicalSecrets.length + i}`}
+            classLabel={classLevel.className}
+            level={level}
+            maxSpellLevel={bardMaxSpellLevel}
+            excludeSpellNames={resolvedMagicalSecrets.map((c) => c.chosenName)}
+            readOnly={readOnly}
+            onChoose={(spellId) => {
+              const spell = getSpellById(spellId)
+              if (!spell) return
+              onSave({
+                spells: [
+                  ...character.spells,
+                  { id: crypto.randomUUID(), name: spell.name, level: spell.level, description: '', actionType: 'action', compendiumId: spell.id, free: true }
+                ],
+                subclassFeatureChoices: [
+                  ...character.subclassFeatureChoices,
+                  { id: crypto.randomUUID(), className: classLevel.className, level, featureName: 'Magical Secrets', chosenName: spell.name }
                 ]
               })
             }}
@@ -993,7 +1042,7 @@ const DIVINE_SMITE_DESCRIPTION =
  * just marks a spell slot as used, the same as SpellsTab's own slot tracker
  * would, and shows what that slot's damage roll comes out to.
  */
-function DivineSmiteCard({
+export function DivineSmiteCard({
   character,
   onSave,
   readOnly
@@ -1065,57 +1114,6 @@ function DivineSmiteCard({
   )
 }
 
-/** The inline chooser for a subclass feature the SRD writes as several named options (e.g. Draconic Bloodline's dragon ancestor) rather than one entry with an embedded choice — see groupedSubclassFeaturesForLevelUp in shared/compendium.ts. */
-function SubclassFeatureOptionChooser({
-  classLabel,
-  subclassLabel,
-  level,
-  baseName,
-  intro,
-  options,
-  readOnly,
-  onChoose
-}: {
-  classLabel: string
-  subclassLabel: string
-  level: number
-  baseName: string
-  intro?: string
-  options: SubclassFeatureOption[]
-  readOnly?: boolean
-  onChoose: (chosenName: string) => void
-}): JSX.Element {
-  const [chosenName, setChosenName] = useState(options[0]?.name ?? '')
-  const chosen = options.find((o) => o.name === chosenName)
-
-  return (
-    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
-      <strong>
-        {baseName} — {subclassLabel || classLabel} {level}
-      </strong>
-      {intro && <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>{intro}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <select className="gb-input" value={chosenName} onChange={(e) => setChosenName(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
-          {options.map((o) => (
-            <option key={o.name} value={o.name}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="primary"
-          onClick={() => onChoose(chosenName)}
-          disabled={readOnly || !chosenName}
-          style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}
-        >
-          Choose
-        </Button>
-      </div>
-      {chosen && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{chosen.desc}</p>}
-    </div>
-  )
-}
-
 /** Circle of the Land's "circle spells" aren't a choice (the two spells for a given terrain/level are fixed) — just a one-click grant once the terrain is known and the level threshold is reached, matching how a real player would just add them to their prepared list. */
 function CircleSpellsGrant({
   classLabel,
@@ -1144,6 +1142,56 @@ function CircleSpellsGrant({
       <Button variant="primary" onClick={onGrant} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
         + Add to Spells
       </Button>
+    </div>
+  )
+}
+
+/** Bard Magical Secrets — unlike Mystic Arcanum/Spell Mastery (which pick from spells the character already knows), this learns a brand-new spell from ANY class's list, so it needs its own picker over the full compendium rather than reusing NamedOptionChooser's fixed name/description list. */
+function MagicalSecretsChooser({
+  classLabel,
+  level,
+  maxSpellLevel,
+  excludeSpellNames,
+  readOnly,
+  onChoose
+}: {
+  classLabel: string
+  level: number
+  maxSpellLevel: number
+  excludeSpellNames: string[]
+  readOnly?: boolean
+  onChoose: (spellId: string) => void
+}): JSX.Element {
+  const options = SPELLS.filter((s) => s.level <= maxSpellLevel && !excludeSpellNames.includes(s.name))
+  const [spellId, setSpellId] = useState(options[0]?.id ?? '')
+  const selected = options.find((s) => s.id === spellId)
+
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+      <strong>
+        Magical Secrets — {classLabel} {level}
+      </strong>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
+        Learn a spell of any level you can cast from any class's list — it doesn't count against your normal spells known.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <select className="gb-input" value={spellId} onChange={(e) => setSpellId(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
+          {options.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} ({spellLevelLabel(s.level)})
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="primary"
+          onClick={() => spellId && onChoose(spellId)}
+          disabled={readOnly || !spellId}
+          style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}
+        >
+          Choose
+        </Button>
+      </div>
+      {selected && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selected.description}</p>}
     </div>
   )
 }

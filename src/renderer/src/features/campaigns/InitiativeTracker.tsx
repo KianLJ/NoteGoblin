@@ -19,6 +19,8 @@ import { Button } from '../../ui/Button'
 interface InitiativeTrackerProps {
   sessionId: string | null
   playerCharacters: Map<string, CharacterSheet>
+  /** Clicking a monster combatant's name opens its full statblock in the main pane (see CampaignWorkspace.tsx) — DM-only, since this whole tracker only ever renders on the DM's side (the player-facing view is PlayerInitiativeView.tsx, a separate component that never sees monster identity). */
+  onSelectMonster: (monster: BestiaryMonster) => void
 }
 
 const STORAGE_KEY = 'gb-saved-encounters'
@@ -107,7 +109,7 @@ function monsterToCombatant(monster: BestiaryMonster): Combatant {
  * sessionHost.ts's broadcastInitiative) — enemies show only as an injury
  * band, never their real name/HP/AC.
  */
-export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTrackerProps): JSX.Element {
+export function InitiativeTracker({ sessionId, playerCharacters, onSelectMonster }: InitiativeTrackerProps): JSX.Element {
   const [state, setState] = useState<InitiativeState>(emptyInitiativeState())
   const [view, setView] = useState<'tracker' | 'build'>('tracker')
   const [monsterQuery, setMonsterQuery] = useState('')
@@ -317,9 +319,36 @@ export function InitiativeTracker({ sessionId, playerCharacters }: InitiativeTra
                   style={{ width: 48, fontSize: 12, padding: '3px 4px' }}
                   title="Initiative"
                 />
-                <strong style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {c.name}
-                </strong>
+                {c.kind === 'monster' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const monster = allMonstersForQuickAdd.find((m) => m.index === c.monsterIndex)
+                      if (monster) onSelectMonster(monster)
+                    }}
+                    title="View statblock"
+                    style={{
+                      flex: 1,
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      color: 'var(--accent)',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                ) : (
+                  <strong style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.name}
+                  </strong>
+                )}
                 {c.currentHp <= 0 && (
                   <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)' }}>
                     Dead

@@ -242,6 +242,7 @@
    sitting inside the surrounding note rather than more prose. */
 .gb-statblock {
   position: relative;
+  max-width: 480px;
   border: 1px solid var(--border-subtle);
   border-top: 4px solid var(--accent);
   border-radius: var(--radius-md);
@@ -280,7 +281,10 @@
   color: var(--text-secondary);
   margin-bottom: 0.3em;
 }
-.gb-statblock-rule {
+/* Qualified with .gb-statblock for the same reason .gb-statblock-section is below — .gb-markdown hr's own
+   margin: 1.5em 0 (one class + one type = higher specificity than this alone) was winning and blowing the
+   section-divider gaps back out. */
+.gb-statblock .gb-statblock-rule {
   border: none;
   border-top: 1px solid var(--border-subtle);
   margin: 0.5em 0;
@@ -291,7 +295,8 @@
 .gb-statblock-line strong {
   color: var(--text-secondary);
 }
-.gb-statblock-abilities {
+/* Same specificity fix as .gb-statblock-rule above — .gb-markdown table's margin: 0 0 1em otherwise wins. */
+.gb-statblock .gb-statblock-abilities {
   width: 100%;
   border-collapse: collapse;
   text-align: center;

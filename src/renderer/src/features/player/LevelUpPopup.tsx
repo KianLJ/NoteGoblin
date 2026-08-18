@@ -17,10 +17,23 @@ import {
   type CharacterSheetData,
   type SubclassFeatureChoice
 } from '@shared/dnd5e'
-import { effectiveAbilityScores, groupedSubclassFeaturesForLevelUp, spellSlotsForClassLevel, subclassesForClass } from '@shared/compendium'
+import {
+  buildAsiSlotResolutionPatch,
+  effectiveAbilityScores,
+  groupedSubclassFeaturesForLevelUp,
+  spellSlotsForClassLevel,
+  subclassesForClass
+} from '@shared/compendium'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
-import { AsiSlotChooser, FightingStyleChooser, NamedOptionChooser, SubclassChooser } from './AsiChoosers'
+import {
+  AsiSlotChooser,
+  FavoredEnemyChooser,
+  FightingStyleChooser,
+  NamedOptionChooser,
+  SubclassChooser,
+  SubclassFeatureOptionChooser
+} from './AsiChoosers'
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th']
 
@@ -72,18 +85,26 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
     .filter((level) => level > fromLevel)
     .filter((level) => !character.asiSlotChoices.some((s) => s.level === level && s.className.toLowerCase() === className.toLowerCase()))
 
-  const resolvedFavoredEnemyCount = character.subclassFeatureChoices.filter(
-    (c) => c.featureName === 'Favored Enemy' && c.className.toLowerCase() === className.toLowerCase()
-  ).length
-  const newlyUnresolvedFavoredEnemyLevels = favoredEnemySlotLevelsUpToLevel(toLevel)
-    .filter((level) => level > fromLevel)
-    .slice(0, favoredEnemySlotLevelsUpToLevel(toLevel).length - resolvedFavoredEnemyCount)
-  const resolvedFavoredTerrainCount = character.subclassFeatureChoices.filter(
-    (c) => c.featureName === 'Favored Terrain' && c.className.toLowerCase() === className.toLowerCase()
-  ).length
-  const newlyUnresolvedFavoredTerrainLevels = favoredTerrainSlotLevelsUpToLevel(toLevel)
-    .filter((level) => level > fromLevel)
-    .slice(0, favoredTerrainSlotLevelsUpToLevel(toLevel).length - resolvedFavoredTerrainCount)
+  // Favored Enemy/Natural Explorer are Ranger-only — favoredEnemySlotLevelsUpToLevel etc. are pure level
+  // functions with no class check of their own (same shape as asiSlotLevelsUpToLevel), so any class leveling
+  // up through 1st/6th/10th would otherwise get a Ranger-flavored chooser that doesn't apply to them at all.
+  const isRangerClass = cls.id === 'ranger'
+  const resolvedFavoredEnemyCount = isRangerClass
+    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Favored Enemy' && c.className.toLowerCase() === className.toLowerCase()).length
+    : 0
+  const newlyUnresolvedFavoredEnemyLevels = isRangerClass
+    ? favoredEnemySlotLevelsUpToLevel(toLevel)
+        .filter((level) => level > fromLevel)
+        .slice(0, favoredEnemySlotLevelsUpToLevel(toLevel).length - resolvedFavoredEnemyCount)
+    : []
+  const resolvedFavoredTerrainCount = isRangerClass
+    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Favored Terrain' && c.className.toLowerCase() === className.toLowerCase()).length
+    : 0
+  const newlyUnresolvedFavoredTerrainLevels = isRangerClass
+    ? favoredTerrainSlotLevelsUpToLevel(toLevel)
+        .filter((level) => level > fromLevel)
+        .slice(0, favoredTerrainSlotLevelsUpToLevel(toLevel).length - resolvedFavoredTerrainCount)
+    : []
 
   // Subclass features gained this level-up — only meaningful once a subclass is actually chosen; a "choice"-shaped
   // one (e.g. Draconic Bloodline's ancestor) surfaces as its own resolvable slot rather than trying to cram a
@@ -91,6 +112,19 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
   const chosenSubclass = classLevel?.subclass ? subclassOptions.find((s) => s.name === classLevel.subclass) : undefined
   const newSubclassFeatures = chosenSubclass
     ? groupedSubclassFeaturesForLevelUp(cls.id, chosenSubclass.id, fromLevel, toLevel).filter((g) => g.kind === 'single')
+    : []
+  // A choice-shaped subclass feature (Draconic Bloodline's ancestor, a Ranger archetype's sub-features) used to
+  // be silently dropped from this recap entirely — filtered out of newSubclassFeatures above, but with nothing
+  // rendered in its place, so a subclass whose every post-pick feature is this shape (Ranger's Hunter archetype)
+  // looked like it granted nothing at all on level-up. Now it gets the same inline chooser FeaturesTab.tsx uses.
+  const newChoiceSubclassFeatures = chosenSubclass
+    ? groupedSubclassFeaturesForLevelUp(cls.id, chosenSubclass.id, fromLevel, toLevel).filter(
+        (g): g is Extract<typeof g, { kind: 'choice' }> =>
+          g.kind === 'choice' &&
+          !character.subclassFeatureChoices.some(
+            (c) => c.level === g.level && c.className.toLowerCase() === className.toLowerCase() && c.featureName === g.baseName
+          )
+      )
     : []
 
   // Every class resource whose max actually changed crossing these levels — newly gained (wasn't available at
@@ -112,7 +146,7 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
     : []
 
   function resolveAsiSlot(entry: Omit<AsiSlotChoice, 'id'>): void {
-    onSave({ asiSlotChoices: [...character.asiSlotChoices, { id: crypto.randomUUID(), ...entry }] })
+    onSave(buildAsiSlotResolutionPatch(character, entry))
   }
 
   function chooseSubclass(name: string): void {
@@ -225,11 +259,10 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
         ))}
 
         {newlyUnresolvedFavoredEnemyLevels.map((level) => (
-          <NamedOptionChooser
+          <FavoredEnemyChooser
             key={`favored-enemy:${level}`}
             classLabel={className}
             level={level}
-            featureName="Favored Enemy"
             options={FAVORED_ENEMY_OPTIONS}
             excludeNames={[]}
             onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level, featureName: 'Favored Enemy', chosenName })}
@@ -248,6 +281,19 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
           />
         ))}
 
+        {newChoiceSubclassFeatures.map((g) => (
+          <SubclassFeatureOptionChooser
+            key={`scc-chooser:${g.level}:${g.baseName}`}
+            classLabel={className}
+            subclassLabel={classLevel?.subclass ?? ''}
+            level={g.level}
+            baseName={g.baseName}
+            intro={g.intro}
+            options={g.options}
+            onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: g.level, featureName: g.baseName, chosenName })}
+          />
+        ))}
+
         {newlyUnresolvedAsiLevels.map((level) => (
           <AsiSlotChooser
             key={level}
@@ -260,6 +306,7 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
 
         {curated.length === 0 &&
           newSubclassFeatures.length === 0 &&
+          newChoiceSubclassFeatures.length === 0 &&
           resourceChanges.length === 0 &&
           slotChanges.length === 0 &&
           !subclassNewlyUnresolved &&

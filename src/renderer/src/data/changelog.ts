@@ -7,6 +7,23 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.2.9',
+    title: 'Enemy tabs, statblock spacing, and more class feature fixes',
+    highlights: [
+      'Statblocks in notes no longer render with huge phantom gaps between every line, and are capped to a sensible width',
+      'Clicking an enemy in the Initiative tracker opens its statblock in its own tab, so the DM can have several open at once',
+      'Favored Enemy and Natural Explorer no longer show up for non-Ranger classes leveling up',
+      'Magic Initiate now actually auto-enables spellcasting when taken from the level-up popup, not just from the Features tab',
+      "Barbarian's Primal Champion now raises Strength and Constitution to 24",
+      'Bard Magical Secrets is a real chooser — learn 2 spells from any class at your castable level, free of your normal cap',
+      'Cleric Turn Undead and Monk Flurry of Blows/Patient Defense/Step of the Wind are now usable actions, and Divine Smite also appears on the Actions tab',
+      "Fixed Channel Divinity options (Sacred Weapon, Turn the Unholy, Preserve Life) being hidden behind an incorrect either/or choice",
+      'Favored Enemy: Humanoids now lets you name the two specific races',
+      'Natural Explorer shows its full benefit text for every terrain, not just Arctic',
+      "Fixed the level-up popup showing nothing for Ranger archetype features (Hunter's entire kit is choice-based, and the popup had no chooser for that shape at all)"
+    ]
+  },
+  {
     version: '0.2.8',
     title: 'Reactions, actions restructure, and class feature fixes',
     highlights: [

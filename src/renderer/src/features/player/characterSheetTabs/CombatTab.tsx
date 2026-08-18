@@ -6,6 +6,7 @@ import {
   activeFeatIds,
   curatedFeaturesForLevelUp,
   formatModifier,
+  resourceActionsForCharacter,
   resourcesForCharacter,
   spellAttackBonus,
   spellSaveDC,
@@ -33,7 +34,7 @@ import {
 } from '@shared/compendium'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { SpellsTab } from './SpellsTab'
-import { FeaturesTab, PoolTracker, UsesTracker } from './FeaturesTab'
+import { DivineSmiteCard, FeaturesTab, PoolTracker, UsesTracker } from './FeaturesTab'
 import type { DetailField } from '../CompendiumDetailModal'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { EntryCard, EntryCardTitle } from '../EntryCard'
@@ -243,6 +244,8 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
   const resources = resourcesForCharacter(character.classes, effScores)
   const bonusActionResources = resources.filter((r) => r.actionType === 'bonus')
   const otherResources = resources.filter((r) => r.actionType !== 'bonus')
+  const resourceActions = resourceActionsForCharacter(character.classes)
+  const isDivineSmiteClass = character.classes.some((c) => c.className.toLowerCase() === 'paladin' && c.level >= 2)
 
   const equippedWeapons = weaponAttacksFromEquipment(character.equipment)
   const equippedWeaponIds = new Set(equippedWeapons.map((w) => w.weapon.id))
@@ -476,6 +479,32 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
           </div>
         )}
 
+        {(isDivineSmiteClass || resourceActions.length > 0) && (
+          <div style={{ marginTop: 12 }}>
+            <div className="gb-label" style={{ margin: '0 0 4px' }}>
+              Special Actions
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+              {isDivineSmiteClass && <DivineSmiteCard character={character} onSave={onSave} readOnly={readOnly} />}
+              {resourceActions.map((action) => {
+                const resource = resources.find((r) => r.id === action.resourceId)
+                if (!resource) return null
+                const used = Math.min(resourceDraft.resourceUsed[resource.id] ?? 0, resource.currentMax)
+                const remaining = resource.currentMax - used
+                return (
+                  <ResourceActionCard
+                    key={action.id}
+                    action={action}
+                    remaining={remaining}
+                    readOnly={readOnly}
+                    onUse={() => setResourceUsed(resource.id, used + action.cost, resource.currentMax)}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {bonusActionResources.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div className="gb-label" style={{ margin: '0 0 4px' }}>
@@ -563,6 +592,41 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** A named ability that spends charges from an existing class resource (Turn Undead ⟶ Channel Divinity, Flurry of Blows ⟶ Ki) — see RESOURCE_ACTIONS in shared/dnd5e.ts. Just a "Use" button plus a remaining-charges readout; the backing resource's own tracker (Bonus Actions/Other Class Resources below, or Features) is still the place to see/restore the raw uses pool. */
+function ResourceActionCard({
+  action,
+  remaining,
+  readOnly,
+  onUse
+}: {
+  action: ReturnType<typeof resourceActionsForCharacter>[number]
+  remaining: number
+  readOnly?: boolean
+  onUse: () => void
+}): JSX.Element {
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+      <HoverDetailCard title={action.name} subtitle={action.className} fields={[]} description={action.description}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, cursor: 'default' }}>
+          <strong style={{ flex: 1 }}>{action.name}</strong>
+          <span className="gb-badge" style={{ fontSize: 10 }}>
+            {ACTION_TYPE_LABEL[action.actionType]}
+          </span>
+        </div>
+      </HoverDetailCard>
+      <Button
+        variant="primary"
+        onClick={onUse}
+        disabled={readOnly || remaining < action.cost}
+        style={{ width: '100%', fontSize: 12, padding: '4px 10px' }}
+        title={`Spends ${action.cost} — ${remaining} available`}
+      >
+        Use ({remaining} left)
+      </Button>
     </div>
   )
 }

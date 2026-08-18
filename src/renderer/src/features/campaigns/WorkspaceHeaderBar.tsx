@@ -1,15 +1,22 @@
 import { useState } from 'react'
-import { CloseIcon, FileIcon, PlusIcon } from './icons'
+import { CloseIcon, FileIcon, PlusIcon, StatblockIcon } from './icons'
 import type { NotesWorkspace } from './useNotesWorkspace'
 import type { Campaign } from '@shared/ipc'
+import type { BestiaryMonster } from '../../data/bestiary'
 
 interface WorkspaceHeaderBarProps {
   campaign: Campaign
   workspace: NotesWorkspace
+  /** Enemy statblock tabs — a separate open list from notes (see AppShell.tsx), rendered after the note tabs with their own icon so they read as a different kind of tab, not another note. */
+  monsterTabs: BestiaryMonster[]
+  activeMonsterTab: string | null
+  /** null deactivates whichever monster tab is active (clicking a note tab) — a real index activates that one. */
+  onSelectMonsterTab: (index: string | null) => void
+  onCloseMonsterTab: (index: string) => void
 }
 
 /** Renders inline with the mode toggle in AppShell's header — note tabs live in the title bar, Obsidian-style. There's no "back": switching campaigns happens via the corner CampaignSwitcher. */
-export function WorkspaceHeaderBar({ campaign, workspace }: WorkspaceHeaderBarProps): JSX.Element {
+export function WorkspaceHeaderBar({ campaign, workspace, monsterTabs, activeMonsterTab, onSelectMonsterTab, onCloseMonsterTab }: WorkspaceHeaderBarProps): JSX.Element {
   const isDm = campaign.myRole === 'dm'
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -32,7 +39,7 @@ export function WorkspaceHeaderBar({ campaign, workspace }: WorkspaceHeaderBarPr
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, overflowX: 'auto', minWidth: 0 }}>
         {workspace.tabNotes.map((tab) => {
-          const active = tab.id === workspace.activeId
+          const active = !activeMonsterTab && tab.id === workspace.activeId
           return (
             <div
               key={tab.id}
@@ -58,7 +65,10 @@ export function WorkspaceHeaderBar({ campaign, workspace }: WorkspaceHeaderBarPr
                 setDraggingId(null)
                 setDragOverId(null)
               }}
-              onClick={() => workspace.setActiveId(tab.id)}
+              onClick={() => {
+                onSelectMonsterTab(null)
+                workspace.setActiveId(tab.id)
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -83,6 +93,48 @@ export function WorkspaceHeaderBar({ campaign, workspace }: WorkspaceHeaderBarPr
                 onClick={(e) => {
                   e.stopPropagation()
                   workspace.closeTab(tab.id)
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  opacity: 0.6
+                }}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+          )
+        })}
+        {monsterTabs.map((monster) => {
+          const active = activeMonsterTab === monster.index
+          return (
+            <div
+              key={monster.index}
+              onClick={() => onSelectMonsterTab(monster.index)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 8px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                background: active ? 'var(--bg-surface-raised)' : 'transparent',
+                color: active ? 'var(--text-primary)' : 'var(--text-muted)'
+              }}
+            >
+              <StatblockIcon />
+              <span>{monster.name}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCloseMonsterTab(monster.index)
                 }}
                 style={{
                   background: 'none',
