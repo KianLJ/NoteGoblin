@@ -4,7 +4,8 @@ interface EntryCardProps {
   name: ReactNode
   badge?: ReactNode
   onEdit?: () => void
-  onRemove: () => void
+  /** Omit for an entry with no direct remove action here — e.g. a derived attack (unarmed strike, or a weapon whose presence comes from being equipped in Inventory) that's removed by changing its actual source instead. */
+  onRemove?: () => void
   children: ReactNode
 }
 
@@ -20,9 +21,11 @@ export function EntryCard({ name, badge, onEdit, onRemove, children }: EntryCard
             ✎
           </button>
         )}
-        <button type="button" onClick={onRemove} title="Remove" style={removeBtnStyle}>
-          ×
-        </button>
+        {onRemove && (
+          <button type="button" onClick={onRemove} title="Remove" style={removeBtnStyle}>
+            ×
+          </button>
+        )}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>{children}</div>
     </div>

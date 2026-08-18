@@ -2,9 +2,12 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
   ABILITIES,
+  ABILITY_DESCRIPTIONS,
   CLASSES,
   SKILLS,
   abilityModifier,
+  activeAsiSlotChoices,
+  activeFeatIds,
   computeInitiative,
   computeMaxHp,
   computeSpeed,
@@ -23,12 +26,24 @@ import {
   type HitDicePool,
   type SkillName
 } from '@shared/dnd5e'
-import { computeArmorClassFromEquipment, subclassesForClass } from '@shared/compendium'
+import {
+  FEATS,
+  armorSpeedPenalty,
+  computeArmorClassFromEquipment,
+  effectiveAbilityScores,
+  effectiveSavingThrowProficiencies,
+  effectiveSkillAdvantage,
+  effectiveSkillProficiencies,
+  featNotes,
+  featSpeedBonus,
+  subclassesForClass
+} from '@shared/compendium'
 import { Button } from '../../../ui/Button'
 import { Modal } from '../../../ui/Modal'
 import { useAutosaveDraft } from '../useAutosaveDraft'
+import { HoverDetailCard } from '../HoverDetailCard'
 import { CombatTab } from './CombatTab'
-import { AbilityIcon, HeartIcon, HitDiceIcon, InitiativeIcon, MoonIcon, ShieldIcon, SpeedIcon, SunIcon } from './icons'
+import { AbilityIcon, HeartIcon, HitDiceIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
   race: string
@@ -47,7 +62,7 @@ interface OverviewDraft {
 interface OverviewTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
-  /** Fired when a class's level is raised (not lowered) — CharacterSheetEditor uses this to pop the level-up prompt with whatever the class table has for the levels just gained. */
+  /** Fired when a class's level is raised (not lowered) — CharacterSheetEditor pops LevelUpPopup, a shortcut for whatever the level you just crossed unlocked. Purely a convenience: the same choice is always available inline in Combat's Features tab (see FeaturesTab.tsx) whether or not this fires. */
   onLevelUp?: (className: string, fromLevel: number, toLevel: number) => void
   readOnly?: boolean
 }
@@ -62,6 +77,7 @@ function resetAllSlots(slots: Record<number, { total: number; used: number }>): 
 export function OverviewTab({ character, onSave, onLevelUp, readOnly }: OverviewTabProps): JSX.Element {
   const [customRows, setCustomRows] = useState<Set<number>>(new Set())
   const [shortRestOpen, setShortRestOpen] = useState(false)
+  const [abilityEditMode, setAbilityEditMode] = useState(false)
   const [draft, setDraft] = useAutosaveDraft<OverviewDraft>(
     {
       race: character.race,
@@ -84,9 +100,24 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
     setDraft((prev) => ({ ...prev, ...fields }))
   }
 
-  const maxHp = computeMaxHp(draft.classes, draft.abilityScores)
+  // Every taken feat's mechanical effects folded on top of the base sheet
+  // values — every derived stat below reads from these, never from
+  // draft.abilityScores/skillProficiencies/savingThrowProficiencies
+  // directly, so a feat that grants an ability bonus or a proficiency
+  // actually cascades into max HP, AC, initiative, saves, skills, passive
+  // perception. The ability score *input fields* still bind to the raw
+  // draft values — only derived, read-only numbers use the effective ones.
+  const activeFeats = activeFeatIds(draft.classes, character.asiSlotChoices)
+  const effScores = effectiveAbilityScores(draft.abilityScores, draft.classes, character.asiSlotChoices)
+  const effSkillProficiencies = effectiveSkillProficiencies(draft.skillProficiencies, activeFeats)
+  const effSaveProficiencies = effectiveSavingThrowProficiencies(draft.savingThrowProficiencies, activeFeats)
+  const speedBonus = featSpeedBonus(activeFeats) + armorSpeedPenalty(character.equipment, effScores)
+  const notes = featNotes(activeFeats)
+  const skillAdvantage = effectiveSkillAdvantage(activeFeats, character.equipment)
 
-  /** Raising a class's level bumps current HP by however much the (fully derived) max just went up, matching the 5e rule that HP gained on level-up is immediate, not just a higher ceiling — and fires onLevelUp so the level-up prompt can show what else was gained. */
+  const maxHp = computeMaxHp(draft.classes, effScores)
+
+  /** Raising a class's level bumps current HP by however much the (fully derived) max just went up, matching the 5e rule that HP gained on level-up is immediate, not just a higher ceiling. Whatever else the new level grants (class features, an ASI/feat slot, a subclass-choice slot) just appears on its own in Combat's Features tab — see FeaturesTab.tsx, which derives all of that live from class/level instead of requiring it to be accepted here. */
   function updateClass(index: number, fields: Partial<ClassLevel>): void {
     if (!draft.classes[index]) {
       patch({ classes: [...draft.classes, { className: '', level: 1, ...fields }] })
@@ -100,8 +131,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
       const prevMax = computeMaxHp(draft.classes, draft.abilityScores)
       const newMax = computeMaxHp(nextClasses, draft.abilityScores)
       updates.currentHp = draft.currentHp + (newMax - prevMax)
-      const className = nextClasses[index].className.trim()
-      if (onLevelUp && className) onLevelUp(className, prev.level, fields.level)
+      onLevelUp?.(prev.className || fields.className || '', prev.level, fields.level)
     }
 
     patch(updates)
@@ -113,6 +143,27 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
     const nextScores = { ...draft.abilityScores, [ability]: value }
     const newMax = computeMaxHp(draft.classes, nextScores)
     patch({ abilityScores: nextScores, currentHp: Math.max(0, draft.currentHp + (newMax - prevMax)) })
+  }
+
+  /** Every active bonus currently bumping one ability score — an ASI slot's flat increase, or a feat's fixed/chosen ability bonus — used both for the little hover tag on each ability card and for the removable list shown in edit mode. Removing one here deletes the underlying asiSlotChoices record (same effect as removing it from Features), since that record is the only place this bump lives. */
+  function abilityBonusSources(ability: Ability): { slotId: string; label: string; amount: number }[] {
+    const sources: { slotId: string; label: string; amount: number }[] = []
+    for (const slot of activeAsiSlotChoices(draft.classes, character.asiSlotChoices)) {
+      if (slot.kind === 'ability' && slot.abilityIncreases?.[ability]) {
+        sources.push({ slotId: slot.id, label: `Ability Score Improvement (Lv ${slot.level})`, amount: slot.abilityIncreases[ability]! })
+      } else if (slot.kind === 'feat') {
+        const feat = FEATS.find((f) => f.id === slot.featId)
+        for (const effect of feat?.effects ?? []) {
+          if (effect.kind === 'abilityScore' && effect.ability === ability) sources.push({ slotId: slot.id, label: feat!.name, amount: effect.amount })
+          else if (effect.kind === 'abilityScoreChoice' && slot.chosenAbility === ability) sources.push({ slotId: slot.id, label: feat!.name, amount: effect.amount })
+        }
+      }
+    }
+    return sources
+  }
+
+  function removeAbilityBonusSource(slotId: string): void {
+    onSave({ asiSlotChoices: character.asiSlotChoices.filter((s) => s.id !== slotId) })
   }
 
   function toggleSave(ability: Ability): void {
@@ -150,7 +201,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
   }
 
   function rollHitDie(pool: HitDicePool): void {
-    const conMod = abilityModifier(draft.abilityScores.con)
+    const conMod = abilityModifier(effScores.con)
     const roll = Math.floor(Math.random() * pool.hitDie) + 1
     const healed = Math.max(1, roll + conMod)
     const nextHp = Math.min(maxHp, draft.currentHp + healed)
@@ -281,6 +332,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         <HeaderField label="Subclass">
           <SubclassField
             className={primary?.className ?? ''}
+            level={primary?.level ?? 1}
             value={primary?.subclass ?? ''}
             onChange={(v) => updateClass(0, { subclass: v })}
             style={boxedInputStyle}
@@ -300,18 +352,18 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
           />
         </HeaderField>
         <VitalStat label="Proficiency" value={formatModifier(pb)} />
-        <VitalStat label="Perception" value={String(passivePerception(draft.abilityScores, draft.skillProficiencies, draft.classes))} />
+        <VitalStat label="Perception" value={String(passivePerception(effScores, effSkillProficiencies, draft.classes))} />
 
         <Divider />
 
         <VitalStat
           label="AC"
-          value={String(computeArmorClassFromEquipment(character.equipment, draft.abilityScores))}
+          value={String(computeArmorClassFromEquipment(character.equipment, effScores))}
           icon={<ShieldIcon size={22} style={{ color: 'var(--accent)' }} />}
           accent
         />
-        <VitalStat label="Initiative" value={formatModifier(computeInitiative(draft.abilityScores))} icon={<InitiativeIcon />} />
-        <VitalStat label="Speed" value={`${computeSpeed(draft.race)} ft`} icon={<SpeedIcon />} />
+        <VitalStat label="Initiative" value={formatModifier(computeInitiative(effScores))} icon={<InitiativeIcon />} />
+        <VitalStat label="Speed" value={`${computeSpeed(draft.race) + speedBonus} ft`} icon={<SpeedIcon />} />
         <VitalStat label="Hit Dice" value={hitDiceDisplay(draft.classes)} icon={<HitDiceIcon />} />
 
         <Divider />
@@ -424,6 +476,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
                   />
                   <SubclassField
                     className={c.className}
+                    level={c.level}
                     value={c.subclass ?? ''}
                     onChange={(v) => updateClass(i, { subclass: v })}
                     style={{ width: 150 }}
@@ -451,29 +504,118 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         + Add Class (Multiclass)
       </button>
 
-      <div>
-        <div className="gb-label">Ability Scores</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
-          {ABILITIES.map(({ id, label }) => (
-            <div key={id} className="gb-card" style={{ padding: 'var(--space-2)', textAlign: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                <AbilityIcon ability={id} style={{ color: 'var(--text-muted)' }} />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label.slice(0, 3)}</span>
-              </div>
-              <input
-                type="number"
-                min={1}
-                max={30}
-                className="gb-input"
-                style={{ textAlign: 'center', marginTop: 4 }}
-                value={draft.abilityScores[id]}
-                onChange={(e) => updateAbilityScore(id, Number(e.target.value))}
-              />
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                {formatModifier(abilityModifier(draft.abilityScores[id]))}
-              </div>
+      {notes.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {notes.map((n, i) => (
+            <div
+              key={i}
+              className="gb-card"
+              style={{ padding: 'var(--space-2) var(--space-3)', borderColor: 'var(--accent)', fontSize: 12 }}
+            >
+              <strong style={{ color: 'var(--accent-hover)' }}>{n.featName}.</strong> {n.text}
             </div>
           ))}
+        </div>
+      )}
+
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <div className="gb-label" style={{ margin: 0 }}>
+            Ability Scores
+          </div>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setAbilityEditMode((v) => !v)}
+              title={abilityEditMode ? 'Done editing' : 'Edit ability scores'}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: abilityEditMode ? 'var(--accent-hover)' : 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <PencilIcon />
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
+          {ABILITIES.map(({ id, label }) => {
+            const bonuses = abilityBonusSources(id)
+            const bonusExtra =
+              bonuses.length > 0
+                ? { label: 'Bonuses', value: bonuses.map((b) => `+${b.amount} — ${b.label}`).join('; ') }
+                : undefined
+            return (
+              <HoverDetailCard key={id} title={label} fields={[]} description={ABILITY_DESCRIPTIONS[id]} extra={bonusExtra}>
+                <div className="gb-card" style={{ padding: 'var(--space-2)', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                    <AbilityIcon ability={id} style={{ color: 'var(--text-muted)' }} />
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label.slice(0, 3)}</span>
+                  </div>
+                  {abilityEditMode ? (
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      className="gb-input"
+                      style={{ textAlign: 'center', marginTop: 4 }}
+                      value={draft.abilityScores[id]}
+                      onChange={(e) => updateAbilityScore(id, Number(e.target.value))}
+                    />
+                  ) : (
+                    <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4, cursor: 'default' }}>
+                      {effScores[id]}
+                      {bonuses.length > 0 && (
+                        <span
+                          style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', verticalAlign: 'super', marginLeft: 2 }}
+                          title={bonusExtra?.value}
+                        >
+                          +{bonuses.reduce((sum, b) => sum + b.amount, 0)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{formatModifier(abilityModifier(effScores[id]))}</div>
+                  {abilityEditMode && bonuses.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 6 }}>
+                      {bonuses.map((b) => (
+                        <div
+                          key={b.slotId}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 4,
+                            fontSize: 10,
+                            color: 'var(--text-muted)',
+                            background: 'var(--bg-sunken)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '2px 4px'
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            +{b.amount} {b.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeAbilityBonusSource(b.slotId)}
+                            title="Remove"
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </HoverDetailCard>
+            )
+          })}
         </div>
       </div>
 
@@ -481,7 +623,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         <div className="gb-label">Saving Throws</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
           {ABILITIES.map(({ id, label }) => {
-            const proficient = draft.savingThrowProficiencies.includes(id)
+            const proficient = effSaveProficiencies.includes(id)
             return (
               <button
                 key={id}
@@ -503,7 +645,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
                   {label.slice(0, 3)}
                 </span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: proficient ? 'var(--accent-hover)' : 'var(--text-primary)' }}>
-                  {formatModifier(savingThrowBonus(id, draft.abilityScores, draft.savingThrowProficiencies, draft.classes))}
+                  {formatModifier(savingThrowBonus(id, effScores, effSaveProficiencies, draft.classes))}
                 </span>
               </button>
             )
@@ -537,10 +679,11 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
               <div key={id} style={{ display: 'contents' }}>
                 <span style={{ fontSize: 12 }}>
                   {id} <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>({ability.toUpperCase()})</span>
+                  {skillAdvantage[id] && <AdvantageTag kind={skillAdvantage[id]!} skill={id} />}
                 </span>
-                <ProficiencyDot value={draft.skillProficiencies[id] ?? 'none'} onClick={() => cycleSkillProficiency(id)} />
+                <ProficiencyDot value={effSkillProficiencies[id] ?? 'none'} onClick={() => cycleSkillProficiency(id)} />
                 <span style={{ fontSize: 12, width: 28, textAlign: 'right' }}>
-                  {formatModifier(skillBonus(id, draft.abilityScores, draft.skillProficiencies, draft.classes))}
+                  {formatModifier(skillBonus(id, effScores, effSkillProficiencies, draft.classes))}
                 </span>
               </div>
             ))}
@@ -578,19 +721,38 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
 /** SRD-backed subclass picker — a dropdown of the real SRD subclass(es) for a recognized class (just one per class, per the SRD's own scope; see shared/compendium.ts), falling back to a freeform text input for an unrecognized/homebrew class name. A legacy or homebrew value that doesn't match any SRD option is kept as an extra "(custom)" option instead of being silently dropped. */
 function SubclassField({
   className,
+  level,
   value,
   onChange,
   style
 }: {
   className: string
+  /** This class's current level — gates the dropdown until the class's real subclass-choice level, since normal D&D doesn't let you pick one early. Ignored for homebrew classes (no SRD data to gate against anyway). */
+  level: number
   value: string
   onChange: (value: string) => void
   style?: CSSProperties
 }): JSX.Element {
-  const classId = CLASSES.find((c) => c.name.toLowerCase() === className.trim().toLowerCase())?.id
-  const options = classId ? subclassesForClass(classId) : []
+  const cls = CLASSES.find((c) => c.name.toLowerCase() === className.trim().toLowerCase())
+  const options = cls ? subclassesForClass(cls.id) : []
   if (options.length === 0) {
     return <input className="gb-input" style={style} value={value} onChange={(e) => onChange(e.target.value)} placeholder="Subclass" />
+  }
+  // Not yet chosen and not yet eligible — normal 5e picks a subclass via
+  // the inline chooser that auto-appears in Combat's Features tab once the
+  // class reaches subclassLevel (see FeaturesTab.tsx's SubclassChooser),
+  // not freely here. Once it's been set (or the eligible level is reached,
+  // e.g. an existing character that predates this gate), the field opens
+  // back up so a mistaken pick is still correctable.
+  if (!value && cls && level < cls.subclassLevel) {
+    return (
+      <div
+        style={{ ...style, padding: '5px 8px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}
+        title={`Chosen via Level Up at ${cls.name} level ${cls.subclassLevel}`}
+      >
+        Chosen at level {cls.subclassLevel}
+      </div>
+    )
   }
   const isKnownOrEmpty = value === '' || options.some((o) => o.name === value)
   return (
@@ -627,6 +789,30 @@ function VitalStat({ label, value, icon, accent }: { label: string; value: strin
       </div>
       <div style={{ fontSize: 16, fontWeight: 600, color: accent ? 'var(--accent)' : 'var(--text-primary)' }}>{value}</div>
     </div>
+  )
+}
+
+/** A small green "A" / red "D" badge — advantage or disadvantage currently in effect on a skill (from a feat's skillAdvantage/skillDisadvantage effect, or equipped armor's Stealth disadvantage; see effectiveSkillAdvantage in shared/compendium.ts). Purely informational, same read-only hover-for-detail spirit as the rest of the sheet. */
+function AdvantageTag({ kind, skill }: { kind: 'advantage' | 'disadvantage'; skill: string }): JSX.Element {
+  return (
+    <span
+      title={kind === 'advantage' ? `Advantage on ${skill} checks` : `Disadvantage on ${skill} checks`}
+      style={{
+        display: 'inline-block',
+        marginLeft: 3,
+        width: 12,
+        height: 12,
+        lineHeight: '12px',
+        textAlign: 'center',
+        fontSize: 9,
+        fontWeight: 700,
+        borderRadius: '50%',
+        color: '#fff',
+        background: kind === 'advantage' ? 'var(--success)' : 'var(--danger)'
+      }}
+    >
+      {kind === 'advantage' ? 'A' : 'D'}
+    </span>
   )
 }
 

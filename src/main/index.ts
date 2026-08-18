@@ -59,7 +59,7 @@ function createWindow(): BrowserWindow {
     // default) — just the color Electron paints before the page's own CSS
     // loads, so a mismatch here is only a flash-of-wrong-color, not a
     // functional issue.
-    backgroundColor: '#14110c',
+    backgroundColor: '#1a160f',
     // Fully custom chrome (frame: false) rather than titleBarStyle:'hidden'
     // + titleBarOverlay — the native overlay's Windows-side hit-testing for
     // the drag region turned out to be unreliable (window dragging would

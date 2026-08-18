@@ -14,6 +14,7 @@ import {
 import {
   CANTRIPS,
   SPELLS,
+  effectiveAbilityScores,
   getSpellById,
   knownSpellsLimit,
   searchSpells,
@@ -98,8 +99,11 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
     .map(Number)
     .sort((a, b) => a - b)
 
+  // A feat that boosts the spellcasting ability should raise DC/attack/prepared-count the same way an ASI does — see shared/compendium.ts's effectiveAbilityScores.
+  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
+
   // Prepared casters (Cleric/Druid/Wizard/Paladin) and known casters (Bard/Sorcerer/Warlock/Ranger) use different SRD rules, but from here they collapse into the same thing: a cap on how many leveled spells you can have on your list at once. Cantrips never count against either.
-  const spellCap = preparedSpellLimit(character.classes, character.abilityScores) ?? knownSpellsLimit(character.classes)
+  const spellCap = preparedSpellLimit(character.classes, effScores) ?? knownSpellsLimit(character.classes)
   const leveledSpellCount = draft.spells.filter((s) => s.level > 0).length
   const atSpellCap = spellCap !== null && leveledSpellCount >= spellCap
 
@@ -152,8 +156,8 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
     setEditingSpell(null)
   }
 
-  const dc = spellSaveDC(draft.spellcastingAbility, character.abilityScores, character.classes)
-  const casterAttackBonus = spellAttackBonus(draft.spellcastingAbility, character.abilityScores, character.classes)
+  const dc = spellSaveDC(draft.spellcastingAbility, effScores, character.classes)
+  const casterAttackBonus = spellAttackBonus(draft.spellcastingAbility, effScores, character.classes)
 
   const visibleSpells = draft.spells.filter(
     (s) =>

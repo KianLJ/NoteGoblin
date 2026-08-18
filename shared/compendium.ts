@@ -17,11 +17,15 @@ import featsData from './data/srd-feats.json'
 import {
   CLASSES,
   abilityModifier,
+  activeAsiSlotChoices,
+  activeFeatIds,
   proficiencyBonus,
   type Ability,
   type AbilityScores,
+  type AsiSlotChoice,
   type ClassLevel,
-  type EquipmentItem
+  type EquipmentItem,
+  type SkillName
 } from './dnd5e'
 
 export interface CompendiumSpell {
@@ -107,33 +111,177 @@ export interface CompendiumSubclassFeature {
 }
 
 /**
- * A feat. The SRD's open content only defines one (Grappler) — every other
- * published feat (Alert, Lucky, Sharpshooter, etc.) is Player's Handbook
- * content and isn't legally reproducible here. `prerequisiteAbility`, when
- * present, is checked against the character's ability scores before
- * offering the feat at an Ability Score Improvement level (see
- * LevelUpPrompt.tsx) — this is the one feat currently wired to actually
- * gate on/appear on the sheet; more can be added to srd-feats.json without
- * touching code, but won't have real SRD text unless it's genuinely SRD
- * content.
+ * A structured, mechanical effect a feat grants — this is what makes taking
+ * a feat actually change the sheet's numbers (ability scores, skills,
+ * saves, speed) instead of just adding a paragraph of text to Class
+ * Features.
+ *
+ * `abilityScore` is a fixed bump (always the same ability) — folded live
+ * into every derived stat via effectiveAbilityScores, same as an ASI.
+ * `abilityScoreChoice` is a player-choice bump (e.g. Grappler's "Strength
+ * or Dexterity") — it can't be resolved generically like `abilityScore`
+ * can, so FeaturesTab.tsx's AsiSlotChooser prompts for the choice and
+ * stores it as `chosenAbility` on the resolved AsiSlotChoice record (see
+ * shared/dnd5e.ts); effectiveAbilityScores reads that record to apply it,
+ * the same as a flat ASI, live every render (never baked into the base
+ * abilityScores directly).
+ *
+ * `note` is for a real rules effect that isn't a number change (e.g.
+ * advantage on grapple attacks, rerolling a damage die) — it still
+ * surfaces as a highlighted callout on the sheet, just not as a stat bump.
+ * Most SRD feat benefits are like this: situational combat/exploration
+ * behavior a static character sheet can't safely automate, not a flat
+ * modifier.
+ */
+export type FeatEffect =
+  | { kind: 'abilityScore'; ability: Ability; amount: number }
+  | { kind: 'abilityScoreChoice'; amount: number; options: Ability[] }
+  | { kind: 'skillProficiency'; skill: SkillName }
+  | { kind: 'savingThrowProficiency'; ability: Ability }
+  | { kind: 'speed'; amount: number }
+  | { kind: 'note'; text: string }
+  | { kind: 'skillAdvantage'; skill: SkillName }
+  | { kind: 'skillDisadvantage'; skill: SkillName }
+
+/**
+ * A feat, sourced from the SRD 5.2.1 (Creative Commons Attribution 4.0 —
+ * see the app's About/attribution notice). This is the SRD's actual,
+ * complete feat list — 4 Origin, 2 General, 4 Fighting Style, 7 Epic Boon
+ * — not the full Player's Handbook roster (Alert-adjacent PHB feats like
+ * Lucky, Sharpshooter, War Caster, etc. are separate PHB-exclusive content
+ * and aren't reproduced here). `prerequisiteAbility`, when present, is
+ * checked against the character's ability scores before offering the feat
+ * at an Ability Score Improvement slot (see FeaturesTab.tsx). `effects`
+ * is what actually gets applied to the sheet (see
+ * effectiveAbilityScores/effectiveSkillProficiencies/etc. below) — more
+ * feats can be added to srd-feats.json with their own `effects` array
+ * without touching any code.
  */
 export interface CompendiumFeat {
   id: string
   name: string
+  category: 'Origin' | 'General' | 'Fighting Style' | 'Epic Boon'
   prerequisite?: string
   prerequisiteAbility?: { ability: Ability; minimum: number }
+  /** A numeric character-level floor (General feats need 4+, Epic Boons need 19+) — checked separately from prerequisiteAbility since it's a different kind of gate (total character level, not an ability score). */
+  minLevel?: number
+  repeatable?: boolean
   desc: string
+  effects?: FeatEffect[]
 }
 
 export const SUBCLASSES: CompendiumSubclass[] = subclassesData as CompendiumSubclass[]
 export const SUBCLASS_FEATURES: CompendiumSubclassFeature[] = subclassFeaturesData as CompendiumSubclassFeature[]
 export const FEATS: CompendiumFeat[] = featsData as CompendiumFeat[]
 
+function resolveFeatEffects(featIds: string[]): FeatEffect[] {
+  return featIds.flatMap((id) => FEATS.find((f) => f.id === id)?.effects ?? [])
+}
+
+/**
+ * Ability scores with every *active* Ability Score Improvement — a flat
+ * `kind: 'ability'` slot, or a `kind: 'feat'` slot whose feat has a fixed
+ * `abilityScore` effect or a resolved `abilityScoreChoice` (via the slot's
+ * own `chosenAbility`) — added on top of the base sheet values. Pass this
+ * (never the raw `character.abilityScores`) into any derived-stat
+ * calculation, so a level-4 ASI or a feat that boosts an ability actually
+ * cascades into skills, saves, AC, spell DC, attack bonus, everywhere. The
+ * base scores themselves stay untouched — this is a read-only view for
+ * computing with, not what an ability score input field should be bound to.
+ * "Active" means the owning class is still at or above the slot's level —
+ * see activeAsiSlotChoices in shared/dnd5e.ts — so lowering a class's level
+ * automatically drops whatever that slot granted.
+ */
+export function effectiveAbilityScores(base: AbilityScores, classes: ClassLevel[], asiSlotChoices: AsiSlotChoice[]): AbilityScores {
+  const result = { ...base }
+  for (const slot of activeAsiSlotChoices(classes, asiSlotChoices)) {
+    if (slot.kind === 'ability' && slot.abilityIncreases) {
+      for (const [ability, amount] of Object.entries(slot.abilityIncreases) as [Ability, number][]) {
+        result[ability] += amount
+      }
+    } else if (slot.kind === 'feat' && slot.chosenAbility) {
+      const feat = FEATS.find((f) => f.id === slot.featId)
+      const choice = feat?.effects?.find((e): e is Extract<FeatEffect, { kind: 'abilityScoreChoice' }> => e.kind === 'abilityScoreChoice')
+      if (choice) result[slot.chosenAbility] += choice.amount
+    }
+  }
+  for (const effect of resolveFeatEffects(activeFeatIds(classes, asiSlotChoices))) {
+    if (effect.kind === 'abilityScore') result[effect.ability] += effect.amount
+  }
+  return result
+}
+
+/** Skill proficiencies with every taken feat's `skillProficiency` effects unioned in (a feat only ever grants proficiency, never expertise, so an existing 'expertise' entry is left alone). */
+export function effectiveSkillProficiencies(
+  base: Partial<Record<SkillName, 'proficient' | 'expertise'>>,
+  featIds: string[]
+): Partial<Record<SkillName, 'proficient' | 'expertise'>> {
+  const result = { ...base }
+  for (const effect of resolveFeatEffects(featIds)) {
+    if (effect.kind === 'skillProficiency' && !result[effect.skill]) result[effect.skill] = 'proficient'
+  }
+  return result
+}
+
+/** Saving throw proficiencies with every taken feat's `savingThrowProficiency` effects unioned in. */
+export function effectiveSavingThrowProficiencies(base: Ability[], featIds: string[]): Ability[] {
+  const granted = resolveFeatEffects(featIds)
+    .filter((e): e is Extract<FeatEffect, { kind: 'savingThrowProficiency' }> => e.kind === 'savingThrowProficiency')
+    .map((e) => e.ability)
+  return [...new Set([...base, ...granted])]
+}
+
+/** Total speed bonus (in feet) granted by taken feats — add to computeSpeed's result. */
+export function featSpeedBonus(featIds: string[]): number {
+  return resolveFeatEffects(featIds)
+    .filter((e): e is Extract<FeatEffect, { kind: 'speed' }> => e.kind === 'speed')
+    .reduce((sum, e) => sum + e.amount, 0)
+}
+
+/**
+ * Every skill currently under advantage or disadvantage — from a feat's
+ * `skillAdvantage`/`skillDisadvantage` effect, or (the one built-in source
+ * right now) Stealth disadvantage from equipped armor with the SRD's
+ * stealthDisadvantage flag set. Surfaced as a small green "A" / red "D" tag
+ * next to the skill in Overview. If a skill somehow ends up with both, they
+ * cancel out per the 5e rule (advantage and disadvantage together = neither) —
+ * that skill is simply left out of the result.
+ */
+export function effectiveSkillAdvantage(
+  featIds: string[],
+  equipment: EquipmentItem[]
+): Partial<Record<SkillName, 'advantage' | 'disadvantage'>> {
+  const result: Partial<Record<SkillName, 'advantage' | 'disadvantage'>> = {}
+  const advantaged = new Set<SkillName>()
+  const disadvantaged = new Set<SkillName>()
+  for (const effect of resolveFeatEffects(featIds)) {
+    if (effect.kind === 'skillAdvantage') advantaged.add(effect.skill)
+    else if (effect.kind === 'skillDisadvantage') disadvantaged.add(effect.skill)
+  }
+  if (armorStealthDisadvantage(equipment)) disadvantaged.add('Stealth')
+  for (const skill of advantaged) if (!disadvantaged.has(skill)) result[skill] = 'advantage'
+  for (const skill of disadvantaged) if (!advantaged.has(skill)) result[skill] = 'disadvantage'
+  return result
+}
+
+/** Non-numeric rules effects from taken feats (e.g. Grappler's grapple-attack advantage) — surfaced as callouts near Feats on the sheet, not folded into any number. */
+export function featNotes(featIds: string[]): { featName: string; text: string }[] {
+  const result: { featName: string; text: string }[] = []
+  for (const id of featIds) {
+    const feat = FEATS.find((f) => f.id === id)
+    if (!feat) continue
+    for (const effect of feat.effects ?? []) {
+      if (effect.kind === 'note') result.push({ featName: feat.name, text: effect.text })
+    }
+  }
+  return result
+}
+
 export function subclassesForClass(classId: string): CompendiumSubclass[] {
   return SUBCLASSES.filter((s) => s.classId === classId)
 }
 
-/** Real subclass feature content for one class+subclass, levels in `(fromLevel, toLevel]` — mirrors curatedFeaturesForLevelUp's own range semantics, since the two are meant to be merged by the caller (see LevelUpPrompt.tsx). */
+/** Real subclass feature content for one class+subclass, levels in `(fromLevel, toLevel]` — used by FeaturesTab.tsx to render a class's subclass-feature cards up to its current level. */
 export function subclassFeaturesForLevelUp(
   classId: string,
   subclassId: string,
@@ -145,10 +293,60 @@ export function subclassFeaturesForLevelUp(
   )
 }
 
-/** True if the character's ability scores meet this feat's prerequisite (always true for a feat with none). */
-export function meetsFeatPrerequisite(feat: CompendiumFeat, abilityScores: AbilityScores): boolean {
-  if (!feat.prerequisiteAbility) return true
-  return abilityScores[feat.prerequisiteAbility.ability] >= feat.prerequisiteAbility.minimum
+/** One option within a subclass feature that actually requires a player pick (e.g. Draconic Bloodline's dragon ancestor, Circle of the Land's terrain). `label` is the part after the colon (e.g. "Black - Acid Damage"); `name`/`desc` are the option's own full SRD entry. */
+export interface SubclassFeatureOption {
+  name: string
+  label: string
+  desc: string
+}
+
+/** A subclass feature at one level that's either a single fixed entry (`kind: 'single'`) or a set of mutually-exclusive named options the player must choose between (`kind: 'choice'`) — some SRD subclass features (Draconic Bloodline's ancestor, Circle of the Land's terrain, a Ranger archetype's sub-features) are written as one entry per option rather than one entry with an embedded choice, so FeaturesTab.tsx needs this grouping to know a pick is required instead of just listing every option as if the character had all of them. */
+export type GroupedSubclassFeature =
+  | { kind: 'single'; feature: CompendiumSubclassFeature }
+  | { kind: 'choice'; level: number; baseName: string; intro?: string; options: SubclassFeatureOption[] }
+
+/**
+ * Groups subclassFeaturesForLevelUp's flat rows by (level, name-before-colon).
+ * A group with only one row is a normal single feature. A group with 2+ rows
+ * is a choice: an entry with no colon in its name (if present) is flavor
+ * text shared by every option, not itself a pick; every colon-suffixed entry
+ * is one selectable option.
+ */
+export function groupedSubclassFeaturesForLevelUp(
+  classId: string,
+  subclassId: string,
+  fromLevel: number,
+  toLevel: number
+): GroupedSubclassFeature[] {
+  const flat = subclassFeaturesForLevelUp(classId, subclassId, fromLevel, toLevel)
+  const groups = new Map<string, CompendiumSubclassFeature[]>()
+  for (const f of flat) {
+    const baseName = f.name.split(':')[0].trim()
+    const key = `${f.level}:${baseName}`
+    const list = groups.get(key) ?? []
+    list.push(f)
+    groups.set(key, list)
+  }
+  const result: GroupedSubclassFeature[] = []
+  for (const list of groups.values()) {
+    if (list.length === 1) {
+      result.push({ kind: 'single', feature: list[0] })
+      continue
+    }
+    const intro = list.find((f) => !f.name.includes(':'))
+    const options = list
+      .filter((f) => f.name.includes(':'))
+      .map((f) => ({ name: f.name, label: f.name.split(':').slice(1).join(':').trim(), desc: f.desc }))
+    result.push({ kind: 'choice', level: list[0].level, baseName: list[0].name.split(':')[0].trim(), intro: intro?.desc, options })
+  }
+  return result.sort((a, b) => (a.kind === 'single' ? a.feature.level : a.level) - (b.kind === 'single' ? b.feature.level : b.level))
+}
+
+/** True if the character's ability scores meet this feat's prerequisite (always true for a feat with none). `characterLevel` is the ASI slot's level (see FeaturesTab.tsx's AsiSlotChooser) — omit it to skip the level check. */
+export function meetsFeatPrerequisite(feat: CompendiumFeat, abilityScores: AbilityScores, characterLevel?: number): boolean {
+  if (feat.prerequisiteAbility && abilityScores[feat.prerequisiteAbility.ability] < feat.prerequisiteAbility.minimum) return false
+  if (feat.minLevel && characterLevel !== undefined && characterLevel < feat.minLevel) return false
+  return true
 }
 
 const spellById = new Map(SPELLS.map((s) => [s.id, s]))
@@ -202,6 +400,11 @@ const SPELL_SLOTS_BY_CLASS_LEVEL = spellSlotsData as SpellSlotTable
  * always separate/additive under the real rules too, which is exactly
  * what summing naturally does here.
  */
+/** Raw per-level spell slot row (index 0 = 1st-level slots, ... index 8 = 9th-level slots) for one class at one level, straight from the SRD table — used by ClassTableTab.tsx to project the full 1-20 progression, not just the character's current level. Empty array for a non-caster or an unrecognized class. */
+export function spellSlotsForClassLevel(classId: string, level: number): number[] {
+  return SPELL_SLOTS_BY_CLASS_LEVEL[classId]?.[String(level)] ?? []
+}
+
 export function spellSlotsForClasses(classes: ClassLevel[]): Record<number, number> {
   const totals: Record<number, number> = {}
   for (const c of classes) {
@@ -228,6 +431,11 @@ const SPELLS_KNOWN_BY_CLASS_LEVEL = spellsKnownData as SpellsKnownTable
  * instead). Multiclass known-casters sum each class's own cap at its own
  * level, the same simplification spellSlotsForClasses uses.
  */
+/** Spells known at one level for one "known"-caster class (see knownSpellsLimit above for why this only applies to Bard/Sorcerer/Warlock/Ranger) — null if this class/level isn't in the table (non-caster, or a level with no cap). Used by ClassTableTab.tsx to project the full progression. */
+export function spellsKnownForClassLevel(classId: string, level: number): number | null {
+  return SPELLS_KNOWN_BY_CLASS_LEVEL[classId]?.[String(level)] ?? null
+}
+
 export function knownSpellsLimit(classes: ClassLevel[]): number | null {
   let total = 0
   let isKnownCaster = false
@@ -289,6 +497,153 @@ export function suggestedAttackAbility(weapon: CompendiumEquipment | undefined, 
 /** Weapon attack bonus = proficiency bonus + the chosen ability's modifier. Proficiency is assumed (there's no per-weapon-type proficiency tracking), which matches most characters' attacks — the one thing that's genuinely per-player is which ability governs the swing, which the caller supplies via `ability` (see suggestedAttackAbility for a sensible default). */
 export function weaponAttackBonus(ability: 'str' | 'dex', abilityScores: AbilityScores, classes: ClassLevel[]): number {
   return proficiencyBonus(classes) + abilityModifier(abilityScores[ability])
+}
+
+/**
+ * Every currently-equipped weapon, paired with its compendium data — this is
+ * what actually populates the Combat tab's Attacks list now, instead of a
+ * separate "add a weapon attack" step. Equip the weapon in Inventory and it
+ * shows up here automatically; unequip it there and it disappears from here
+ * the same way, matching the rest of the sheet's "derived, not stored"
+ * features. A custom (non-compendium) attack is unaffected — those stay in
+ * character.attacks and are added/edited directly on the Combat tab, since
+ * there's no compendium entry to equip for them.
+ */
+export function weaponAttacksFromEquipment(equipment: EquipmentItem[]): Array<{ item: EquipmentItem; weapon: CompendiumEquipment }> {
+  const result: Array<{ item: EquipmentItem; weapon: CompendiumEquipment }> = []
+  for (const item of equipment) {
+    if (!item.equipped || !item.compendiumId) continue
+    const weapon = getEquipmentById(item.compendiumId)
+    if (weapon?.category === 'Weapon') result.push({ item, weapon })
+  }
+  return result
+}
+
+/** Every character can always make an unarmed strike — 1 bludgeoning damage, Strength-based, no equipment required (SRD 2014 rule). Not stored, not removable, just always present on the Combat tab alongside whatever's equipped. */
+export const UNARMED_STRIKE = {
+  name: 'Unarmed Strike',
+  damage: '1',
+  damageType: 'Bludgeoning',
+  description: 'Instead of using a weapon to make a melee weapon attack, you can use an unarmed strike: a punch, kick, headbutt, or similar forceful blow. On a hit, an unarmed strike deals bludgeoning damage equal to 1 + your Strength modifier.'
+} as const
+
+/**
+ * -10 ft. per the SRD's "wearing armor you lack the Strength for" rule —
+ * only ever from *equipped* armor, and only armor that actually has a
+ * strMinimum (light/medium armor never do).
+ */
+export function armorSpeedPenalty(equipment: EquipmentItem[], abilityScores: AbilityScores): number {
+  const equippedArmor = equipment.filter((i) => i.equipped && i.compendiumId).map((i) => getEquipmentById(i.compendiumId!))
+  const underStrength = equippedArmor.some((a) => a?.category === 'Armor' && a.strMinimum && abilityScores.str < a.strMinimum)
+  return underStrength ? -10 : 0
+}
+
+/** True if any currently-equipped armor imposes Stealth disadvantage — surfaced as a small "D" tag on the Stealth skill row in Overview. */
+export function armorStealthDisadvantage(equipment: EquipmentItem[]): boolean {
+  return equipment
+    .filter((i) => i.equipped && i.compendiumId)
+    .map((i) => getEquipmentById(i.compendiumId!))
+    .some((a) => a?.category === 'Armor' && a.stealthDisadvantage)
+}
+
+/**
+ * A single, simplified default gear package per class — the SRD actually
+ * offers a choice of 2-4 equivalent packages (e.g. a Fighter picks chain
+ * mail OR leather armor + a longbow), which this doesn't model; it seeds one
+ * reasonable option so a new character isn't starting with an empty
+ * inventory, and every item is fully editable/removable afterward like
+ * anything else on the Inventory tab.
+ */
+const STARTING_EQUIPMENT: Record<string, { id: string; quantity: number; equip?: boolean }[]> = {
+  barbarian: [
+    { id: 'greataxe', quantity: 1, equip: true },
+    { id: 'handaxe', quantity: 2 },
+    { id: 'explorers-pack', quantity: 1 }
+  ],
+  bard: [
+    { id: 'rapier', quantity: 1, equip: true },
+    { id: 'leather-armor', quantity: 1, equip: true },
+    { id: 'dagger', quantity: 1 },
+    { id: 'lute', quantity: 1 },
+    { id: 'diplomats-pack', quantity: 1 }
+  ],
+  cleric: [
+    { id: 'mace', quantity: 1, equip: true },
+    { id: 'scale-mail', quantity: 1, equip: true },
+    { id: 'shield', quantity: 1, equip: true },
+    { id: 'priests-pack', quantity: 1 }
+  ],
+  druid: [
+    { id: 'scimitar', quantity: 1, equip: true },
+    { id: 'leather-armor', quantity: 1, equip: true },
+    { id: 'shield', quantity: 1, equip: true },
+    { id: 'explorers-pack', quantity: 1 }
+  ],
+  fighter: [
+    { id: 'chain-mail', quantity: 1, equip: true },
+    { id: 'longsword', quantity: 1, equip: true },
+    { id: 'shield', quantity: 1, equip: true },
+    { id: 'longbow', quantity: 1 },
+    { id: 'arrow', quantity: 20 },
+    { id: 'explorers-pack', quantity: 1 }
+  ],
+  monk: [
+    { id: 'shortsword', quantity: 1, equip: true },
+    { id: 'dart', quantity: 10 },
+    { id: 'dungeoneers-pack', quantity: 1 }
+  ],
+  paladin: [
+    { id: 'longsword', quantity: 1, equip: true },
+    { id: 'shield', quantity: 1, equip: true },
+    { id: 'chain-mail', quantity: 1, equip: true },
+    { id: 'priests-pack', quantity: 1 }
+  ],
+  ranger: [
+    { id: 'longbow', quantity: 1, equip: true },
+    { id: 'arrow', quantity: 20 },
+    { id: 'shortsword', quantity: 2, equip: true },
+    { id: 'leather-armor', quantity: 1, equip: true },
+    { id: 'explorers-pack', quantity: 1 }
+  ],
+  rogue: [
+    { id: 'rapier', quantity: 1, equip: true },
+    { id: 'shortbow', quantity: 1 },
+    { id: 'arrow', quantity: 20 },
+    { id: 'leather-armor', quantity: 1, equip: true },
+    { id: 'thieves-tools', quantity: 1 },
+    { id: 'burglars-pack', quantity: 1 }
+  ],
+  sorcerer: [
+    { id: 'dagger', quantity: 2, equip: true },
+    { id: 'component-pouch', quantity: 1 },
+    { id: 'explorers-pack', quantity: 1 }
+  ],
+  warlock: [
+    { id: 'crossbow-light', quantity: 1, equip: true },
+    { id: 'crossbow-bolt', quantity: 20 },
+    { id: 'component-pouch', quantity: 1 },
+    { id: 'leather-armor', quantity: 1, equip: true },
+    { id: 'dagger', quantity: 2 },
+    { id: 'scholars-pack', quantity: 1 }
+  ],
+  wizard: [
+    { id: 'quarterstaff', quantity: 1, equip: true },
+    { id: 'component-pouch', quantity: 1 },
+    { id: 'spellbook', quantity: 1 },
+    { id: 'scholars-pack', quantity: 1 }
+  ]
+}
+
+/** Builds EquipmentItem rows for a class's default starting gear (see STARTING_EQUIPMENT) — used by the character creation wizard so a new character isn't starting empty-handed. Unrecognized classId returns []. */
+export function startingEquipmentFor(classId: string): EquipmentItem[] {
+  const pkg = STARTING_EQUIPMENT[classId] ?? []
+  return pkg
+    .map(({ id, quantity, equip }): EquipmentItem | null => {
+      const item = getEquipmentById(id)
+      if (!item) return null
+      return { id: crypto.randomUUID(), name: item.name, quantity, weight: item.weight ?? 0, notes: '', compendiumId: item.id, equipped: !!equip }
+    })
+    .filter((i): i is EquipmentItem => !!i)
 }
 
 export function spellLevelLabel(level: number): string {

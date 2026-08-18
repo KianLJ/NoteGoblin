@@ -3,11 +3,10 @@ import type { CharacterSheet } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
 import { totalLevel } from '@shared/dnd5e'
 import { useAutosaveDraft } from './useAutosaveDraft'
-import { LevelUpPrompt } from './LevelUpPrompt'
+import { LevelUpPopup } from './LevelUpPopup'
 import { OverviewTab } from './characterSheetTabs/OverviewTab'
 import { InventoryTab } from './characterSheetTabs/InventoryTab'
 import { ClassTableTab } from './characterSheetTabs/ClassTableTab'
-import { ClassFeaturesTab } from './characterSheetTabs/ClassFeaturesTab'
 import { BackgroundTab } from './characterSheetTabs/BackgroundTab'
 
 interface CharacterSheetEditorProps {
@@ -18,7 +17,7 @@ interface CharacterSheetEditorProps {
   readOnly?: boolean
 }
 
-const TABS = ['Overview', 'Inventory', 'Class Table', 'Class Features', 'Background'] as const
+const TABS = ['Overview', 'Inventory', 'Class Table', 'Background'] as const
 type Tab = (typeof TABS)[number]
 
 interface PendingLevelUp {
@@ -27,7 +26,22 @@ interface PendingLevelUp {
   toLevel: number
 }
 
-/** Full D&D 5e stat block — keyed by character.id from the parent, so switching characters remounts this with fresh state. All tabs stay mounted (just hidden) rather than conditionally rendered, so a debounced edit mid-flight in a tab you switch away from still fires instead of being cancelled on unmount. */
+/**
+ * Full D&D 5e stat block — keyed by character.id from the parent, so
+ * switching characters remounts this with fresh state. All tabs stay
+ * mounted (just hidden) rather than conditionally rendered, so a debounced
+ * edit mid-flight in a tab you switch away from still fires instead of
+ * being cancelled on unmount.
+ *
+ * Raising a class's level in Overview is enough on its own — Combat's
+ * Features tab derives everything (class features, subclass features,
+ * ASI/feat choices, racial traits) live from class/level every render (see
+ * FeaturesTab.tsx), so a new level's content just appears, and lowering it
+ * makes that content disappear the same way. The level-up popup below is
+ * purely a convenience shortcut for whatever the level you just crossed
+ * unlocked — closing it without deciding anything loses nothing, since the
+ * same choice is still sitting there, inline, in Features.
+ */
 export function CharacterSheetEditor({ character, onSave, onDelete, readOnly }: CharacterSheetEditorProps): JSX.Element {
   const [tab, setTab] = useState<Tab>('Overview')
   const [nameDraft, setNameDraft] = useAutosaveDraft(character.name, (name) => onSave({ name }))
@@ -41,7 +55,7 @@ export function CharacterSheetEditor({ character, onSave, onDelete, readOnly }: 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {pendingLevelUp && !readOnly && (
-        <LevelUpPrompt
+        <LevelUpPopup
           character={character}
           className={pendingLevelUp.className}
           fromLevel={pendingLevelUp.fromLevel}
@@ -157,9 +171,6 @@ export function CharacterSheetEditor({ character, onSave, onDelete, readOnly }: 
         </div>
         <div style={{ display: tab === 'Class Table' ? 'block' : 'none' }}>
           <ClassTableTab character={character} onSave={onSave} readOnly={readOnly} />
-        </div>
-        <div style={{ display: tab === 'Class Features' ? 'block' : 'none' }}>
-          <ClassFeaturesTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
         <div style={{ display: tab === 'Background' ? 'block' : 'none' }}>
           <BackgroundTab character={character} onSave={onSave} readOnly={readOnly} />

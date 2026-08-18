@@ -61,11 +61,11 @@ const DEFAULT_COLORS: Record<ResolvedTheme, Record<string, string>> = {
     '--danger': '#8c3a35'
   },
   dark: {
-    '--bg-canvas': '#14110c',
-    '--bg-surface': '#241f17',
-    '--bg-surface-raised': '#332c20',
-    '--bg-sunken': '#100d09',
-    '--border-subtle': '#332c20',
+    '--bg-canvas': '#1a160f',
+    '--bg-surface': '#302921',
+    '--bg-surface-raised': '#453b2c',
+    '--bg-sunken': '#150f0a',
+    '--border-subtle': '#453b2c',
     '--border-strong': '#d6c69c',
     '--text-primary': '#f2ead6',
     '--text-secondary': '#c7b995',
@@ -200,50 +200,18 @@ export function initTheme(): void {
   })
 }
 
-export interface FontChoice {
-  id: string
-  label: string
-  /** Headings/titles. */
-  display: string
-  /** Everything else — body text, inputs, UI chrome. */
-  body: string
+/** The app's built-in default — used whenever the user hasn't picked an installed system font. */
+const DEFAULT_FONT_STACK = {
+  display: "'Cambria', 'Iowan Old Style', 'Georgia', serif",
+  body: "'Segoe UI Variable', 'Segoe UI', -apple-system, sans-serif"
 }
-
-// System-only stacks, no bundled/downloaded font files or external font
-// services — the CSP's style-src/font-src don't allow those, and it keeps
-// every choice actually available on whatever OS this happens to run on.
-export const FONT_CHOICES: FontChoice[] = [
-  {
-    id: 'classic',
-    label: 'Classic',
-    display: "'Cambria', 'Iowan Old Style', 'Georgia', serif",
-    body: "'Segoe UI Variable', 'Segoe UI', -apple-system, sans-serif"
-  },
-  {
-    id: 'modern',
-    label: 'Modern Sans',
-    display: "'Segoe UI Variable', 'Segoe UI', -apple-system, sans-serif",
-    body: "'Segoe UI Variable', 'Segoe UI', -apple-system, sans-serif"
-  },
-  {
-    id: 'storybook',
-    label: 'Storybook Serif',
-    display: "'Georgia', 'Iowan Old Style', 'Times New Roman', serif",
-    body: "'Georgia', 'Iowan Old Style', 'Times New Roman', serif"
-  },
-  {
-    id: 'typewriter',
-    label: 'Typewriter',
-    display: "'Consolas', 'Courier New', monospace",
-    body: "'Consolas', 'Courier New', monospace"
-  }
-]
+export const DEFAULT_FONT_ID = 'default'
 
 const FONT_KEY = 'gb-font-choice'
-/** Prefix marking a stored font id as an arbitrary installed system font (picked via querySystemFonts) rather than one of the curated FONT_CHOICES pairings. */
+/** Prefix marking a stored font id as an arbitrary installed system font (picked via querySystemFonts) rather than the built-in default. */
 const SYSTEM_FONT_PREFIX = 'system:'
 
-/** True for a locally-installed font id (as opposed to one of the curated FONT_CHOICES). */
+/** True for a locally-installed font id (as opposed to the built-in default). */
 export function isSystemFontId(id: string): boolean {
   return id.startsWith(SYSTEM_FONT_PREFIX)
 }
@@ -258,9 +226,8 @@ export function makeSystemFontId(family: string): string {
 
 export function getStoredFontId(): string {
   const stored = localStorage.getItem(FONT_KEY)
-  if (!stored) return FONT_CHOICES[0].id
-  if (isSystemFontId(stored)) return stored
-  return FONT_CHOICES.some((f) => f.id === stored) ? stored : FONT_CHOICES[0].id
+  if (stored && isSystemFontId(stored)) return stored
+  return DEFAULT_FONT_ID
 }
 
 export function applyFont(id: string): void {
@@ -270,14 +237,42 @@ export function applyFont(id: string): void {
     document.documentElement.style.setProperty('--font-body', `'${family}'`)
     return
   }
-  const choice = FONT_CHOICES.find((f) => f.id === id) ?? FONT_CHOICES[0]
-  document.documentElement.style.setProperty('--font-display', choice.display)
-  document.documentElement.style.setProperty('--font-body', choice.body)
+  document.documentElement.style.setProperty('--font-display', DEFAULT_FONT_STACK.display)
+  document.documentElement.style.setProperty('--font-body', DEFAULT_FONT_STACK.body)
 }
 
 export function setFont(id: string): void {
   localStorage.setItem(FONT_KEY, id)
   applyFont(id)
+}
+
+const FONT_SCALE_KEY = 'gb-font-scale'
+export const FONT_SCALE_MIN = 0.75
+export const FONT_SCALE_MAX = 1.5
+export const FONT_SCALE_DEFAULT = 1
+export const FONT_SCALE_STEPS = [0.75, 0.85, 1, 1.1, 1.25, 1.5]
+
+export function getStoredFontScale(): number {
+  const raw = localStorage.getItem(FONT_SCALE_KEY)
+  const n = raw ? Number(raw) : FONT_SCALE_DEFAULT
+  return Number.isFinite(n) && n >= FONT_SCALE_MIN && n <= FONT_SCALE_MAX ? n : FONT_SCALE_DEFAULT
+}
+
+/**
+ * Scales the whole rendered app proportionally to each element's own size —
+ * not just font-size — via Chromium's `zoom`, since most of the UI is sized
+ * in raw pixels rather than rem. This is what an oversized custom/system
+ * font (whose glyphs render far bigger than its declared px size implies)
+ * can be scaled back down to compensate for, without needing to change fonts.
+ */
+export function applyFontScale(scale: number): void {
+  ;(document.documentElement.style as unknown as { zoom: string }).zoom = String(scale)
+}
+
+export function setFontScale(scale: number): void {
+  const clamped = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, scale))
+  localStorage.setItem(FONT_SCALE_KEY, String(clamped))
+  applyFontScale(clamped)
 }
 
 /** Every installed system font family, alphabetized — via Chromium's Local Font Access API. Resolves to [] if the API isn't available (older Chromium) or the user denies the permission, so callers should treat an empty list as "fall back to the curated presets," not an error. */

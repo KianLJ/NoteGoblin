@@ -481,7 +481,8 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             EditorView.theme({
               '&': { height: '100%', fontSize: '14px', color: 'var(--text-primary)', backgroundColor: 'transparent' },
               '&.cm-focused': { outline: 'none' },
-              '.cm-content': { fontFamily: 'var(--font-body)', lineHeight: '1.7', padding: 0 },
+              '.cm-content': { fontFamily: 'var(--font-body)', lineHeight: '1.7', padding: 0, caretColor: 'var(--text-primary)' },
+              '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text-primary)' },
               '.cm-scroller': { fontFamily: 'var(--font-body)', overflow: 'auto' },
               '.cm-gutters': { display: 'none' },
               '.cm-line': { padding: 0 },

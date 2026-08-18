@@ -15,6 +15,24 @@ export const ABILITIES: { id: Ability; label: string }[] = [
   { id: 'cha', label: 'Charisma' }
 ]
 
+/**
+ * "The Six Abilities" — the SRD's own "Score Measures", "Make a Check
+ * To...", and "Make a Save To..." table entries (SRD 5.2.1, Creative
+ * Commons Attribution 4.0 — see the app's About/attribution notice), plus
+ * a closing line naming the skills that key off that ability and which
+ * classes use it to cast spells (not SRD text — derived from the SKILLS
+ * table and CLASSES below). Shown as a hover tooltip on each ability score
+ * (see OverviewTab.tsx).
+ */
+export const ABILITY_DESCRIPTIONS: Record<Ability, string> = {
+  str: 'Measures: Physical might.\nMake a check to lift, push, pull, or break something.\nMake a save to physically resist direct force.\nGoverns the Athletics skill, and melee attacks with most weapons.',
+  dex: 'Measures: Agility, reflexes, and balance.\nMake a check to move nimbly, quickly, or quietly.\nMake a save to dodge out of harm’s way.\nGoverns Acrobatics, Sleight of Hand, and Stealth, ranged weapon attacks, and your Armor Class and Initiative.',
+  con: 'Measures: Health and stamina.\nMake a check to push your body beyond normal limits.\nMake a save to endure a toxic hazard.\nHas no skills of its own, but sets your hit points and is the save most often called for to maintain Concentration.',
+  int: 'Measures: Reasoning and memory.\nMake a check to reason or remember.\nMake a save to recognize an illusion as fake.\nGoverns Arcana, History, Investigation, Nature, and Religion. Spellcasting ability for Wizards.',
+  wis: 'Measures: Perceptiveness and mental fortitude.\nMake a check to notice things in the environment or in creatures’ behavior.\nMake a save to resist a mental assault.\nGoverns Animal Handling, Insight, Medicine, Perception, and Survival. Spellcasting ability for Clerics, Druids, and Rangers.',
+  cha: 'Measures: Confidence, poise, and charm.\nMake a check to influence, entertain, or deceive.\nMake a save to assert your identity.\nGoverns Deception, Intimidation, Performance, and Persuasion. Spellcasting ability for Bards, Paladins, Sorcerers, and Warlocks.'
+}
+
 export type AbilityScores = Record<Ability, number>
 
 export const DEFAULT_ABILITY_SCORES: AbilityScores = {
@@ -85,6 +103,45 @@ export interface Race {
   abilityBonuses: Partial<AbilityScores>
   speed: number
   traits: string[]
+}
+
+/**
+ * Full text for every trait name used in RACES below — this app's species
+ * list models the 2014-ruleset traits (ability-score-granting species,
+ * Half-Elf/Half-Orc included), not the 2024 SRD's species list (which
+ * dropped ability bonuses from species entirely, moving them to
+ * Background, and replaced Half-Elf/Half-Orc with Goliath/Orc) — so these
+ * are standard 5e trait text, not verbatim SRD 5.2.1 quotes. Shown as a
+ * hover tooltip in FeaturesTab.tsx.
+ */
+export const RACE_TRAIT_DESCRIPTIONS: Record<string, string> = {
+  'Extra Language': 'You can speak, read, and write one extra language of your choice.',
+  Darkvision:
+    'You can see in dim light within a fixed range of you as if it were bright light, and in darkness as if it were dim light. You discern color in that darkness only as shades of gray.',
+  'Keen Senses': 'You have proficiency in the Perception skill.',
+  'Fey Ancestry': "You have advantage on saving throws against being charmed, and magic can't put you to sleep.",
+  Trance:
+    "You don't need to sleep. Instead, you meditate deeply for 4 hours a day. After resting this way, you gain the same benefit a human does from 8 hours of sleep.",
+  'Dwarven Resilience': 'You have advantage on saving throws against poison, and resistance against poison damage.',
+  Stonecunning:
+    'Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient in the History skill and add double your proficiency bonus to the check.',
+  Lucky: 'When you roll a 1 on a d20 for an attack roll, ability check, or saving throw, you can reroll the die and must use the new roll.',
+  Brave: 'You have advantage on saving throws against being frightened.',
+  'Halfling Nimbleness': 'You can move through the space of any creature that is of a size larger than yours.',
+  'Draconic Ancestry':
+    'You have draconic ancestry. Choose one type of dragon — your Breath Weapon and Damage Resistance traits are determined by that choice.',
+  'Breath Weapon':
+    'You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.',
+  'Damage Resistance': 'You have resistance to the damage type associated with your Draconic Ancestry.',
+  'Gnome Cunning': 'You have advantage on all Intelligence, Wisdom, and Charisma saving throws against magic.',
+  'Skill Versatility': 'You gain proficiency in two skills of your choice.',
+  'Relentless Endurance':
+    "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. You can't use this trait again until you finish a long rest.",
+  'Savage Attacks':
+    "When you score a critical hit with a melee weapon attack, you can roll one of the weapon's damage dice one additional time and add it to the extra damage of the critical hit.",
+  'Hellish Resistance': 'You have resistance to fire damage.',
+  'Infernal Legacy':
+    'You know the thaumaturgy cantrip. At 3rd level you can cast hellish rebuke once per long rest, and at 5th level darkness once per long rest — Charisma is your spellcasting ability for these.'
 }
 
 export const RACES: Race[] = [
@@ -161,6 +218,8 @@ export interface Class {
   savingThrowProficiencies: Ability[]
   skillChoice: { choose: number; from: SkillName[] }
   spellcastingAbility: Ability | null
+  /** The level this class picks a subclass at (1 for Cleric/Sorcerer/Warlock, 2 for Druid/Wizard, 3 for everyone else) — drives both the level-up prompt's subclass chooser and when OverviewTab's subclass field unlocks. */
+  subclassLevel: number
 }
 
 export const CLASSES: Class[] = [
@@ -171,7 +230,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'str',
     savingThrowProficiencies: ['str', 'con'],
     skillChoice: { choose: 2, from: ['Animal Handling', 'Athletics', 'Intimidation', 'Nature', 'Perception', 'Survival'] },
-    spellcastingAbility: null
+    spellcastingAbility: null,
+    subclassLevel: 3
   },
   {
     id: 'bard',
@@ -180,7 +240,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'cha',
     savingThrowProficiencies: ['dex', 'cha'],
     skillChoice: { choose: 3, from: SKILLS.map((s) => s.id) },
-    spellcastingAbility: 'cha'
+    spellcastingAbility: 'cha',
+    subclassLevel: 3
   },
   {
     id: 'cleric',
@@ -189,7 +250,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'wis',
     savingThrowProficiencies: ['wis', 'cha'],
     skillChoice: { choose: 2, from: ['History', 'Insight', 'Medicine', 'Persuasion', 'Religion'] },
-    spellcastingAbility: 'wis'
+    spellcastingAbility: 'wis',
+    subclassLevel: 1
   },
   {
     id: 'druid',
@@ -198,7 +260,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'wis',
     savingThrowProficiencies: ['int', 'wis'],
     skillChoice: { choose: 2, from: ['Arcana', 'Animal Handling', 'Insight', 'Medicine', 'Nature', 'Perception', 'Religion', 'Survival'] },
-    spellcastingAbility: 'wis'
+    spellcastingAbility: 'wis',
+    subclassLevel: 2
   },
   {
     id: 'fighter',
@@ -207,7 +270,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'str',
     savingThrowProficiencies: ['str', 'con'],
     skillChoice: { choose: 2, from: ['Acrobatics', 'Animal Handling', 'Athletics', 'History', 'Insight', 'Intimidation', 'Perception', 'Survival'] },
-    spellcastingAbility: null
+    spellcastingAbility: null,
+    subclassLevel: 3
   },
   {
     id: 'monk',
@@ -216,7 +280,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'dex',
     savingThrowProficiencies: ['str', 'dex'],
     skillChoice: { choose: 2, from: ['Acrobatics', 'Athletics', 'History', 'Insight', 'Religion', 'Stealth'] },
-    spellcastingAbility: null
+    spellcastingAbility: null,
+    subclassLevel: 3
   },
   {
     id: 'paladin',
@@ -225,7 +290,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'str',
     savingThrowProficiencies: ['wis', 'cha'],
     skillChoice: { choose: 2, from: ['Athletics', 'Insight', 'Intimidation', 'Medicine', 'Persuasion', 'Religion'] },
-    spellcastingAbility: 'cha'
+    spellcastingAbility: 'cha',
+    subclassLevel: 3
   },
   {
     id: 'ranger',
@@ -234,7 +300,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'dex',
     savingThrowProficiencies: ['str', 'dex'],
     skillChoice: { choose: 3, from: ['Animal Handling', 'Athletics', 'Insight', 'Investigation', 'Nature', 'Perception', 'Stealth', 'Survival'] },
-    spellcastingAbility: 'wis'
+    spellcastingAbility: 'wis',
+    subclassLevel: 3
   },
   {
     id: 'rogue',
@@ -243,7 +310,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'dex',
     savingThrowProficiencies: ['dex', 'int'],
     skillChoice: { choose: 4, from: ['Acrobatics', 'Athletics', 'Deception', 'Insight', 'Intimidation', 'Investigation', 'Perception', 'Performance', 'Persuasion', 'Sleight of Hand', 'Stealth'] },
-    spellcastingAbility: null
+    spellcastingAbility: null,
+    subclassLevel: 3
   },
   {
     id: 'sorcerer',
@@ -252,7 +320,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'cha',
     savingThrowProficiencies: ['con', 'cha'],
     skillChoice: { choose: 2, from: ['Arcana', 'Deception', 'Insight', 'Intimidation', 'Persuasion', 'Religion'] },
-    spellcastingAbility: 'cha'
+    spellcastingAbility: 'cha',
+    subclassLevel: 1
   },
   {
     id: 'warlock',
@@ -261,7 +330,8 @@ export const CLASSES: Class[] = [
     primaryAbility: 'cha',
     savingThrowProficiencies: ['wis', 'cha'],
     skillChoice: { choose: 2, from: ['Arcana', 'Deception', 'History', 'Intimidation', 'Investigation', 'Nature', 'Religion'] },
-    spellcastingAbility: 'cha'
+    spellcastingAbility: 'cha',
+    subclassLevel: 1
   },
   {
     id: 'wizard',
@@ -270,9 +340,26 @@ export const CLASSES: Class[] = [
     primaryAbility: 'int',
     savingThrowProficiencies: ['int', 'wis'],
     skillChoice: { choose: 2, from: ['Arcana', 'History', 'Insight', 'Investigation', 'Medicine', 'Religion'] },
-    spellcastingAbility: 'int'
+    spellcastingAbility: 'int',
+    subclassLevel: 2
   }
 ]
+
+/** The exact CLASS_LEVEL_FEATURES entry name that represents "choose your subclass" for each class — FeaturesTab.tsx excludes this row from a class's plain curated-feature list and renders an actual interactive picker (or, once chosen, a resolved card) in its place. */
+export const SUBCLASS_CHOICE_FEATURE_NAME: Record<string, string> = {
+  barbarian: 'Primal Path',
+  bard: 'Bard College',
+  cleric: 'Divine Domain',
+  druid: 'Druid Circle',
+  fighter: 'Martial Archetype',
+  monk: 'Monastic Tradition',
+  paladin: 'Sacred Oath',
+  ranger: 'Ranger Archetype',
+  rogue: 'Roguish Archetype',
+  sorcerer: 'Sorcerous Origin',
+  warlock: 'Otherworldly Patron',
+  wizard: 'Arcane Tradition'
+}
 
 export interface Background {
   id: string
@@ -628,6 +715,252 @@ export function curatedFeaturesForLevelUp(className: string, fromLevel: number, 
   return table.filter((f) => f.level > fromLevel && f.level <= toLevel)
 }
 
+/** Every ASI level (from CLASS_LEVEL_FEATURES's asi() rows) at or below `level` for a class — the set of slots FeaturesTab.tsx needs to render (resolved or as an inline chooser) for that class at its current level. */
+export function asiSlotLevelsUpToLevel(className: string, level: number): number[] {
+  return curatedFeaturesForLevelUp(className, 0, level)
+    .filter((f) => f.name === 'Ability Score Improvement')
+    .map((f) => f.level)
+}
+
+/**
+ * Every "Fighting Style" level (Fighter 1, Paladin 2, Ranger 2) at or below
+ * `level` — same shape as asiSlotLevelsUpToLevel. Under SRD 5.2.1, Fighting
+ * Style is granted as a pick from the "Fighting Style" category feats (see
+ * shared/compendium.ts's FEATS), so a slot here resolves into the exact same
+ * asiSlotChoices record an ASI-into-a-feat pick does (kind: 'feat') — it's
+ * just restricted to that one feat category and always free (no ability
+ * score prerequisite to gate it).
+ */
+export function fightingStyleSlotLevelsUpToLevel(className: string, level: number): number[] {
+  return curatedFeaturesForLevelUp(className, 0, level)
+    .filter((f) => f.name === 'Fighting Style')
+    .map((f) => f.level)
+}
+
+/** An AsiSlotChoice is "active" only while the class it belongs to is still at or above the level it resolves — lowering a class's level (not deleting the record) is enough to make it (and whatever it granted) disappear everywhere, and raising it back restores the exact same choice instead of forcing a re-pick. */
+export function activeAsiSlotChoices(classes: ClassLevel[], asiSlotChoices: AsiSlotChoice[]): AsiSlotChoice[] {
+  return asiSlotChoices.filter((slot) => {
+    const cls = classes.find((c) => c.className.toLowerCase() === slot.className.toLowerCase())
+    return !!cls && cls.level >= slot.level
+  })
+}
+
+/** Ids of every feat currently in effect — derived from active (see above) `kind: 'feat'` slot choices, never stored as its own list. */
+export function activeFeatIds(classes: ClassLevel[], asiSlotChoices: AsiSlotChoice[]): string[] {
+  return activeAsiSlotChoices(classes, asiSlotChoices)
+    .filter((s): s is AsiSlotChoice & { featId: string } => s.kind === 'feat' && !!s.featId)
+    .map((s) => s.featId)
+}
+
+/** Same active/inactive lifecycle as activeAsiSlotChoices — a SubclassFeatureChoice only counts while its class is still at or above the level it resolves. */
+export function activeSubclassFeatureChoices(classes: ClassLevel[], choices: SubclassFeatureChoice[]): SubclassFeatureChoice[] {
+  return choices.filter((choice) => {
+    const cls = classes.find((c) => c.className.toLowerCase() === choice.className.toLowerCase())
+    return !!cls && cls.level >= choice.level
+  })
+}
+
+/**
+ * A trackable class resource — the handful of D&D Beyond-style "click to
+ * use" mechanics (Rage, Ki points, Lay on Hands, Second Wind, ...) rather
+ * than the full class feature list, most of which is just flavor text with
+ * nothing to click. Deliberately scoped to what the SRD actually defines
+ * numbers for; homebrew/other-book resources (e.g. a subclass's own
+ * charges) aren't modeled here.
+ *
+ * `kind: 'uses'` is a set of discrete charges (pips) that reset all at once
+ * on the recharge; `kind: 'pool'` is a spendable numeric pool (Lay on
+ * Hands' HP) where you dial in how much of it you're using.
+ */
+export interface ClassResourceDef {
+  id: string
+  name: string
+  kind: 'uses' | 'pool'
+  /** The level (in this class) at which the resource is first gained. */
+  minLevel: number
+  /** A short rest also clears a 'long'-recharge resource — long rests clear everything — 'short' resources reset on either. */
+  recharge: 'short' | 'long'
+  /** Max uses (kind 'uses') or pool size (kind 'pool') at a given class level. */
+  max: (level: number, abilityMod: (ability: Ability) => number) => number
+  /** Short one-liner shown directly on the card. */
+  description: string
+  /** Full SRD rules text (2014 SRD, OGL) — shown as a hover tooltip in FeaturesTab.tsx, same hover-for-detail pattern as everything else on the sheet. */
+  fullDescription: string
+}
+
+/** Curated by class id — SRD-only, and only the classes/resources the SRD actually gives numbers for (Ranger and Rogue have no chargeable core resource in the SRD, so they're absent here). */
+export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
+  barbarian: [
+    {
+      id: 'barbarian-rage',
+      name: 'Rage',
+      kind: 'uses',
+      minLevel: 1,
+      recharge: 'long',
+      max: (level) => (level >= 20 ? 99 : level >= 17 ? 6 : level >= 12 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2),
+      description: 'Bonus action to fly into a rage: bonus melee damage, resistance to bludgeoning/piercing/slashing, advantage on Strength checks and saves.',
+      fullDescription:
+        "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action. While raging, you gain the following benefits if you aren't wearing heavy armor:\n- You have advantage on Strength checks and Strength saving throws.\n- When you make a melee weapon attack using Strength, you gain a bonus to the damage roll that increases as you level.\n- You have resistance to bludgeoning, piercing, and slashing damage.\nIf you are able to cast spells, you can't cast them or concentrate on them while raging.\nYour rage lasts for 1 minute. It ends early if you are knocked unconscious or if your turn ends and you haven't attacked a hostile creature since your last turn or taken damage since then. You can also end your rage on your turn as a bonus action.\nOnce you have raged the maximum number of times for your barbarian level, you must finish a long rest before you can rage again."
+    }
+  ],
+  bard: [
+    {
+      id: 'bard-inspiration',
+      name: 'Bardic Inspiration',
+      kind: 'uses',
+      minLevel: 1,
+      recharge: 'long',
+      max: (_level, abilityMod) => Math.max(1, abilityMod('cha')),
+      description: 'Bonus action to give one creature within 60 ft. an inspiration die to add to one ability check, attack roll, or saving throw.',
+      fullDescription:
+        "You can inspire others through stirring words or music. To do so, you use a bonus action on your turn to choose one creature other than yourself within 60 feet of you who can hear you. That creature gains one Bardic Inspiration die, a d6. Once within the next 10 minutes, the creature can roll the die and add the number rolled to one ability check, attack roll, or saving throw it makes. The creature can wait until after it rolls the d20 before deciding to use the Bardic Inspiration die, but must decide before the GM says whether the roll succeeds or fails. Once the Bardic Inspiration die is rolled, it is lost. A creature can have only one Bardic Inspiration die at a time.\nYou regain any expended uses when you finish a long rest.\nYour Bardic Inspiration die changes when you reach certain levels in this class: it becomes a d8 at 5th level, a d10 at 10th level, and a d12 at 15th level."
+    }
+  ],
+  cleric: [
+    {
+      id: 'cleric-channel-divinity',
+      name: 'Channel Divinity',
+      kind: 'uses',
+      minLevel: 2,
+      recharge: 'short',
+      max: (level) => (level >= 18 ? 3 : level >= 6 ? 2 : 1),
+      description: 'Channel divine energy for a supernatural effect, including Turn Undead.',
+      fullDescription:
+        'You gain the ability to channel divine energy directly from your deity, using that energy to fuel magical effects. You start with two such effects: Turn Undead and an effect determined by your domain. Some domains grant you additional effects as you advance in levels.\nWhen you use your Channel Divinity, you choose which effect to create. You must then finish a short or long rest to use your Channel Divinity again.\nSome Channel Divinity effects require saving throws — the DC equals your cleric spell save DC.\nBeginning at 6th level, you can use your Channel Divinity twice between rests, and beginning at 18th level, three times between rests. When you finish a short or long rest, you regain your expended uses.'
+    }
+  ],
+  druid: [
+    {
+      id: 'druid-wild-shape',
+      name: 'Wild Shape',
+      kind: 'uses',
+      minLevel: 2,
+      recharge: 'short',
+      max: () => 2,
+      description: 'Magically assume the shape of a beast you’ve seen before.',
+      fullDescription:
+        "You can use your action to magically assume the shape of a beast that you have seen before. You regain expended uses when you finish a short or long rest.\nYour druid level determines the beasts you can transform into — at 2nd level, for example, you can transform into any beast that has a challenge rating of 1/4 or lower that doesn't have a flying or swimming speed.\nYou can stay in a beast shape for a number of hours equal to half your druid level (rounded down), reverting early is possible as a bonus action, and you automatically revert if you fall unconscious, drop to 0 hit points, or die.\nWhile transformed: your game statistics are replaced by the beast's, but you keep your alignment, personality, Intelligence/Wisdom/Charisma scores, and proficiencies (using the higher bonus if both you and the beast share one). You can't cast spells or speak. You retain class/race features usable in the new form, but not special senses like darkvision unless the new form also has them."
+    }
+  ],
+  fighter: [
+    {
+      id: 'fighter-second-wind',
+      name: 'Second Wind',
+      kind: 'uses',
+      minLevel: 1,
+      recharge: 'short',
+      max: () => 1,
+      description: 'Bonus action to regain 1d10 + fighter level hit points.',
+      fullDescription:
+        'You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level. Once you use this feature, you must finish a short or long rest before you can use it again.'
+    },
+    {
+      id: 'fighter-action-surge',
+      name: 'Action Surge',
+      kind: 'uses',
+      minLevel: 2,
+      recharge: 'short',
+      max: (level) => (level >= 17 ? 2 : 1),
+      description: 'Take one additional action on your turn.',
+      fullDescription:
+        'You can push yourself beyond your normal limits for a moment. On your turn, you can take one additional action on top of your regular action and a possible bonus action.\nOnce you use this feature, you must finish a short or long rest before you can use it again. Starting at 17th level, you can use it twice before a rest, but only once on the same turn.'
+    },
+    {
+      id: 'fighter-indomitable',
+      name: 'Indomitable',
+      kind: 'uses',
+      minLevel: 9,
+      recharge: 'long',
+      max: (level) => (level >= 17 ? 3 : level >= 13 ? 2 : 1),
+      description: 'Reroll a failed saving throw — you must use the new roll.',
+      fullDescription:
+        "You can reroll a saving throw that you fail. If you do so, you must use the new roll, and you can't use this feature again until you finish a long rest. You can use this feature twice between long rests starting at 13th level, and three times between long rests starting at 17th level."
+    }
+  ],
+  monk: [
+    {
+      id: 'monk-ki',
+      name: 'Ki Points',
+      kind: 'pool',
+      minLevel: 2,
+      recharge: 'short',
+      max: (level) => level,
+      description: 'Spend to fuel Flurry of Blows, Patient Defense, Step of the Wind, and other ki features.',
+      fullDescription:
+        'Your training allows you to harness the mystic energy of ki. You can spend ki points to fuel various ki features — you start knowing three: Flurry of Blows, Patient Defense, and Step of the Wind, and learn more as you gain levels.\nWhen you spend a ki point, it is unavailable until you finish a short or long rest, at the end of which you draw all of your expended ki back into yourself (you must spend at least 30 minutes of the rest meditating).\nSome ki features require a saving throw: DC = 8 + your proficiency bonus + your Wisdom modifier.'
+    }
+  ],
+  paladin: [
+    {
+      id: 'paladin-lay-on-hands',
+      name: 'Lay on Hands',
+      kind: 'pool',
+      minLevel: 1,
+      recharge: 'long',
+      max: (level) => level * 5,
+      description: 'A pool of healing power — touch a creature to restore HP from the pool, 5 points to cure one disease or neutralize one poison.',
+      fullDescription:
+        "Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest — with that pool, you can restore a total number of hit points equal to your paladin level × 5.\nAs an action, you can touch a creature and draw power from the pool to restore hit points to it, up to the maximum remaining in your pool.\nAlternatively, you can expend 5 hit points from your pool to cure the target of one disease or neutralize one poison affecting it (you can cure multiple afflictions with one use, expending hit points separately for each). This feature has no effect on undead and constructs."
+    },
+    {
+      id: 'paladin-divine-sense',
+      name: 'Divine Sense',
+      kind: 'uses',
+      minLevel: 1,
+      recharge: 'long',
+      max: (_level, abilityMod) => 1 + Math.max(0, abilityMod('cha')),
+      description: 'Action to detect celestials, fiends, and undead within 60 ft.',
+      fullDescription:
+        'The presence of strong evil registers on your senses like a noxious odor, and powerful good rings like heavenly music in your ears. As an action, you can open your awareness to detect such forces: until the end of your next turn, you know the location of any celestial, fiend, or undead within 60 feet of you that is not behind total cover, and its type (but not its identity). You also detect the presence of any place or object that has been consecrated or desecrated.\nWhen you finish a long rest, you regain all expended uses.'
+    }
+  ],
+  sorcerer: [
+    {
+      id: 'sorcerer-sorcery-points',
+      name: 'Sorcery Points',
+      kind: 'pool',
+      minLevel: 2,
+      recharge: 'long',
+      max: (level) => level,
+      description: 'Spend to fuel Metamagic, or convert to/from spell slots.',
+      fullDescription:
+        'You tap into a deep wellspring of magic within yourself, represented by sorcery points, which allow you to create a variety of magical effects, including fueling your Metamagic options and converting to/from spell slots.\nYou can never have more sorcery points than shown for your sorcerer level. You regain all spent sorcery points when you finish a long rest.'
+    }
+  ],
+  wizard: [
+    {
+      id: 'wizard-arcane-recovery',
+      name: 'Arcane Recovery',
+      kind: 'uses',
+      minLevel: 1,
+      recharge: 'long',
+      max: () => 1,
+      description: 'Once per day, on a short rest, recover expended spell slots with a combined level ≤ half your wizard level (rounded up).',
+      fullDescription:
+        "You have learned to regain some of your magical energy by studying your spellbook. Once per day when you finish a short rest, you can choose expended spell slots to recover. The spell slots can have a combined level equal to or less than half your wizard level (rounded up), and none of the slots can be 6th level or higher.\nFor example, a 4th-level wizard can recover up to two levels' worth of spell slots — either one 2nd-level slot or two 1st-level slots."
+    }
+  ]
+}
+
+/** Every class resource this character currently has, each carrying its live max (recomputed from the class's current level, never stored) alongside the def itself. */
+export function resourcesForCharacter(
+  classes: ClassLevel[],
+  abilityScores: AbilityScores
+): Array<ClassResourceDef & { classId: string; className: string; currentMax: number }> {
+  const abilityMod = (a: Ability): number => abilityModifier(abilityScores[a])
+  const result: Array<ClassResourceDef & { classId: string; className: string; currentMax: number }> = []
+  for (const c of classes) {
+    const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
+    if (!cls) continue
+    const defs = CLASS_RESOURCES[cls.id] ?? []
+    for (const def of defs) {
+      if (c.level < def.minLevel) continue
+      result.push({ ...def, classId: cls.id, className: cls.name, currentMax: def.max(c.level, abilityMod) })
+    }
+  }
+  return result
+}
+
 export type ActionType = 'action' | 'bonus' | 'reaction'
 
 export interface Attack {
@@ -657,8 +990,10 @@ export interface EquipmentItem {
   category?: string
   /** Freeform for custom items (e.g. "15 gp") — compendium-linked items show their real cost instead. */
   cost?: string
-  /** Only meaningful for Armor-category items — an equipped armor/shield feeds into computeArmorClassFromEquipment (shared/compendium.ts) instead of the default unarmored AC formula. */
+  /** For Armor-category items, feeds into computeArmorClassFromEquipment (shared/compendium.ts) instead of the default unarmored AC formula. For Weapon-category items, an equipped one is what actually puts it on the Combat tab's Attacks list — see weaponAttacksFromEquipment; unequip it there (not a remove button in Combat) to take it off. */
   equipped?: boolean
+  /** Weapon-category items only, and only meaningful once equipped — which ability governs its attack roll (see weaponAttacksFromEquipment/suggestedAttackAbility). Lets a Finesse weapon's wielder pick Str or Dex instead of always defaulting to whichever the weapon suggests. */
+  attackAbility?: 'str' | 'dex'
   /** Links back to a shared/compendium.ts mundane equipment entry — see Attack.compendiumId. */
   compendiumId?: string
   /** Links back to a shared/compendium.ts magic item entry (Potion of Healing, Ring of Protection, etc.) — a separate id space/lookup from compendiumId since magic items are a different SRD list (rarity/category, no weight/cost) from mundane equipment. */
@@ -670,6 +1005,50 @@ export interface Feature {
   name: string
   source: string
   description: string
+}
+
+/**
+ * A resolved (or resolvable) Ability Score Improvement slot — one exists,
+ * implicitly, at every `asi()` level in CLASS_LEVEL_FEATURES for a class the
+ * character has (level 4, 8, 12, ... for most classes). FeaturesTab.tsx
+ * enumerates every such slot up to the class's *current* level and looks
+ * for a matching record here by (className, level); if none exists yet, it
+ * renders an inline chooser instead of a resolved card. Records for a level
+ * the class is no longer at (because the class level was lowered) are
+ * simply skipped everywhere — never deleted — so leveling back up restores
+ * the exact same choice instead of forcing a re-pick.
+ */
+export interface AsiSlotChoice {
+  id: string
+  className: string
+  level: number
+  kind: 'ability' | 'feat'
+  /** kind 'ability': e.g. `{ str: 2 }` or `{ str: 1, dex: 1 }`. */
+  abilityIncreases?: Partial<Record<Ability, number>>
+  /** kind 'feat': the chosen feat's id (shared/compendium.ts's FEATS). */
+  featId?: string
+  /** kind 'feat', only when that feat has an `abilityScoreChoice` effect (e.g. Grappler's "Strength or Dexterity") — which ability was picked. */
+  chosenAbility?: Ability
+}
+
+/**
+ * A resolved pick for a subclass feature that the SRD writes as several
+ * mutually-exclusive named options rather than one entry with an embedded
+ * choice (e.g. Draconic Bloodline's dragon ancestor, Circle of the Land's
+ * terrain) — see groupedSubclassFeaturesForLevelUp in shared/compendium.ts,
+ * which is what actually detects these groups from the flat feature data.
+ * `featureName` is the shared base name (e.g. "Dragon Ancestor"); `chosenName`
+ * is the full name of the specific option picked (e.g. "Dragon Ancestor:
+ * Black - Acid Damage"). Same active/inactive lifecycle as AsiSlotChoice —
+ * tagged with (className, level), only counted while the class is still at
+ * or above that level.
+ */
+export interface SubclassFeatureChoice {
+  id: string
+  className: string
+  level: number
+  featureName: string
+  chosenName: string
 }
 
 export interface Spell {
@@ -742,10 +1121,15 @@ export interface CharacterSheetData {
   currency: Currency
   equipment: EquipmentItem[]
 
+  /** Freeform, unstructured extras — homebrew boons, DM-granted notes, anything outside the automatic class-table/subclass/ASI/feat system below. Everything curated (class features, subclass features, ASI/feat choices, racial traits) is derived live from class/level instead of stored here — see FeaturesTab.tsx. */
   features: Feature[]
   customClassFeatures: CustomClassFeature[]
-  /** Ids of feats taken at an Ability Score Improvement level (see shared/compendium.ts's FEATS) — chosen instead of the +2/+1+1 ability increase for that level. */
-  feats: string[]
+  /** Every resolved (or still-resolvable) Ability Score Improvement slot — see AsiSlotChoice above. This is also where "which feats the character has" lives now (kind: 'feat' entries) — there's no separate feats list. */
+  asiSlotChoices: AsiSlotChoice[]
+  /** Every resolved pick for a subclass feature written as multiple named options — see SubclassFeatureChoice above. */
+  subclassFeatureChoices: SubclassFeatureChoice[]
+  /** How many charges/points of each class resource (see CLASS_RESOURCES below) have been spent — keyed by ClassResourceDef.id. The max is always computed live from class/level, never stored, so it can't drift out of sync with a level-up. */
+  resourceUsed: Record<string, number>
 
   spellcastingAbility: Ability | null
   spellSlots: Record<number, { total: number; used: number }>
@@ -780,7 +1164,9 @@ export function emptyCharacterSheet(): CharacterSheetData {
     equipment: [],
     features: [],
     customClassFeatures: [],
-    feats: [],
+    asiSlotChoices: [],
+    subclassFeatureChoices: [],
+    resourceUsed: {},
     spellcastingAbility: null,
     spellSlots: {},
     spells: [],
