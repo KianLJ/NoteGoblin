@@ -338,6 +338,14 @@ export interface AppApi {
       ApiResult<{ vaultPath: string; migrated: { campaigns: number; notes: number; folders: number } }>
     >
   }
+  // Discord Rich Presence — cosmetic, best-effort (see main/discordPresence.ts).
+  // AppShell.tsx calls this whenever the DM/player + active-campaign state
+  // changes; it's a no-op if Discord isn't running or no Client ID is
+  // configured, so nothing here needs to check for that first.
+  discord: {
+    /** null clears the presence line entirely. */
+    setActivity: (details: string | null) => Promise<void>
+  }
   /** The window is frame:false with a fully custom titlebar (see main/index.ts) — these replace the native minimize/maximize/close buttons. */
   windowControls: {
     minimize: () => Promise<void>

@@ -18,6 +18,7 @@ import { syncRelayAccount, changeRelayPassword, clearRelaySession } from './rela
 import * as relayClient from '@server/relay/relayClient'
 import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId } from './relayState'
 import { queryOnline } from './relaySocket'
+import { setDiscordActivity } from './discordPresence'
 import {
   startSessionHost,
   stopSessionHost,
@@ -848,6 +849,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('dice:broadcast', (_event, sessionId: string, roll: DiceRollLogEntry): void => {
     if (getHostedSession()?.sessionId === sessionId) broadcastDiceRoll(roll)
     else void sendSessionRequest('dice.roll', { roll })
+  })
+
+  // --- Discord Rich Presence -------------------------------------------------
+  ipcMain.handle('discord:set-activity', (_event, details: string | null): void => {
+    setDiscordActivity(details)
   })
 
   // --- Relay / Friends -----------------------------------------------------

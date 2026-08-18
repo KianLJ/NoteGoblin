@@ -129,6 +129,9 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('ws:dice-roll', listener)
     }
   },
+  discord: {
+    setActivity: (details) => ipcRenderer.invoke('discord:set-activity', details)
+  },
   relay: {
     status: () => ipcRenderer.invoke('relay:status'),
     myUserId: () => ipcRenderer.invoke('relay:my-user-id'),

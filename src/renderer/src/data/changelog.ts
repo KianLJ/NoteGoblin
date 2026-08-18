@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.1',
+    title: 'Discord Rich Presence',
+    highlights: [
+      'Added Discord Rich Presence — your status shows "DM for <campaign>" while hosting, or "Playing in <campaign>" while connected to someone else\'s',
+      'Shows a bit of goblin flavor the rest of the time instead of nothing',
+      'Entirely best-effort: works only if Discord\'s desktop client is running, and never affects the app if it isn\'t'
+    ]
+  },
+  {
     version: '0.3.0',
     title: 'Dice Tray',
     highlights: [

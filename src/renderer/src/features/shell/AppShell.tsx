@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModeToggle, type Mode } from './ModeToggle'
 import { WindowControls } from './WindowControls'
 import { VersionBadge } from './VersionBadge'
@@ -15,6 +15,20 @@ import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
 import { Bestiary } from '../bestiary/Bestiary'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
+
+// Discord presence line shown while the app is open but not actively DMing
+// or connected to a session — one is picked at random per launch (not
+// re-rolled on every render) rather than staying blank, since "the app's
+// just sitting there" is exactly the moment a bit of goblin flavor earns
+// its keep more than a literal status ever would.
+const IDLE_PRESENCE_LINES = [
+  'Hoarding notes in goblin hole',
+  'Rifling through old campaign notes',
+  'Sorting shinies into folders',
+  'Scribbling something in the dark',
+  'Guarding a pile of loot (mostly notes)',
+  'Goblining it'
+]
 
 interface AppShellProps {
   displayName: string
@@ -170,6 +184,25 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     if (!joinedSession) return
     window.goblin.characters.syncSelected(joinedSession.sessionId, playerWorkspace.lastActiveCharacter ?? null)
   }, [joinedSession, playerWorkspace.lastActiveCharacter])
+
+  // Picked once per launch (not re-rolled every idle stretch) so it stays
+  // recognizable as "your" line for the session rather than shuffling under you.
+  const idlePresenceLine = useMemo(() => IDLE_PRESENCE_LINES[Math.floor(Math.random() * IDLE_PRESENCE_LINES.length)], [])
+
+  // Discord Rich Presence — "DM for <campaign>" while actively hosting,
+  // "Playing in <campaign>" while connected to someone else's, and a bit of
+  // goblin flavor any other time (not hosting/not joined, or no campaign
+  // yet) rather than blank. See main/discordPresence.ts for why this is
+  // entirely best-effort: it's a no-op if Discord isn't running.
+  useEffect(() => {
+    const details =
+      mode === 'dm' && hostedSessionId && activeCampaign
+        ? `DM for ${activeCampaign.name}`
+        : mode === 'player' && joinedSession && playerWorkspace.activeCampaign
+          ? `Playing in ${playerWorkspace.activeCampaign.name}`
+          : idlePresenceLine
+    void window.goblin.discord.setActivity(details)
+  }, [mode, hostedSessionId, activeCampaign, joinedSession, playerWorkspace.activeCampaign, idlePresenceLine])
 
   // DM: every connected player's currently-selected character, kept live —
   // used by RightPanel's ConnectedPlayersList to open one as a read-only tab.
