@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { PlayersIcon, InitiativeIcon } from '../campaigns/panelIcons'
+import { PlayersIcon, DiceIcon, InitiativeIcon } from '../campaigns/panelIcons'
 import { PlayerInitiativeView } from './PlayerInitiativeView'
+import { DiceTray } from '../dice/DiceTray'
 import type { Note, PresencePlayer } from '@shared/ipc'
 
 interface PartySidebarProps {
@@ -18,7 +19,7 @@ interface PartySidebarProps {
 /** Right-side, player-mode-only panel — mirrors the DM's RightPanel/ConnectedPlayersList (including the ability to open a party member's sheet, read-only), but doubles as where a note's author manages who else can edit it, since that's the author's own call to make (not the DM's). */
 export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onToggleEditor, onViewCharacter }: PartySidebarProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
-  const [tab, setTab] = useState<'party' | 'initiative'>('party')
+  const [tab, setTab] = useState<'party' | 'initiative' | 'dice'>('party')
 
   useEffect(() => {
     if (!sessionId || !campaignId) {
@@ -51,16 +52,20 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
       >
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
           <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'party'} onClick={() => setTab('party')} />
+          <PartyTabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
           <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
         </div>
 
-        {/* Both stay mounted (hidden via CSS) rather than conditionally rendered — PlayerInitiativeView only
-            accumulates its state from live pushes (no fetch-on-mount), so unmounting it on every tab switch
-            used to throw away whatever it had seen until the DM's next edit pushed a fresh copy. */}
+        {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — both PlayerInitiativeView
+            and DiceTray only accumulate their state from live pushes (no fetch-on-mount), so unmounting on every
+            tab switch used to throw away whatever they'd seen until the next push arrived. */}
         <div style={{ display: tab === 'initiative' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <PlayerInitiativeView sessionId={sessionId} />
         </div>
-        <div style={{ display: tab === 'initiative' ? 'none' : 'contents' }}>
+        <div style={{ display: tab === 'dice' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
+          <DiceTray sessionId={sessionId} />
+        </div>
+        <div style={{ display: tab === 'party' ? 'contents' : 'none' }}>
             {canManage && (
               <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
                 Grant edit access to "{activeNote!.title || 'Untitled'}"

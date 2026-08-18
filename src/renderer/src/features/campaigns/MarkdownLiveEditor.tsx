@@ -18,6 +18,7 @@ import { WIKILINK_PATTERN, wikilinkIsDouble, wikilinkTarget } from '../../wikili
 import { resolveImageSrc } from '../../imageSrc'
 import { renderNoteMarkdown } from '../../markdown'
 import { saveCustomMonster } from '../../data/customBestiary'
+import { parseDiceCodeSpan, type DieSides } from '@shared/dice'
 import type { Note } from '@shared/ipc'
 
 export interface MarkdownLiveEditorHandle {
@@ -40,6 +41,8 @@ interface MarkdownLiveEditorProps {
   onWikilinkClick: (target: string) => void
   /** Right-click on a resolved wikilink — omit to leave right-click doing nothing special. */
   onWikilinkContextMenu?: (target: string, x: number, y: number) => void
+  /** Clicked an inline `` `dice: 2d6 + 3` `` roll widget (see DiceRollWidget below) — same shape Preview mode's click handler parses out of the button's data attribute, just already-parsed here since the widget is built from the same data. */
+  onDiceRoll?: (dice: { sides: DieSides; count: number; modifier: number }) => void
   /** Blocks actual document edits at the CodeMirror level (no cursor, no typing, paste rejected) — not a CSS overlay, which only stops mouse-driven interaction and leaves keyboard input (e.g. Tab-focusing in) still able to "type" locally even though nothing would ever save. Reconfigurable live via a Compartment since editorUserIds can change while a note's already open. */
   readOnly?: boolean
 }
@@ -151,6 +154,34 @@ class ImageWidget extends WidgetType {
   }
 }
 
+/** Renders an inline `` `dice: 2d6 + 3` `` code span as a clickable roll button, matching markdown.ts's Preview-mode `codespan` renderer exactly (same label, same emoji) so Write and Preview never look different for this. Clicking is handled by the `mousedown` handler below via `onDiceRoll` — the widget itself just displays; it doesn't roll on its own. */
+class DiceRollWidget extends WidgetType {
+  constructor(
+    readonly dice: { sides: DieSides; count: number; modifier: number },
+    readonly label: string
+  ) {
+    super()
+  }
+
+  eq(other: DiceRollWidget): boolean {
+    return other.label === this.label
+  }
+
+  toDOM(): HTMLElement {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'gb-dice-roll'
+    btn.dataset.diceRoll = JSON.stringify(this.dice)
+    btn.title = 'Click to roll'
+    btn.textContent = `🎲 ${this.label}`
+    return btn
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+
 /** Renders a ```statblock fenced block or a GFM table as the same rendered HTML the Preview pane shows (via renderNoteMarkdown, so statblock cards/tables — and any wikilinks inside a table cell — stay in perfect sync with Preview) instead of raw source, while the cursor/selection is elsewhere on it. Raw syntax reappears on click, same reveal rule as everything else in this file. */
 class BlockHtmlWidget extends WidgetType {
   constructor(readonly html: string) {
@@ -244,6 +275,24 @@ function buildDecorations(state: EditorState, knownTitles: Set<string>, campaign
             return false
           }
         }
+        return
+      }
+      // An inline `` `dice: 2d6 + 3` `` code span — same reveal-on-selection
+      // rule as everything else, rendered via the exact same
+      // parseDiceCodeSpan Preview mode's `codespan` renderer uses (see
+      // markdown.ts) so Write and Preview never disagree about what counts
+      // as a valid roll.
+      if (node.name === 'InlineCode') {
+        const marks = node.node.getChildren('CodeMark')
+        if (marks.length === 2) {
+          const text = doc.sliceString(marks[0].to, marks[1].from)
+          const dice = parseDiceCodeSpan(text)
+          if (dice && !selectionOverlaps(state, node.from, node.to)) {
+            const label = text.trim().replace(/^dice:\s*/i, '')
+            ranges.push(Decoration.replace({ widget: new DiceRollWidget(dice, label) }).range(node.from, node.to))
+          }
+        }
+        return false
       }
     }
   })
@@ -340,7 +389,8 @@ function livePreviewExtension(
   knownTitlesRef: { current: Set<string> },
   campaignId: string,
   onWikilinkClick: (target: string) => void,
-  onWikilinkContextMenu?: (target: string, x: number, y: number) => void
+  onWikilinkContextMenu?: (target: string, x: number, y: number) => void,
+  onDiceRoll?: (dice: { sides: DieSides; count: number; modifier: number }) => void
 ): Extension[] {
   // A StateField, not a ViewPlugin — CodeMirror only allows block-level
   // decorations (the Table/statblock widgets from replaceBlockWithWidget)
@@ -359,6 +409,16 @@ function livePreviewExtension(
   })
   const clickHandler = EditorView.domEventHandlers({
     mousedown(event, view) {
+      const diceBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-dice-roll]')
+      if (diceBtn) {
+        event.preventDefault()
+        try {
+          onDiceRoll?.(JSON.parse(diceBtn.dataset.diceRoll ?? '{}'))
+        } catch {
+          /* malformed dice-roll JSON — nothing sensible to roll */
+        }
+        return true
+      }
       const saveBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-save-statblock]')
       if (saveBtn) {
         event.preventDefault()
@@ -480,7 +540,7 @@ const imageDropHandler = EditorView.domEventHandlers({
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
   function MarkdownLiveEditor(
-    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, readOnly },
+    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, readOnly },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
@@ -500,7 +560,7 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
             markdown({ extensions: [GFM] }),
             EditorView.lineWrapping,
-            livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu),
+            livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu, onDiceRoll),
             EditorView.updateListener.of((update) => {
               if (update.docChanged) onChange(update.state.doc.toString())
             }),

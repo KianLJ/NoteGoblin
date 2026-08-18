@@ -12,11 +12,13 @@ import type {
   PresenceFrame,
   CampaignChangedFrame,
   ActiveCampaignChangedFrame,
-  InitiativeFrame
+  InitiativeFrame,
+  DiceRollFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
+import type { DiceRollLogEntry } from '@shared/dice'
 
 /**
  * DM side of a hosted session — like-for-like replacement of hostServer.ts's
@@ -214,6 +216,22 @@ export function broadcastInitiative(state: InitiativeState): void {
   }
 }
 
+/**
+ * Fans a dice roll out to every connected player — `roll` is already
+ * redacted at the source if it was a private roll (see
+ * shared/dice.ts's redactRollForBroadcast), so this never needs
+ * per-recipient sanitizing the way broadcastInitiative does. `excludeUserId`
+ * skips the roller themselves when relaying a player's own roll back out
+ * (see the 'dice.roll' dispatch case below) — they already have their own
+ * true copy locally and don't need it echoed back.
+ */
+export function broadcastDiceRoll(roll: DiceRollLogEntry, excludeUserId?: string): void {
+  const frame: DiceRollFrame = { type: 'dice-roll', roll }
+  for (const p of players.values()) {
+    if (p.userId !== excludeUserId) sendToRelay(p.userId, frame)
+  }
+}
+
 function handleFrame(raw: WebSocket.RawData): void {
   let message: unknown
   try {
@@ -382,6 +400,20 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
     case 'initiative.setMine': {
       const initiative = typeof p.initiative === 'number' ? p.initiative : null
       if (dmWindow) dmWindow.webContents.send('ws:player-initiative', { userId, initiative })
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
+    // A player's roll — pushed to the DM's own renderer so it shows up in
+    // their log too, then fanned out to every OTHER connected player (the
+    // roller already has their own true copy locally, see DiceTray.tsx, so
+    // they're excluded from the relay to avoid a duplicate entry). `roll` is
+    // already redacted at the source if it was private (shared/dice.ts) —
+    // this never sees or forwards the real numbers of a private roll.
+    case 'dice.roll': {
+      const roll = p.roll as DiceRollLogEntry | undefined
+      if (roll && typeof roll.id === 'string') {
+        if (dmWindow) dmWindow.webContents.send('ws:dice-roll', roll)
+        broadcastDiceRoll(roll, userId)
+      }
       return { reqId: frame.reqId, ok: true, data: undefined }
     }
     default:

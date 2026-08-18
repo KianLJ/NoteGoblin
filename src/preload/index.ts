@@ -7,6 +7,7 @@ import type {
   PlayerInitiativeUpdate,
   PresenceUpdate
 } from '../../shared/ipc'
+import type { DiceRollLogEntry } from '../../shared/dice'
 
 const api: AppApi = {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
@@ -118,6 +119,14 @@ const api: AppApi = {
       const listener = (_event: Electron.IpcRendererEvent, update: PlayerInitiativeUpdate): void => callback(update)
       ipcRenderer.on('ws:player-initiative', listener)
       return () => ipcRenderer.removeListener('ws:player-initiative', listener)
+    }
+  },
+  dice: {
+    broadcast: (sessionId, roll) => ipcRenderer.invoke('dice:broadcast', sessionId, roll),
+    onRoll: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, roll: DiceRollLogEntry): void => callback(roll)
+      ipcRenderer.on('ws:dice-roll', listener)
+      return () => ipcRenderer.removeListener('ws:dice-roll', listener)
     }
   },
   relay: {

@@ -7,6 +7,19 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.0',
+    title: 'Dice Tray',
+    highlights: [
+      'Added a shared Dice Tray — labeled buttons roll any number of any standard die (d4–d100) plus a modifier, available to the DM and every player',
+      'Every roll appears in a live log shared by the whole table, showing who rolled, the formula, the total, and the full per-die breakdown',
+      'Added a private-roll option — everyone else sees that you rolled, but the actual result stays visible only to you',
+      'Notes now support inline dice rolls — write `dice: 2d6 + 3` as inline code and it becomes a clickable roll button, in both the live-preview editor and Preview, logged to the same shared tray',
+      'All tabs in the DM and player header strips (including the new enemy statblock tabs) can now be dragged into any order, not just notes',
+      'Widened the Initiative tracker’s HP/AC fields so larger numbers no longer get clipped',
+      'The Party/Dice/Initiative panel is now available to players immediately, instead of only after joining a campaign'
+    ]
+  },
+  {
     version: '0.2.9',
     title: 'Enemy tabs, statblock spacing, and more class feature fixes',
     highlights: [

@@ -4,6 +4,7 @@
 import type { CharacterSheetData } from './dnd5e'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification, RelayStatus } from './relay'
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
+import type { DiceRollLogEntry } from './dice'
 
 export interface Identity {
   id: string
@@ -267,6 +268,23 @@ export interface AppApi {
     setMine: (initiative: number | null) => Promise<void>
     /** DM-only — fires when a connected player sets their own initiative. */
     onPlayerSet: (callback: (update: PlayerInitiativeUpdate) => void) => () => void
+  }
+  // Shared dice tray — both the DM and every connected player can roll, and
+  // everyone sees the same log. There's no "canonical" server-side state to
+  // fetch on join (unlike Initiative); each side just keeps its own local
+  // array of entries it's seen since it started watching, appending its own
+  // rolls immediately (optimistic — no round trip needed to see your own
+  // result) and everyone else's as they arrive over `onRoll`. A no-op call
+  // to `broadcast` while neither hosting nor joined (fully offline) is fine
+  // — the tray still works locally either way. `sessionId` is required (not
+  // optional like most other calls here) purely to disambiguate "hosting
+  // this session" from "not networked at all," the same reason
+  // characters.syncSelected takes one.
+  dice: {
+    /** Sends an already-rolled entry to the rest of the table — pass the redacted copy (see shared/dice.ts's redactRollForBroadcast) if it was a private roll; your own local log should keep the true, unredacted copy instead of whatever this sends. */
+    broadcast: (sessionId: string, roll: DiceRollLogEntry) => Promise<void>
+    /** Fires whenever anyone else at the table rolls — DM receives every player's roll (relayed via the DM, who also re-broadcasts it to the rest of the table); a player receives the DM's rolls and every other player's. */
+    onRoll: (callback: (roll: DiceRollLogEntry) => void) => () => void
   }
   // Friends/presence, backed by the relay (see relay/) rather than local
   // storage. The relay account itself is transparent — it's the same

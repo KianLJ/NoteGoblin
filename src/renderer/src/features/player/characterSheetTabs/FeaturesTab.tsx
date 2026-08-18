@@ -57,7 +57,7 @@ import {
 } from '../AsiChoosers'
 
 /** Warlock Mystic Arcanum — one specific spell of each level, chosen once each at 11th/13th/15th/17th, castable once per long rest without a slot. featureName matches the curated CLASS_LEVEL_FEATURES entry exactly, so resolving one both marks that row done and drives the chip/chooser below. */
-const MYSTIC_ARCANUM_LEVELS = [
+export const MYSTIC_ARCANUM_LEVELS = [
   { charLevel: 11, spellLevel: 6, featureName: 'Mystic Arcanum (6th level)' },
   { charLevel: 13, spellLevel: 7, featureName: 'Mystic Arcanum (7th level)' },
   { charLevel: 15, spellLevel: 8, featureName: 'Mystic Arcanum (8th level)' },
@@ -1115,7 +1115,7 @@ export function DivineSmiteCard({
 }
 
 /** Circle of the Land's "circle spells" aren't a choice (the two spells for a given terrain/level are fixed) — just a one-click grant once the terrain is known and the level threshold is reached, matching how a real player would just add them to their prepared list. */
-function CircleSpellsGrant({
+export function CircleSpellsGrant({
   classLabel,
   terrain,
   level,
@@ -1147,7 +1147,7 @@ function CircleSpellsGrant({
 }
 
 /** Bard Magical Secrets — unlike Mystic Arcanum/Spell Mastery (which pick from spells the character already knows), this learns a brand-new spell from ANY class's list, so it needs its own picker over the full compendium rather than reusing NamedOptionChooser's fixed name/description list. */
-function MagicalSecretsChooser({
+export function MagicalSecretsChooser({
   classLabel,
   level,
   maxSpellLevel,

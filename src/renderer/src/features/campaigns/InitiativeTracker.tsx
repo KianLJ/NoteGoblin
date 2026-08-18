@@ -369,7 +369,7 @@ export function InitiativeTracker({ sessionId, playerCharacters, onSelectMonster
                     className="gb-input"
                     value={c.currentHp}
                     onChange={(e) => setCombatantHp(c.id, Number(e.target.value))}
-                    style={{ width: 44, fontSize: 11, padding: '2px 4px' }}
+                    style={{ width: 60, fontSize: 11, padding: '2px 4px' }}
                   />
                   / {c.maxHp}
                 </label>
@@ -380,7 +380,7 @@ export function InitiativeTracker({ sessionId, playerCharacters, onSelectMonster
                     className="gb-input"
                     value={c.ac}
                     onChange={(e) => updateCombatant(c.id, { ac: Number(e.target.value) })}
-                    style={{ width: 36, fontSize: 11, padding: '2px 4px' }}
+                    style={{ width: 48, fontSize: 11, padding: '2px 4px' }}
                   />
                 </label>
               </div>

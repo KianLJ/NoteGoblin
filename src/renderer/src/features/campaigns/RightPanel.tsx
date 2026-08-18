@@ -3,11 +3,11 @@ import { ConnectedPlayersList } from './ConnectedPlayersList'
 import { InitiativeTracker } from './InitiativeTracker'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon } from './panelIcons'
+import { DiceTray } from '../dice/DiceTray'
 import type { CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
 
-// Extend this union as new tools land — a dice roller, etc.
-type RightPanelTab = 'players' | 'initiative'
+type RightPanelTab = 'players' | 'initiative' | 'dice'
 
 interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
@@ -35,7 +35,7 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
       >
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
           <TabButton icon={<PlayersIcon />} label="Players" active={tab === 'players'} onClick={() => setTab('players')} />
-          <TabButton icon={<DiceIcon />} label="Dice" disabled title="Coming soon" />
+          <TabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
           <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
         </div>
 
@@ -53,6 +53,9 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
           </div>
           <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
             <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} onSelectMonster={onSelectMonster} />
+          </div>
+          <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
+            <DiceTray sessionId={sessionId} />
           </div>
         </div>
       </div>
