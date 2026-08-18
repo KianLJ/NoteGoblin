@@ -3,6 +3,7 @@ import type { CharacterSheet } from '@shared/ipc'
 import type { CharacterSheetData, Currency, EquipmentItem } from '@shared/dnd5e'
 import {
   EQUIPMENT,
+  effectiveAbilityScores,
   getEquipmentById,
   getMagicItemById,
   searchEquipment,
@@ -128,11 +129,31 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
     return compendium?.category === listCategoryFilter
   })
 
+  const totalWeight = draft.equipment.reduce((sum, item) => sum + item.weight * item.quantity, 0)
+  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
+  // SRD carrying capacity: Strength score × 15 lb.
+  const carryCapacity = effScores.str * 15
+  const encumbered = totalWeight > carryCapacity
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
       {formOpen && (
         <CustomItemForm initial={editingItem ?? undefined} onSave={handleFormSave} onClose={() => setFormOpen(false)} />
       )}
+
+      <div>
+        <div className="gb-label">Carrying Weight</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: encumbered ? 'var(--danger)' : 'var(--text-primary)' }}>
+            {totalWeight} / {carryCapacity} lb.
+          </span>
+          {encumbered && (
+            <span className="gb-badge" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} title="Over your Strength score × 15 lb. carrying capacity">
+              Encumbered
+            </span>
+          )}
+        </div>
+      </div>
 
       <div>
         <div className="gb-label">Currency</div>
@@ -224,12 +245,16 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                     </Field>
                   )}
                   {(compendium?.cost || item.cost) && <Field label="Cost">{compendium?.cost ?? item.cost}</Field>}
-                  {compendium?.category === 'Armor' && (
+                  {(compendium?.category === 'Armor' || compendium?.category === 'Weapon') && (
                     <Button
                       variant={item.equipped ? 'primary' : 'secondary'}
                       onClick={() => updateItem(item.id, { equipped: !item.equipped })}
                       style={{ fontSize: 11, padding: '3px 8px' }}
-                      title="Equipped armor/shields feed into your AC"
+                      title={
+                        compendium.category === 'Armor'
+                          ? 'Equipped armor/shields feed into your AC'
+                          : 'Equipped weapons show up as attacks on the Combat tab'
+                      }
                     >
                       {item.equipped ? 'Equipped' : 'Equip'}
                     </Button>

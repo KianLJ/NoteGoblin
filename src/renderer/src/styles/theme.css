@@ -10,10 +10,10 @@
 
 :root {
   /* Ink (near-black, warm) — dark-mode surfaces / light-mode text */
-  --ink-950: #14110c;
-  --ink-900: #1b1712;
-  --ink-800: #241f17;
-  --ink-700: #332c20;
+  --ink-950: #1a160f;
+  --ink-900: #241e16;
+  --ink-800: #302921;
+  --ink-700: #453b2c;
   --ink-600: #4a4030;
 
   /* Parchment (warm off-white) — light-mode surfaces / dark-mode text */
@@ -87,7 +87,7 @@
      surface, not just barely-distinguishable dark-on-dark. */
   --bg-surface: var(--ink-800);
   --bg-surface-raised: var(--ink-700);
-  --bg-sunken: #100d09;
+  --bg-sunken: #150f0a;
   --border-subtle: var(--ink-700);
   --border-strong: var(--parchment-300);
   --text-primary: var(--parchment-100);

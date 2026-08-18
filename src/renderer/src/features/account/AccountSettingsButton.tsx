@@ -5,13 +5,15 @@ import { ChevronRightIcon } from '../campaigns/icons'
 import { ColorTokenEditor } from './ColorTokenEditor'
 import { emitIdentitySwitched } from '../auth/identityEvents'
 import {
-  FONT_CHOICES,
+  FONT_SCALE_STEPS,
   getStoredFontId,
+  getStoredFontScale,
   getStoredMode,
   isSystemFontId,
   makeSystemFontId,
   querySystemFonts,
   setFont,
+  setFontScale,
   setThemeMode,
   systemFontFamily,
   type ThemeMode
@@ -37,7 +39,15 @@ export function AccountSettingsButton(): JSX.Element {
       {open && (
         <div
           className="gb-card"
-          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 300, zIndex: 200 }}
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            left: 0,
+            width: 300,
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            zIndex: 200
+          }}
         >
           <AccountSettingsForm />
         </div>
@@ -72,6 +82,7 @@ function AccountSettingsForm(): JSX.Element {
 
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredMode())
   const [fontId, setFontIdState] = useState<string>(() => getStoredFontId())
+  const [fontScale, setFontScaleState] = useState<number>(() => getStoredFontScale())
   const [systemFonts, setSystemFonts] = useState<string[] | null>(null)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -101,6 +112,11 @@ function AccountSettingsForm(): JSX.Element {
   function chooseFont(id: string): void {
     setFont(id)
     setFontIdState(id)
+  }
+
+  function chooseFontScale(scale: number): void {
+    setFontScale(scale)
+    setFontScaleState(scale)
   }
 
   function loadSystemFonts(): void {
@@ -333,31 +349,53 @@ function AccountSettingsForm(): JSX.Element {
               </button>
             ))}
           </div>
-          <label className="gb-label">Font</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 'var(--space-3)' }}>
-            {FONT_CHOICES.map((font) => (
+          <label className="gb-label">Font size</label>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
+            {FONT_SCALE_STEPS.map((scale) => (
               <button
-                key={font.id}
+                key={scale}
                 type="button"
-                onClick={() => chooseFont(font.id)}
+                onClick={() => chooseFontScale(scale)}
                 style={{
-                  padding: '6px 8px',
+                  flex: 1,
+                  padding: '6px 0',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-subtle)',
-                  background: fontId === font.id ? 'var(--accent-subtle)' : 'transparent',
-                  color: fontId === font.id ? 'var(--accent-hover)' : 'var(--text-secondary)',
-                  fontSize: 13,
-                  fontFamily: font.display,
-                  fontWeight: fontId === font.id ? 700 : 400,
-                  textAlign: 'left',
+                  background: fontScale === scale ? 'var(--accent-subtle)' : 'transparent',
+                  color: fontScale === scale ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  fontSize: 12,
+                  fontWeight: fontScale === scale ? 700 : 400,
                   cursor: 'pointer'
                 }}
               >
-                {font.label}
+                {Math.round(scale * 100)}%
               </button>
             ))}
           </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-4px 0 var(--space-3)' }}>
+            Scales every part of the app proportionally — use this to compensate if an installed font below renders
+            unusually large.
+          </p>
           <label className="gb-label">Installed font</label>
+          <button
+            type="button"
+            onClick={() => chooseFont('default')}
+            style={{
+              padding: '6px 8px',
+              marginBottom: 6,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-subtle)',
+              background: !isSystemFontId(fontId) ? 'var(--accent-subtle)' : 'transparent',
+              color: !isSystemFontId(fontId) ? 'var(--accent-hover)' : 'var(--text-secondary)',
+              fontSize: 13,
+              fontWeight: !isSystemFontId(fontId) ? 700 : 400,
+              textAlign: 'left',
+              cursor: 'pointer',
+              width: '100%'
+            }}
+          >
+            Default
+          </button>
           {systemFonts === null ? (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Loading…</p>
           ) : systemFonts.length === 0 ? (
@@ -729,6 +767,20 @@ function AccountSettingsForm(): JSX.Element {
           )}
         </>
       )}
+
+      <hr className="gb-divider" style={{ margin: 'var(--space-3) 0 var(--space-2)' }} />
+      <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+        This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast
+        LLC, available at{' '}
+        <a href="https://www.dndbeyond.com/srd" target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>
+          dndbeyond.com/srd
+        </a>
+        . The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at{' '}
+        <a href="https://creativecommons.org/licenses/by/4.0/legalcode" target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>
+          creativecommons.org/licenses/by/4.0
+        </a>
+        .
+      </p>
     </div>
   )
 }

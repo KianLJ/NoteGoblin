@@ -2,20 +2,22 @@ import { useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { CLASSES, formatModifier, type ActionType, type Attack, type CharacterSheetData } from '@shared/dnd5e'
 import {
-  WEAPONS,
+  UNARMED_STRIKE,
+  effectiveAbilityScores,
   getEquipmentById,
-  searchEquipment,
   suggestedAttackAbility,
   weaponAttackBonus,
+  weaponAttacksFromEquipment,
   type CompendiumEquipment
 } from '@shared/compendium'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { SpellsTab } from './SpellsTab'
-import { CompendiumPicker } from '../CompendiumPicker'
+import { FeaturesTab } from './FeaturesTab'
 import type { DetailField } from '../CompendiumDetailModal'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { EntryCard } from '../EntryCard'
 import { CustomWeaponForm } from '../CustomWeaponForm'
+import { Button } from '../../../ui/Button'
 
 interface CombatDraft {
   attacks: Attack[]
@@ -32,8 +34,6 @@ const ACTION_TYPES: { id: ActionType; label: string }[] = [
   { id: 'bonus', label: 'Bonus Action' },
   { id: 'reaction', label: 'Reaction' }
 ]
-
-const WEAPON_DAMAGE_TYPES = Array.from(new Set(WEAPONS.map((w) => w.damageType).filter((t): t is string => !!t))).sort()
 
 function weaponFields(weapon: CompendiumEquipment): DetailField[] {
   const fields: DetailField[] = [
@@ -58,18 +58,19 @@ function customWeaponFields(attack: Attack): DetailField[] {
   return fields
 }
 
-/** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Spells reuses the standalone SpellsTab component (it owns its own autosave draft); both inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at the other panel. */
+/** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells/Features inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
 export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.Element {
   const isCaster =
     character.spellcastingAbility !== null ||
     character.classes.some((c) => CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())?.spellcastingAbility)
+  // A feat that boosts Str/Dex should raise attack bonus the same way an
+  // ASI does — see shared/compendium.ts's effectiveAbilityScores.
+  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
 
-  const [innerTab, setInnerTab] = useState<'Attacks' | 'Spells'>('Attacks')
+  const [innerTab, setInnerTab] = useState<'Attacks' | 'Spells' | 'Features'>('Attacks')
   const [formOpen, setFormOpen] = useState(false)
   const [editingAttack, setEditingAttack] = useState<Attack | null>(null)
   const [listSearch, setListSearch] = useState('')
-  const [listDamageTypeFilter, setListDamageTypeFilter] = useState('all')
-  const [pickerDamageTypeFilter, setPickerDamageTypeFilter] = useState('all')
   const [draft, setDraft] = useAutosaveDraft<CombatDraft>({ attacks: character.attacks }, onSave, readOnly)
 
   function patch(fields: Partial<CombatDraft>): void {
@@ -80,22 +81,9 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
     patch({ attacks: draft.attacks.map((a) => (a.id === id ? { ...a, ...fields } : a)) })
   }
 
-  function addWeaponFromCompendium(weapon: CompendiumEquipment): void {
-    patch({
-      attacks: [
-        ...draft.attacks,
-        {
-          id: crypto.randomUUID(),
-          name: weapon.name,
-          attackAbility: suggestedAttackAbility(weapon, character.abilityScores),
-          damage: weapon.damageDice ?? '',
-          damageType: weapon.damageType ?? '',
-          notes: '',
-          actionType: 'action',
-          compendiumId: weapon.id
-        }
-      ]
-    })
+  /** Weapon attacks come from equipping the weapon in Inventory now (see weaponAttacksFromEquipment) — writes to character.equipment go straight through onSave rather than this tab's own attacks draft, since equipment isn't this tab's data. */
+  function setWeaponAttackAbility(equipmentItemId: string, ability: 'str' | 'dex'): void {
+    onSave({ equipment: character.equipment.map((i) => (i.id === equipmentItemId ? { ...i, attackAbility: ability } : i)) })
   }
 
   function openCreateForm(): void {
@@ -115,11 +103,18 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
     setEditingAttack(null)
   }
 
-  const visibleAttacks = draft.attacks.filter(
-    (a) =>
-      (listSearch.trim() === '' || a.name.toLowerCase().includes(listSearch.trim().toLowerCase())) &&
-      (listDamageTypeFilter === 'all' || a.damageType.toLowerCase() === listDamageTypeFilter.toLowerCase())
-  )
+  // Equipping a weapon in Inventory is what actually puts it here now — see
+  // weaponAttacksFromEquipment. `draft.attacks` (without a compendiumId) is
+  // custom, freeform attacks only. A stored attack that still has a
+  // compendiumId is a leftover from before this change; it keeps showing
+  // (nothing was lost) as long as an equipped inventory item with the same
+  // weapon isn't already covering it, to avoid a duplicate row.
+  const equippedWeapons = weaponAttacksFromEquipment(character.equipment)
+  const equippedWeaponIds = new Set(equippedWeapons.map((w) => w.weapon.id))
+  const legacyStoredWeaponAttacks = draft.attacks.filter((a) => a.compendiumId && !equippedWeaponIds.has(a.compendiumId))
+  const customAttacks = draft.attacks.filter((a) => !a.compendiumId)
+
+  const matchesSearch = (name: string): boolean => listSearch.trim() === '' || name.toLowerCase().includes(listSearch.trim().toLowerCase())
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -144,6 +139,13 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
             Spells
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setInnerTab('Features')}
+          style={{ ...innerTabStyle, borderBottomColor: innerTab === 'Features' ? 'var(--accent)' : 'transparent', color: innerTab === 'Features' ? 'var(--text-primary)' : 'var(--text-muted)' }}
+        >
+          Features
+        </button>
         {!isCaster && (
           <button
             type="button"
@@ -158,7 +160,7 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
       </div>
 
       <div style={{ display: innerTab === 'Attacks' ? 'block' : 'none' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
           <input
             className="gb-input"
             placeholder="Search…"
@@ -166,43 +168,87 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
             onChange={(e) => setListSearch(e.target.value)}
             style={{ width: 130, fontSize: 12, padding: '4px 8px' }}
           />
-          <select
-            className="gb-input"
-            style={{ fontSize: 12, padding: '4px 8px' }}
-            value={listDamageTypeFilter}
-            onChange={(e) => setListDamageTypeFilter(e.target.value)}
-          >
-            <option value="all">All Types</option>
-            {WEAPON_DAMAGE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
-          {visibleAttacks.map((attack) => {
-            const weapon = attack.compendiumId ? getEquipmentById(attack.compendiumId) : undefined
+          {matchesSearch(UNARMED_STRIKE.name) && (
+            <HoverDetailCard title={UNARMED_STRIKE.name} subtitle="Always available" fields={[]} description={UNARMED_STRIKE.description}>
+              <EntryCard name={<LockedValue value={UNARMED_STRIKE.name} />} badge={<span className="gb-badge">{UNARMED_STRIKE.damageType}</span>}>
+                <MiniStat label="Atk" value={formatModifier(weaponAttackBonus('str', effScores, character.classes))} />
+                <LockedValue value={UNARMED_STRIKE.damage} />
+                <LockedValue value="Action" />
+              </EntryCard>
+            </HoverDetailCard>
+          )}
+
+          {equippedWeapons
+            .filter(({ weapon }) => matchesSearch(weapon.name))
+            .map(({ item, weapon }) => {
+              const ability = item.attackAbility ?? suggestedAttackAbility(weapon, effScores)
+              const bonus = weaponAttackBonus(ability, effScores, character.classes)
+              return (
+                <HoverDetailCard key={item.id} title={weapon.name} subtitle="Equipped weapon" fields={weaponFields(weapon)} description={weapon.description ?? ''}>
+                  <EntryCard name={<LockedValue value={weapon.name} />} badge={weapon.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}>
+                    <MiniStat label="Atk" value={formatModifier(bonus)} />
+                    <select
+                      className="gb-input"
+                      style={miniSelectStyle}
+                      value={ability}
+                      onChange={(e) => setWeaponAttackAbility(item.id, e.target.value as 'str' | 'dex')}
+                      title="Which ability governs this attack"
+                      disabled={readOnly}
+                    >
+                      <option value="str">Str</option>
+                      <option value="dex">Dex</option>
+                    </select>
+                    <LockedValue value={weapon.damageDice ?? '—'} />
+                  </EntryCard>
+                </HoverDetailCard>
+              )
+            })}
+
+          {legacyStoredWeaponAttacks.filter((a) => matchesSearch(a.name)).map((attack) => {
+            const weapon = getEquipmentById(attack.compendiumId!)
             const ability = attack.attackAbility ?? 'str'
-            const bonus = weaponAttackBonus(ability, character.abilityScores, character.classes)
+            const bonus = weaponAttackBonus(ability, effScores, character.classes)
             return (
               <HoverDetailCard
                 key={attack.id}
-                title={weapon?.name ?? (attack.name || 'Untitled Attack')}
-                subtitle={weapon ? 'Weapon' : attack.weaponRange}
+                title={weapon?.name ?? attack.name}
+                subtitle="Weapon"
                 fields={weapon ? weaponFields(weapon) : customWeaponFields(attack)}
                 description={weapon?.description ?? attack.notes}
               >
                 <EntryCard
                   name={<LockedValue value={weapon?.name ?? attack.name} />}
-                  badge={
-                    weapon?.damageType ? (
-                      <span className="gb-badge">{weapon.damageType}</span>
-                    ) : attack.damageType ? (
-                      <span className="gb-badge">{attack.damageType}</span>
-                    ) : undefined
-                  }
-                  onEdit={weapon ? undefined : () => openEditForm(attack)}
+                  badge={weapon?.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}
+                  onRemove={() => patch({ attacks: draft.attacks.filter((a) => a.id !== attack.id) })}
+                >
+                  <MiniStat label="Atk" value={formatModifier(bonus)} />
+                  <select
+                    className="gb-input"
+                    style={miniSelectStyle}
+                    value={ability}
+                    onChange={(e) => updateAttack(attack.id, { attackAbility: e.target.value as 'str' | 'dex' })}
+                    title="Which ability governs this attack"
+                  >
+                    <option value="str">Str</option>
+                    <option value="dex">Dex</option>
+                  </select>
+                  <LockedValue value={attack.damage} />
+                </EntryCard>
+              </HoverDetailCard>
+            )
+          })}
+
+          {customAttacks.filter((a) => matchesSearch(a.name)).map((attack) => {
+            const ability = attack.attackAbility ?? 'str'
+            const bonus = weaponAttackBonus(ability, effScores, character.classes)
+            return (
+              <HoverDetailCard key={attack.id} title={attack.name || 'Untitled Attack'} subtitle={attack.weaponRange} fields={customWeaponFields(attack)} description={attack.notes}>
+                <EntryCard
+                  name={<LockedValue value={attack.name} />}
+                  badge={attack.damageType ? <span className="gb-badge">{attack.damageType}</span> : undefined}
+                  onEdit={() => openEditForm(attack)}
                   onRemove={() => patch({ attacks: draft.attacks.filter((a) => a.id !== attack.id) })}
                 >
                   <MiniStat label="Atk" value={formatModifier(bonus)} />
@@ -234,31 +280,13 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
             )
           })}
         </div>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>
+          Equip a weapon on the Inventory tab to add it here automatically — unequip it there to remove it.
+        </p>
         <div style={{ marginTop: 8 }}>
-          <CompendiumPicker
-            search={(q) => searchEquipment(pickerDamageTypeFilter === 'all' ? WEAPONS : WEAPONS.filter((w) => w.damageType === pickerDamageTypeFilter), q)}
-            getLabel={(w: CompendiumEquipment) => w.name}
-            getSublabel={(w: CompendiumEquipment) => `${w.damageDice ?? ''} ${w.damageType ?? ''}`.trim()}
-            onPick={addWeaponFromCompendium}
-            onAddCustom={openCreateForm}
-            buttonLabel="+ Add Attack"
-            searchPlaceholder="Search SRD weapons…"
-            filters={
-              <select
-                className="gb-input"
-                style={{ fontSize: 12 }}
-                value={pickerDamageTypeFilter}
-                onChange={(e) => setPickerDamageTypeFilter(e.target.value)}
-              >
-                <option value="all">All Damage Types</option>
-                {WEAPON_DAMAGE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            }
-          />
+          <Button variant="secondary" onClick={openCreateForm} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
+            + Add Custom Attack
+          </Button>
         </div>
       </div>
 
@@ -267,6 +295,10 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
           <SpellsTab character={character} onSave={onSave} readOnly={readOnly} />
         </div>
       )}
+
+      <div style={{ display: innerTab === 'Features' ? 'block' : 'none' }}>
+        <FeaturesTab character={character} onSave={onSave} readOnly={readOnly} />
+      </div>
     </div>
   )
 }

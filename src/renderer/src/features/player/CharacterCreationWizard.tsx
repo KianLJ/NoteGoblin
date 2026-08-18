@@ -18,6 +18,7 @@ import {
   type CharacterSheetData,
   type SkillName
 } from '@shared/dnd5e'
+import { startingEquipmentFor } from '@shared/compendium'
 
 interface CharacterCreationWizardProps {
   onCreate: (name: string, sheet: CharacterSheetData) => void
@@ -137,6 +138,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
       skillProficiencies,
       currentHp: computeMaxHp(classes, finalScores),
       spellcastingAbility: cls?.spellcastingAbility ?? null,
+      equipment: cls ? startingEquipmentFor(cls.id) : [],
       features: background
         ? [{ id: crypto.randomUUID(), name: background.feature.name, source: background.name, description: background.feature.description }]
         : []
