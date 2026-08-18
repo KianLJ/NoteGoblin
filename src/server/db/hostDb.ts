@@ -58,6 +58,35 @@ function rebuildVisibilityCheck(database: DatabaseType, table: 'notes' | 'folder
   if (wasForeignKeysOn) database.pragma('foreign_keys = ON')
 }
 
+/**
+ * host_state.active_campaign_id originally carried a `REFERENCES
+ * campaigns(id)` foreign key — wrong the moment vault mode shipped, since a
+ * vault-mode campaign never gets a row in this database's own `campaigns`
+ * table at all, so setting one active threw "FOREIGN KEY constraint failed"
+ * on every attempt. A no-op once a database is already on the FK-less
+ * schema (checked via sqlite_master, not a flag) or on a genuinely fresh
+ * install (table doesn't exist yet — the schema exec right after this
+ * creates it correctly from the start).
+ */
+function rebuildHostStateWithoutForeignKey(database: DatabaseType): void {
+  const row = database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'host_state'").get() as
+    | { sql: string }
+    | undefined
+  if (!row || !row.sql.includes('REFERENCES campaigns')) return
+
+  const tmpTable = 'host_state_pre_fk_migration'
+  const wasForeignKeysOn = (database.pragma('foreign_keys', { simple: true }) as number) === 1
+  database.pragma('foreign_keys = OFF')
+  const migrate = database.transaction(() => {
+    database.exec(`ALTER TABLE host_state RENAME TO ${tmpTable}`)
+    database.exec('CREATE TABLE host_state (id INTEGER PRIMARY KEY CHECK (id = 1), active_campaign_id TEXT)')
+    database.exec(`INSERT INTO host_state SELECT * FROM ${tmpTable}`)
+    database.exec(`DROP TABLE ${tmpTable}`)
+  })
+  migrate()
+  if (wasForeignKeysOn) database.pragma('foreign_keys = ON')
+}
+
 /** Opens the singleton host database (the campaigns this installation hosts). */
 export function getHostDb(userDataDir: string): DatabaseType {
   if (!db) {
@@ -73,6 +102,7 @@ export function getHostDb(userDataDir: string): DatabaseType {
       }
       rebuildVisibilityCheck(database, 'notes')
       rebuildVisibilityCheck(database, 'folders')
+      rebuildHostStateWithoutForeignKey(database)
     })
   }
   return db

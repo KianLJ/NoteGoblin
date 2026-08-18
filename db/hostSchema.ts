@@ -33,10 +33,16 @@ CREATE TABLE IF NOT EXISTS campaign_members (
 -- Singleton (id is always 1) — which campaign the DM currently has open.
 -- Connecting players auto-join whatever this points at rather than picking
 -- from a list themselves; the DM decides what "the table" is, not each
--- player individually.
+-- player individually. Deliberately NOT a foreign key against campaigns(id)
+-- despite looking like it should be one: once a vault folder is configured,
+-- campaigns live as files (see vaultStore.ts's CampaignFileRepo) and never
+-- get a row in this table at all, so a real FK here throws "FOREIGN KEY
+-- constraint failed" the moment a vault-mode campaign is set active — this
+-- pointer is plain local app state referencing whichever id is currently
+-- "the table," not campaign content that SQLite needs to guarantee exists.
 CREATE TABLE IF NOT EXISTS host_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
-  active_campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL
+  active_campaign_id TEXT
 );
 
 -- Folders organize notes into a tree, scoped to the same 'dm'/'shared'
