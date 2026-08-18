@@ -240,13 +240,36 @@ export const FONT_CHOICES: FontChoice[] = [
 ]
 
 const FONT_KEY = 'gb-font-choice'
+/** Prefix marking a stored font id as an arbitrary installed system font (picked via querySystemFonts) rather than one of the curated FONT_CHOICES pairings. */
+const SYSTEM_FONT_PREFIX = 'system:'
+
+/** True for a locally-installed font id (as opposed to one of the curated FONT_CHOICES). */
+export function isSystemFontId(id: string): boolean {
+  return id.startsWith(SYSTEM_FONT_PREFIX)
+}
+
+export function systemFontFamily(id: string): string {
+  return id.slice(SYSTEM_FONT_PREFIX.length)
+}
+
+export function makeSystemFontId(family: string): string {
+  return `${SYSTEM_FONT_PREFIX}${family}`
+}
 
 export function getStoredFontId(): string {
   const stored = localStorage.getItem(FONT_KEY)
-  return FONT_CHOICES.some((f) => f.id === stored) ? (stored as string) : FONT_CHOICES[0].id
+  if (!stored) return FONT_CHOICES[0].id
+  if (isSystemFontId(stored)) return stored
+  return FONT_CHOICES.some((f) => f.id === stored) ? stored : FONT_CHOICES[0].id
 }
 
 export function applyFont(id: string): void {
+  if (isSystemFontId(id)) {
+    const family = systemFontFamily(id)
+    document.documentElement.style.setProperty('--font-display', `'${family}'`)
+    document.documentElement.style.setProperty('--font-body', `'${family}'`)
+    return
+  }
   const choice = FONT_CHOICES.find((f) => f.id === id) ?? FONT_CHOICES[0]
   document.documentElement.style.setProperty('--font-display', choice.display)
   document.documentElement.style.setProperty('--font-body', choice.body)
@@ -255,4 +278,15 @@ export function applyFont(id: string): void {
 export function setFont(id: string): void {
   localStorage.setItem(FONT_KEY, id)
   applyFont(id)
+}
+
+/** Every installed system font family, alphabetized — via Chromium's Local Font Access API. Resolves to [] if the API isn't available (older Chromium) or the user denies the permission, so callers should treat an empty list as "fall back to the curated presets," not an error. */
+export async function querySystemFonts(): Promise<string[]> {
+  if (!window.queryLocalFonts) return []
+  try {
+    const fonts = await window.queryLocalFonts()
+    return [...new Set(fonts.map((f) => f.family))].sort((a, b) => a.localeCompare(b))
+  } catch {
+    return []
+  }
 }

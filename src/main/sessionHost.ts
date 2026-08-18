@@ -6,7 +6,13 @@ import { UserRepo } from '@server/repositories/userRepo'
 import * as campaignService from '@server/services/campaignService'
 import type { ServiceResult } from '@server/services/campaignService'
 import { RELAY_URL, relaySessionPath } from '@server/relay/relayConfig'
-import type { RequestFrame, ResponseFrame, PresenceFrame, CampaignChangedFrame } from '@server/relay/sessionProtocol'
+import type {
+  RequestFrame,
+  ResponseFrame,
+  PresenceFrame,
+  CampaignChangedFrame,
+  ActiveCampaignChangedFrame
+} from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet } from '@shared/ipc'
 
@@ -185,6 +191,12 @@ export function broadcastCampaignChanged(campaignId: string): void {
   if (dmWindow) {
     dmWindow.webContents.send('ws:campaign-changed', { sessionId: currentSessionId, campaignId })
   }
+}
+
+/** Called after the DM switches their active campaign, so every connected player picks it up live instead of relying on the manual "Sync" button. */
+export function broadcastActiveCampaignChanged(): void {
+  const frame: ActiveCampaignChangedFrame = { type: 'active-campaign-changed' }
+  for (const p of players.values()) sendToRelay(p.userId, frame)
 }
 
 function handleFrame(raw: WebSocket.RawData): void {

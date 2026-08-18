@@ -46,3 +46,8 @@ export interface CampaignChangedFrame {
   type: 'campaign-changed'
   campaignId: string
 }
+
+/** Pushed to every connected player when the DM switches their active campaign, so a player already connected picks it up live instead of needing the manual "Sync" button. */
+export interface ActiveCampaignChangedFrame {
+  type: 'active-campaign-changed'
+}

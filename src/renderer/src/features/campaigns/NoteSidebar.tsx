@@ -13,6 +13,7 @@ interface NoteSidebarProps {
   /** null while there's no campaign open yet — tree still renders (empty), creation is a no-op until one exists. */
   campaignId: string | null
   onSelect: (id: string) => void
+  onOpenInNewTab: (id: string) => void
   onCreateNote: (visibility: 'dm' | 'shared', folderId: string | null) => void
   onCreateFolder: (visibility: 'dm' | 'shared', name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
@@ -42,6 +43,7 @@ export function NoteSidebar({
   myUserId,
   campaignId,
   onSelect,
+  onOpenInNewTab,
   onCreateNote,
   onCreateFolder,
   onRenameNote,
@@ -105,6 +107,7 @@ export function NoteSidebar({
   return (
     <ResizableSidebar
       defaultWidth={220}
+      collapseStorageKey="gb-sidebar-collapsed:notes"
       footer={
         <div
           style={{
@@ -146,6 +149,7 @@ export function NoteSidebar({
             activeId={activeId}
             myUserId={myUserId}
             onSelectNote={onSelect}
+            onOpenNoteInNewTab={onOpenInNewTab}
             onCreateNote={(folderId) => onCreateNote('shared', folderId)}
             onCreateFolder={(name, parentFolderId) => onCreateFolder('shared', name, parentFolderId)}
             onRenameNote={onRenameNote}
@@ -202,6 +206,7 @@ export function NoteSidebar({
                 activeId={activeId}
                 myUserId={myUserId}
                 onSelectNote={onSelect}
+                onOpenNoteInNewTab={onOpenInNewTab}
                 onCreateNote={(folderId) => onCreateNote('dm', folderId)}
                 onCreateFolder={(name, parentFolderId) => onCreateFolder('dm', name, parentFolderId)}
                 onRenameNote={onRenameNote}

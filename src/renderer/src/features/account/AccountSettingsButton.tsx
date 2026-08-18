@@ -4,7 +4,18 @@ import { GearIcon } from './icons'
 import { ChevronRightIcon } from '../campaigns/icons'
 import { ColorTokenEditor } from './ColorTokenEditor'
 import { emitIdentitySwitched } from '../auth/identityEvents'
-import { FONT_CHOICES, getStoredFontId, getStoredMode, setFont, setThemeMode, type ThemeMode } from '../../theme'
+import {
+  FONT_CHOICES,
+  getStoredFontId,
+  getStoredMode,
+  isSystemFontId,
+  makeSystemFontId,
+  querySystemFonts,
+  setFont,
+  setThemeMode,
+  systemFontFamily,
+  type ThemeMode
+} from '../../theme'
 import type { Identity } from '@shared/ipc'
 import type { AdminAccountSummary } from '@shared/relay'
 
@@ -61,6 +72,7 @@ function AccountSettingsForm(): JSX.Element {
 
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredMode())
   const [fontId, setFontIdState] = useState<string>(() => getStoredFontId())
+  const [systemFonts, setSystemFonts] = useState<string[] | null>(null)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
@@ -89,6 +101,11 @@ function AccountSettingsForm(): JSX.Element {
   function chooseFont(id: string): void {
     setFont(id)
     setFontIdState(id)
+  }
+
+  function loadSystemFonts(): void {
+    if (systemFonts !== null) return
+    querySystemFonts().then(setSystemFonts)
   }
 
   useEffect(() => {
@@ -260,7 +277,13 @@ function AccountSettingsForm(): JSX.Element {
 
       <button
         type="button"
-        onClick={() => setAppearanceOpen((o) => !o)}
+        onClick={() =>
+          setAppearanceOpen((o) => {
+            const next = !o
+            if (next) loadSystemFonts()
+            return next
+          })
+        }
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -334,6 +357,30 @@ function AccountSettingsForm(): JSX.Element {
               </button>
             ))}
           </div>
+          <label className="gb-label">Installed font</label>
+          {systemFonts === null ? (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Loading…</p>
+          ) : systemFonts.length === 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
+              No system fonts available to browse on this device.
+            </p>
+          ) : (
+            <select
+              className="gb-input"
+              value={isSystemFontId(fontId) ? systemFontFamily(fontId) : ''}
+              onChange={(e) => {
+                if (e.target.value) chooseFont(makeSystemFontId(e.target.value))
+              }}
+              style={{ marginBottom: 'var(--space-3)', fontSize: 13 }}
+            >
+              <option value="">Choose a font on this computer…</option>
+              {systemFonts.map((family) => (
+                <option key={family} value={family} style={{ fontFamily: family }}>
+                  {family}
+                </option>
+              ))}
+            </select>
+          )}
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <ColorTokenEditor themeMode={themeMode} />
           </div>

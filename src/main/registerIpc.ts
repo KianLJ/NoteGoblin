@@ -10,7 +10,9 @@ import { campaignIdForVaultPath } from '@server/files/vaultStore'
 import { IdentityRepo } from '@server/repositories/identityRepo'
 import { UserRepo } from '@server/repositories/userRepo'
 import * as campaignService from '@server/services/campaignService'
+import type { ServiceResult } from '@server/services/campaignService'
 import { CharacterRepo, type CharacterRow } from '@server/repositories/characterRepo'
+import { SnapshotRepo, type CampaignSnapshot } from '@server/repositories/snapshotRepo'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { syncRelayAccount, changeRelayPassword, clearRelaySession } from './relaySync'
 import * as relayClient from '@server/relay/relayClient'
@@ -21,7 +23,8 @@ import {
   stopSessionHost,
   inviteToSession,
   subscribeDmPresence,
-  broadcastCampaignChanged
+  broadcastCampaignChanged,
+  broadcastActiveCampaignChanged
 } from './sessionHost'
 import { joinSession, leaveSession, sendRequest as sendSessionRequest } from './sessionClient'
 import {
@@ -389,6 +392,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return { db, userId: hostUser.id }
   }
 
+  /**
+   * Runs a campaignService call on the DM's own local (non-relay) path and
+   * converts both ServiceResult failures AND thrown exceptions into an
+   * ApiResult. Without this, a throw from a vault-mode repo (e.g. the vault
+   * folder was moved/unmounted) crashes straight out of the IPC handler as a
+   * rejected promise instead of a visible error message — the same failure
+   * reaches the player-facing path fine because sessionHost's dispatch()
+   * already has an equivalent catch.
+   */
+  function runService<T>(fn: () => ServiceResult<T>): ApiResult<T> {
+    try {
+      const result = fn()
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+    }
+  }
+
   ipcMain.handle(
     'campaigns:list',
     async (_event, sessionId?: string): Promise<ApiResult<Campaign[]>> => {
@@ -410,8 +431,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.createCampaign(me.db, me.userId, name)
-        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        return runService(() => campaignService.createCampaign(me.db, me.userId, name))
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -426,15 +446,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('campaigns:rename', async (_event, campaignId: string, name: string): Promise<ApiResult<Campaign>> => {
     const me = ensureMyHostUser()
     if ('error' in me) return { ok: false, error: me.error }
-    const result = campaignService.renameCampaign(me.db, campaignId, me.userId, name)
-    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    return runService(() => campaignService.renameCampaign(me.db, campaignId, me.userId, name))
   })
 
   ipcMain.handle('campaigns:delete', async (_event, campaignId: string): Promise<ApiResult<void>> => {
     const me = ensureMyHostUser()
     if ('error' in me) return { ok: false, error: me.error }
-    const result = campaignService.deleteCampaign(me.db, campaignId, me.userId)
-    return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+    return runService(() => campaignService.deleteCampaign(me.db, campaignId, me.userId))
   })
 
   ipcMain.handle(
@@ -473,8 +491,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.setActiveCampaign(me.db, campaignId, me.userId)
-        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        try {
+          const result = campaignService.setActiveCampaign(me.db, campaignId, me.userId)
+          if (result.ok && getHostedSession()) broadcastActiveCampaignChanged()
+          return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -523,9 +546,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.createNote(me.db, campaignId, me.userId, input)
-        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
-        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        try {
+          const result = campaignService.createNote(me.db, campaignId, me.userId, input)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -545,9 +572,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.updateNote(me.db, campaignId, noteId, me.userId, input)
-        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
-        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        try {
+          const result = campaignService.updateNote(me.db, campaignId, noteId, me.userId, input)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -561,9 +592,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.deleteNote(me.db, campaignId, noteId, me.userId)
-        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
-        return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+        try {
+          const result = campaignService.deleteNote(me.db, campaignId, noteId, me.userId)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -577,8 +612,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.listFolders(me.db, campaignId, me.userId)
-        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        return runService(() => campaignService.listFolders(me.db, campaignId, me.userId))
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -597,9 +631,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.createFolder(me.db, campaignId, me.userId, input)
-        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
-        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        try {
+          const result = campaignService.createFolder(me.db, campaignId, me.userId, input)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -619,9 +657,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.updateFolder(me.db, campaignId, folderId, me.userId, input)
-        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
-        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        try {
+          const result = campaignService.updateFolder(me.db, campaignId, folderId, me.userId, input)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -635,9 +677,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
-        const result = campaignService.deleteFolder(me.db, campaignId, folderId, me.userId)
-        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
-        return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+        try {
+          const result = campaignService.deleteFolder(me.db, campaignId, folderId, me.userId)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
       }
       const err = requireJoinedSession(sessionId)
       if (err) return err
@@ -708,6 +754,34 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     (_event, sessionId: string, character: CharacterSheet | null): void => {
       if (getHostedSession()?.sessionId === sessionId) return // nothing to sync to yourself
       void sendSessionRequest('characters.sync', { character })
+    }
+  )
+
+  // --- Offline campaign snapshots ---------------------------------------
+  // A read-only local cache of a joined campaign's notes/folders, written
+  // through every time the player successfully syncs while connected (see
+  // usePlayerWorkspace.ts) — lets the campaign stay browsable when the DM
+  // isn't currently hosting.
+  const snapshotRepo = new SnapshotRepo(localDb)
+
+  ipcMain.handle('snapshots:list', (): ApiResult<CampaignSnapshot[]> => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    return { ok: true, data: snapshotRepo.list(identity.id) }
+  })
+
+  ipcMain.handle('snapshots:get', (_event, campaignId: string): ApiResult<CampaignSnapshot | null> => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    return { ok: true, data: snapshotRepo.get(identity.id, campaignId) ?? null }
+  })
+
+  ipcMain.handle(
+    'snapshots:save',
+    (_event, campaign: Campaign, notes: Note[], folders: Folder[]): void => {
+      const identity = getCurrentIdentity()
+      if (!identity) return
+      snapshotRepo.save(identity.id, campaign, notes, folders)
     }
   )
 

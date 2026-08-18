@@ -21,7 +21,7 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
   const [tab, setTab] = useState<RightPanelTab>('players')
 
   return (
-    <ResizableSidebar defaultWidth={240} handleSide="left">
+    <ResizableSidebar defaultWidth={240} handleSide="left" collapseStorageKey="gb-sidebar-collapsed:right-panel">
       <div
         style={{
           height: '100%',

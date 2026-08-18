@@ -133,6 +133,15 @@ function checkForUpdates(): void {
 }
 
 app.whenReady().then(() => {
+  // Auto-grants the Local Font Access API so the Appearance settings' font
+  // picker can list actually-installed system fonts — this is our own
+  // trusted renderer, not arbitrary web content, so there's no one else's
+  // permission to protect here.
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback((permission as string) === 'local-fonts')
+  })
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => (permission as string) === 'local-fonts')
+
   if (!isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({

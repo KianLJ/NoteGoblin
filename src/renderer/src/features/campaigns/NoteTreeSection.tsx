@@ -109,6 +109,8 @@ interface NoteTreeSectionProps {
   onSetClipboard: (items: ClipboardItem[], mode: 'copy' | 'cut') => void
   onClearClipboard: () => void
   onSelectNote: (id: string) => void
+  /** Right-click "Open in new tab" — the explicit escape hatch, since a plain click now reuses the current tab (preview-tab pattern). */
+  onOpenNoteInNewTab: (id: string) => void
   onCreateNote: (folderId: string | null) => void
   onCreateFolder: (name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
@@ -153,6 +155,7 @@ export function NoteTreeSection({
   onSetClipboard,
   onClearClipboard,
   onSelectNote,
+  onOpenNoteInNewTab,
   onCreateNote,
   onCreateFolder,
   onRenameNote,
@@ -517,6 +520,9 @@ export function NoteTreeSection({
     const isMine = note.authorUserId === myUserId
     if (!isMine && !isDm && !multi) return
     const items: ContextMenuItem[] = []
+    if (!multi) {
+      items.push({ label: 'Open in new tab', onSelect: () => onOpenNoteInNewTab(note.id) })
+    }
     if (isMine) {
       items.push(
         {

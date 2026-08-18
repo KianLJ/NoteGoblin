@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { Compartment, EditorState, type Extension, type Range } from '@codemirror/state'
+import { Compartment, EditorState, type Extension, type Range, type Text } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -12,6 +12,7 @@ import {
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
 import { markdown } from '@codemirror/lang-markdown'
+import { GFM } from '@lezer/markdown'
 import {
   autocompletion,
   closeBrackets,
@@ -23,6 +24,7 @@ import {
 } from '@codemirror/autocomplete'
 import { WIKILINK_PATTERN, wikilinkIsDouble, wikilinkTarget } from '../../wikilink'
 import { resolveImageSrc } from '../../imageSrc'
+import { renderNoteMarkdown } from '../../markdown'
 import type { Note } from '@shared/ipc'
 
 export interface MarkdownLiveEditorHandle {
@@ -98,6 +100,34 @@ function selectionOverlaps(state: EditorState, from: number, to: number): boolea
   return state.selection.ranges.some((r) => r.from <= to && r.to >= from)
 }
 
+/**
+ * Shared by the Table and ```statblock cases below — block widgets must
+ * start/end exactly on line boundaries, so this expands the syntax node's
+ * range to the containing lines before deciding whether to reveal raw text
+ * (selection overlap) or replace it with the rendered widget. Returns true
+ * when the widget was actually applied, so the caller can (a) stop the tree
+ * walk from descending into this node's children and (b) skip these same
+ * lines in the per-line wikilink/image scan below — a nested decoration
+ * inside an already-fully-replaced block range would collide with it
+ * (CodeMirror doesn't allow overlapping replace decorations).
+ */
+function replaceBlockWithWidget(
+  state: EditorState,
+  doc: Text,
+  ranges: Range<Decoration>[],
+  nodeFrom: number,
+  nodeTo: number,
+  knownTitles: Set<string>,
+  campaignId: string
+): boolean {
+  const from = doc.lineAt(nodeFrom).from
+  const to = doc.lineAt(nodeTo).to
+  if (selectionOverlaps(state, from, to)) return false
+  const html = renderNoteMarkdown(doc.sliceString(from, to), knownTitles, campaignId)
+  ranges.push(Decoration.replace({ widget: new BlockHtmlWidget(html), block: true }).range(from, to))
+  return true
+}
+
 /** Renders `![alt](src)` as an actual `<img>` in place — unlike the text-level decorations above, an image has no "collapsed label" to show, so it's just replaced outright (raw syntax reappears when the selection is on that line, same reveal rule as everything else). */
 class ImageWidget extends WidgetType {
   constructor(
@@ -126,6 +156,28 @@ class ImageWidget extends WidgetType {
   }
 }
 
+/** Renders a ```statblock fenced block or a GFM table as the same rendered HTML the Preview pane shows (via renderNoteMarkdown, so statblock cards/tables — and any wikilinks inside a table cell — stay in perfect sync with Preview) instead of raw source, while the cursor/selection is elsewhere on it. Raw syntax reappears on click, same reveal rule as everything else in this file. */
+class BlockHtmlWidget extends WidgetType {
+  constructor(readonly html: string) {
+    super()
+  }
+
+  eq(other: BlockHtmlWidget): boolean {
+    return other.html === this.html
+  }
+
+  toDOM(): HTMLElement {
+    const wrap = document.createElement('div')
+    wrap.className = 'gb-markdown cm-live-block'
+    wrap.innerHTML = this.html
+    return wrap
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+
 /**
  * Obsidian-style "Live Preview": formatting (headers, bold, italic,
  * [[wikilinks]] and [single-bracket] links) renders inline while the
@@ -142,6 +194,9 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>, campaignId
   const doc = state.doc
   const tree = syntaxTree(state)
   const ranges: Range<Decoration>[] = []
+  // Line ranges fully consumed by a Table/statblock widget — excluded from
+  // the per-line wikilink/image scan below (see replaceBlockWithWidget).
+  const hiddenBlockRanges: Array<[number, number]> = []
 
   tree.iterate({
     enter(node) {
@@ -168,12 +223,40 @@ function buildDecorations(view: EditorView, knownTitles: Set<string>, campaignId
             ranges.push(Decoration.replace({}).range(mark.from, mark.to))
           }
         }
+        return
+      }
+      // A ```statblock fenced block or a GFM table — same widget, same
+      // reveal-on-selection rule as images above, rendered via the exact
+      // same renderNoteMarkdown Preview uses so it never drifts out of sync.
+      if (node.name === 'Table') {
+        const from = doc.lineAt(node.from).from
+        const to = doc.lineAt(node.to).to
+        const applied = replaceBlockWithWidget(state, doc, ranges, node.from, node.to, knownTitles, campaignId)
+        if (applied) {
+          hiddenBlockRanges.push([from, to])
+          return false
+        }
+        return
+      }
+      if (node.name === 'FencedCode') {
+        const infoNode = node.node.getChild('CodeInfo')
+        const lang = infoNode ? doc.sliceString(infoNode.from, infoNode.to).trim().toLowerCase() : ''
+        if (lang === 'statblock') {
+          const from = doc.lineAt(node.from).from
+          const to = doc.lineAt(node.to).to
+          const applied = replaceBlockWithWidget(state, doc, ranges, node.from, node.to, knownTitles, campaignId)
+          if (applied) {
+            hiddenBlockRanges.push([from, to])
+            return false
+          }
+        }
       }
     }
   })
 
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i)
+    if (hiddenBlockRanges.some(([from, to]) => line.from >= from && line.to <= to)) continue
     WIKILINK_RE.lastIndex = 0
     let match: RegExpExecArray | null
     while ((match = WIKILINK_RE.exec(line.text))) {
@@ -389,7 +472,7 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             closeBrackets(),
             autocompletion({ override: [noteLinkCompletionSource(notesRef)] }),
             keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
-            markdown(),
+            markdown({ extensions: [GFM] }),
             EditorView.lineWrapping,
             livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu),
             EditorView.updateListener.of((update) => {

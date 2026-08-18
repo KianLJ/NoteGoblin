@@ -27,7 +27,7 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
       {open && (
         <div
           className="gb-card"
-          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 260 }}
+          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 260, zIndex: 200 }}
         >
           <h3
             style={{

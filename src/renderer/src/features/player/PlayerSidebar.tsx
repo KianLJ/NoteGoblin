@@ -2,8 +2,20 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { LockIcon, PlusIcon } from '../campaigns/icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
-import type { Campaign, Folder, Note } from '@shared/ipc'
+import type { Campaign, CampaignSnapshot, Folder, Note } from '@shared/ipc'
 import type { PlayerTabRef } from './usePlayerWorkspace'
+
+/** Rough "how long ago" for the offline snapshot's "as of" label — doesn't need to be precise, just orient the reader. */
+function formatSyncedAt(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  const minutes = Math.round(ms / 60000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.round(hours / 24)
+  return `${days}d ago`
+}
 
 interface PlayerSidebarProps {
   activeCampaign: Campaign | null
@@ -12,6 +24,7 @@ interface PlayerSidebarProps {
   activeTab: PlayerTabRef | null
   myUserId: string | null
   onSelectNote: (id: string) => void
+  onOpenNoteInNewTab: (id: string) => void
   onCreateNote: (visibility: 'shared' | 'private', folderId: string | null) => void
   onCreateFolder: (
     visibility: 'shared' | 'private',
@@ -28,6 +41,13 @@ interface PlayerSidebarProps {
   onPasteFolder: (sourceFolderId: string, targetParentId: string | null, targetVisibility: 'dm' | 'shared' | 'private') => void
   /** Whether you're connected to a session at all — connection status/resync itself now lives in the Friends menu, this just decides which empty-state hint to show. */
   connectedLabel: string | null
+  /** True while browsing a cached snapshot instead of a live campaign — shows an "Offline" badge and hides create/edit affordances (the workspace itself already rejects writes; this just keeps the UI honest about it). */
+  isOffline: boolean
+  /** The snapshot's timestamp, for the "as of" label — null unless isOffline. */
+  offlineSyncedAt: string | null
+  /** Every campaign previously cached while connected — offered as a fallback when there's no live campaign to show. */
+  offlineSnapshots: CampaignSnapshot[] | null
+  onOpenOfflineCampaign: (campaignId: string) => void
   /** The character switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
   footer: ReactNode
 }
@@ -41,6 +61,7 @@ export function PlayerSidebar({
   activeTab,
   myUserId,
   onSelectNote,
+  onOpenNoteInNewTab,
   onCreateNote,
   onCreateFolder,
   onRenameNote,
@@ -52,6 +73,10 @@ export function PlayerSidebar({
   onPasteNote,
   onPasteFolder,
   connectedLabel,
+  isOffline,
+  offlineSyncedAt,
+  offlineSnapshots,
+  onOpenOfflineCampaign,
   footer
 }: PlayerSidebarProps): JSX.Element {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
@@ -97,6 +122,7 @@ export function PlayerSidebar({
   return (
     <ResizableSidebar
       defaultWidth={220}
+      collapseStorageKey="gb-sidebar-collapsed:notes"
       footer={
         <div
           style={{
@@ -128,6 +154,27 @@ export function PlayerSidebar({
       >
         {activeCampaign ? (
           <>
+            {isOffline && (
+              <div
+                title="Read-only — the DM isn't currently hosting. Connect to make changes."
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px var(--space-3)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'var(--text-muted)',
+                  background: 'var(--bg-surface-raised)',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  flexShrink: 0
+                }}
+              >
+                Offline{offlineSyncedAt ? ` · synced ${formatSyncedAt(offlineSyncedAt)}` : ''}
+              </div>
+            )}
             <div style={{ height: partyHeight, minHeight: 0, overflowY: 'auto', flexShrink: 0 }}>
               <NoteTreeSection
                 title="Party Notes"
@@ -139,6 +186,7 @@ export function PlayerSidebar({
                 activeId={activeTab?.kind === 'note' ? activeTab.id : null}
                 myUserId={myUserId}
                 onSelectNote={onSelectNote}
+                onOpenNoteInNewTab={onOpenNoteInNewTab}
                 onCreateNote={(folderId) => onCreateNote('shared', folderId)}
                 onCreateFolder={(name, parentFolderId) => onCreateFolder('shared', name, parentFolderId)}
                 onRenameNote={onRenameNote}
@@ -187,6 +235,7 @@ export function PlayerSidebar({
                 activeId={activeTab?.kind === 'note' ? activeTab.id : null}
                 myUserId={myUserId}
                 onSelectNote={onSelectNote}
+                onOpenNoteInNewTab={onOpenNoteInNewTab}
                 onCreateNote={(folderId) => onCreateNote('private', folderId)}
                 onCreateFolder={(name, parentFolderId) => onCreateFolder('private', name, parentFolderId)}
                 onRenameNote={onRenameNote}
@@ -210,6 +259,43 @@ export function PlayerSidebar({
                 {connectedLabel ? "Waiting for the DM's campaign" : 'Join a friend’s game from the Friends menu'}
               </EmptyHint>
             </Section>
+            {offlineSnapshots && offlineSnapshots.length > 0 && (
+              <Section title="Offline">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 var(--space-2)' }}>
+                  {offlineSnapshots.map((snap) => (
+                    <button
+                      key={snap.campaign.id}
+                      type="button"
+                      title={`Last synced ${formatSyncedAt(snap.syncedAt)}`}
+                      onClick={() => onOpenOfflineCampaign(snap.campaign.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 6,
+                        padding: '6px 8px',
+                        border: 'none',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        color: 'var(--text-primary)',
+                        fontSize: 13
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {snap.campaign.name}
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
+                        {formatSyncedAt(snap.syncedAt)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Section>
+            )}
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ModeToggle, type Mode } from './ModeToggle'
 import { WindowControls } from './WindowControls'
 import { VersionBadge } from './VersionBadge'
+import { BestiaryIcon } from './icons'
 import { FriendsMenu } from '../friends/FriendsMenu'
 import { NotificationToasts } from '../notifications/NotificationToasts'
 import { useNotifications } from '../notifications/useNotifications'
@@ -11,6 +12,7 @@ import { useNotesWorkspace } from '../campaigns/useNotesWorkspace'
 import { PlayerWorkspaceBody } from '../player/PlayerWorkspaceBody'
 import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
+import { Bestiary } from '../bestiary/Bestiary'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 
 interface AppShellProps {
@@ -143,18 +145,20 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     if (!joinedSession || !playerWorkspace.activeCampaign) return
     window.goblin.presence.selectCharacter(
       joinedSession.sessionId,
-      playerWorkspace.activeCharacter?.name ?? null
+      playerWorkspace.lastActiveCharacter?.name ?? null
     )
-  }, [joinedSession, playerWorkspace.activeCampaign, playerWorkspace.activeCharacter])
+  }, [joinedSession, playerWorkspace.activeCampaign, playerWorkspace.lastActiveCharacter])
 
   // Same trigger as the presence name announcement above, but carries the
-  // whole sheet — re-fires on every edit too, since activeCharacter is a new
-  // object each time saveCharacter's setCharacters resolves, keeping the
-  // DM's view live rather than frozen at whatever it looked like on selection.
+  // whole sheet — re-fires on every edit too, since lastActiveCharacter is a
+  // new object each time saveCharacter's setCharacters resolves, keeping the
+  // DM's view live rather than frozen at whatever it looked like on
+  // selection. Uses lastActiveCharacter (not activeCharacter) so switching to
+  // a note tab doesn't clear what the table sees you playing.
   useEffect(() => {
     if (!joinedSession) return
-    window.goblin.characters.syncSelected(joinedSession.sessionId, playerWorkspace.activeCharacter ?? null)
-  }, [joinedSession, playerWorkspace.activeCharacter])
+    window.goblin.characters.syncSelected(joinedSession.sessionId, playerWorkspace.lastActiveCharacter ?? null)
+  }, [joinedSession, playerWorkspace.lastActiveCharacter])
 
   // DM: every connected player's currently-selected character, kept live —
   // used by RightPanel's ConnectedPlayersList to open one as a read-only tab.
@@ -170,6 +174,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     })
   }, [])
   const [viewedPlayerUserId, setViewedPlayerUserId] = useState<string | null>(null)
+  const [bestiaryOpen, setBestiaryOpen] = useState(false)
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -217,6 +222,15 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           className="gb-no-drag"
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexShrink: 0 }}
         >
+          <button
+            type="button"
+            onClick={() => setBestiaryOpen(true)}
+            className="gb-btn gb-btn--secondary"
+            title="Bestiary"
+            style={{ padding: 'var(--space-2)', display: 'flex' }}
+          >
+            <BestiaryIcon />
+          </button>
           <FriendsMenu
             mode={mode}
             hostedSessionId={hostedSessionId}
@@ -271,6 +285,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
       <VersionBadge />
+      {bestiaryOpen && <Bestiary onClose={() => setBestiaryOpen(false)} />}
     </div>
   )
 }

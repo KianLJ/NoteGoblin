@@ -81,6 +81,10 @@ export function CampaignWorkspace({
         campaignId={campaign?.id ?? null}
         onSelect={(id) => {
           onViewPlayerUserId(null)
+          navigateToNote(id)
+        }}
+        onOpenInNewTab={(id) => {
+          onViewPlayerUserId(null)
           openNote(id)
         }}
         onCreateNote={(visibility, folderId) => createNote(visibility, folderId)}
