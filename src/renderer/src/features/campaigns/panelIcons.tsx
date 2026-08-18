@@ -41,17 +41,18 @@ export function DiceIcon(): JSX.Element {
   )
 }
 
+/** An order list — one bold, filled row (the active turn) and three lighter ones (everyone else waiting their turn). */
 export function InitiativeIcon(): JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M6 4h8M6 8h8M6 12h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-      <path
-        d="M2 3.3v2M2 3.3l-.7.7M1.9 8h.5M2.4 8v1.6M1.5 9.6h1.8M1.8 12.1c.6-.5 1.2-.5 1.2.1s-.5.5-.7.7c-.3.3-.5.5-.5.9h1.2"
-        stroke="currentColor"
-        strokeWidth="0.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <line x1="5.15" y1="1.92" x2="14.71" y2="1.92" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" opacity="0.5" />
+      <circle cx="1.88" cy="1.92" r="0.28" fill="currentColor" stroke="currentColor" strokeWidth="1.25" opacity="0.5" />
+      <line x1="5.51" y1="6.19" x2="14.36" y2="6.19" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="1.88" cy="6.19" r="1.15" fill="currentColor" stroke="currentColor" strokeLinejoin="round" />
+      <line x1="5.15" y1="10.47" x2="14.71" y2="10.47" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" opacity="0.5" />
+      <circle cx="1.88" cy="10.47" r="0.28" fill="currentColor" stroke="currentColor" strokeWidth="1.25" opacity="0.5" />
+      <line x1="5.15" y1="14.08" x2="14.71" y2="14.08" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" opacity="0.5" />
+      <circle cx="1.88" cy="14.08" r="0.28" fill="currentColor" stroke="currentColor" strokeWidth="1.25" opacity="0.5" />
     </svg>
   )
 }

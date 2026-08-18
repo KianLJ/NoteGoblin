@@ -234,7 +234,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             type="button"
             onClick={() => setBestiaryOpen(true)}
             className="gb-btn gb-btn--secondary"
-            title="Bestiary"
+            title="Codex"
             style={{ padding: 'var(--space-2)', display: 'flex' }}
           >
             <BestiaryIcon />

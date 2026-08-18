@@ -98,9 +98,9 @@ const ABILITY_ICON_PATHS: Record<string, JSX.Element> = {
   dex: <path d="M3 13 12 4M12 4H7M12 4v5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />,
   con: (
     <path
-      d="M8 2.2c1.8 2.4 3.6 4.5 3.6 6.9a3.6 3.6 0 0 1-7.2 0c0-2.4 1.8-4.5 3.6-6.9Z"
+      d="M8 13.2 2.8 8.7C1.6 7.6 1.6 5.7 2.9 4.6a3 3 0 0 1 4-.1L8 5.4l1.1-.9a3 3 0 0 1 4 .1c1.3 1.1 1.3 3 .1 4.1L8 13.2Z"
       stroke="currentColor"
-      strokeWidth="1.15"
+      strokeWidth="1.1"
       strokeLinejoin="round"
     />
   ),

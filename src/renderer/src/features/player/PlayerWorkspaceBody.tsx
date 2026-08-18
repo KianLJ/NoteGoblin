@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PlayerSidebar } from './PlayerSidebar'
 import { PartySidebar } from './PartySidebar'
 import { CharacterSheetEditor } from './CharacterSheetEditor'
@@ -6,6 +6,8 @@ import { CharacterCreationWizard } from './CharacterCreationWizard'
 import { CharacterSwitcher } from './CharacterSwitcher'
 import { NoteEditor } from '../campaigns/NoteEditor'
 import { AccountSettingsButton } from '../account/AccountSettingsButton'
+import { Modal } from '../../ui/Modal'
+import { Button } from '../../ui/Button'
 import type { PlayerWorkspace } from './usePlayerWorkspace'
 import type { CharacterSheet } from '@shared/ipc'
 
@@ -31,6 +33,7 @@ export function PlayerWorkspaceBody({
     folders,
     activeTab,
     activeCharacter,
+    lastActiveCharacter,
     activeNote,
     openTab,
     navigateToNote,
@@ -55,6 +58,23 @@ export function PlayerWorkspaceBody({
   } = workspace
 
   const [wizardOpen, setWizardOpen] = useState(false)
+
+  // Prompted once per fresh join (not on every reconnect/resync of the same
+  // session, and not just from reopening the app while already in one) —
+  // refreshCharacters already picked a reasonable default (whichever
+  // character you last touched) so the table isn't sitting empty while you
+  // decide, but a new session is exactly the moment "which of my characters
+  // am I playing at this table" actually needs an answer instead of a
+  // silent guess. Still fully optional — closing it leaves that default in
+  // place, and the switcher in the corner can change it anytime after.
+  const [characterPromptOpen, setCharacterPromptOpen] = useState(false)
+  const prevSessionIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (sessionId && sessionId !== prevSessionIdRef.current && characters && characters.length > 1) {
+      setCharacterPromptOpen(true)
+    }
+    prevSessionIdRef.current = sessionId
+  }, [sessionId, characters])
 
   // A party member's sheet, viewed read-only via PartySidebar — a one-off
   // fetch (see window.goblin.characters.getPlayerCharacter), not something
@@ -82,6 +102,30 @@ export function PlayerWorkspaceBody({
           }}
           onClose={() => setWizardOpen(false)}
         />
+      )}
+
+      {characterPromptOpen && characters && (
+        <Modal onClose={() => setCharacterPromptOpen(false)} width={400}>
+          <h2 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 18 }}>Which character?</h2>
+          <p style={{ margin: '0 0 var(--space-3)', fontSize: 13, color: 'var(--text-muted)' }}>
+            Choose who you're playing at this table — you can always switch later from the corner.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {characters.map((c) => (
+              <Button
+                key={c.id}
+                variant={activeCharacter?.id === c.id ? 'primary' : 'secondary'}
+                onClick={() => {
+                  openTab({ kind: 'character', id: c.id })
+                  setCharacterPromptOpen(false)
+                }}
+                style={{ justifyContent: 'flex-start' }}
+              >
+                {c.name || 'Unnamed Character'}
+              </Button>
+            ))}
+          </div>
+        </Modal>
       )}
 
       {error && (
@@ -129,7 +173,7 @@ export function PlayerWorkspaceBody({
           <>
             <CharacterSwitcher
               characters={characters}
-              current={activeCharacter}
+              current={lastActiveCharacter}
               onSelect={(character) => openTab({ kind: 'character', id: character.id })}
               onRequestCreate={() => setWizardOpen(true)}
               onDelete={(character) => deleteCharacter(character.id)}
