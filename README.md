@@ -41,28 +41,34 @@ Built with Electron, React, and TypeScript.
 - A read-only offline snapshot of the last-synced campaign stays browsable for players even when the DM isn't currently hosting.
 - Auto-updates via GitHub Releases.
 
+## Installation
+
+NoteGoblin ships as a Windows installer — no Node, no build step, nothing to configure.
+
+1. Grab the latest `NoteGoblin-Setup-<version>.exe` from the [Releases page](https://github.com/KianLJ/NoteGoblin/releases).
+2. Run the installer. You can choose the install location; it adds a desktop and Start Menu shortcut.
+3. Launch NoteGoblin and create a local account (just a display name and password — nothing leaves your machine until you actually host or join a session).
+4. To play with others: one person starts hosting from the Friends menu and invites the rest; everyone else joins with one click. No port forwarding, IP addresses, or LAN required.
+
+The app checks for updates on launch and installs them automatically.
+
+## Screenshots
+
+**Notes, with a saved Codex statblock and the live initiative tracker open alongside**
+![Notes and Codex](docs/screenshots/notes-and-codex.png)
+
+**Character sheet — automatic AC/HP/attacks, class resources, and toggleable features like Reckless Attack**
+![Character sheet](docs/screenshots/character-sheet.png)
+
+**Initiative tracker, tracking HP/AC/status effects for a full encounter**
+![Initiative tracker](docs/screenshots/initiative-tracker.png)
+
 ## Tech Stack
 
 - **App shell:** Electron + React + TypeScript, built with `electron-vite`
 - **Editor:** CodeMirror 6, with a custom Obsidian-style live-preview layer
 - **Local data:** SQLite (`better-sqlite3`), with an optional file-based vault mode
 - **Multiplayer:** a Cloudflare Workers relay (see `relay/`) brokering WebSocket sessions between a hosting DM and connecting players — the relay only ever forwards opaque messages, it never sees campaign content
-
-## Getting Started
-
-```bash
-npm install
-npm run dev
-```
-
-Other scripts:
-
-```bash
-npm run build        # production build (unpacked)
-npm run build:win     # packaged Windows installer
-npm run typecheck     # type-check the whole project
-npm run relay:dev     # run the Cloudflare Workers relay locally
-```
 
 ## Project Structure
 
@@ -75,14 +81,3 @@ shared/           Types and game-rule logic shared between main and renderer
 relay/            The Cloudflare Workers relay (Durable Objects) that brokers live sessions
 db/               SQLite schema
 ```
-
-## Screenshots
-
-**Notes, with a saved Codex statblock and the live initiative tracker open alongside**
-![Notes and Codex](docs/screenshots/notes-and-codex.png)
-
-**Character sheet — automatic AC/HP/attacks, class resources, and toggleable features like Reckless Attack**
-![Character sheet](docs/screenshots/character-sheet.png)
-
-**Initiative tracker, tracking HP/AC/status effects for a full encounter**
-![Initiative tracker](docs/screenshots/initiative-tracker.png)
