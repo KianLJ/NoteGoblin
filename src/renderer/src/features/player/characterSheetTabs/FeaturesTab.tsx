@@ -3,6 +3,8 @@ import type { CharacterSheet } from '@shared/ipc'
 import {
   CLASSES,
   ELDRITCH_INVOCATIONS,
+  FAVORED_ENEMY_OPTIONS,
+  FAVORED_TERRAIN_OPTIONS,
   METAMAGIC_OPTIONS,
   PACT_BOON_OPTIONS,
   RACES,
@@ -12,20 +14,27 @@ import {
   asiSlotLevelsUpToLevel,
   curatedFeaturesForLevelUp,
   eldritchInvocationSlotCountAtLevel,
+  favoredEnemySlotLevelsUpToLevel,
+  favoredTerrainSlotLevelsUpToLevel,
   fightingStyleSlotLevelsUpToLevel,
   metamagicSlotCountAtLevel,
   metamagicSlotUnlockLevel,
   resourcesForCharacter,
+  sneakAttackDice,
+  subclassFightingStyleSlotLevelsUpToLevel,
   type AsiSlotChoice,
   type CharacterSheetData,
   type ClassLevel,
   type Feature,
+  type Spell,
   type SubclassFeatureChoice
 } from '@shared/dnd5e'
 import {
   FEATS,
   SPELLS,
+  circleSpellLevelsUpToLevel,
   effectiveAbilityScores,
+  getSpellById,
   groupedSubclassFeaturesForLevelUp,
   isActivatableResource,
   spellSlotsForClasses,
@@ -96,6 +105,8 @@ function effectLabel(effect: FeatEffect): string {
       return 'Disadvantage: Initiative'
     case 'armorClass':
       return `${effect.amount >= 0 ? '+' : ''}${effect.amount} AC`
+    case 'spellChoice':
+      return `${effect.cantripCount} cantrips + ${effect.spellCount} level-${effect.spellLevel} spell (${effect.classes.join('/')})`
   }
 }
 
@@ -193,8 +204,29 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
     setFeatureDraft((prev) => ({ features: prev.features.map((f) => (f.id === id ? { ...f, ...fields } : f)) }))
   }
 
+  /**
+   * A feat with a `spellChoice` effect (Magic Initiate) resolves through
+   * this same ASI/feat flow (see AsiSlotChooser), but needs two extra
+   * side effects beyond just recording the choice: the picked spells
+   * become real, castable entries on character.spells (marked `free` so
+   * they don't eat into the class's normal known/prepared cap), and if the
+   * character had no spellcasting ability at all yet (a non-caster taking
+   * the feat), this is what turns that on automatically instead of making
+   * them separately hit the "+ Enable Spellcasting" button.
+   */
   function resolveAsiSlot(entry: Omit<AsiSlotChoice, 'id'>): void {
-    onSave({ asiSlotChoices: [...character.asiSlotChoices, { id: crypto.randomUUID(), ...entry }] })
+    const patch: Partial<CharacterSheetData> = { asiSlotChoices: [...character.asiSlotChoices, { id: crypto.randomUUID(), ...entry }] }
+    if (entry.kind === 'feat' && entry.chosenSpellIds?.length) {
+      const known = new Set(character.spells.map((s) => s.compendiumId).filter(Boolean))
+      const granted: Spell[] = entry.chosenSpellIds
+        .filter((id) => !known.has(id))
+        .map((id) => getSpellById(id))
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action', compendiumId: s.id, free: true }))
+      patch.spells = [...character.spells, ...granted]
+      if (!character.spellcastingAbility && entry.chosenAbility) patch.spellcastingAbility = entry.chosenAbility
+    }
+    onSave(patch)
   }
 
   function removeAsiSlot(id: string): void {
@@ -523,6 +555,38 @@ function ClassFeatureSection({
   const unresolvedFightingStyleLevels = fightingStyleLevels.filter(
     (level) => !character.asiSlotChoices.some((s) => s.level === level && s.className.toLowerCase() === classLevel.className.toLowerCase())
   )
+  const chosenFightingStyleFeatIds = character.asiSlotChoices
+    .filter((s) => s.className.toLowerCase() === classLevel.className.toLowerCase() && s.kind === 'feat' && s.featId)
+    .map((s) => s.featId!)
+    .filter((id) => FEATS.find((f) => f.id === id)?.category === 'Fighting Style')
+  const additionalFightingStyleLevels = subclassFightingStyleSlotLevelsUpToLevel(cls.id, chosenSubclass?.id, classLevel.level)
+  const unresolvedAdditionalFightingStyleLevels = additionalFightingStyleLevels.filter(
+    (level) => !character.asiSlotChoices.some((s) => s.level === level && s.className.toLowerCase() === classLevel.className.toLowerCase())
+  )
+
+  const isRangerClass = cls.id === 'ranger'
+  const resolvedFavoredEnemies = isRangerClass
+    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Favored Enemy' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    : []
+  const favoredEnemySlots = isRangerClass ? favoredEnemySlotLevelsUpToLevel(classLevel.level) : []
+  const unresolvedFavoredEnemySlots = favoredEnemySlots.slice(resolvedFavoredEnemies.length)
+  const resolvedFavoredTerrains = isRangerClass
+    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Favored Terrain' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    : []
+  const favoredTerrainSlots = isRangerClass ? favoredTerrainSlotLevelsUpToLevel(classLevel.level) : []
+  const unresolvedFavoredTerrainSlots = favoredTerrainSlots.slice(resolvedFavoredTerrains.length)
+
+  const isDruidClass = cls.id === 'druid'
+  const circleTerrainChoice = isDruidClass
+    ? character.subclassFeatureChoices.find((c) => c.featureName === 'Circle of the Land' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    : undefined
+  const circleTerrain = circleTerrainChoice?.chosenName.split(':')[1]?.trim()
+  const circleSpellLevels = circleTerrain ? circleSpellLevelsUpToLevel(circleTerrain, classLevel.level) : []
+  const grantedCircleSpellLevels = character.subclassFeatureChoices
+    .filter((c) => c.featureName === 'Circle Spells' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+    .map((c) => c.level)
+  const ungrantedCircleSpellLevels = circleSpellLevels.filter((entry) => !grantedCircleSpellLevels.includes(entry.level))
+
   const customFeatures = character.customClassFeatures.filter(
     (f) => f.className.toLowerCase() === classLevel.className.toLowerCase() && f.level <= classLevel.level
   )
@@ -545,6 +609,13 @@ function ClassFeatureSection({
     resolvedSpellMastery.length === 0 &&
     unresolvedSignatureSpellsCount === 0 &&
     resolvedSignatureSpells.length === 0 &&
+    unresolvedAdditionalFightingStyleLevels.length === 0 &&
+    resolvedFavoredEnemies.length === 0 &&
+    unresolvedFavoredEnemySlots.length === 0 &&
+    resolvedFavoredTerrains.length === 0 &&
+    unresolvedFavoredTerrainSlots.length === 0 &&
+    ungrantedCircleSpellLevels.length === 0 &&
+    grantedCircleSpellLevels.length === 0 &&
     !(classLevel.level >= cls.subclassLevel)
 
   if (nothingYet) return null
@@ -557,7 +628,12 @@ function ClassFeatureSection({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {curated.map((f) => (
-            <InfoChip key={`${f.level}:${f.name}`} title={f.name} subtitle={`${classLevel.className} ${f.level}`} description={f.description} />
+            <InfoChip
+              key={`${f.level}:${f.name}`}
+              title={f.name === 'Sneak Attack' ? `Sneak Attack (${sneakAttackDice(classLevel.level)})` : f.name}
+              subtitle={`${classLevel.className} ${f.level}`}
+              description={f.description}
+            />
           ))}
           {groupedSubclassFeatures
             .filter((g) => g.kind === 'single')
@@ -641,6 +717,38 @@ function ClassFeatureSection({
               onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
             />
           ))}
+          {resolvedFavoredEnemies.map((choice) => (
+            <InfoChip
+              key={choice.id}
+              title={choice.chosenName}
+              subtitle={`Favored Enemy — ${classLevel.className} ${choice.level}`}
+              description={FAVORED_ENEMY_OPTIONS.find((o) => o.name === choice.chosenName)?.description ?? ''}
+              accent
+              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
+            />
+          ))}
+          {resolvedFavoredTerrains.map((choice) => (
+            <InfoChip
+              key={choice.id}
+              title={choice.chosenName}
+              subtitle={`Favored Terrain — ${classLevel.className} ${choice.level}`}
+              description={FAVORED_TERRAIN_OPTIONS.find((o) => o.name === choice.chosenName)?.description ?? ''}
+              accent
+              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
+            />
+          ))}
+          {isDruidClass &&
+            character.subclassFeatureChoices
+              .filter((c) => c.featureName === 'Circle Spells' && c.className.toLowerCase() === classLevel.className.toLowerCase())
+              .map((choice) => (
+                <InfoChip
+                  key={choice.id}
+                  title={`Circle Spells (${classLevel.subclass} ${choice.level})`}
+                  subtitle="Always prepared"
+                  description={choice.chosenName}
+                  accent
+                />
+              ))}
           {customFeatures.map((f) => (
             <InfoChip key={f.id} title={f.name} subtitle={`${classLevel.className} ${f.level} (custom)`} description={f.description} />
           ))}
@@ -699,6 +807,70 @@ function ClassFeatureSection({
             level={level}
             readOnly={readOnly}
             onResolve={(entry) => onResolveAsi(entry)}
+          />
+        ))}
+
+        {unresolvedAdditionalFightingStyleLevels.map((level) => (
+          <FightingStyleChooser
+            key={`fs-additional:${level}`}
+            classLabel={classLevel.className}
+            level={level}
+            excludeFeatIds={chosenFightingStyleFeatIds}
+            readOnly={readOnly}
+            onResolve={(entry) => onResolveAsi(entry)}
+          />
+        ))}
+
+        {unresolvedFavoredEnemySlots.map((level) => (
+          <NamedOptionChooser
+            key={`favored-enemy:${level}`}
+            classLabel={classLevel.className}
+            level={level}
+            featureName="Favored Enemy"
+            options={FAVORED_ENEMY_OPTIONS}
+            excludeNames={resolvedFavoredEnemies.map((c) => c.chosenName)}
+            readOnly={readOnly}
+            onChoose={(chosenName) => onResolveSubclassFeatureChoice({ className: classLevel.className, level, featureName: 'Favored Enemy', chosenName })}
+          />
+        ))}
+
+        {unresolvedFavoredTerrainSlots.map((level) => (
+          <NamedOptionChooser
+            key={`favored-terrain:${level}`}
+            classLabel={classLevel.className}
+            level={level}
+            featureName="Favored Terrain"
+            options={FAVORED_TERRAIN_OPTIONS}
+            excludeNames={resolvedFavoredTerrains.map((c) => c.chosenName)}
+            readOnly={readOnly}
+            onChoose={(chosenName) => onResolveSubclassFeatureChoice({ className: classLevel.className, level, featureName: 'Favored Terrain', chosenName })}
+          />
+        ))}
+
+        {ungrantedCircleSpellLevels.map(({ level, spellIds }) => (
+          <CircleSpellsGrant
+            key={`circle-spells:${level}`}
+            classLabel={classLevel.className}
+            terrain={circleTerrain ?? ''}
+            level={level}
+            spellIds={spellIds}
+            readOnly={readOnly}
+            onGrant={() => {
+              const known = new Set(character.spells.map((s) => s.compendiumId).filter(Boolean))
+              const granted: Spell[] = spellIds
+                .filter((id) => !known.has(id))
+                .map((id) => getSpellById(id))
+                .filter((s): s is NonNullable<typeof s> => !!s)
+                .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action', compendiumId: s.id, free: true }))
+              const names = spellIds.map((id) => getSpellById(id)?.name).filter((n): n is string => !!n)
+              onSave({
+                spells: [...character.spells, ...granted],
+                subclassFeatureChoices: [
+                  ...character.subclassFeatureChoices,
+                  { id: crypto.randomUUID(), className: classLevel.className, level, featureName: 'Circle Spells', chosenName: names.join(', ') }
+                ]
+              })
+            }}
           />
         ))}
 
@@ -944,7 +1116,39 @@ function SubclassFeatureOptionChooser({
   )
 }
 
-function UsesTracker({
+/** Circle of the Land's "circle spells" aren't a choice (the two spells for a given terrain/level are fixed) — just a one-click grant once the terrain is known and the level threshold is reached, matching how a real player would just add them to their prepared list. */
+function CircleSpellsGrant({
+  classLabel,
+  terrain,
+  level,
+  spellIds,
+  readOnly,
+  onGrant
+}: {
+  classLabel: string
+  terrain: string
+  level: number
+  spellIds: string[]
+  readOnly?: boolean
+  onGrant: () => void
+}): JSX.Element {
+  const names = spellIds.map((id) => SPELLS.find((s) => s.id === id)?.name ?? id)
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+      <strong>
+        Circle Spells — {classLabel} {level}
+      </strong>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
+        Your {terrain} circle grants {names.join(' and ')}, always prepared, at no cost against your normal spells known.
+      </div>
+      <Button variant="primary" onClick={onGrant} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
+        + Add to Spells
+      </Button>
+    </div>
+  )
+}
+
+export function UsesTracker({
   max,
   used,
   remaining,
@@ -991,7 +1195,7 @@ function UsesTracker({
   )
 }
 
-function PoolTracker({
+export function PoolTracker({
   max,
   used,
   remaining,

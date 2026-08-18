@@ -530,12 +530,12 @@ export const CLASS_LEVEL_FEATURES: Record<string, ClassLevelFeature[]> = {
   druid: [
     { level: 1, name: 'Druidic', description: 'You know the secret language of druids.' },
     { level: 1, name: 'Spellcasting', description: 'Cast druid spells using Wisdom.' },
-    { level: 2, name: 'Wild Shape', description: 'Transform into a beast you’ve seen, twice per short rest.' },
+    { level: 2, name: 'Wild Shape', description: 'Transform into a beast with a challenge rating of 1/4 or lower, no flying or swimming speed, twice per short rest.' },
     { level: 2, name: 'Druid Circle', description: 'Choose a druid subclass.' },
-    { level: 4, name: 'Wild Shape Improvement', description: 'Wild Shape into new beast forms.' },
+    { level: 4, name: 'Wild Shape Improvement', description: 'Wild Shape into a beast with a challenge rating of 1/2 or lower — a swimming speed is now allowed, but not a flying one.' },
     asi(4),
     { level: 6, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
-    { level: 8, name: 'Wild Shape Improvement', description: 'Wild Shape into new beast forms.' },
+    { level: 8, name: 'Wild Shape Improvement', description: 'Wild Shape into a beast with a challenge rating of 1 or lower — a flying speed is now allowed.' },
     asi(8),
     { level: 10, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
     asi(12),
@@ -644,7 +644,12 @@ export const CLASS_LEVEL_FEATURES: Record<string, ClassLevelFeature[]> = {
   ],
   rogue: [
     { level: 1, name: 'Expertise', description: 'Double your proficiency bonus for two chosen skill proficiencies.' },
-    { level: 1, name: 'Sneak Attack', description: 'Extra damage once per turn when you have advantage or a nearby ally.' },
+    {
+      level: 1,
+      name: 'Sneak Attack',
+      description:
+        'Once per turn, deal an extra 1d6 damage (see the Combat tab for your current total, which grows every two Rogue levels) to one creature you hit with an attack using a Finesse or Ranged weapon, if you have advantage on the attack roll. You don’t need advantage if another enemy of the target is within 5 feet of it, that enemy isn’t incapacitated, and you don’t have disadvantage on the attack roll.'
+    },
     { level: 1, name: 'Thieves’ Cant', description: 'A secret mix of dialect, jargon, and code.' },
     { level: 2, name: 'Cunning Action', description: 'Dash, Disengage, or Hide as a bonus action.' },
     { level: 3, name: 'Roguish Archetype', description: 'Choose a rogue subclass.' },
@@ -736,6 +741,11 @@ export function curatedFeaturesForLevelUp(className: string, fromLevel: number, 
   return table.filter((f) => f.level > fromLevel && f.level <= toLevel)
 }
 
+/** Rogue Sneak Attack's damage die count at a given Rogue class level — 1d6 at 1st, +1d6 every 2 levels, capping at 10d6 at 19th. Shown dynamically wherever Sneak Attack is displayed, since the curated feature table only has one static row for it. */
+export function sneakAttackDice(rogueLevel: number): string {
+  return `${Math.min(10, Math.ceil(rogueLevel / 2))}d6`
+}
+
 /** Every ASI level (from CLASS_LEVEL_FEATURES's asi() rows) at or below `level` for a class — the set of slots FeaturesTab.tsx needs to render (resolved or as an inline chooser) for that class at its current level. */
 export function asiSlotLevelsUpToLevel(className: string, level: number): number[] {
   return curatedFeaturesForLevelUp(className, 0, level)
@@ -756,6 +766,52 @@ export function fightingStyleSlotLevelsUpToLevel(className: string, level: numbe
   return curatedFeaturesForLevelUp(className, 0, level)
     .filter((f) => f.name === 'Fighting Style')
     .map((f) => f.level)
+}
+
+/** Subclass-granted extra Fighting Style picks, on top of the base-class one above — SRD 2014's only case is the Fighter's Champion archetype, which gets a second pick (Additional Fighting Style) at 10th level. Keyed off the class's chosen subclass id (see shared/compendium.ts's CompendiumSubclass), not the class table, since this is archetype-specific rather than universal to the class. */
+export function subclassFightingStyleSlotLevelsUpToLevel(classId: string, subclassId: string | undefined, level: number): number[] {
+  if (classId === 'fighter' && subclassId === 'champion' && level >= 10) return [10]
+  return []
+}
+
+/** SRD 2014 Ranger Favored Enemy — creature types (plus two humanoid races of your choice, represented here as freeform-friendly generic options); one is chosen at 1st level, a second at 6th ("Favored Enemy & Explorer Improvement"). */
+export const FAVORED_ENEMY_OPTIONS: NamedOption[] = [
+  { name: 'Aberrations', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Aberrations — plus learn one language they speak, if any.' },
+  { name: 'Beasts', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Beasts — plus learn one language they speak, if any.' },
+  { name: 'Celestials', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Celestials — plus learn one language they speak, if any.' },
+  { name: 'Constructs', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Constructs — plus learn one language they speak, if any.' },
+  { name: 'Dragons', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Dragons — plus learn one language they speak, if any.' },
+  { name: 'Elementals', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Elementals — plus learn one language they speak, if any.' },
+  { name: 'Fey', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Fey — plus learn one language they speak, if any.' },
+  { name: 'Fiends', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Fiends — plus learn one language they speak, if any.' },
+  { name: 'Giants', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Giants — plus learn one language they speak, if any.' },
+  { name: 'Monstrosities', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Monstrosities — plus learn one language they speak, if any.' },
+  { name: 'Oozes', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Oozes — plus learn one language they speak, if any.' },
+  { name: 'Plants', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Plants — plus learn one language they speak, if any.' },
+  { name: 'Undead', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, Undead — plus learn one language they speak, if any.' },
+  { name: 'Humanoids (two races of your choice)', description: 'Advantage on Wisdom (Survival) checks to track, and Intelligence checks to recall lore about, two races of humanoid you choose — plus learn one language spoken by either, if any.' }
+]
+
+/** SRD 2014 Ranger Natural Explorer favored terrains — one chosen at 1st level, additional ones at 6th and 10th. */
+export const FAVORED_TERRAIN_OPTIONS: NamedOption[] = [
+  { name: 'Arctic', description: 'In this terrain: difficult terrain doesn’t slow your group’s travel, you can’t get lost except by magic, you stay alert to danger even while doing another task while traveling, you move stealthily at a normal pace when alone, you find twice as much food when foraging, and you learn a creature’s exact number, and the general strength, of a group you’re tracking.' },
+  { name: 'Coast', description: 'Same Natural Explorer benefits as Arctic, applied to coastal terrain.' },
+  { name: 'Desert', description: 'Same Natural Explorer benefits as Arctic, applied to desert terrain.' },
+  { name: 'Forest', description: 'Same Natural Explorer benefits as Arctic, applied to forest terrain.' },
+  { name: 'Grassland', description: 'Same Natural Explorer benefits as Arctic, applied to grassland terrain.' },
+  { name: 'Mountain', description: 'Same Natural Explorer benefits as Arctic, applied to mountain terrain.' },
+  { name: 'Swamp', description: 'Same Natural Explorer benefits as Arctic, applied to swamp terrain.' },
+  { name: 'Underdark', description: 'Same Natural Explorer benefits as Arctic, applied to the Underdark.' }
+]
+
+/** Favored Enemy is picked at 1st level, then again at 6th ("Favored Enemy & Explorer Improvement") — same shape as asiSlotLevelsUpToLevel/fightingStyleSlotLevelsUpToLevel. */
+export function favoredEnemySlotLevelsUpToLevel(level: number): number[] {
+  return [1, 6].filter((l) => level >= l)
+}
+
+/** Natural Explorer's favored terrain is picked at 1st, 6th, and 10th level. */
+export function favoredTerrainSlotLevelsUpToLevel(level: number): number[] {
+  return [1, 6, 10].filter((l) => level >= l)
 }
 
 export interface NamedOption {
@@ -951,6 +1007,8 @@ export interface ClassResourceDef {
   recharge: (level: number) => 'short' | 'long'
   /** Max uses (kind 'uses') or pool size (kind 'pool') at a given class level. */
   max: (level: number, abilityMod: (ability: Ability) => number) => number
+  /** Which action economy this resource is spent with — drives which section of the Actions tab it's grouped into (see CombatTab.tsx). Most are 'bonus' (Rage, Second Wind, Ki-fueled abilities are usually bonus actions) or 'action'; omitted for a resource with no single fixed action cost (e.g. Sorcery Points, which fund other actions rather than being spent as one themselves). */
+  actionType?: ActionType
   /** Short one-liner shown directly on the card. */
   description: string
   /** Full SRD rules text (2014 SRD, OGL) — shown as a hover tooltip in FeaturesTab.tsx, same hover-for-detail pattern as everything else on the sheet. */
@@ -965,6 +1023,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Rage',
       kind: 'uses',
       minLevel: 1,
+      actionType: 'bonus',
       recharge: () => 'long',
       max: (level) => (level >= 20 ? 99 : level >= 17 ? 6 : level >= 12 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2),
       description: 'Bonus action to fly into a rage: bonus melee damage, resistance to bludgeoning/piercing/slashing, advantage on Strength checks and saves.',
@@ -978,6 +1037,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Bardic Inspiration',
       kind: 'uses',
       minLevel: 1,
+      actionType: 'bonus',
       // Font of Inspiration (5th level) changes this from long-rest to short-rest recharge — see the recharge field's own doc comment above.
       recharge: (level) => (level >= 5 ? 'short' : 'long'),
       max: (_level, abilityMod) => Math.max(1, abilityMod('cha')),
@@ -992,6 +1052,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Channel Divinity',
       kind: 'uses',
       minLevel: 2,
+      actionType: 'action',
       recharge: () => 'short',
       max: (level) => (level >= 18 ? 3 : level >= 6 ? 2 : 1),
       description: 'Channel divine energy for a supernatural effect, including Turn Undead.',
@@ -1005,11 +1066,13 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Wild Shape',
       kind: 'uses',
       minLevel: 2,
+      actionType: 'action',
       recharge: () => 'short',
-      max: () => 2,
+      // Archdruid (20th level) makes this unlimited — see the "> 20 renders as Unlimited" display rule in FeaturesTab.tsx's UsesTracker.
+      max: (level) => (level >= 20 ? 99 : 2),
       description: 'Magically assume the shape of a beast you’ve seen before.',
       fullDescription:
-        "You can use your action to magically assume the shape of a beast that you have seen before. You regain expended uses when you finish a short or long rest.\nYour druid level determines the beasts you can transform into — at 2nd level, for example, you can transform into any beast that has a challenge rating of 1/4 or lower that doesn't have a flying or swimming speed.\nYou can stay in a beast shape for a number of hours equal to half your druid level (rounded down), reverting early is possible as a bonus action, and you automatically revert if you fall unconscious, drop to 0 hit points, or die.\nWhile transformed: your game statistics are replaced by the beast's, but you keep your alignment, personality, Intelligence/Wisdom/Charisma scores, and proficiencies (using the higher bonus if both you and the beast share one). You can't cast spells or speak. You retain class/race features usable in the new form, but not special senses like darkvision unless the new form also has them."
+        "You can use your action to magically assume the shape of a beast that you have seen before. You regain expended uses when you finish a short or long rest — and at 20th level (Archdruid), you can do this an unlimited number of times, no rest required.\nYour druid level determines the beasts you can transform into: at 2nd level, any beast with a challenge rating of 1/4 or lower that doesn't have a flying or swimming speed; at 4th level, up to CR 1/2, swimming speed now allowed; at 8th level, up to CR 1, flying speed now allowed too.\nYou can stay in a beast shape for a number of hours equal to half your druid level (rounded down), reverting early is possible as a bonus action, and you automatically revert if you fall unconscious, drop to 0 hit points, or die.\nWhile transformed: your game statistics are replaced by the beast's, but you keep your alignment, personality, Intelligence/Wisdom/Charisma scores, and proficiencies (using the higher bonus if both you and the beast share one). You can't cast spells or speak. You retain class/race features usable in the new form, but not special senses like darkvision unless the new form also has them."
     }
   ],
   fighter: [
@@ -1018,6 +1081,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Second Wind',
       kind: 'uses',
       minLevel: 1,
+      actionType: 'bonus',
       recharge: () => 'short',
       max: () => 1,
       description: 'Bonus action to regain 1d10 + fighter level hit points.',
@@ -1029,6 +1093,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Action Surge',
       kind: 'uses',
       minLevel: 2,
+      actionType: 'action',
       recharge: () => 'short',
       max: (level) => (level >= 17 ? 2 : 1),
       description: 'Take one additional action on your turn.',
@@ -1066,6 +1131,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Lay on Hands',
       kind: 'pool',
       minLevel: 1,
+      actionType: 'action',
       recharge: () => 'long',
       max: (level) => level * 5,
       description: 'A pool of healing power — touch a creature to restore HP from the pool, 5 points to cure one disease or neutralize one poison.',
@@ -1077,6 +1143,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Divine Sense',
       kind: 'uses',
       minLevel: 1,
+      actionType: 'action',
       recharge: () => 'long',
       max: (_level, abilityMod) => 1 + Math.max(0, abilityMod('cha')),
       description: 'Action to detect celestials, fiends, and undead within 60 ft.',
@@ -1132,6 +1199,60 @@ export function resourcesForCharacter(
 }
 
 export type ActionType = 'action' | 'bonus' | 'reaction'
+
+/**
+ * A class feature that's a free, unlimited-use toggle rather than a
+ * chargeable resource (see CLASS_RESOURCES) or a passive number — you turn
+ * it on for a scene/turn and its effects apply until you turn it back off.
+ * Barbarian's Reckless Attack (attack with advantage, at the cost of
+ * attacks against you also having advantage) is the SRD's clearest example;
+ * modeled as its own small system rather than shoehorned into
+ * CLASS_RESOURCES since it has no "uses" or "pool" to track. Rendered in
+ * the Combat tab's Actions section as a plain on/off button, stored the
+ * same way an activatable class resource buff is (character.activeBuffs),
+ * just without ever spending a use.
+ */
+export interface ToggleFeatureDef {
+  id: string
+  name: string
+  classId: string
+  minLevel: number
+  actionType: ActionType
+  description: string
+}
+
+export const TOGGLE_FEATURES: ToggleFeatureDef[] = [
+  {
+    id: 'barbarian-reckless-attack',
+    name: 'Reckless Attack',
+    classId: 'barbarian',
+    minLevel: 2,
+    actionType: 'action',
+    description:
+      'When you make your first attack on your turn, you can decide to attack recklessly — doing so gives you advantage on melee weapon attack rolls using Strength during this turn, but attack rolls against you have advantage until your next turn.'
+  }
+]
+
+/** Every toggle feature the character currently qualifies for, across all their classes. */
+export function toggleFeaturesForCharacter(classes: ClassLevel[]): Array<ToggleFeatureDef & { className: string }> {
+  const result: Array<ToggleFeatureDef & { className: string }> = []
+  for (const c of classes) {
+    const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
+    if (!cls) continue
+    for (const def of TOGGLE_FEATURES) {
+      if (def.classId === cls.id && c.level >= def.minLevel) result.push({ ...def, className: c.className })
+    }
+  }
+  return result
+}
+
+/** Class names (as they appear on ClassLevel.className) of every class the character has that's actually a spellcasting class per CLASSES — used to restrict the Spells tab's "+ Add Spell" picker to spells on the character's own class list(s), the way real spell-known/prepared rules work. Feat-granted spellcasting from an outside list (Magic Initiate) deliberately bypasses this via its own dedicated chooser instead of the general picker. */
+export function spellcasterClassNames(classes: ClassLevel[]): string[] {
+  return classes
+    .map((c) => CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase()))
+    .filter((cls): cls is Class => !!cls && cls.spellcastingAbility !== null)
+    .map((cls) => cls.name)
+}
 
 export interface Attack {
   id: string
@@ -1193,8 +1314,10 @@ export interface AsiSlotChoice {
   abilityIncreases?: Partial<Record<Ability, number>>
   /** kind 'feat': the chosen feat's id (shared/compendium.ts's FEATS). */
   featId?: string
-  /** kind 'feat', only when that feat has an `abilityScoreChoice` effect (e.g. Grappler's "Strength or Dexterity") — which ability was picked. */
+  /** kind 'feat', only when that feat has an `abilityScoreChoice` effect (e.g. Grappler's "Strength or Dexterity") — which ability was picked. Also doubles as the chosen spellcasting ability for a feat with a `spellChoice` effect (Magic Initiate) — picking Int/Wis/Cha for that feat's spells reuses this same field rather than a separate one. */
   chosenAbility?: Ability
+  /** kind 'feat', only for a feat with a `spellChoice` effect (Magic Initiate) — the compendium spell ids chosen to fill it, in the order they were picked (cantrips first, then the leveled spell). The matching Spell rows are also written into character.spells directly (see FeaturesTab.tsx's MagicInitiateChooser) so they're fully real/castable; this list is kept alongside just so removing the feat can be traced back to what it granted. */
+  chosenSpellIds?: string[]
 }
 
 /**
@@ -1234,6 +1357,8 @@ export interface Spell {
   higherLevel?: string
   /** Links back to a shared/compendium.ts spell — see Attack.compendiumId. */
   compendiumId?: string
+  /** True for a spell granted for free by a feat or subclass feature (Magic Initiate's cantrips/spell, a Druid Circle's circle spells) rather than chosen against the class's normal known/prepared spell cap — excluded from SpellsTab's spellCap/cantripCap counts, matching the SRD rule that these "always prepared"/bonus spells don't eat into your normal allotment. */
+  free?: boolean
 }
 
 export interface Appearance {
