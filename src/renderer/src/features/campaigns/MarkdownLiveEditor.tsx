@@ -17,6 +17,7 @@ import {
 import { WIKILINK_PATTERN, wikilinkIsDouble, wikilinkTarget } from '../../wikilink'
 import { resolveImageSrc } from '../../imageSrc'
 import { renderNoteMarkdown } from '../../markdown'
+import { saveCustomMonster } from '../../data/customBestiary'
 import type { Note } from '@shared/ipc'
 
 export interface MarkdownLiveEditorHandle {
@@ -85,6 +86,8 @@ function noteLinkCompletionSource(notesRef: { current: Note[] }): CompletionSour
 
 const WIKILINK_RE = new RegExp(WIKILINK_PATTERN, 'g')
 const IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g
+const EMBED_IMAGE_RE = /!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g
+const IMAGE_EXTENSION_RE = /\.(?:png|jpe?g|gif|svg|webp|bmp)$/i
 /** Bare `data:` payload, valid image syntax or not — see the fallback pass below. */
 const DATA_URI_RE = /data:[^\s)\]]{40,}/g
 
@@ -248,11 +251,30 @@ function buildDecorations(state: EditorState, knownTitles: Set<string>, campaign
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i)
     if (hiddenBlockRanges.some(([from, to]) => line.from >= from && line.to <= to)) continue
+    // Obsidian's embed syntax — `![[image.png]]` — scanned first so its span
+    // can be excluded from the wikilink scan below, which would otherwise
+    // match the `[[image.png]]` half on its own (a wikilink match doesn't
+    // care what precedes it) and render a broken link to a note literally
+    // titled "image.png" instead of the image.
+    const embedImageSpans: Array<[number, number]> = []
+    EMBED_IMAGE_RE.lastIndex = 0
+    let embedMatch: RegExpExecArray | null
+    while ((embedMatch = EMBED_IMAGE_RE.exec(line.text))) {
+      const target = embedMatch[1].trim()
+      if (!IMAGE_EXTENSION_RE.test(target)) continue
+      const from = line.from + embedMatch.index
+      const to = from + embedMatch[0].length
+      embedImageSpans.push([from, to])
+      if (selectionOverlaps(state, from, to)) continue
+      ranges.push(Decoration.replace({ widget: new ImageWidget(resolveImageSrc(campaignId, target), target) }).range(from, to))
+    }
+
     WIKILINK_RE.lastIndex = 0
     let match: RegExpExecArray | null
     while ((match = WIKILINK_RE.exec(line.text))) {
       const from = line.from + match.index
       const to = from + match[0].length
+      if (embedImageSpans.some(([s, e]) => from < e && to > s)) continue
       if (selectionOverlaps(state, from, to)) continue
       const target = wikilinkTarget(match)
       const isDouble = wikilinkIsDouble(match)
@@ -337,6 +359,18 @@ function livePreviewExtension(
   })
   const clickHandler = EditorView.domEventHandlers({
     mousedown(event, view) {
+      const saveBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-save-statblock]')
+      if (saveBtn) {
+        event.preventDefault()
+        try {
+          const data = JSON.parse(saveBtn.dataset.saveStatblock ?? '{}')
+          const saved = saveCustomMonster(data)
+          saveBtn.textContent = `Saved: ${saved.name}`
+        } catch {
+          /* malformed statblock JSON — nothing sensible to save */
+        }
+        return true
+      }
       const el = (event.target as HTMLElement).closest<HTMLElement>('[data-wikilink]')
       if (!el) return false
       // Clicking a rendered (collapsed) wikilink navigates, matching the

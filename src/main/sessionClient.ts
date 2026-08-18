@@ -4,6 +4,7 @@ import type { BrowserWindow } from 'electron'
 import { RELAY_URL, relaySessionPath } from '@server/relay/relayConfig'
 import type {
   CampaignChangedFrame,
+  InitiativeFrame,
   PresenceFrame,
   RequestFrame,
   RequestKind,
@@ -193,5 +194,10 @@ function handleFrame(raw: WebSocket.RawData): void {
 
   if (payload.type === 'active-campaign-changed' && clientWindow) {
     clientWindow.webContents.send('ws:active-campaign-changed', { sessionId: currentSessionId })
+  }
+
+  if (payload.type === 'initiative' && clientWindow) {
+    const frame = payload as InitiativeFrame
+    clientWindow.webContents.send('ws:initiative', { sessionId: currentSessionId, state: frame.state })
   }
 }

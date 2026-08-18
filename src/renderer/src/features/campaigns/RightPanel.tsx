@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react'
 import { ConnectedPlayersList } from './ConnectedPlayersList'
+import { InitiativeTracker } from './InitiativeTracker'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon } from './panelIcons'
 import type { CharacterSheet } from '@shared/ipc'
 
-// Extend this union as new tools land — dice roller, initiative tracker, etc.
-// The tab strip below already renders disabled placeholders for what's next.
-type RightPanelTab = 'players'
+// Extend this union as new tools land — a dice roller, etc.
+type RightPanelTab = 'players' | 'initiative'
 
 interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
@@ -34,10 +34,10 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
           <TabButton icon={<PlayersIcon />} label="Players" active={tab === 'players'} onClick={() => setTab('players')} />
           <TabButton icon={<DiceIcon />} label="Dice" disabled title="Coming soon" />
-          <TabButton icon={<InitiativeIcon />} label="Initiative" disabled title="Coming soon" />
+          <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: tab === 'players' ? 'auto' : 'hidden' }}>
           {tab === 'players' && (
             <ConnectedPlayersList
               sessionId={sessionId}
@@ -46,6 +46,7 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
               onSelectPlayer={onSelectPlayer}
             />
           )}
+          {tab === 'initiative' && <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} />}
         </div>
       </div>
     </ResizableSidebar>

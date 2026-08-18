@@ -14,6 +14,16 @@ interface WikilinkToken extends Tokens.Generic {
 const WIKILINK_START_RE = /\[/
 const WIKILINK_TOKEN_RE = new RegExp(`^(?:${WIKILINK_PATTERN})`)
 
+const EMBED_IMAGE_START_RE = /!\[\[/
+const EMBED_IMAGE_TOKEN_RE = /^!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/
+const IMAGE_EXTENSION_RE = /\.(?:png|jpe?g|gif|svg|webp|bmp)$/i
+
+interface EmbedImageToken extends Tokens.Generic {
+  type: 'embedImage'
+  target: string
+  alt: string
+}
+
 export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -64,6 +74,34 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
         }
       },
       extensions: [
+        {
+          // Obsidian's embed syntax — `![[image.png]]` — otherwise falls
+          // through to the wikilink extension below (which only sees
+          // `[[image.png]]`, the `!` doesn't stop it from matching) and
+          // renders as a broken link to a note literally titled "image.png"
+          // instead of the image. Only claims it when the target actually
+          // looks like an image file; `![[Some Note]]` (Obsidian's note
+          // transclusion) isn't implemented, so that still falls through to
+          // the ordinary wikilink rendering same as before.
+          name: 'embedImage',
+          level: 'inline',
+          start(src: string): number | undefined {
+            const idx = src.search(EMBED_IMAGE_START_RE)
+            return idx === -1 ? undefined : idx
+          },
+          tokenizer(src: string): EmbedImageToken | undefined {
+            const match = EMBED_IMAGE_TOKEN_RE.exec(src)
+            if (!match) return undefined
+            const target = match[1].trim()
+            if (!IMAGE_EXTENSION_RE.test(target)) return undefined
+            return { type: 'embedImage', raw: match[0], target, alt: (match[2]?.trim() || target) }
+          },
+          renderer(token: Tokens.Generic): string {
+            const { target, alt } = token as EmbedImageToken
+            const src = escapeHtml(resolveImageSrc(campaignId, target))
+            return `<img src="${src}" alt="${escapeHtml(alt)}">`
+          }
+        },
         {
           name: 'wikilink',
           level: 'inline',

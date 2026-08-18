@@ -3,6 +3,7 @@
 
 import type { CharacterSheetData } from './dnd5e'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification, RelayStatus } from './relay'
+import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 
 export interface Identity {
   id: string
@@ -88,6 +89,11 @@ export interface PresenceUpdate {
   sessionId: string
   campaignId: string
   players: PresencePlayer[]
+}
+
+export interface InitiativeUpdate {
+  sessionId: string
+  state: PlayerVisibleInitiativeState
 }
 
 export interface PlayerCharacterUpdate {
@@ -242,6 +248,15 @@ export interface AppApi {
     subscribe: (sessionId: string, campaignId: string) => Promise<void>
     selectCharacter: (sessionId: string, characterName: string | null) => Promise<void>
     onUpdate: (callback: (update: PresenceUpdate) => void) => () => void
+  }
+  // DM-only push of the initiative tracker's live state to every connected
+  // player — see shared/encounter.ts for the InitiativeState/
+  // PlayerVisibleInitiativeState shapes and sessionHost.ts's
+  // broadcastInitiative for the per-recipient sanitizing. A no-op while not
+  // hosting; the tracker still works locally either way.
+  initiative: {
+    broadcast: (state: InitiativeState) => Promise<void>
+    onUpdate: (callback: (update: InitiativeUpdate) => void) => () => void
   }
   // Friends/presence, backed by the relay (see relay/) rather than local
   // storage. The relay account itself is transparent — it's the same

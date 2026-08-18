@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { LockIcon, PlusIcon } from '../campaigns/icons'
+import { BackArrowIcon, LockIcon, PlusIcon } from '../campaigns/icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
 import type { Campaign, CampaignSnapshot, Folder, Note } from '@shared/ipc'
 import type { PlayerTabRef } from './usePlayerWorkspace'
@@ -48,6 +48,8 @@ interface PlayerSidebarProps {
   /** Every campaign previously cached while connected — offered as a fallback when there's no live campaign to show. */
   offlineSnapshots: CampaignSnapshot[] | null
   onOpenOfflineCampaign: (campaignId: string) => void
+  /** Leaves the offline snapshot currently being viewed, back to the "pick a cached campaign" list — only relevant while isOffline. */
+  onCloseOfflineCampaign: () => void
   /** The character switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
   footer: ReactNode
 }
@@ -77,6 +79,7 @@ export function PlayerSidebar({
   offlineSyncedAt,
   offlineSnapshots,
   onOpenOfflineCampaign,
+  onCloseOfflineCampaign,
   footer
 }: PlayerSidebarProps): JSX.Element {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
@@ -156,7 +159,6 @@ export function PlayerSidebar({
           <>
             {isOffline && (
               <div
-                title="Read-only — the DM isn't currently hosting. Connect to make changes."
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -164,19 +166,39 @@ export function PlayerSidebar({
                   padding: '5px var(--space-3)',
                   fontSize: 11,
                   fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
                   color: 'var(--text-muted)',
                   background: 'var(--bg-surface-raised)',
                   borderBottom: '1px solid var(--border-subtle)',
                   flexShrink: 0
                 }}
               >
-                Offline{offlineSyncedAt ? ` · synced ${formatSyncedAt(offlineSyncedAt)}` : ''}
+                <button
+                  type="button"
+                  onClick={onCloseOfflineCampaign}
+                  title="Back to other cached campaigns"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <BackArrowIcon />
+                </button>
+                <span
+                  title="Read-only — the DM isn't currently hosting. Connect to make changes."
+                  style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
+                >
+                  Offline{offlineSyncedAt ? ` · synced ${formatSyncedAt(offlineSyncedAt)}` : ''}
+                </span>
               </div>
             )}
             <div style={{ height: partyHeight, minHeight: 0, overflowY: 'auto', flexShrink: 0 }}>
               <NoteTreeSection
+                key={`${activeCampaign.id}:party`}
                 title="Party Notes"
                 storageKey={`${activeCampaign.id}:party`}
                 visibility="shared"
@@ -225,6 +247,7 @@ export function PlayerSidebar({
 
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <NoteTreeSection
+                key={`${activeCampaign.id}:private`}
                 title="Private Notes"
                 headerIcon={<LockIcon />}
                 storageKey={`${activeCampaign.id}:private`}

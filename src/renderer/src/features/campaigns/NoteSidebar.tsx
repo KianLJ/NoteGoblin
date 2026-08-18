@@ -139,6 +139,14 @@ export function NoteSidebar({
       >
         <div style={{ height: isDm ? partyHeight : '100%', minHeight: 0, overflowY: 'auto', flexShrink: 0 }}>
           <NoteTreeSection
+            // Forces a remount when the real campaign id replaces the
+            // 'none' placeholder (or when switching between campaigns) —
+            // without it, the collapsed-folders state loaded by this
+            // component's lazy useState initializer at the 'none' mount
+            // never gets reloaded from the correct localStorage key once
+            // storageKey changes, since a changed prop alone doesn't rerun
+            // that initializer. See loadCollapsed/storageKey below.
+            key={`${storageBase}:shared`}
             title="Party Notes"
             storageKey={`${storageBase}:shared`}
             visibility="shared"
@@ -195,6 +203,7 @@ export function NoteSidebar({
 
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <NoteTreeSection
+                key={`${storageBase}:dm`}
                 title="DM Only"
                 headerIcon={<LockIcon />}
                 storageKey={`${storageBase}:dm`}

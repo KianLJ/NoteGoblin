@@ -1,6 +1,6 @@
 {
   "name": "notegoblin",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "A D&D campaign companion for DMs and players — notes, character sheets, initiative, and live party chat with friends over the internet.",
   "main": "./out/main/index.js",
   "author": "NoteGoblin",

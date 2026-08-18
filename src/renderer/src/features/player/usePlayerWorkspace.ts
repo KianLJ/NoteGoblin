@@ -164,6 +164,17 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     })
   }
 
+  /** Leaves the currently-viewed offline snapshot, back to the "pick a cached campaign" list — the only way out otherwise being an actual live reconnect. */
+  function closeOfflineCampaign(): void {
+    setIsOffline(false)
+    setOfflineSyncedAt(null)
+    setActiveCampaign(null)
+    setNotes(null)
+    setFolders(null)
+    setTabs((prev) => prev.filter((t) => t.kind !== 'note'))
+    setActiveTabState((current) => (current?.kind === 'note' ? null : current))
+  }
+
 
   function openTab(ref: PlayerTabRef): void {
     setTabs((prev) => (prev.some((t) => sameTab(t, ref)) ? prev : [...prev, ref]))
@@ -448,6 +459,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     isOffline,
     offlineSyncedAt,
     openOfflineCampaign,
+    closeOfflineCampaign,
     refreshOfflineSnapshots
   }
 }

@@ -11,10 +11,12 @@ import type {
   ResponseFrame,
   PresenceFrame,
   CampaignChangedFrame,
-  ActiveCampaignChangedFrame
+  ActiveCampaignChangedFrame,
+  InitiativeFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet } from '@shared/ipc'
+import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
 
 /**
  * DM side of a hosted session — like-for-like replacement of hostServer.ts's
@@ -197,6 +199,19 @@ export function broadcastCampaignChanged(campaignId: string): void {
 export function broadcastActiveCampaignChanged(): void {
   const frame: ActiveCampaignChangedFrame = { type: 'active-campaign-changed' }
   for (const p of players.values()) sendToRelay(p.userId, frame)
+}
+
+/**
+ * Pushes the DM's initiative tracker state to every connected player —
+ * sanitized per-recipient (see shared/encounter.ts's sanitizeForPlayer), so
+ * each player's copy is computed fresh rather than one shared payload; a
+ * monster's real name/exact HP/AC/position never leaves this process.
+ */
+export function broadcastInitiative(state: InitiativeState): void {
+  for (const p of players.values()) {
+    const frame: InitiativeFrame = { type: 'initiative', state: sanitizeForPlayer(state, p.userId) }
+    sendToRelay(p.userId, frame)
+  }
 }
 
 function handleFrame(raw: WebSocket.RawData): void {
