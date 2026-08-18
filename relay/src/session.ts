@@ -141,6 +141,7 @@ export class Session extends Server<Env> {
     }
 
     connection.setState({ userId: payload.userId, username, role } satisfies ConnState)
+    console.log(`[session] onConnect: userId=${payload.userId} role=${role} username=${username}`)
 
     // The WebSocket handshake itself always completes (and fires the client's
     // `open` event) before this handler runs — connection.close() above still
@@ -171,7 +172,11 @@ export class Session extends Server<Env> {
     if (connection.state.role === 'player') {
       // Players only ever address the DM — the relay doesn't interpret
       // `payload`, it's opaque business-logic content from sessionClient.ts.
-      for (const dmConn of this.getConnections<ConnState>('role:dm')) {
+      const dmConns = [...this.getConnections<ConnState>('role:dm')]
+      console.log(
+        `[session] player->dm message from userId=${connection.state.userId}, dmConns found=${dmConns.length}, totalConns=${[...this.getConnections()].length}`
+      )
+      for (const dmConn of dmConns) {
         send(dmConn, { from: connection.state.userId, fromUsername: connection.state.username, payload: frame.payload })
       }
       return
@@ -183,8 +188,10 @@ export class Session extends Server<Env> {
         send(conn, { payload: frame.payload })
       }
     } else if (typeof frame.to === 'string') {
-      for (const conn of this.getConnections<ConnState>(`user:${frame.to}`)) {
-        if (conn.state?.role === 'player') send(conn, { payload: frame.payload })
+      const targets = [...this.getConnections<ConnState>(`user:${frame.to}`)].filter((c) => c.state?.role === 'player')
+      console.log(`[session] dm->player response to userId=${frame.to}, targets found=${targets.length}`)
+      for (const conn of targets) {
+        send(conn, { payload: frame.payload })
       }
     }
   }

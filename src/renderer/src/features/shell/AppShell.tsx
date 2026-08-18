@@ -128,10 +128,18 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
   // Whatever campaign the DM has open is "the table" — connecting players
   // auto-join this instead of picking from a list themselves. Recorded on
-  // the relay session so a player discovers it the moment they join.
+  // the relay session so a player discovers it the moment they join. The
+  // result used to be discarded outright — if this ever failed (a race with
+  // identity loading, an ownership mismatch, anything), the DM's own view of
+  // the campaign looked completely normal while every join silently failed
+  // with "the DM hasn't started a session yet," with no way to tell why.
   useEffect(() => {
     if (!activeCampaign) return
-    window.goblin.campaigns.setActive(activeCampaign.id)
+    window.goblin.campaigns.setActive(activeCampaign.id).then((result) => {
+      if (!result.ok) {
+        console.error(`Failed to mark "${activeCampaign.name}" as the active/hostable campaign: ${result.error}`)
+      }
+    })
   }, [activeCampaign])
 
   // Player: subscribe to presence once connected to a campaign, and keep the
