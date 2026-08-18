@@ -190,19 +190,33 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const idlePresenceLine = useMemo(() => IDLE_PRESENCE_LINES[Math.floor(Math.random() * IDLE_PRESENCE_LINES.length)], [])
 
   // Discord Rich Presence — "DM for <campaign>" while actively hosting,
-  // "Playing in <campaign>" while connected to someone else's, and a bit of
-  // goblin flavor any other time (not hosting/not joined, or no campaign
-  // yet) rather than blank. See main/discordPresence.ts for why this is
-  // entirely best-effort: it's a no-op if Discord isn't running.
+  // "Playing in <campaign> as <character>" while connected to someone
+  // else's with a character selected (lastActiveCharacter, same "sticky
+  // across note tabs" character used to announce presence/sync your sheet
+  // above — falls back to plain "Playing in <campaign>" if you haven't
+  // picked one), and a bit of goblin flavor any other time (not hosting/not
+  // joined, or no campaign yet) rather than blank. See
+  // main/discordPresence.ts for why this is entirely best-effort: it's a
+  // no-op if Discord isn't running.
   useEffect(() => {
     const details =
       mode === 'dm' && hostedSessionId && activeCampaign
         ? `DM for ${activeCampaign.name}`
         : mode === 'player' && joinedSession && playerWorkspace.activeCampaign
-          ? `Playing in ${playerWorkspace.activeCampaign.name}`
+          ? playerWorkspace.lastActiveCharacter
+            ? `Playing in ${playerWorkspace.activeCampaign.name} as ${playerWorkspace.lastActiveCharacter.name || 'Unnamed Character'}`
+            : `Playing in ${playerWorkspace.activeCampaign.name}`
           : idlePresenceLine
     void window.goblin.discord.setActivity(details)
-  }, [mode, hostedSessionId, activeCampaign, joinedSession, playerWorkspace.activeCampaign, idlePresenceLine])
+  }, [
+    mode,
+    hostedSessionId,
+    activeCampaign,
+    joinedSession,
+    playerWorkspace.activeCampaign,
+    playerWorkspace.lastActiveCharacter,
+    idlePresenceLine
+  ])
 
   // DM: every connected player's currently-selected character, kept live —
   // used by RightPanel's ConnectedPlayersList to open one as a read-only tab.

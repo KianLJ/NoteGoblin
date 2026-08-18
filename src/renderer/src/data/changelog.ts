@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.3',
+    title: 'Show your character in Discord presence',
+    highlights: [
+      'Player-side Discord presence now shows "Playing in <campaign> as <character>" when you have a character selected, falling back to just "Playing in <campaign>" otherwise'
+    ]
+  },
+  {
     version: '0.3.2',
     title: 'Fix Discord Rich Presence never actually showing',
     highlights: [
