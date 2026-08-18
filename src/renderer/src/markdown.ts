@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify'
 import { WIKILINK_PATTERN, wikilinkAlias, wikilinkTarget } from './wikilink'
 import { resolveImageSrc } from './imageSrc'
 import { parseStatblock, renderStatblockHtml } from './statblock'
+import { parseDiceCodeSpan } from '@shared/dice'
 
 /** A minimal Obsidian-style wikilink token — `[[Target]]`/`[[Target|Alias]]` or `[Target]`/`[Target|Alias]`. */
 interface WikilinkToken extends Tokens.Generic {
@@ -71,6 +72,18 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
           const langName = (lang ?? '').trim().split(/\s+/)[0]
           const langClass = langName ? ` class="language-${escapeHtml(langName)}"` : ''
           return `<pre><code${langClass}>${escapeHtml(text)}</code></pre>`
+        },
+        // Inline `` `dice: 2d6 + 3` `` code spans render as a clickable roll
+        // button instead of plain code — the click handler (see
+        // NoteEditor.tsx's handlePreviewClick) rolls it through the same
+        // shared dice log/broadcast path the Dice Tray's own Roll button
+        // uses (see features/dice/diceLogStore.ts), so it shows up there
+        // too. Anything else falls back to marked's own plain <code>.
+        codespan({ text }: Tokens.Codespan): string {
+          const dice = parseDiceCodeSpan(text)
+          if (!dice) return `<code>${escapeHtml(text)}</code>`
+          const payload = escapeHtml(JSON.stringify(dice))
+          return `<button type="button" class="gb-dice-roll" data-dice-roll="${payload}" title="Click to roll">🎲 ${escapeHtml(text.replace(/^dice:\s*/i, ''))}</button>`
         }
       },
       extensions: [

@@ -1,4 +1,5 @@
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
+import type { DiceRollLogEntry } from '@shared/dice'
 
 /**
  * Frame shapes carried opaquely by the relay's session room (relay/src/session.ts,
@@ -28,6 +29,7 @@ export type RequestKind =
   | 'characters.sync'
   | 'characters.getPlayerCharacter'
   | 'initiative.setMine'
+  | 'dice.roll'
 
 export interface RequestFrame {
   reqId: string
@@ -66,4 +68,20 @@ export interface ActiveCampaignChangedFrame {
 export interface InitiativeFrame {
   type: 'initiative'
   state: PlayerVisibleInitiativeState
+}
+
+/**
+ * Pushed to every connected player (and, when relaying a player's own roll,
+ * to the DM's own window too) whenever anyone at the table rolls dice. The
+ * DM is the hub for this the same way it is for everything else — a
+ * player's roll reaches other players by going player → DM (as a
+ * 'dice.roll' request) → DM re-broadcasts this frame to everyone else, DM's
+ * own roll broadcasts directly. `roll` may already be a redacted (private)
+ * entry — see shared/dice.ts's redactRollForBroadcast, applied at the
+ * roller's own end before it's ever sent, so this frame never carries a
+ * private roll's real numbers regardless of who forwards it.
+ */
+export interface DiceRollFrame {
+  type: 'dice-roll'
+  roll: DiceRollLogEntry
 }

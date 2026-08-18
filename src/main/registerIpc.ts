@@ -25,9 +25,11 @@ import {
   subscribeDmPresence,
   broadcastCampaignChanged,
   broadcastActiveCampaignChanged,
-  broadcastInitiative
+  broadcastInitiative,
+  broadcastDiceRoll
 } from './sessionHost'
 import type { InitiativeState } from '@shared/encounter'
+import type { DiceRollLogEntry } from '@shared/dice'
 import { joinSession, leaveSession, sendRequest as sendSessionRequest } from './sessionClient'
 import {
   hasRememberedCredentials,
@@ -834,6 +836,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // is the one who actually owns the tracker's combatant list.
   ipcMain.handle('initiative:set-mine', (_event, initiative: number | null): void => {
     void sendSessionRequest('initiative.setMine', { initiative })
+  })
+
+  // --- Dice tray ------------------------------------------------------------
+  // Same DM-is-the-hub shape as everything else here: hosting broadcasts
+  // straight out to every player; joined sends the already-rolled (and
+  // already-redacted-if-private) entry to the DM to relay onward. Neither
+  // path waits on a response — the caller's own renderer already appended
+  // its true copy to its own local log before this fires, so there's
+  // nothing to wait for.
+  ipcMain.handle('dice:broadcast', (_event, sessionId: string, roll: DiceRollLogEntry): void => {
+    if (getHostedSession()?.sessionId === sessionId) broadcastDiceRoll(roll)
+    else void sendSessionRequest('dice.roll', { roll })
   })
 
   // --- Relay / Friends -----------------------------------------------------

@@ -4,6 +4,7 @@ import type { BrowserWindow } from 'electron'
 import { RELAY_URL, relaySessionPath } from '@server/relay/relayConfig'
 import type {
   CampaignChangedFrame,
+  DiceRollFrame,
   InitiativeFrame,
   PresenceFrame,
   RequestFrame,
@@ -199,5 +200,10 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'initiative' && clientWindow) {
     const frame = payload as InitiativeFrame
     clientWindow.webContents.send('ws:initiative', { sessionId: currentSessionId, state: frame.state })
+  }
+
+  if (payload.type === 'dice-roll' && clientWindow) {
+    const frame = payload as DiceRollFrame
+    clientWindow.webContents.send('ws:dice-roll', frame.roll)
   }
 }

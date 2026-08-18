@@ -230,6 +230,7 @@ export function PlayerWorkspaceBody({
             key={activeNote.id}
             note={activeNote}
             notes={notes ?? []}
+            sessionId={sessionId}
             readOnly={
               isOffline ||
               (activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? ''))
@@ -259,21 +260,22 @@ export function PlayerWorkspaceBody({
         )}
       </div>
 
-      {activeCampaign && !isOffline && (
-        <PartySidebar
-          sessionId={sessionId}
-          campaignId={activeCampaign.id}
-          myUserId={myUserId}
-          activeNote={activeNote}
-          onToggleEditor={(noteId, userId, grant) => {
-            const note = notes?.find((n) => n.id === noteId)
-            if (!note) return
-            const next = grant ? [...note.editorUserIds, userId] : note.editorUserIds.filter((id) => id !== userId)
-            saveNote(noteId, { editorUserIds: next })
-          }}
-          onViewCharacter={viewPartyMemberCharacter}
-        />
-      )}
+      {/* Always rendered, not gated on having an active campaign — Dice (and, once connected, Initiative) are
+          useful before you've joined anyone's table, not just after. campaignId is null and every note-editor-grant
+          control simply has nothing to act on until a campaign/note exists; PartySidebar already handles that. */}
+      <PartySidebar
+        sessionId={sessionId}
+        campaignId={!isOffline ? activeCampaign?.id ?? null : null}
+        myUserId={myUserId}
+        activeNote={activeNote}
+        onToggleEditor={(noteId, userId, grant) => {
+          const note = notes?.find((n) => n.id === noteId)
+          if (!note) return
+          const next = grant ? [...note.editorUserIds, userId] : note.editorUserIds.filter((id) => id !== userId)
+          saveNote(noteId, { editorUserIds: next })
+        }}
+        onViewCharacter={viewPartyMemberCharacter}
+      />
     </div>
   )
 }

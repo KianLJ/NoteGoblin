@@ -20,6 +20,8 @@ interface AppShellProps {
   displayName: string
 }
 
+export type DmTabRef = { kind: 'note'; id: string } | { kind: 'monster'; id: string }
+
 export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [mode, setMode] = useState<Mode>('dm')
 
@@ -208,6 +210,41 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     })
   }
 
+  /**
+   * The DM header's tab strip mixes two independently-owned lists — note
+   * tabs (useNotesWorkspace's own ordered, persisted `openTabs`) and monster
+   * tabs (above) — but a single drag can only reorder items within one JS
+   * array. This is the merged visual order both render from, letting a note
+   * and a monster tab drag-reorder against each other the same way the
+   * player side's PlayerTabRef strip already does across notes/characters.
+   * Reconciled (not recomputed from scratch) whenever either source list
+   * changes, so existing positions survive — only a newly-opened tab gets
+   * appended, and a closed one just drops out.
+   */
+  const [dmTabOrder, setDmTabOrder] = useState<DmTabRef[]>([])
+  useEffect(() => {
+    setDmTabOrder((prev) => {
+      const noteIds = new Set(workspace.tabNotes.map((n) => n.id))
+      const monsterIds = new Set(monsterTabs.map((m) => m.index))
+      const kept = prev.filter((t) => (t.kind === 'note' ? noteIds.has(t.id) : monsterIds.has(t.id)))
+      const keptNoteIds = new Set(kept.filter((t) => t.kind === 'note').map((t) => t.id))
+      const keptMonsterIds = new Set(kept.filter((t) => t.kind === 'monster').map((t) => t.id))
+      const newNotes: DmTabRef[] = workspace.tabNotes.filter((n) => !keptNoteIds.has(n.id)).map((n) => ({ kind: 'note', id: n.id }))
+      const newMonsters: DmTabRef[] = monsterTabs.filter((m) => !keptMonsterIds.has(m.index)).map((m) => ({ kind: 'monster', id: m.index }))
+      return [...kept, ...newNotes, ...newMonsters]
+    })
+  }, [workspace.tabNotes, monsterTabs])
+
+  function moveDmTab(dragged: DmTabRef, target: DmTabRef): void {
+    if (dragged.kind === target.kind && dragged.id === target.id) return
+    setDmTabOrder((prev) => {
+      const withoutDragged = prev.filter((t) => !(t.kind === dragged.kind && t.id === dragged.id))
+      const targetIndex = withoutDragged.findIndex((t) => t.kind === target.kind && t.id === target.id)
+      if (targetIndex === -1) return prev
+      return [...withoutDragged.slice(0, targetIndex), dragged, ...withoutDragged.slice(targetIndex)]
+    })
+  }
+
   /** Switches which monster tab (if any) is the active view — null deactivates all of them (a note, or nothing, shows instead), same "explicit null clears it" convention as onViewPlayerUserId. Activating a real one also drops the player-character view, same mutual-exclusivity every other "takes over the main pane" view already has. */
   function selectMonsterTab(index: string | null): void {
     setActiveMonsterTab(index)
@@ -247,6 +284,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
                 activeMonsterTab={activeMonsterTab}
                 onSelectMonsterTab={selectMonsterTab}
                 onCloseMonsterTab={closeMonsterTab}
+                tabOrder={dmTabOrder}
+                onMoveTab={moveDmTab}
               />
             </>
           )}

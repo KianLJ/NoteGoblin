@@ -3,23 +3,40 @@ import { CloseIcon, FileIcon, PlusIcon, StatblockIcon } from './icons'
 import type { NotesWorkspace } from './useNotesWorkspace'
 import type { Campaign } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
+import type { DmTabRef } from '../shell/AppShell'
 
 interface WorkspaceHeaderBarProps {
   campaign: Campaign
   workspace: NotesWorkspace
-  /** Enemy statblock tabs — a separate open list from notes (see AppShell.tsx), rendered after the note tabs with their own icon so they read as a different kind of tab, not another note. */
+  /** Enemy statblock tabs — a separate open list from notes (see AppShell.tsx), interleaved with note tabs via `tabOrder` below rather than always trailing them. */
   monsterTabs: BestiaryMonster[]
   activeMonsterTab: string | null
   /** null deactivates whichever monster tab is active (clicking a note tab) — a real index activates that one. */
   onSelectMonsterTab: (index: string | null) => void
   onCloseMonsterTab: (index: string) => void
+  /** The merged visual order of every open tab, note or monster — see AppShell.tsx's dmTabOrder for why this can't just be "notes then monsters." Drag-and-drop reorders this directly, so any tab can end up anywhere regardless of kind. */
+  tabOrder: DmTabRef[]
+  onMoveTab: (dragged: DmTabRef, target: DmTabRef) => void
+}
+
+function sameRef(a: DmTabRef, b: DmTabRef): boolean {
+  return a.kind === b.kind && a.id === b.id
 }
 
 /** Renders inline with the mode toggle in AppShell's header — note tabs live in the title bar, Obsidian-style. There's no "back": switching campaigns happens via the corner CampaignSwitcher. */
-export function WorkspaceHeaderBar({ campaign, workspace, monsterTabs, activeMonsterTab, onSelectMonsterTab, onCloseMonsterTab }: WorkspaceHeaderBarProps): JSX.Element {
+export function WorkspaceHeaderBar({
+  campaign,
+  workspace,
+  monsterTabs,
+  activeMonsterTab,
+  onSelectMonsterTab,
+  onCloseMonsterTab,
+  tabOrder,
+  onMoveTab
+}: WorkspaceHeaderBarProps): JSX.Element {
   const isDm = campaign.myRole === 'dm'
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [draggingRef, setDraggingRef] = useState<DmTabRef | null>(null)
+  const [dragOverRef, setDragOverRef] = useState<DmTabRef | null>(null)
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0 }}>
@@ -38,36 +55,47 @@ export function WorkspaceHeaderBar({ campaign, workspace, monsterTabs, activeMon
       <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, overflowX: 'auto', minWidth: 0 }}>
-        {workspace.tabNotes.map((tab) => {
-          const active = !activeMonsterTab && tab.id === workspace.activeId
+        {tabOrder.map((ref) => {
+          const isDragging = !!draggingRef && sameRef(draggingRef, ref)
+          const isDragOver = !!dragOverRef && sameRef(dragOverRef, ref)
+          const note = ref.kind === 'note' ? workspace.tabNotes.find((n) => n.id === ref.id) : undefined
+          const monster = ref.kind === 'monster' ? monsterTabs.find((m) => m.index === ref.id) : undefined
+          if (ref.kind === 'note' && !note) return null
+          if (ref.kind === 'monster' && !monster) return null
+          const active = ref.kind === 'note' ? !activeMonsterTab && ref.id === workspace.activeId : activeMonsterTab === ref.id
+
           return (
             <div
-              key={tab.id}
+              key={`${ref.kind}:${ref.id}`}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = 'move'
-                setDraggingId(tab.id)
+                setDraggingRef(ref)
               }}
               onDragEnd={() => {
-                setDraggingId(null)
-                setDragOverId(null)
+                setDraggingRef(null)
+                setDragOverRef(null)
               }}
               onDragOver={(e) => {
-                if (!draggingId || draggingId === tab.id) return
+                if (!draggingRef || sameRef(draggingRef, ref)) return
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
-                setDragOverId(tab.id)
+                setDragOverRef(ref)
               }}
-              onDragLeave={() => setDragOverId((id) => (id === tab.id ? null : id))}
+              onDragLeave={() => setDragOverRef((r) => (r && sameRef(r, ref) ? null : r))}
               onDrop={(e) => {
                 e.preventDefault()
-                if (draggingId) workspace.moveTab(draggingId, tab.id)
-                setDraggingId(null)
-                setDragOverId(null)
+                if (draggingRef) onMoveTab(draggingRef, ref)
+                setDraggingRef(null)
+                setDragOverRef(null)
               }}
               onClick={() => {
-                onSelectMonsterTab(null)
-                workspace.setActiveId(tab.id)
+                if (ref.kind === 'note') {
+                  onSelectMonsterTab(null)
+                  workspace.setActiveId(ref.id)
+                } else {
+                  onSelectMonsterTab(ref.id)
+                }
               }}
               style={{
                 display: 'flex',
@@ -79,62 +107,21 @@ export function WorkspaceHeaderBar({ campaign, workspace, monsterTabs, activeMon
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
-                opacity: draggingId === tab.id ? 0.5 : 1,
-                background: dragOverId === tab.id ? 'var(--accent-subtle)' : active ? 'var(--bg-surface-raised)' : 'transparent',
-                outline: dragOverId === tab.id ? '1px dashed var(--accent)' : 'none',
+                opacity: isDragging ? 0.5 : 1,
+                background: isDragOver ? 'var(--accent-subtle)' : active ? 'var(--bg-surface-raised)' : 'transparent',
+                outline: isDragOver ? '1px dashed var(--accent)' : 'none',
                 outlineOffset: -1,
                 color: active ? 'var(--text-primary)' : 'var(--text-muted)'
               }}
             >
-              <FileIcon />
-              <span>{tab.title || 'Untitled'}</span>
+              {ref.kind === 'note' ? <FileIcon /> : <StatblockIcon />}
+              <span>{ref.kind === 'note' ? note!.title || 'Untitled' : monster!.name}</span>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  workspace.closeTab(tab.id)
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'inherit',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  opacity: 0.6
-                }}
-              >
-                <CloseIcon />
-              </button>
-            </div>
-          )
-        })}
-        {monsterTabs.map((monster) => {
-          const active = activeMonsterTab === monster.index
-          return (
-            <div
-              key={monster.index}
-              onClick={() => onSelectMonsterTab(monster.index)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '5px 8px',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 13,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                background: active ? 'var(--bg-surface-raised)' : 'transparent',
-                color: active ? 'var(--text-primary)' : 'var(--text-muted)'
-              }}
-            >
-              <StatblockIcon />
-              <span>{monster.name}</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onCloseMonsterTab(monster.index)
+                  if (ref.kind === 'note') workspace.closeTab(ref.id)
+                  else onCloseMonsterTab(ref.id)
                 }}
                 style={{
                   background: 'none',

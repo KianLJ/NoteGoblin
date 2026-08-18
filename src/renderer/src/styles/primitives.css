@@ -237,6 +237,31 @@
   border-bottom-color: var(--danger);
 }
 
+/* Inline `` `dice: 2d6 + 3` `` roll button — see markdown.ts's `codespan`
+   renderer (Preview) and MarkdownLiveEditor.tsx's DiceRollWidget (Write),
+   both of which share this class so the two modes look identical. Not
+   scoped under .gb-markdown since the Write-mode widget renders outside it
+   (inside CodeMirror's own content, not a .gb-markdown wrapper). */
+.gb-dice-roll {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-body);
+  font-size: 0.9em;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.gb-dice-roll:hover {
+  background: var(--accent);
+  color: var(--bg-surface);
+}
+
 /* Rendered ```statblock fenced block — see statblock.ts. A bordered card
    with an accent top edge, styled to read as a distinct "reference card"
    sitting inside the surrounding note rather than more prose. */

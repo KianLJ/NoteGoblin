@@ -174,6 +174,7 @@ export function CampaignWorkspace({
             key={activeNote.id}
             note={activeNote}
             notes={notes ?? []}
+            sessionId={hostedSessionId ?? null}
             // The DM always has edit power over notes in their own campaign
             // (this workspace only ever shows campaigns they DM) — matches
             // the same blanket allowance campaignService.updateNote grants

@@ -8,11 +8,15 @@ import { saveCustomMonster } from '../../data/customBestiary'
 import { Bestiary } from '../bestiary/Bestiary'
 import { statblockToFencedBlock } from '../../statblock'
 import type { BestiaryMonster } from '../../data/bestiary'
+import { performRoll } from '../dice/diceLogStore'
+import type { DiceGroup } from '@shared/dice'
 
 interface NoteEditorProps {
   note: Note
   /** Every note currently visible to you, across all sections — resolves [[Title]] wikilinks and feeds the link picker. Excludes nothing by visibility since you can only ever see what you're already allowed to. */
   notes: Note[]
+  /** The hosted (DM) or joined (player) session id, if any — passed straight through to an inline `dice: ...` roll (see performRoll in diceLogStore.ts) so it reaches the rest of the table, not just this note's own log. */
+  sessionId: string | null
   onSave: (patch: { title?: string; bodyMarkdown?: string }) => void
   /** Wikilink target matched an existing note by title — navigates by replacing the active tab (the "preview tab" pattern), not adding a new one. */
   onNavigateToNote: (noteId: string) => void
@@ -56,6 +60,7 @@ function formatCount(n: number): string {
 export function NoteEditor({
   note,
   notes,
+  sessionId,
   onSave,
   onNavigateToNote,
   onOpenInNewTab,
@@ -179,7 +184,24 @@ export function NoteEditor({
     else onCreateAndLinkNote(target)
   }
 
+  /** An inline `` `dice: 2d6 + 3` `` roll — clicked either as a rendered button in Preview mode (parsed from its `data-dice-roll` JSON) or in Write mode's live-preview widget (see MarkdownLiveEditor.tsx's onDiceRoll prop) — always a public roll (there's no "private roll" toggle inline in a note, only in the Dice Tray itself), rolled through the same shared log/broadcast path so it shows up there too. */
+  function rollFromDice(dice: { sides: DiceGroup['sides']; count: number; modifier: number }): void {
+    void window.goblin.identity.getCurrent().then((identity) => {
+      performRoll(sessionId, identity?.id ?? 'me', identity?.displayName ?? 'You', [{ sides: dice.sides, count: dice.count }], dice.modifier, false)
+    })
+  }
+
   function handlePreviewClick(e: ReactMouseEvent<HTMLDivElement>): void {
+    const diceBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-dice-roll]')
+    if (diceBtn) {
+      e.preventDefault()
+      try {
+        rollFromDice(JSON.parse(diceBtn.dataset.diceRoll ?? '{}'))
+      } catch {
+        /* malformed dice-roll JSON — nothing sensible to roll */
+      }
+      return
+    }
     const saveBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-save-statblock]')
     if (saveBtn) {
       e.preventDefault()
@@ -372,6 +394,7 @@ export function NoteEditor({
           onChange={handleBodyChange}
           onWikilinkClick={resolveWikilink}
           onWikilinkContextMenu={handleWikilinkContextMenu}
+          onDiceRoll={rollFromDice}
           readOnly={readOnly}
         />
       </div>
