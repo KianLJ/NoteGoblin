@@ -33,6 +33,19 @@ export function HeartIcon({ size = 20, style }: IconProps): JSX.Element {
   )
 }
 
+export function StarIcon({ size = 20, style, filled }: IconProps & { filled?: boolean }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill={filled ? 'currentColor' : 'none'} aria-hidden="true" style={style}>
+      <path
+        d="M8 1.6 9.85 5.9l4.65.4-3.53 3.06 1.06 4.54L8 11.53l-4.03 2.37 1.06-4.54L1.5 6.3l4.65-.4L8 1.6Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function PencilIcon({ size = 14, style }: IconProps): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" style={style}>

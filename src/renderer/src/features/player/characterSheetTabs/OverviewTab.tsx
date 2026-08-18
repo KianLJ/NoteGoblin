@@ -16,6 +16,7 @@ import {
   hitDicePools,
   passivePerception,
   proficiencyBonus,
+  resourcesForCharacter,
   savingThrowBonus,
   skillBonus,
   type Ability,
@@ -47,7 +48,7 @@ import { Modal } from '../../../ui/Modal'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { CombatTab } from './CombatTab'
-import { AbilityIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, SunIcon } from './icons'
+import { AbilityIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
   race: string
@@ -59,6 +60,7 @@ interface OverviewDraft {
   otherProficiencies: string
   currentHp: number
   tempHp: number
+  inspiration: boolean
   deathSaves: DeathSaves
   hitDiceUsed: Record<string, number>
 }
@@ -93,6 +95,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
       otherProficiencies: character.otherProficiencies,
       currentHp: character.currentHp,
       tempHp: character.tempHp,
+      inspiration: character.inspiration,
       deathSaves: character.deathSaves,
       hitDiceUsed: character.hitDiceUsed
     },
@@ -190,11 +193,20 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
     patch({ skillProficiencies: nextProficiencies })
   }
 
-  /** Long rest: full HP, all spell slots refresh, death saves clear, and all spent hit dice are fully restored (a house-rule simplification of the 5e default, which only recovers half). Short rest clears death saves, refreshes Warlock Pact Magic (the one class that recharges slots on a short rest), and opens the hit-die picker below so the player can choose which dice to spend. Neither one touches temp HP, which RAW only goes away when it's reduced to 0, not on a rest. */
+  /** Every class resource (Rage, Ki, Bardic Inspiration, etc.) whose recharge matches this rest, reset to 0 used — merged over whatever's still in progress for the resources that DON'T recharge on this rest, not a blanket wipe. */
+  function resetResourcesFor(kinds: Array<'short' | 'long'>): Record<string, number> {
+    const next = { ...character.resourceUsed }
+    for (const r of resourcesForCharacter(draft.classes, effScores)) {
+      if (kinds.includes(r.currentRecharge)) next[r.id] = 0
+    }
+    return next
+  }
+
+  /** Long rest: full HP, all spell slots refresh, death saves clear, all spent hit dice are fully restored (a house-rule simplification of the 5e default, which only recovers half), and every resource that recharges on a short OR long rest clears. Short rest clears death saves, refreshes Warlock Pact Magic and any short-recharge resources (Second Wind, Channel Divinity, etc.), and opens the hit-die picker below so the player can choose which dice to spend. Neither one touches temp HP, which RAW only goes away when it's reduced to 0, not on a rest. */
   function longRest(): void {
     const updates = { currentHp: maxHp, deathSaves: { successes: 0, failures: 0 }, hitDiceUsed: {} }
     patch(updates)
-    onSave({ ...updates, spellSlots: resetAllSlots(character.spellSlots) })
+    onSave({ ...updates, spellSlots: resetAllSlots(character.spellSlots), resourceUsed: resetResourcesFor(['short', 'long']) })
   }
 
   function shortRest(): void {
@@ -202,6 +214,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
     const isWarlock = draft.classes.some((c) => c.className.toLowerCase() === 'warlock')
     onSave({
       deathSaves: { successes: 0, failures: 0 },
+      resourceUsed: resetResourcesFor(['short']),
       ...(isWarlock ? { spellSlots: resetAllSlots(character.spellSlots) } : {})
     })
     setShortRestOpen(true)
@@ -361,6 +374,26 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         <VitalStat label="Proficiency" value={formatModifier(pb)} />
         <VitalStat label="Perception" value={String(passivePerception(effScores, effSkillProficiencies, draft.classes))} />
 
+        <button
+          type="button"
+          onClick={() => !readOnly && patch({ inspiration: !draft.inspiration })}
+          disabled={readOnly}
+          title="Inspiration — granted by the DM, spend it for advantage on one roll"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: readOnly ? 'default' : 'pointer'
+          }}
+        >
+          <StarIcon size={22} filled={draft.inspiration} style={{ color: draft.inspiration ? 'var(--accent)' : 'var(--text-muted)' }} />
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Inspiration</span>
+        </button>
+
         <Divider />
 
         <VitalStat
@@ -401,12 +434,12 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
             <input
               type="number"
               className="gb-input"
-              style={{ width: 48, textAlign: 'center', fontSize: 18, fontWeight: 700, padding: '2px 4px' }}
+              style={{ width: 64, textAlign: 'center', fontSize: 18, fontWeight: 700, padding: '2px 4px' }}
               value={draft.currentHp}
               onChange={(e) => patch({ currentHp: Number(e.target.value) })}
             />
             <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>/</span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', minWidth: 24, textAlign: 'center' }}>{maxHp}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', minWidth: 36, textAlign: 'center' }}>{maxHp}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
             <HeartIcon size={11} style={{ color: 'var(--text-muted)' }} />
@@ -741,13 +774,17 @@ function ResistancesSection({ character, onSave, readOnly }: { character: Charac
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const buffResistances = activeBuffResistances(character.activeBuffs)
 
-  function addTag(key: (typeof RESISTANCE_ROWS)[number]['key']): void {
-    const value = (drafts[key] ?? '').trim()
+  function addTagValue(key: (typeof RESISTANCE_ROWS)[number]['key'], rawValue: string): void {
+    const value = rawValue.trim()
     if (!value || readOnly) return
     const current = character[key]
     if (current.some((t) => t.toLowerCase() === value.toLowerCase())) return
     onSave({ [key]: [...current, value] })
     setDrafts((prev) => ({ ...prev, [key]: '' }))
+  }
+
+  function addTag(key: (typeof RESISTANCE_ROWS)[number]['key']): void {
+    addTagValue(key, drafts[key] ?? '')
   }
 
   function removeTag(key: (typeof RESISTANCE_ROWS)[number]['key'], value: string): void {
@@ -805,7 +842,14 @@ function ResistancesSection({ character, onSave, readOnly }: { character: Charac
               list={`damage-types-${key}`}
               placeholder="Add…"
               value={drafts[key] ?? ''}
-              onChange={(e) => setDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
+              onChange={(e) => {
+                const value = e.target.value
+                // A datalist pick fires this same 'input'/onChange event as typing does — no separate "option
+                // selected" event exists — so an exact match against the known list is what tells the two apart
+                // from an in-progress keystroke, letting a dropdown pick add immediately without needing Enter.
+                if (DAMAGE_TYPES.some((t) => t.toLowerCase() === value.toLowerCase())) addTagValue(key, value)
+                else setDrafts((prev) => ({ ...prev, [key]: value }))
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()

@@ -532,9 +532,11 @@ export const CLASS_LEVEL_FEATURES: Record<string, ClassLevelFeature[]> = {
     { level: 1, name: 'Spellcasting', description: 'Cast druid spells using Wisdom.' },
     { level: 2, name: 'Wild Shape', description: 'Transform into a beast you’ve seen, twice per short rest.' },
     { level: 2, name: 'Druid Circle', description: 'Choose a druid subclass.' },
-    { level: 4, name: 'Wild Shape Improvement', description: 'Wild Shape into new beast forms; also an Ability Score Improvement.' },
+    { level: 4, name: 'Wild Shape Improvement', description: 'Wild Shape into new beast forms.' },
+    asi(4),
     { level: 6, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
-    { level: 8, name: 'Wild Shape Improvement', description: 'Wild Shape into new beast forms; also an Ability Score Improvement.' },
+    { level: 8, name: 'Wild Shape Improvement', description: 'Wild Shape into new beast forms.' },
+    asi(8),
     { level: 10, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
     asi(12),
     { level: 14, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
@@ -573,7 +575,8 @@ export const CLASS_LEVEL_FEATURES: Record<string, ClassLevelFeature[]> = {
     { level: 2, name: 'Unarmored Movement', description: '+10 ft speed while unarmored.' },
     { level: 3, name: 'Monastic Tradition', description: 'Choose a monk subclass.' },
     { level: 3, name: 'Deflect Missiles', description: 'Reduce and possibly catch and throw back ranged weapon damage.' },
-    { level: 4, name: 'Slow Fall', description: 'Reduce falling damage with a reaction; also an Ability Score Improvement.' },
+    { level: 4, name: 'Slow Fall', description: 'Reduce falling damage with a reaction.' },
+    asi(4),
     { level: 5, name: 'Extra Attack', description: 'Attack twice whenever you take the Attack action.' },
     { level: 5, name: 'Stunning Strike', description: 'Spend a ki point to attempt to stun a creature you hit.' },
     { level: 6, name: 'Ki-Empowered Strikes', description: 'Unarmed strikes count as magical; gain a Tradition feature.' },
@@ -627,7 +630,8 @@ export const CLASS_LEVEL_FEATURES: Record<string, ClassLevelFeature[]> = {
     { level: 5, name: 'Extra Attack', description: 'Attack twice whenever you take the Attack action.' },
     { level: 6, name: 'Favored Enemy & Explorer Improvement', description: 'Gain an additional favored enemy and favored terrain.' },
     { level: 7, name: 'Archetype Feature', description: 'Gain a feature from your Ranger Archetype.' },
-    { level: 8, name: 'Land’s Stride', description: 'Move through nonmagical difficult terrain without cost; also an Ability Score Improvement.' },
+    { level: 8, name: 'Land’s Stride', description: 'Move through nonmagical difficult terrain without cost.' },
+    asi(8),
     { level: 10, name: 'Natural Explorer Improvement', description: 'Gain another favored terrain; also Hide in Plain Sight.' },
     { level: 11, name: 'Archetype Feature', description: 'Gain a feature from your Ranger Archetype.' },
     asi(12),
@@ -754,6 +758,154 @@ export function fightingStyleSlotLevelsUpToLevel(className: string, level: numbe
     .map((f) => f.level)
 }
 
+export interface NamedOption {
+  name: string
+  description: string
+}
+
+/** SRD 2014 sorcerer Metamagic — 8 options, each a standing modification you can apply to a spell you cast by spending sorcery points. */
+export const METAMAGIC_OPTIONS: NamedOption[] = [
+  { name: 'Careful Spell', description: 'When you cast a spell that forces a saving throw, you can protect up to Charisma modifier creatures from its effect — they auto-succeed. Costs 1 sorcery point.' },
+  { name: 'Distant Spell', description: 'When you cast a spell with a range of 5+ feet, double its range; a touch spell becomes 30 feet. Costs 1 sorcery point.' },
+  { name: 'Empowered Spell', description: 'When you roll damage for a spell, reroll up to Charisma modifier (minimum 1) damage dice, using the new rolls. Costs 1 sorcery point.' },
+  { name: 'Extended Spell', description: 'When you cast a spell with a duration of 1 minute or longer, double its duration, to a maximum of 24 hours. Costs 1 sorcery point.' },
+  { name: 'Heightened Spell', description: 'When you cast a spell that forces a saving throw, give one target disadvantage on its first save against it. Costs 3 sorcery points.' },
+  { name: 'Quickened Spell', description: 'When you cast a spell with a casting time of one action, change its casting time to a bonus action instead. Costs 2 sorcery points.' },
+  { name: 'Subtle Spell', description: 'When you cast a spell, cast it without any somatic or verbal components. Costs 1 sorcery point.' },
+  { name: 'Twinned Spell', description: 'When you cast a spell that targets only one creature and doesn’t have a range of Self, target a second creature in range with the same spell (spell slot level twice, minus one, sorcery points if it doesn’t already target multiple). Costs a number of sorcery points equal to the spell’s level (1 for a cantrip).' }
+]
+
+/** Metamagic options known grows at 3rd, 10th, and 17th level — 2 → 3 → 4 total, never fewer, never a re-pick of ones already known. */
+export function metamagicSlotCountAtLevel(level: number): number {
+  if (level >= 17) return 4
+  if (level >= 10) return 3
+  if (level >= 3) return 2
+  return 0
+}
+
+/** Which class level unlocked the Nth Metamagic pick (0-indexed) — the first two both unlock at 3rd level, so this is purely for display ("Metamagic — Sorcerer 3"), not a dedup key the way an ASI slot's level is. */
+export function metamagicSlotUnlockLevel(pickIndex: number): number {
+  return pickIndex < 2 ? 3 : pickIndex === 2 ? 10 : 17
+}
+
+/** SRD 2014 warlock Pact Boon — one of three, chosen once at 3rd level and never changed again by the class table itself. */
+export const PACT_BOON_OPTIONS: NamedOption[] = [
+  { name: 'Pact of the Chain', description: 'Learn the find familiar spell and can cast it as a ritual; when you cast it, you can choose one of three normally-unavailable forms (imp, pseudodragon, quasit, or sprite) for your familiar, which also gains the ability to attack.' },
+  { name: 'Pact of the Blade', description: 'Conjure a pact weapon in your hand as an action — any melee weapon you’re proficient with, which counts as magical for overcoming resistance. Dismiss it as a free action; conjuring it again while it’s not on your person returns it to your hand instead of creating a new one.' },
+  { name: 'Pact of the Tome', description: 'Your patron gives you a Book of Shadows. Choose three cantrips from any class’s spell list — they count as warlock spells for you and don’t count against your number of cantrips known.' }
+]
+
+export interface EldritchInvocationOption extends NamedOption {
+  /** Minimum warlock level required — 2, 5, 7, 9, 12, or 15 in the SRD. */
+  level: number
+  /** Requires having taken this exact Pact Boon (see PACT_BOON_OPTIONS) — undefined if the invocation has no pact requirement. */
+  prereqPact?: string
+  /** Requires knowing this spell (compendium id) — every case in the SRD is eldritch-blast. */
+  prereqSpell?: string
+}
+
+/** SRD 2014 warlock Eldritch Invocations — the full list, each gated by warlock level and (for some) a Pact Boon or known spell. */
+export const ELDRITCH_INVOCATIONS: EldritchInvocationOption[] = [
+  { name: 'Agonizing Blast', level: 2, prereqSpell: 'eldritch-blast', description: 'When you cast eldritch blast, add your Charisma modifier to the damage it deals on a hit.' },
+  { name: 'Armor of Shadows', level: 2, description: 'You can cast mage armor on yourself at will, without expending a spell slot or material components.' },
+  { name: 'Beast Speech', level: 2, description: 'You can cast speak with animals at will, without expending a spell slot.' },
+  { name: 'Beguiling Influence', level: 2, description: 'You gain proficiency in the Deception and Persuasion skills.' },
+  {
+    name: 'Book of Ancient Secrets',
+    level: 2,
+    prereqPact: 'Pact of the Tome',
+    description:
+      "You can now inscribe magical rituals in your Book of Shadows. Choose two 1st-level spells that have the ritual tag from any class's spell list (the two needn't be from the same list). The spells appear in the book and don't count against the number of spells you know. With your Book of Shadows in hand, you can cast the chosen spells as rituals. You can't cast the spells except as rituals, unless you've learned them by some other means. You can also cast a warlock spell you know as a ritual if it has the ritual tag. On your adventures, you can add other ritual spells to your Book of Shadows. When you find such a spell, you can add it to the book if the spell's level is equal to or less than half your warlock level (rounded up) and if you can spare the time to transcribe the spell. For each level of the spell, the transcription process takes 2 hours and costs 50 gp for the rare inks needed to inscribe it."
+  },
+  { name: "Devil's Sight", level: 2, description: 'You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet.' },
+  { name: 'Eldritch Sight', level: 2, description: 'You can cast detect magic at will, without expending a spell slot.' },
+  { name: 'Eldritch Spear', level: 2, prereqSpell: 'eldritch-blast', description: 'When you cast eldritch blast, its range is 300 feet.' },
+  { name: 'Eyes of the Rune Keeper', level: 2, description: 'You can read all writing.' },
+  {
+    name: 'Fiendish Vigor',
+    level: 2,
+    description: 'You can cast false life on yourself at will as a 1st-level spell, without expending a spell slot or material components.'
+  },
+  {
+    name: 'Gaze of Two Minds',
+    level: 2,
+    description:
+      "You can use your action to touch a willing humanoid and perceive through its senses until the end of your next turn. As long as the creature is on the same plane of existence as you, you can use your action on subsequent turns to maintain this connection, extending the duration until the end of your next turn. While perceiving through the other creature's senses, you benefit from any special senses possessed by that creature, and you are blinded and deafened to your own surroundings."
+  },
+  { name: 'Mask of Many Faces', level: 2, description: 'You can cast disguise self at will, without expending a spell slot.' },
+  { name: 'Misty Visions', level: 2, description: 'You can cast silent image at will, without expending a spell slot or material components.' },
+  {
+    name: 'Repelling Blast',
+    level: 2,
+    prereqSpell: 'eldritch-blast',
+    description: 'When you hit a creature with eldritch blast, you can push the creature up to 10 feet away from you in a straight line.'
+  },
+  { name: 'Thief of Five Fates', level: 2, description: "You can cast bane once using a warlock spell slot. You can't do so again until you finish a long rest." },
+  {
+    name: 'Voice of the Chain Master',
+    level: 2,
+    prereqPact: 'Pact of the Chain',
+    description:
+      "You can communicate telepathically with your familiar and perceive through your familiar's senses as long as you are on the same plane of existence. Additionally, while perceiving through your familiar's senses, you can also speak through your familiar in your own voice, even if your familiar is normally incapable of speech."
+  },
+  { name: 'Mire the Mind', level: 5, description: "You can cast slow once using a warlock spell slot. You can't do so again until you finish a long rest." },
+  {
+    name: 'One with Shadows',
+    level: 5,
+    description: 'When you are in an area of dim light or darkness, you can use your action to become invisible until you move or take an action or a reaction.'
+  },
+  { name: 'Sign of Ill Omen', level: 5, description: "You can cast bestow curse once using a warlock spell slot. You can't do so again until you finish a long rest." },
+  {
+    name: 'Thirsting Blade',
+    level: 5,
+    prereqPact: 'Pact of the Blade',
+    description: 'You can attack with your pact weapon twice, instead of once, whenever you take the Attack action on your turn.'
+  },
+  { name: 'Bewitching Whispers', level: 7, description: "You can cast compulsion once using a warlock spell slot. You can't do so again until you finish a long rest." },
+  { name: 'Dreadful Word', level: 7, description: "You can cast confusion once using a warlock spell slot. You can't do so again until you finish a long rest." },
+  { name: 'Sculptor of Flesh', level: 7, description: "You can cast polymorph once using a warlock spell slot. You can't do so again until you finish a long rest." },
+  { name: 'Ascendant Step', level: 9, description: 'You can cast levitate on yourself at will, without expending a spell slot or material components.' },
+  {
+    name: 'Minions of Chaos',
+    level: 9,
+    description: "You can cast conjure elemental once using a warlock spell slot. You can't do so again until you finish a long rest."
+  },
+  { name: 'Otherworldly Leap', level: 9, description: 'You can cast jump on yourself at will, without expending a spell slot or material components.' },
+  { name: 'Whispers of the Grave', level: 9, description: 'You can cast speak with dead at will, without expending a spell slot.' },
+  {
+    name: 'Lifedrinker',
+    level: 12,
+    prereqPact: 'Pact of the Blade',
+    description: 'When you hit a creature with your pact weapon, the creature takes extra necrotic damage equal to your Charisma modifier (minimum 1).'
+  },
+  {
+    name: 'Chains of Carceri',
+    level: 15,
+    prereqPact: 'Pact of the Chain',
+    description:
+      'You can cast hold monster at will--targeting a celestial, fiend, or elemental--without expending a spell slot or material components. You must finish a long rest before you can use this invocation on the same creature again.'
+  },
+  { name: 'Master of Myriad Forms', level: 15, description: 'You can cast alter self at will, without expending a spell slot.' },
+  { name: 'Visions of Distant Realms', level: 15, description: 'You can cast arcane eye at will, without expending a spell slot.' },
+  {
+    name: 'Witch Sight',
+    level: 15,
+    description: 'You can see the true form of any shapechanger or creature concealed by illusion or transmutation magic while the creature is within 30 feet of you and within line of sight.'
+  }
+]
+
+/** Invocations known grows at 2nd, 5th, 7th, 9th, 11th, 14th, and 17th level — the standard SRD warlock progression (2 → 3 → 4 → 5 → 6 → 7 → 8), maxing out at 17th and never shrinking. */
+export function eldritchInvocationSlotCountAtLevel(level: number): number {
+  if (level >= 17) return 8
+  if (level >= 14) return 7
+  if (level >= 11) return 6
+  if (level >= 9) return 5
+  if (level >= 7) return 4
+  if (level >= 5) return 3
+  if (level >= 2) return 2
+  return 0
+}
+
 /** An AsiSlotChoice is "active" only while the class it belongs to is still at or above the level it resolves — lowering a class's level (not deleting the record) is enough to make it (and whatever it granted) disappear everywhere, and raising it back restores the exact same choice instead of forcing a re-pick. */
 export function activeAsiSlotChoices(classes: ClassLevel[], asiSlotChoices: AsiSlotChoice[]): AsiSlotChoice[] {
   return asiSlotChoices.filter((slot) => {
@@ -795,8 +947,8 @@ export interface ClassResourceDef {
   kind: 'uses' | 'pool'
   /** The level (in this class) at which the resource is first gained. */
   minLevel: number
-  /** A short rest also clears a 'long'-recharge resource — long rests clear everything — 'short' resources reset on either. */
-  recharge: 'short' | 'long'
+  /** A 'short'-recharge resource clears on either a short or a long rest; a 'long'-recharge one only on a long rest. A function since a handful of resources change which one applies at a higher level (e.g. Bardic Inspiration becomes short-recharge at 5th level via Font of Inspiration) — same "computed live from level" idea as `max` below. */
+  recharge: (level: number) => 'short' | 'long'
   /** Max uses (kind 'uses') or pool size (kind 'pool') at a given class level. */
   max: (level: number, abilityMod: (ability: Ability) => number) => number
   /** Short one-liner shown directly on the card. */
@@ -813,7 +965,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Rage',
       kind: 'uses',
       minLevel: 1,
-      recharge: 'long',
+      recharge: () => 'long',
       max: (level) => (level >= 20 ? 99 : level >= 17 ? 6 : level >= 12 ? 5 : level >= 6 ? 4 : level >= 3 ? 3 : 2),
       description: 'Bonus action to fly into a rage: bonus melee damage, resistance to bludgeoning/piercing/slashing, advantage on Strength checks and saves.',
       fullDescription:
@@ -826,11 +978,12 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Bardic Inspiration',
       kind: 'uses',
       minLevel: 1,
-      recharge: 'long',
+      // Font of Inspiration (5th level) changes this from long-rest to short-rest recharge — see the recharge field's own doc comment above.
+      recharge: (level) => (level >= 5 ? 'short' : 'long'),
       max: (_level, abilityMod) => Math.max(1, abilityMod('cha')),
       description: 'Bonus action to give one creature within 60 ft. an inspiration die to add to one ability check, attack roll, or saving throw.',
       fullDescription:
-        "You can inspire others through stirring words or music. To do so, you use a bonus action on your turn to choose one creature other than yourself within 60 feet of you who can hear you. That creature gains one Bardic Inspiration die, a d6. Once within the next 10 minutes, the creature can roll the die and add the number rolled to one ability check, attack roll, or saving throw it makes. The creature can wait until after it rolls the d20 before deciding to use the Bardic Inspiration die, but must decide before the GM says whether the roll succeeds or fails. Once the Bardic Inspiration die is rolled, it is lost. A creature can have only one Bardic Inspiration die at a time.\nYou regain any expended uses when you finish a long rest.\nYour Bardic Inspiration die changes when you reach certain levels in this class: it becomes a d8 at 5th level, a d10 at 10th level, and a d12 at 15th level."
+        "You can inspire others through stirring words or music. To do so, you use a bonus action on your turn to choose one creature other than yourself within 60 feet of you who can hear you. That creature gains one Bardic Inspiration die, a d6. Once within the next 10 minutes, the creature can roll the die and add the number rolled to one ability check, attack roll, or saving throw it makes. The creature can wait until after it rolls the d20 before deciding to use the Bardic Inspiration die, but must decide before the GM says whether the roll succeeds or fails. Once the Bardic Inspiration die is rolled, it is lost. A creature can have only one Bardic Inspiration die at a time.\nYou regain any expended uses when you finish a long rest — or a short rest as well, once you have Font of Inspiration at 5th level.\nYour Bardic Inspiration die changes when you reach certain levels in this class: it becomes a d8 at 5th level, a d10 at 10th level, and a d12 at 15th level."
     }
   ],
   cleric: [
@@ -839,7 +992,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Channel Divinity',
       kind: 'uses',
       minLevel: 2,
-      recharge: 'short',
+      recharge: () => 'short',
       max: (level) => (level >= 18 ? 3 : level >= 6 ? 2 : 1),
       description: 'Channel divine energy for a supernatural effect, including Turn Undead.',
       fullDescription:
@@ -852,7 +1005,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Wild Shape',
       kind: 'uses',
       minLevel: 2,
-      recharge: 'short',
+      recharge: () => 'short',
       max: () => 2,
       description: 'Magically assume the shape of a beast you’ve seen before.',
       fullDescription:
@@ -865,7 +1018,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Second Wind',
       kind: 'uses',
       minLevel: 1,
-      recharge: 'short',
+      recharge: () => 'short',
       max: () => 1,
       description: 'Bonus action to regain 1d10 + fighter level hit points.',
       fullDescription:
@@ -876,7 +1029,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Action Surge',
       kind: 'uses',
       minLevel: 2,
-      recharge: 'short',
+      recharge: () => 'short',
       max: (level) => (level >= 17 ? 2 : 1),
       description: 'Take one additional action on your turn.',
       fullDescription:
@@ -887,7 +1040,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Indomitable',
       kind: 'uses',
       minLevel: 9,
-      recharge: 'long',
+      recharge: () => 'long',
       max: (level) => (level >= 17 ? 3 : level >= 13 ? 2 : 1),
       description: 'Reroll a failed saving throw — you must use the new roll.',
       fullDescription:
@@ -900,7 +1053,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Ki Points',
       kind: 'pool',
       minLevel: 2,
-      recharge: 'short',
+      recharge: () => 'short',
       max: (level) => level,
       description: 'Spend to fuel Flurry of Blows, Patient Defense, Step of the Wind, and other ki features.',
       fullDescription:
@@ -913,7 +1066,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Lay on Hands',
       kind: 'pool',
       minLevel: 1,
-      recharge: 'long',
+      recharge: () => 'long',
       max: (level) => level * 5,
       description: 'A pool of healing power — touch a creature to restore HP from the pool, 5 points to cure one disease or neutralize one poison.',
       fullDescription:
@@ -924,7 +1077,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Divine Sense',
       kind: 'uses',
       minLevel: 1,
-      recharge: 'long',
+      recharge: () => 'long',
       max: (_level, abilityMod) => 1 + Math.max(0, abilityMod('cha')),
       description: 'Action to detect celestials, fiends, and undead within 60 ft.',
       fullDescription:
@@ -937,7 +1090,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Sorcery Points',
       kind: 'pool',
       minLevel: 2,
-      recharge: 'long',
+      recharge: () => 'long',
       max: (level) => level,
       description: 'Spend to fuel Metamagic, or convert to/from spell slots.',
       fullDescription:
@@ -950,7 +1103,7 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
       name: 'Arcane Recovery',
       kind: 'uses',
       minLevel: 1,
-      recharge: 'long',
+      recharge: () => 'long',
       max: () => 1,
       description: 'Once per day, on a short rest, recover expended spell slots with a combined level ≤ half your wizard level (rounded up).',
       fullDescription:
@@ -963,16 +1116,16 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
 export function resourcesForCharacter(
   classes: ClassLevel[],
   abilityScores: AbilityScores
-): Array<ClassResourceDef & { classId: string; className: string; currentMax: number }> {
+): Array<ClassResourceDef & { classId: string; className: string; currentMax: number; currentRecharge: 'short' | 'long' }> {
   const abilityMod = (a: Ability): number => abilityModifier(abilityScores[a])
-  const result: Array<ClassResourceDef & { classId: string; className: string; currentMax: number }> = []
+  const result: Array<ClassResourceDef & { classId: string; className: string; currentMax: number; currentRecharge: 'short' | 'long' }> = []
   for (const c of classes) {
     const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
     if (!cls) continue
     const defs = CLASS_RESOURCES[cls.id] ?? []
     for (const def of defs) {
       if (c.level < def.minLevel) continue
-      result.push({ ...def, classId: cls.id, className: cls.name, currentMax: def.max(c.level, abilityMod) })
+      result.push({ ...def, classId: cls.id, className: cls.name, currentMax: def.max(c.level, abilityMod), currentRecharge: def.recharge(c.level) })
     }
   }
   return result
@@ -1126,6 +1279,8 @@ export interface CharacterSheetData {
 
   currentHp: number
   tempHp: number
+  /** The DM-awarded kind (advantage on one roll, spent to use it) — a simple on/off flag, not the Bard's Bardic Inspiration die pool. */
+  inspiration: boolean
   deathSaves: DeathSaves
   /** Hit dice spent (not yet recovered), keyed by class name — one pool per class since each contributes `level` dice of its own hit die size. Spent on a Short Rest to heal, recovered (half the total, minimum one) on a Long Rest. */
   hitDiceUsed: Record<string, number>
@@ -1177,6 +1332,7 @@ export function emptyCharacterSheet(): CharacterSheetData {
     otherProficiencies: '',
     currentHp: 1,
     tempHp: 0,
+    inspiration: false,
     deathSaves: { successes: 0, failures: 0 },
     hitDiceUsed: {},
     attacks: [],

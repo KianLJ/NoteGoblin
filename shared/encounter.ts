@@ -27,6 +27,11 @@ export const INJURY_LABELS: Record<InjuryLevel, string> = {
   critical: 'Critically Wounded'
 }
 
+export interface DeathSaves {
+  successes: number
+  failures: number
+}
+
 export type Combatant = {
   id: string
   name: string
@@ -39,17 +44,27 @@ export type Combatant = {
   monsterIndex?: string
   /** kind 'player' only — the connected player's relay userId, so the DM can click through to their sheet like elsewhere in the app. */
   userId?: string
+  /** Free-text condition tags (Prone, Poisoned, Concentrating, etc.) — same list shown to the DM and to players, since knowing an enemy is prone/restrained is normal tactical information, not a secret. */
+  statusEffects: string[]
+  /** kind 'player' only, and only once currentHp <= 0 — SRD death saving throws. Cleared (set back to null) once currentHp rises back above 0. */
+  deathSaves: DeathSaves | null
 }
 
 export interface InitiativeState {
   round: number
+  /** DM's call — when true, a player's own death saves are visible only to the DM, not to that player or the rest of the party (some tables prefer the tension of not knowing your own odds). */
+  deathSavesPrivate: boolean
   /** Index into `combatants` (already sorted by initiative, highest first) whose turn it is. -1 = combat not started yet. */
   turnIndex: number
   combatants: Combatant[]
 }
 
 export function emptyInitiativeState(): InitiativeState {
-  return { round: 1, turnIndex: -1, combatants: [] }
+  return { round: 1, turnIndex: -1, combatants: [], deathSavesPrivate: false }
+}
+
+export function emptyCombatant(): Pick<Combatant, 'statusEffects' | 'deathSaves'> {
+  return { statusEffects: [], deathSaves: null }
 }
 
 /** Combatants in turn order — initiative descending, ties broken by name so the order is at least stable and predictable. */
@@ -57,13 +72,28 @@ export function sortedByInitiative(combatants: Combatant[]): Combatant[] {
   return [...combatants].sort((a, b) => (b.initiative ?? -Infinity) - (a.initiative ?? -Infinity) || a.name.localeCompare(b.name))
 }
 
-/** What a connected player is allowed to see of one combatant — enemies lose their name/exact stats/position, replaced with an injury-level band; players see everyone's real name and their own real stats. */
+/**
+ * What a connected player is allowed to see of one combatant — real name
+ * for everyone (including monsters), real current/max HP for a fellow
+ * player (so the party can see how banged-up each other is), but only an
+ * injury-level band for a monster's HP, never its exact numbers. A dead
+ * (currentHp <= 0) monster or player is flagged so the UI can show a tag
+ * for it without needing the raw HP itself.
+ */
 export interface PlayerVisibleCombatant {
   id: string
   kind: 'player' | 'monster'
   name: string
+  initiative: number | null
+  /** Real numbers for a player combatant; null for a monster (see `injury` instead). */
+  currentHp: number | null
+  maxHp: number | null
   injury: InjuryLevel
+  dead: boolean
   isSelf: boolean
+  statusEffects: string[]
+  /** Only ever populated for the viewer's own combatant, and only when the DM hasn't made death saves private — see InitiativeState.deathSavesPrivate. */
+  deathSaves: DeathSaves | null
 }
 
 export interface PlayerVisibleInitiativeState {
@@ -81,13 +111,22 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
   return {
     round: state.round,
     turnIndex: state.turnIndex,
-    combatants: ordered.map((c, i) => ({
-      id: c.id,
-      kind: c.kind,
-      name: c.kind === 'player' ? c.name : `Enemy ${i + 1}`,
-      injury: injuryLevel(c.currentHp, c.maxHp),
-      isSelf: c.kind === 'player' && c.userId === viewerUserId
-    }))
+    combatants: ordered.map((c) => {
+      const isSelf = c.kind === 'player' && c.userId === viewerUserId
+      return {
+        id: c.id,
+        kind: c.kind,
+        name: c.name,
+        initiative: c.initiative,
+        currentHp: c.kind === 'player' ? c.currentHp : null,
+        maxHp: c.kind === 'player' ? c.maxHp : null,
+        injury: injuryLevel(c.currentHp, c.maxHp),
+        dead: c.currentHp <= 0,
+        isSelf,
+        statusEffects: c.statusEffects,
+        deathSaves: isSelf && !state.deathSavesPrivate ? c.deathSaves : null
+      }
+    })
   }
 }
 

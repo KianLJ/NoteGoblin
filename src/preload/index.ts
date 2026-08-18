@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppApi, CampaignChangeEvent, InitiativeUpdate, PlayerCharacterUpdate, PresenceUpdate } from '../../shared/ipc'
+import type {
+  AppApi,
+  CampaignChangeEvent,
+  InitiativeUpdate,
+  PlayerCharacterUpdate,
+  PlayerInitiativeUpdate,
+  PresenceUpdate
+} from '../../shared/ipc'
 
 const api: AppApi = {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
@@ -105,6 +112,12 @@ const api: AppApi = {
       const listener = (_event: Electron.IpcRendererEvent, update: InitiativeUpdate): void => callback(update)
       ipcRenderer.on('ws:initiative', listener)
       return () => ipcRenderer.removeListener('ws:initiative', listener)
+    },
+    setMine: (initiative) => ipcRenderer.invoke('initiative:set-mine', initiative),
+    onPlayerSet: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, update: PlayerInitiativeUpdate): void => callback(update)
+      ipcRenderer.on('ws:player-initiative', listener)
+      return () => ipcRenderer.removeListener('ws:player-initiative', listener)
     }
   },
   relay: {

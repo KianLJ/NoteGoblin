@@ -828,6 +828,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (getHostedSession()) broadcastInitiative(state)
   })
 
+  // Player-only — a joined player rolling/entering their own initiative,
+  // forwarded to the DM's renderer (see sessionHost.ts's 'initiative.setMine'
+  // case) rather than back through this same player's own IPC, since the DM
+  // is the one who actually owns the tracker's combatant list.
+  ipcMain.handle('initiative:set-mine', (_event, initiative: number | null): void => {
+    void sendSessionRequest('initiative.setMine', { initiative })
+  })
+
   // --- Relay / Friends -----------------------------------------------------
   // The relay account is the same identity/password as identity.* (synced
   // transparently in syncRelayAccount, see the identity handlers above) — no

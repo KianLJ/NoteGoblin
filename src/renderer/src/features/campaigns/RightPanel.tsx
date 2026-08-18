@@ -37,16 +37,21 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
           <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: tab === 'players' ? 'auto' : 'hidden' }}>
-          {tab === 'players' && (
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          {/* Both panels stay mounted (hidden via CSS) rather than conditionally rendered — the initiative tracker
+              in particular owns its own live combat state locally, which used to reset to empty every time you
+              switched away from this tab and back, since unmounting threw the whole thing away. */}
+          <div style={{ display: tab === 'players' ? 'block' : 'none', height: '100%', overflowY: 'auto' }}>
             <ConnectedPlayersList
               sessionId={sessionId}
               campaignId={campaignId}
               playerCharacters={playerCharacters}
               onSelectPlayer={onSelectPlayer}
             />
-          )}
-          {tab === 'initiative' && <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} />}
+          </div>
+          <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
+            <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} />
+          </div>
         </div>
       </div>
     </ResizableSidebar>

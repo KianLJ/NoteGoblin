@@ -1,11 +1,22 @@
 import { useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import { CLASSES, abilityModifier, formatModifier, type AbilityScores, type ActionType, type Attack, type CharacterSheetData } from '@shared/dnd5e'
+import {
+  CLASSES,
+  abilityModifier,
+  curatedFeaturesForLevelUp,
+  formatModifier,
+  spellAttackBonus,
+  type AbilityScores,
+  type ActionType,
+  type Attack,
+  type CharacterSheetData
+} from '@shared/dnd5e'
 import {
   UNARMED_STRIKE,
   activeBuffMeleeDamageBonus,
   effectiveAbilityScores,
   getEquipmentById,
+  getSpellById,
   suggestedAttackAbility,
   weaponAttackBonus,
   weaponAttacksFromEquipment,
@@ -35,6 +46,12 @@ const ACTION_TYPES: { id: ActionType; label: string }[] = [
   { id: 'bonus', label: 'Bonus Action' },
   { id: 'reaction', label: 'Reaction' }
 ]
+
+/** SRD 2014 core class features that actually spend a reaction — sparse by design, since most classes never grant one baseline (Sentinel-style reactions all come from feats/subclasses outside this SRD's scope, and a custom attack/note can always cover anything homebrew). Keyed by class id, valued with the exact CLASS_LEVEL_FEATURES name so the real curated description comes along for free. */
+const REACTION_FEATURE_NAMES: Record<string, string[]> = {
+  monk: ['Deflect Missiles', 'Slow Fall'],
+  rogue: ['Uncanny Dodge']
+}
 
 function weaponFields(weapon: CompendiumEquipment): DetailField[] {
   const fields: DetailField[] = [
@@ -85,7 +102,7 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
   // Rage's damage bonus only ever applies to a Str-based melee attack — see activeBuffMeleeDamageBonus in shared/compendium.ts.
   const meleeBuffDamage = activeBuffMeleeDamageBonus(character.activeBuffs, character.classes)
 
-  const [innerTab, setInnerTab] = useState<'Attacks' | 'Spells' | 'Features'>('Attacks')
+  const [innerTab, setInnerTab] = useState<'Attacks' | 'Spells' | 'Features' | 'Reactions'>('Attacks')
   const [formOpen, setFormOpen] = useState(false)
   const [editingAttack, setEditingAttack] = useState<Attack | null>(null)
   const [listSearch, setListSearch] = useState('')
@@ -122,6 +139,36 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
   // compendiumId is a leftover from before this change; it keeps showing
   // (nothing was lost) as long as an equipped inventory item with the same
   // weapon isn't already covering it, to avoid a duplicate row.
+  // A known cantrip that requires a spell attack roll to deal damage
+  // (Fire Bolt, Sacred Flame's DC-based ones are excluded — attackType is
+  // only set for the "make an attack roll" cantrips, never the "target
+  // saves" ones) is functionally an attack, not just a line on the Spells
+  // tab — including feat-granted ones (Magic Initiate), since a spell
+  // learned that way lands in character.spells the same as any other and
+  // isn't distinguishable here from one a class granted directly.
+  const damagingCantrips = character.spells
+    .filter((s) => s.level === 0)
+    .map((s) => ({ spell: s, compendium: s.compendiumId ? getSpellById(s.compendiumId) : undefined }))
+    .filter((s): s is { spell: (typeof character.spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } => !!s.compendium?.attackType)
+  const cantripAttackBonus = spellAttackBonus(character.spellcastingAbility, effScores, character.classes)
+
+  // Every known spell whose own casting time is "1 reaction" (Shield, Counterspell, Feather Fall, Hellish Rebuke,
+  // ...) — derived from the compendium's own castingTime field, not a hand-maintained list, so it stays accurate
+  // as spells are added or removed on the Spells tab.
+  const reactionSpells = character.spells
+    .map((s) => ({ spell: s, compendium: s.compendiumId ? getSpellById(s.compendiumId) : undefined }))
+    .filter((s): s is { spell: (typeof character.spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } =>
+      s.compendium?.castingTime === '1 reaction'
+    )
+  const reactionFeatures = character.classes.flatMap((c) => {
+    const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
+    const names = cls ? REACTION_FEATURE_NAMES[cls.id] : undefined
+    if (!names) return []
+    return curatedFeaturesForLevelUp(c.className, 0, c.level)
+      .filter((f) => names.includes(f.name))
+      .map((f) => ({ ...f, className: c.className }))
+  })
+
   const equippedWeapons = weaponAttacksFromEquipment(character.equipment)
   const equippedWeaponIds = new Set(equippedWeapons.map((w) => w.weapon.id))
   const legacyStoredWeaponAttacks = draft.attacks.filter((a) => a.compendiumId && !equippedWeaponIds.has(a.compendiumId))
@@ -159,6 +206,13 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
         >
           Features
         </button>
+        <button
+          type="button"
+          onClick={() => setInnerTab('Reactions')}
+          style={{ ...innerTabStyle, borderBottomColor: innerTab === 'Reactions' ? 'var(--accent)' : 'transparent', color: innerTab === 'Reactions' ? 'var(--text-primary)' : 'var(--text-muted)' }}
+        >
+          Reactions
+        </button>
         {!isCaster && (
           <button
             type="button"
@@ -192,6 +246,27 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
               </EntryCard>
             </HoverDetailCard>
           )}
+
+          {damagingCantrips
+            .filter(({ spell }) => matchesSearch(spell.name))
+            .map(({ spell, compendium }) => {
+              const diceMatch = /\d+d\d+/.exec(compendium.description)
+              return (
+                <HoverDetailCard
+                  key={spell.id}
+                  title={compendium.name}
+                  subtitle="Cantrip"
+                  fields={[]}
+                  description={compendium.description}
+                >
+                  <EntryCard name={<EntryCardTitle value={compendium.name} />} badge={<span className="gb-badge">Cantrip</span>}>
+                    <MiniStat label="Atk" value={cantripAttackBonus !== null ? formatModifier(cantripAttackBonus) : '—'} />
+                    <LockedValue value={diceMatch ? diceMatch[0] : 'See spell'} />
+                    <LockedValue value="Action" />
+                  </EntryCard>
+                </HoverDetailCard>
+              )
+            })}
 
           {equippedWeapons
             .filter(({ weapon }) => matchesSearch(weapon.name))
@@ -287,6 +362,41 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
 
       <div style={{ display: innerTab === 'Features' ? 'block' : 'none' }}>
         <FeaturesTab character={character} onSave={onSave} readOnly={readOnly} />
+      </div>
+
+      <div style={{ display: innerTab === 'Reactions' ? 'block' : 'none' }}>
+        {reactionFeatures.length === 0 && reactionSpells.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            No reactions yet — a class feature that spends a reaction, or a known spell with a casting time of 1
+            reaction (Shield, Counterspell, Feather Fall, ...), will show up here automatically.
+          </p>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+          {reactionFeatures.map((f) => (
+            <div key={`${f.className}:${f.name}`} className="gb-card" style={{ padding: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <strong style={{ flex: 1 }}>{f.name}</strong>
+                <span className="gb-badge" style={{ fontSize: 10 }}>
+                  {f.className}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>{f.description}</p>
+            </div>
+          ))}
+          {reactionSpells.map(({ spell, compendium }) => (
+            <HoverDetailCard key={spell.id} title={compendium.name} subtitle="Reaction Spell" fields={[]} description={compendium.description}>
+              <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <strong style={{ flex: 1 }}>{compendium.name}</strong>
+                  <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }}>
+                    Reaction Spell
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>{compendium.description}</p>
+              </div>
+            </HoverDetailCard>
+          ))}
+        </div>
       </div>
     </div>
   )

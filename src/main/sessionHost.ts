@@ -375,6 +375,15 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       const target = players.get(str('userId'))
       return { reqId: frame.reqId, ok: true, data: target?.character ?? null }
     }
+    // A player setting their own initiative roll — forwarded straight to the
+    // DM's own renderer (which owns the actual tracker state, see
+    // InitiativeTracker.tsx) so it can update that combatant and rebroadcast,
+    // same shape as characters.sync above.
+    case 'initiative.setMine': {
+      const initiative = typeof p.initiative === 'number' ? p.initiative : null
+      if (dmWindow) dmWindow.webContents.send('ws:player-initiative', { userId, initiative })
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
     default:
       return { reqId: frame.reqId, ok: false, error: 'Unknown request kind.' }
   }

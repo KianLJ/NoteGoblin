@@ -1,17 +1,22 @@
 import type { CharacterSheet } from '@shared/ipc'
 import {
   CLASSES,
+  CLASS_RESOURCES,
   SUBCLASS_CHOICE_FEATURE_NAME,
+  abilityModifier,
   asiSlotLevelsUpToLevel,
   curatedFeaturesForLevelUp,
   fightingStyleSlotLevelsUpToLevel,
+  type Ability,
   type AsiSlotChoice,
   type CharacterSheetData
 } from '@shared/dnd5e'
-import { subclassesForClass } from '@shared/compendium'
+import { effectiveAbilityScores, groupedSubclassFeaturesForLevelUp, spellSlotsForClassLevel, subclassesForClass } from '@shared/compendium'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { AsiSlotChooser, FightingStyleChooser, SubclassChooser } from './AsiChoosers'
+
+const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th']
 
 interface LevelUpPopupProps {
   character: CharacterSheet
@@ -54,6 +59,32 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
   const subclassOptions = subclassesForClass(cls.id)
   const subclassNewlyUnresolved = toLevel >= cls.subclassLevel && fromLevel < cls.subclassLevel && !classLevel?.subclass && subclassOptions.length > 0
 
+  // Subclass features gained this level-up — only meaningful once a subclass is actually chosen; a "choice"-shaped
+  // one (e.g. Draconic Bloodline's ancestor) surfaces as its own resolvable slot rather than trying to cram a
+  // chooser into this recap, same "resolve it in Features whenever you get to it" deal as ASI/Fighting Style.
+  const chosenSubclass = classLevel?.subclass ? subclassOptions.find((s) => s.name === classLevel.subclass) : undefined
+  const newSubclassFeatures = chosenSubclass
+    ? groupedSubclassFeaturesForLevelUp(cls.id, chosenSubclass.id, fromLevel, toLevel).filter((g) => g.kind === 'single')
+    : []
+
+  // Every class resource whose max actually changed crossing these levels — newly gained (wasn't available at
+  // fromLevel, is now) or simply grew (Rage's uses going from 2 to 3, say).
+  const abilityMod = (a: Ability): number => abilityModifier(character.abilityScores[a])
+  const resourceChanges = (CLASS_RESOURCES[cls.id] ?? []).flatMap((def) => {
+    if (toLevel < def.minLevel) return []
+    const prevMax = fromLevel >= def.minLevel ? def.max(fromLevel, abilityMod) : 0
+    const nextMax = def.max(toLevel, abilityMod)
+    if (nextMax <= prevMax) return []
+    return [{ def, prevMax, nextMax, isNew: fromLevel < def.minLevel }]
+  })
+
+  // Every spell slot level whose count grew this level-up.
+  const slotChanges = cls.spellcastingAbility
+    ? spellSlotsForClassLevel(cls.id, toLevel)
+        .map((count, i) => ({ level: i + 1, count, prevCount: spellSlotsForClassLevel(cls.id, fromLevel)[i] ?? 0 }))
+        .filter((s) => s.count > s.prevCount)
+    : []
+
   function resolveAsiSlot(entry: Omit<AsiSlotChoice, 'id'>): void {
     onSave({ asiSlotChoices: [...character.asiSlotChoices, { id: crypto.randomUUID(), ...entry }] })
   }
@@ -76,7 +107,7 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
 
         {curated.length > 0 && (
           <div>
-            <div className="gb-label">New Features</div>
+            <div className="gb-label">New Class Features</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {curated.map((f) => (
                 <div key={`${f.level}:${f.name}`} className="gb-card" style={{ padding: 'var(--space-3)' }}>
@@ -84,6 +115,55 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
                     Lv {f.level} — {f.name}
                   </strong>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{f.description}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {newSubclassFeatures.length > 0 && (
+          <div>
+            <div className="gb-label">New {classLevel?.subclass} Features</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {newSubclassFeatures.map((g) => {
+                if (g.kind !== 'single') return null
+                return (
+                  <div key={`${g.feature.level}:${g.feature.name}`} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: 'var(--accent)' }}>
+                    <strong>
+                      Lv {g.feature.level} — {g.feature.name}
+                    </strong>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{g.feature.desc}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {resourceChanges.length > 0 && (
+          <div>
+            <div className="gb-label">Resources</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {resourceChanges.map(({ def, prevMax, nextMax, isNew }) => (
+                <div key={def.id} className="gb-card" style={{ padding: 'var(--space-3)' }}>
+                  <strong>{def.name}</strong>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    {isNew ? `New — ${nextMax} ${def.kind === 'uses' ? 'uses' : 'points'}` : `${prevMax} → ${nextMax} ${def.kind === 'uses' ? 'uses' : 'points'}`}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{def.description}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {slotChanges.length > 0 && (
+          <div>
+            <div className="gb-label">Spell Slots</div>
+            <div className="gb-card" style={{ padding: 'var(--space-3)', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {slotChanges.map((s) => (
+                <div key={s.level} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>{ORDINALS[s.level - 1]}:</strong> {s.prevCount} → {s.count}
                 </div>
               ))}
             </div>
@@ -105,14 +185,26 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
         ))}
 
         {newlyUnresolvedAsiLevels.map((level) => (
-          <AsiSlotChooser key={level} classLabel={className} level={level} abilityScores={character.abilityScores} onResolve={resolveAsiSlot} />
+          <AsiSlotChooser
+            key={level}
+            classLabel={className}
+            level={level}
+            abilityScores={effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)}
+            onResolve={resolveAsiSlot}
+          />
         ))}
 
-        {curated.length === 0 && !subclassNewlyUnresolved && newlyUnresolvedAsiLevels.length === 0 && newlyUnresolvedFightingStyleLevels.length === 0 && (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Nothing new at this level for {className.toLowerCase()} — check the Class Table tab for the full progression.
-          </p>
-        )}
+        {curated.length === 0 &&
+          newSubclassFeatures.length === 0 &&
+          resourceChanges.length === 0 &&
+          slotChanges.length === 0 &&
+          !subclassNewlyUnresolved &&
+          newlyUnresolvedAsiLevels.length === 0 &&
+          newlyUnresolvedFightingStyleLevels.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              Nothing new at this level for {className.toLowerCase()} — check the Class Table tab for the full progression.
+            </p>
+          )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button variant="primary" onClick={onClose}>
