@@ -16,7 +16,7 @@ import { useAutosaveDraft } from '../useAutosaveDraft'
 import { CompendiumPicker } from '../CompendiumPicker'
 import type { DetailField } from '../CompendiumDetailModal'
 import { HoverDetailCard } from '../HoverDetailCard'
-import { EntryCard } from '../EntryCard'
+import { EntryCard, EntryCardTitle } from '../EntryCard'
 import { CustomItemForm } from '../CustomItemForm'
 import { Button } from '../../../ui/Button'
 
@@ -216,7 +216,7 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                 description={compendium?.description ?? magicItem?.description ?? item.notes}
               >
                 <EntryCard
-                  name={<LockedValue value={compendium?.name ?? magicItem?.name ?? item.name} />}
+                  name={<EntryCardTitle value={compendium?.name ?? magicItem?.name ?? item.name} />}
                   badge={
                     compendium ? (
                       <span className="gb-badge">{compendium.category}</span>

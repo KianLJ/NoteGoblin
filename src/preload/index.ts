@@ -82,6 +82,7 @@ const api: AppApi = {
     update: (id, input) => ipcRenderer.invoke('characters:update', id, input),
     remove: (id) => ipcRenderer.invoke('characters:remove', id),
     syncSelected: (sessionId, character) => ipcRenderer.invoke('characters:sync-selected', sessionId, character),
+    getPlayerCharacter: (userId) => ipcRenderer.invoke('characters:get-player-character', userId),
     onPlayerCharacterChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, update: PlayerCharacterUpdate): void => callback(update)
       ipcRenderer.on('ws:player-character', listener)

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
   ABILITIES,
@@ -26,7 +26,7 @@ import { useAutosaveDraft } from '../useAutosaveDraft'
 import { CompendiumPicker } from '../CompendiumPicker'
 import type { DetailField } from '../CompendiumDetailModal'
 import { HoverDetailCard } from '../HoverDetailCard'
-import { EntryCard } from '../EntryCard'
+import { EntryCard, EntryCardTitle } from '../EntryCard'
 import { CustomSpellForm } from '../CustomSpellForm'
 import { Button } from '../../../ui/Button'
 
@@ -290,7 +290,7 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
                 }
               >
                 <EntryCard
-                  name={<LockedValue value={compendium?.name ?? spell.name} />}
+                  name={<EntryCardTitle value={compendium?.name ?? spell.name} />}
                   badge={<span className="gb-badge gb-badge--accent">{spellLevelLabel(spell.level)}</span>}
                   onEdit={compendium ? undefined : () => openEditForm(spell)}
                   onRemove={() => patch({ spells: draft.spells.filter((s) => s.id !== spell.id) })}
@@ -397,16 +397,3 @@ function MiniStat({ label, value }: { label: string; value: string }): JSX.Eleme
   )
 }
 
-/** Read-only stand-in for an input — every field on a spell card is now set via CustomSpellForm (custom) or the SRD data (compendium-linked), not typed inline, so the name always renders this way. */
-function LockedValue({ value }: { value: string }): JSX.Element {
-  return <div style={lockedValueStyle}>{value || '—'}</div>
-}
-
-const lockedValueStyle: CSSProperties = {
-  padding: '7px 10px',
-  borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-sunken)',
-  color: 'var(--text-secondary)',
-  fontSize: 14
-}

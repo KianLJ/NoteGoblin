@@ -7,6 +7,7 @@ import { CharacterSwitcher } from './CharacterSwitcher'
 import { NoteEditor } from '../campaigns/NoteEditor'
 import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import type { PlayerWorkspace } from './usePlayerWorkspace'
+import type { CharacterSheet } from '@shared/ipc'
 
 interface PlayerWorkspaceBodyProps {
   workspace: PlayerWorkspace
@@ -53,6 +54,22 @@ export function PlayerWorkspaceBody({
   } = workspace
 
   const [wizardOpen, setWizardOpen] = useState(false)
+
+  // A party member's sheet, viewed read-only via PartySidebar — a one-off
+  // fetch (see window.goblin.characters.getPlayerCharacter), not something
+  // kept live, so it reflects whatever they had selected at the moment you
+  // clicked rather than updating as they play. Takes over the main pane
+  // (same precedence CampaignWorkspace.tsx gives its own DM-side version)
+  // until explicitly closed.
+  const [viewedPartyMemberUserId, setViewedPartyMemberUserId] = useState<string | null>(null)
+  const [viewedPartyMemberCharacter, setViewedPartyMemberCharacter] = useState<CharacterSheet | null | undefined>(undefined)
+
+  async function viewPartyMemberCharacter(userId: string): Promise<void> {
+    setViewedPartyMemberUserId(userId)
+    setViewedPartyMemberCharacter(undefined)
+    const result = await window.goblin.characters.getPlayerCharacter(userId)
+    setViewedPartyMemberCharacter(result.ok ? result.data : null)
+  }
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -113,19 +130,54 @@ export function PlayerWorkspaceBody({
               current={activeCharacter}
               onSelect={(character) => openTab({ kind: 'character', id: character.id })}
               onRequestCreate={() => setWizardOpen(true)}
+              onDelete={(character) => deleteCharacter(character.id)}
             />
             <AccountSettingsButton />
           </>
         }
       />
 
-      <div style={{ flex: 1, minHeight: 0, background: 'var(--bg-surface)', overflowY: 'auto' }}>
-        {activeCharacter ? (
+      <div style={{ flex: 1, minHeight: 0, background: 'var(--bg-surface)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {viewedPartyMemberUserId ? (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: 'var(--space-2) var(--space-5)',
+                borderBottom: '1px solid var(--border-subtle)',
+                fontSize: 12,
+                color: 'var(--text-muted)',
+                flexShrink: 0
+              }}
+            >
+              <span>
+                {viewedPartyMemberCharacter === undefined
+                  ? 'Loading…'
+                  : viewedPartyMemberCharacter
+                    ? `Viewing ${viewedPartyMemberCharacter.name}'s sheet — read only`
+                    : "Couldn't load that character — they may have disconnected or changed selection."}
+              </span>
+              <button
+                type="button"
+                onClick={() => setViewedPartyMemberUserId(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}
+              >
+                Close
+              </button>
+            </div>
+            {viewedPartyMemberCharacter && (
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <CharacterSheetEditor key={viewedPartyMemberCharacter.id} character={viewedPartyMemberCharacter} readOnly onSave={() => {}} />
+              </div>
+            )}
+          </>
+        ) : activeCharacter ? (
           <CharacterSheetEditor
             key={activeCharacter.id}
             character={activeCharacter}
             onSave={(patch) => saveCharacter(activeCharacter.id, patch)}
-            onDelete={() => deleteCharacter(activeCharacter.id)}
           />
         ) : activeNote ? (
           <NoteEditor
@@ -173,6 +225,7 @@ export function PlayerWorkspaceBody({
             const next = grant ? [...note.editorUserIds, userId] : note.editorUserIds.filter((id) => id !== userId)
             saveNote(noteId, { editorUserIds: next })
           }}
+          onViewCharacter={viewPartyMemberCharacter}
         />
       )}
     </div>

@@ -20,6 +20,7 @@ import {
   FEATS,
   effectiveAbilityScores,
   groupedSubclassFeaturesForLevelUp,
+  isActivatableResource,
   spellSlotsForClasses,
   subclassesForClass,
   type FeatEffect,
@@ -62,6 +63,24 @@ function effectLabel(effect: FeatEffect): string {
       return `Advantage: ${effect.skill}`
     case 'skillDisadvantage':
       return `Disadvantage: ${effect.skill}`
+    case 'abilityCheckAdvantage':
+      return `Advantage: ${effect.ability.toUpperCase()} checks`
+    case 'abilityCheckDisadvantage':
+      return `Disadvantage: ${effect.ability.toUpperCase()} checks`
+    case 'savingThrowAdvantage':
+      return `Advantage: ${effect.ability.toUpperCase()} saves`
+    case 'savingThrowDisadvantage':
+      return `Disadvantage: ${effect.ability.toUpperCase()} saves`
+    case 'attackAdvantage':
+      return 'Advantage: attack rolls'
+    case 'attackDisadvantage':
+      return 'Disadvantage: attack rolls'
+    case 'initiativeAdvantage':
+      return 'Advantage: Initiative'
+    case 'initiativeDisadvantage':
+      return 'Disadvantage: Initiative'
+    case 'armorClass':
+      return `${effect.amount >= 0 ? '+' : ''}${effect.amount} AC`
   }
 }
 
@@ -142,6 +161,19 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
     setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
   }
 
+  /** Activating spends a use, same as any other use of this resource (so Rage's uses tracker and its "active" state never drift apart) — deactivating never refunds it, matching how raging doesn't give the use back when it ends. */
+  function toggleBuff(resourceId: string, kind: 'uses' | 'pool', currentUsed: number, max: number): void {
+    if (readOnly) return
+    const active = character.activeBuffs.includes(resourceId)
+    if (active) {
+      onSave({ activeBuffs: character.activeBuffs.filter((id) => id !== resourceId) })
+      return
+    }
+    if (kind === 'uses' && currentUsed >= max) return
+    if (kind === 'uses') setUsed(resourceId, currentUsed + 1, max)
+    onSave({ activeBuffs: [...character.activeBuffs, resourceId] })
+  }
+
   function rest(kinds: Array<'short' | 'long'>): void {
     setResourceDraft((prev) => {
       const next = { ...prev.resourceUsed }
@@ -206,11 +238,18 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
             {resources.map((r) => {
               const used = Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)
               const remaining = r.currentMax - used
+              const activatable = isActivatableResource(r.id)
+              const active = character.activeBuffs.includes(r.id)
               return (
-                <div key={r.id} className="gb-card" style={{ padding: 'var(--space-3)' }}>
+                <div key={r.id} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
                   <HoverDetailCard title={r.name} subtitle={r.className} fields={[]} description={r.fullDescription}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, cursor: 'default' }}>
                       <strong style={{ flex: 1 }}>{r.name}</strong>
+                      {active && (
+                        <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }}>
+                          Active
+                        </span>
+                      )}
                       <span className="gb-badge" style={{ fontSize: 10 }}>
                         {r.className}
                       </span>
@@ -233,6 +272,18 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
                         readOnly={readOnly}
                         onSetUsed={(n) => setUsed(r.id, n, r.currentMax)}
                       />
+                    )}
+
+                    {activatable && (
+                      <Button
+                        variant={active ? 'secondary' : 'primary'}
+                        onClick={() => toggleBuff(r.id, r.kind, used, r.currentMax)}
+                        disabled={readOnly || (!active && r.kind === 'uses' && remaining <= 0)}
+                        style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 10px' }}
+                        title={active ? `End ${r.name} — its bonuses stop applying immediately` : `Activate ${r.name} — applies its bonuses across the sheet until you end it`}
+                      >
+                        {active ? `End ${r.name}` : `Activate ${r.name}`}
+                      </Button>
                     )}
                   </HoverDetailCard>
                 </div>

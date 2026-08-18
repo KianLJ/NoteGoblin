@@ -13,7 +13,7 @@ interface EntryCardProps {
 export function EntryCard({ name, badge, onEdit, onRemove, children }: EntryCardProps): JSX.Element {
   return (
     <div className="gb-card" style={cardStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>{name}</div>
         {badge}
         {onEdit && (
@@ -30,6 +30,27 @@ export function EntryCard({ name, badge, onEdit, onRemove, children }: EntryCard
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>{children}</div>
     </div>
   )
+}
+
+/**
+ * The name slot for an EntryCard — a compendium/custom entry's name is
+ * never editable here (renaming happens in its own form/compendium data,
+ * not inline), so it shouldn't look like an input field the way the card's
+ * other locked stat values (damage, weight, cost) reasonably do. Bold and
+ * accent-colored instead, and explicitly allowed to wrap to two lines
+ * (the boxed input look this replaces had a fixed single-line height that
+ * a long item/spell/weapon name would overflow).
+ */
+export function EntryCardTitle({ value }: { value: string }): JSX.Element {
+  return <div style={titleStyle}>{value || '—'}</div>
+}
+
+const titleStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: 'var(--accent)',
+  lineHeight: 1.3,
+  overflowWrap: 'break-word'
 }
 
 const cardStyle: CSSProperties = {

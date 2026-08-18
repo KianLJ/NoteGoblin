@@ -757,6 +757,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
 
+  /** A player fetching another connected party member's currently-selected character — a one-off snapshot (see the matching case in sessionHost.ts for why it's not a live subscription), used by PartySidebar's "view sheet" action. */
+  ipcMain.handle(
+    'characters:get-player-character',
+    async (_event, userId: string): Promise<ApiResult<CharacterSheet | null>> => {
+      return sendSessionRequest<CharacterSheet | null>('characters.getPlayerCharacter', { userId })
+    }
+  )
+
   // --- Offline campaign snapshots ---------------------------------------
   // A read-only local cache of a joined campaign's notes/folders, written
   // through every time the player successfully syncs while connected (see

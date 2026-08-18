@@ -1,8 +1,9 @@
 import { useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import { CLASSES, formatModifier, type ActionType, type Attack, type CharacterSheetData } from '@shared/dnd5e'
+import { CLASSES, abilityModifier, formatModifier, type AbilityScores, type ActionType, type Attack, type CharacterSheetData } from '@shared/dnd5e'
 import {
   UNARMED_STRIKE,
+  activeBuffMeleeDamageBonus,
   effectiveAbilityScores,
   getEquipmentById,
   suggestedAttackAbility,
@@ -15,7 +16,7 @@ import { SpellsTab } from './SpellsTab'
 import { FeaturesTab } from './FeaturesTab'
 import type { DetailField } from '../CompendiumDetailModal'
 import { HoverDetailCard } from '../HoverDetailCard'
-import { EntryCard } from '../EntryCard'
+import { EntryCard, EntryCardTitle } from '../EntryCard'
 import { CustomWeaponForm } from '../CustomWeaponForm'
 import { Button } from '../../../ui/Button'
 
@@ -49,6 +50,21 @@ function weaponFields(weapon: CompendiumEquipment): DetailField[] {
   return fields
 }
 
+/** "1d8" -> "1d8 +3" — a weapon (or unarmed strike) attack's damage always adds its governing ability's modifier, per the SRD's weapon attack rules. Bare dice with no modifier suffix would understate the actual damage roll. `extraBonus` folds in anything else currently boosting this specific attack's damage — right now just an active buff's meleeDamageBonus (Rage), passed in by the caller only for Str-based melee attacks. */
+function weaponDamageDisplay(dice: string, ability: 'str' | 'dex', abilityScores: AbilityScores, extraBonus = 0): string {
+  if (!dice) return '—'
+  return `${dice} ${formatModifier(abilityModifier(abilityScores[ability]) + extraBonus)}`
+}
+
+/** Same idea as suggestedAttackAbility (shared/compendium.ts), for a custom attack's freeform weaponRange/properties fields instead of a compendium weapon's typed ones — ranged uses Dex, Finesse picks whichever of Str/Dex is currently higher, everything else uses Str. Automatic now, not a per-attack dropdown, so this is the only place it's decided. */
+function customAttackAbility(attack: Attack, abilityScores: AbilityScores): 'str' | 'dex' {
+  if (attack.weaponRange === 'Ranged') return 'dex'
+  if ((attack.properties ?? '').toLowerCase().includes('finesse')) {
+    return abilityModifier(abilityScores.dex) > abilityModifier(abilityScores.str) ? 'dex' : 'str'
+  }
+  return 'str'
+}
+
 /** Same shape as weaponFields, but reading a custom attack's own stored fields (filled in via CustomWeaponForm) instead of a compendium entry. */
 function customWeaponFields(attack: Attack): DetailField[] {
   const fields: DetailField[] = []
@@ -66,6 +82,8 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
   // A feat that boosts Str/Dex should raise attack bonus the same way an
   // ASI does — see shared/compendium.ts's effectiveAbilityScores.
   const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
+  // Rage's damage bonus only ever applies to a Str-based melee attack — see activeBuffMeleeDamageBonus in shared/compendium.ts.
+  const meleeBuffDamage = activeBuffMeleeDamageBonus(character.activeBuffs, character.classes)
 
   const [innerTab, setInnerTab] = useState<'Attacks' | 'Spells' | 'Features'>('Attacks')
   const [formOpen, setFormOpen] = useState(false)
@@ -79,11 +97,6 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
 
   function updateAttack(id: string, fields: Partial<Attack>): void {
     patch({ attacks: draft.attacks.map((a) => (a.id === id ? { ...a, ...fields } : a)) })
-  }
-
-  /** Weapon attacks come from equipping the weapon in Inventory now (see weaponAttacksFromEquipment) — writes to character.equipment go straight through onSave rather than this tab's own attacks draft, since equipment isn't this tab's data. */
-  function setWeaponAttackAbility(equipmentItemId: string, ability: 'str' | 'dex'): void {
-    onSave({ equipment: character.equipment.map((i) => (i.id === equipmentItemId ? { ...i, attackAbility: ability } : i)) })
   }
 
   function openCreateForm(): void {
@@ -172,9 +185,9 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
           {matchesSearch(UNARMED_STRIKE.name) && (
             <HoverDetailCard title={UNARMED_STRIKE.name} subtitle="Always available" fields={[]} description={UNARMED_STRIKE.description}>
-              <EntryCard name={<LockedValue value={UNARMED_STRIKE.name} />} badge={<span className="gb-badge">{UNARMED_STRIKE.damageType}</span>}>
+              <EntryCard name={<EntryCardTitle value={UNARMED_STRIKE.name} />} badge={<span className="gb-badge">{UNARMED_STRIKE.damageType}</span>}>
                 <MiniStat label="Atk" value={formatModifier(weaponAttackBonus('str', effScores, character.classes))} />
-                <LockedValue value={UNARMED_STRIKE.damage} />
+                <LockedValue value={weaponDamageDisplay(UNARMED_STRIKE.damage, 'str', effScores, meleeBuffDamage)} />
                 <LockedValue value="Action" />
               </EntryCard>
             </HoverDetailCard>
@@ -183,24 +196,20 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
           {equippedWeapons
             .filter(({ weapon }) => matchesSearch(weapon.name))
             .map(({ item, weapon }) => {
-              const ability = item.attackAbility ?? suggestedAttackAbility(weapon, effScores)
+              const ability = suggestedAttackAbility(weapon, effScores)
               const bonus = weaponAttackBonus(ability, effScores, character.classes)
               return (
                 <HoverDetailCard key={item.id} title={weapon.name} subtitle="Equipped weapon" fields={weaponFields(weapon)} description={weapon.description ?? ''}>
-                  <EntryCard name={<LockedValue value={weapon.name} />} badge={weapon.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}>
+                  <EntryCard name={<EntryCardTitle value={weapon.name} />} badge={weapon.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}>
                     <MiniStat label="Atk" value={formatModifier(bonus)} />
-                    <select
-                      className="gb-input"
-                      style={miniSelectStyle}
-                      value={ability}
-                      onChange={(e) => setWeaponAttackAbility(item.id, e.target.value as 'str' | 'dex')}
-                      title="Which ability governs this attack"
-                      disabled={readOnly}
-                    >
-                      <option value="str">Str</option>
-                      <option value="dex">Dex</option>
-                    </select>
-                    <LockedValue value={weapon.damageDice ?? '—'} />
+                    <LockedValue
+                      value={weaponDamageDisplay(
+                        weapon.damageDice ?? '',
+                        ability,
+                        effScores,
+                        ability === 'str' && weapon.weaponRange !== 'Ranged' ? meleeBuffDamage : 0
+                      )}
+                    />
                   </EntryCard>
                 </HoverDetailCard>
               )
@@ -208,7 +217,7 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
 
           {legacyStoredWeaponAttacks.filter((a) => matchesSearch(a.name)).map((attack) => {
             const weapon = getEquipmentById(attack.compendiumId!)
-            const ability = attack.attackAbility ?? 'str'
+            const ability = weapon ? suggestedAttackAbility(weapon, effScores) : customAttackAbility(attack, effScores)
             const bonus = weaponAttackBonus(ability, effScores, character.classes)
             return (
               <HoverDetailCard
@@ -219,50 +228,30 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
                 description={weapon?.description ?? attack.notes}
               >
                 <EntryCard
-                  name={<LockedValue value={weapon?.name ?? attack.name} />}
+                  name={<EntryCardTitle value={weapon?.name ?? attack.name} />}
                   badge={weapon?.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}
                   onRemove={() => patch({ attacks: draft.attacks.filter((a) => a.id !== attack.id) })}
                 >
                   <MiniStat label="Atk" value={formatModifier(bonus)} />
-                  <select
-                    className="gb-input"
-                    style={miniSelectStyle}
-                    value={ability}
-                    onChange={(e) => updateAttack(attack.id, { attackAbility: e.target.value as 'str' | 'dex' })}
-                    title="Which ability governs this attack"
-                  >
-                    <option value="str">Str</option>
-                    <option value="dex">Dex</option>
-                  </select>
-                  <LockedValue value={attack.damage} />
+                  <LockedValue value={weaponDamageDisplay(attack.damage, ability, effScores)} />
                 </EntryCard>
               </HoverDetailCard>
             )
           })}
 
           {customAttacks.filter((a) => matchesSearch(a.name)).map((attack) => {
-            const ability = attack.attackAbility ?? 'str'
+            const ability = customAttackAbility(attack, effScores)
             const bonus = weaponAttackBonus(ability, effScores, character.classes)
             return (
               <HoverDetailCard key={attack.id} title={attack.name || 'Untitled Attack'} subtitle={attack.weaponRange} fields={customWeaponFields(attack)} description={attack.notes}>
                 <EntryCard
-                  name={<LockedValue value={attack.name} />}
+                  name={<EntryCardTitle value={attack.name} />}
                   badge={attack.damageType ? <span className="gb-badge">{attack.damageType}</span> : undefined}
                   onEdit={() => openEditForm(attack)}
                   onRemove={() => patch({ attacks: draft.attacks.filter((a) => a.id !== attack.id) })}
                 >
                   <MiniStat label="Atk" value={formatModifier(bonus)} />
-                  <select
-                    className="gb-input"
-                    style={miniSelectStyle}
-                    value={ability}
-                    onChange={(e) => updateAttack(attack.id, { attackAbility: e.target.value as 'str' | 'dex' })}
-                    title="Which ability governs this attack"
-                  >
-                    <option value="str">Str</option>
-                    <option value="dex">Dex</option>
-                  </select>
-                  <LockedValue value={attack.damage} />
+                  <LockedValue value={weaponDamageDisplay(attack.damage, ability, effScores)} />
                   <select
                     className="gb-input"
                     style={miniSelectStyle}

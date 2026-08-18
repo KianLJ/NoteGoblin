@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
+import { PlayersIcon } from '../campaigns/panelIcons'
 import type { Note, PresencePlayer } from '@shared/ipc'
 
 interface PartySidebarProps {
@@ -9,10 +10,12 @@ interface PartySidebarProps {
   /** Whichever note is currently open — when you authored it, each party member gets a checkbox to grant/revoke edit access; otherwise this is just a "who's here" list. */
   activeNote: Note | null
   onToggleEditor: (noteId: string, userId: string, grant: boolean) => void
+  /** Opens a party member's currently-selected character as a read-only sheet — omitted (no button shown) for a player with no character selected, since there'd be nothing to open. */
+  onViewCharacter: (userId: string) => void
 }
 
-/** Right-side, player-mode-only panel — mirrors the DM's RightPanel/ConnectedPlayersList, but doubles as where a note's author manages who else can edit it, since that's the author's own call to make (not the DM's). */
-export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onToggleEditor }: PartySidebarProps): JSX.Element {
+/** Right-side, player-mode-only panel — mirrors the DM's RightPanel/ConnectedPlayersList (including the ability to open a party member's sheet, read-only), but doubles as where a note's author manages who else can edit it, since that's the author's own call to make (not the DM's). */
+export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onToggleEditor, onViewCharacter }: PartySidebarProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
 
   useEffect(() => {
@@ -46,6 +49,9 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
       >
         <div
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
             padding: 'var(--space-3)',
             borderBottom: '1px solid var(--border-subtle)',
             fontSize: 11,
@@ -55,6 +61,7 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
             color: 'var(--text-muted)'
           }}
         >
+          <PlayersIcon />
           Party
         </div>
 
@@ -82,19 +89,35 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
                     borderBottom: '1px solid var(--border-subtle)'
                   }}
                 >
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: 'var(--text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {player.characterName ?? <em style={{ fontWeight: 400, color: 'var(--text-muted)' }}>No character selected</em>}
-                    </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    {player.characterName ? (
+                      <button
+                        type="button"
+                        onClick={() => onViewCharacter(player.userId)}
+                        title="View this character's sheet (read only)"
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: 'var(--accent)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {player.characterName}
+                      </button>
+                    ) : (
+                      <div style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <em>No character selected</em>
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player.displayName}</div>
                   </div>
                   {canManage && (

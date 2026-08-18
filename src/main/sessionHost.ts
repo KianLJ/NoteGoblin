@@ -349,6 +349,17 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       }
       return { reqId: frame.reqId, ok: true, data: undefined }
     }
+    // A snapshot, not a live subscription — a player who wants to check a
+    // party member's sheet fetches it fresh each time (PartySidebar re-fetches
+    // on selection), rather than the DM's continuous ws:player-character push
+    // (which would mean broadcasting every player's sheet to everyone on
+    // every edit, not just to the DM). The host already keeps every synced
+    // player's character live in `players` (see 'characters.sync' above) —
+    // this just reads it back out for whoever asks.
+    case 'characters.getPlayerCharacter': {
+      const target = players.get(str('userId'))
+      return { reqId: frame.reqId, ok: true, data: target?.character ?? null }
+    }
     default:
       return { reqId: frame.reqId, ok: false, error: 'Unknown request kind.' }
   }

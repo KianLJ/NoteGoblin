@@ -24,6 +24,7 @@ export type RequestKind =
   | 'presence.subscribe'
   | 'presence.selectCharacter'
   | 'characters.sync'
+  | 'characters.getPlayerCharacter'
 
 export interface RequestFrame {
   reqId: string

@@ -9,10 +9,10 @@ import {
   activeAsiSlotChoices,
   activeFeatIds,
   computeInitiative,
+  DAMAGE_TYPES,
   computeMaxHp,
   computeSpeed,
   formatModifier,
-  hitDiceDisplay,
   hitDicePools,
   passivePerception,
   proficiencyBonus,
@@ -28,9 +28,13 @@ import {
 } from '@shared/dnd5e'
 import {
   FEATS,
+  activeBuffResistances,
   armorSpeedPenalty,
   computeArmorClassFromEquipment,
+  effectiveAbilityCheckAdvantage,
   effectiveAbilityScores,
+  effectiveInitiativeAdvantage,
+  effectiveSavingThrowAdvantage,
   effectiveSavingThrowProficiencies,
   effectiveSkillAdvantage,
   effectiveSkillProficiencies,
@@ -43,7 +47,7 @@ import { Modal } from '../../../ui/Modal'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { CombatTab } from './CombatTab'
-import { AbilityIcon, HeartIcon, HitDiceIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, SunIcon } from './icons'
+import { AbilityIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
   race: string
@@ -114,6 +118,9 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
   const speedBonus = featSpeedBonus(activeFeats) + armorSpeedPenalty(character.equipment, effScores)
   const notes = featNotes(activeFeats)
   const skillAdvantage = effectiveSkillAdvantage(activeFeats, character.equipment)
+  const abilityCheckAdvantage = effectiveAbilityCheckAdvantage(activeFeats, character.activeBuffs)
+  const savingThrowAdvantage = effectiveSavingThrowAdvantage(activeFeats, character.activeBuffs)
+  const initiativeAdvantage = effectiveInitiativeAdvantage(activeFeats)
 
   const maxHp = computeMaxHp(draft.classes, effScores)
 
@@ -358,13 +365,19 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
 
         <VitalStat
           label="AC"
-          value={String(computeArmorClassFromEquipment(character.equipment, effScores))}
+          value={String(computeArmorClassFromEquipment(character.equipment, effScores, activeFeats))}
           icon={<ShieldIcon size={22} style={{ color: 'var(--accent)' }} />}
           accent
+          large
         />
-        <VitalStat label="Initiative" value={formatModifier(computeInitiative(effScores))} icon={<InitiativeIcon />} />
-        <VitalStat label="Speed" value={`${computeSpeed(draft.race) + speedBonus} ft`} icon={<SpeedIcon />} />
-        <VitalStat label="Hit Dice" value={hitDiceDisplay(draft.classes)} icon={<HitDiceIcon />} />
+        <VitalStat
+          label="Initiative"
+          value={formatModifier(computeInitiative(effScores))}
+          icon={<InitiativeIcon />}
+          large
+          badge={initiativeAdvantage && <AdvantageTag kind={initiativeAdvantage} label="Initiative" />}
+        />
+        <VitalStat label="Speed" value={`${computeSpeed(draft.race) + speedBonus} ft`} icon={<SpeedIcon />} large />
 
         <Divider />
 
@@ -408,6 +421,26 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
           </div>
         </div>
 
+        {draft.currentHp <= 0 && (
+          <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)' }}>
+            <div className="gb-label" style={{ marginBottom: 4 }}>
+              Death Saves
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+              <DeathSaveRow
+                label="Successes"
+                count={draft.deathSaves.successes}
+                onChange={(n) => patch({ deathSaves: { ...draft.deathSaves, successes: n } })}
+              />
+              <DeathSaveRow
+                label="Failures"
+                count={draft.deathSaves.failures}
+                onChange={(n) => patch({ deathSaves: { ...draft.deathSaves, failures: n } })}
+              />
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 6 }}>
           <RestButton onClick={shortRest} icon={<SunIcon />}>
             Short
@@ -416,6 +449,10 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
             Long
           </RestButton>
         </div>
+
+        <Divider />
+
+        <ResistancesSection character={character} onSave={onSave} readOnly={readOnly} />
       </div>
 
       {additionalClasses.length > 0 && (
@@ -555,6 +592,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
                     <AbilityIcon ability={id} style={{ color: 'var(--text-muted)' }} />
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label.slice(0, 3)}</span>
+                    {abilityCheckAdvantage[id] && <AdvantageTag kind={abilityCheckAdvantage[id]!} label={`${label} checks`} />}
                   </div>
                   {abilityEditMode ? (
                     <input
@@ -641,8 +679,9 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
                   cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: 10, textTransform: 'uppercase', color: proficient ? 'var(--accent-hover)' : 'var(--text-muted)' }}>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', color: proficient ? 'var(--accent-hover)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 2 }}>
                   {label.slice(0, 3)}
+                  {savingThrowAdvantage[id] && <AdvantageTag kind={savingThrowAdvantage[id]!} label={`${label} saves`} />}
                 </span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: proficient ? 'var(--accent-hover)' : 'var(--text-primary)' }}>
                   {formatModifier(savingThrowBonus(id, effScores, effSaveProficiencies, draft.classes))}
@@ -653,24 +692,6 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         </div>
       </div>
 
-      {draft.currentHp <= 0 && (
-        <div>
-          <div className="gb-label">Death Saves</div>
-          <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
-            <DeathSaveRow
-              label="Successes"
-              count={draft.deathSaves.successes}
-              onChange={(n) => patch({ deathSaves: { ...draft.deathSaves, successes: n } })}
-            />
-            <DeathSaveRow
-              label="Failures"
-              count={draft.deathSaves.failures}
-              onChange={(n) => patch({ deathSaves: { ...draft.deathSaves, failures: n } })}
-            />
-          </div>
-        </div>
-      )}
-
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 'var(--space-4)', alignItems: 'start' }}>
         <div>
           <div className="gb-label">Skills</div>
@@ -679,7 +700,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
               <div key={id} style={{ display: 'contents' }}>
                 <span style={{ fontSize: 12 }}>
                   {id} <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>({ability.toUpperCase()})</span>
-                  {skillAdvantage[id] && <AdvantageTag kind={skillAdvantage[id]!} skill={id} />}
+                  {skillAdvantage[id] && <AdvantageTag kind={skillAdvantage[id]!} label={`${id} checks`} />}
                 </span>
                 <ProficiencyDot value={effSkillProficiencies[id] ?? 'none'} onClick={() => cycleSkillProficiency(id)} />
                 <span style={{ fontSize: 12, width: 28, textAlign: 'right' }}>
@@ -705,6 +726,102 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
           placeholder="Armor, weapons, tools, languages…"
         />
       </Field>
+    </div>
+  )
+}
+
+const RESISTANCE_ROWS: { key: 'damageResistances' | 'damageVulnerabilities' | 'damageImmunities'; label: string }[] = [
+  { key: 'damageResistances', label: 'Resistances' },
+  { key: 'damageVulnerabilities', label: 'Vulnerabilities' },
+  { key: 'damageImmunities', label: 'Immunities' }
+]
+
+/** Freeform damage-type tags per row, written straight through onSave (a discrete add/remove click, not something that needs debouncing) — plus, on the Resistances row only, a non-removable tag for whatever's granted by an active buff right now (Rage's B/P/S resistance — see activeBuffResistances in shared/compendium.ts). That one's shown separately from the stored list since it's conditional on the buff staying on, not a permanent trait to save. */
+function ResistancesSection({ character, onSave, readOnly }: { character: CharacterSheet; onSave: (patch: Partial<CharacterSheetData>) => void; readOnly?: boolean }): JSX.Element {
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const buffResistances = activeBuffResistances(character.activeBuffs)
+
+  function addTag(key: (typeof RESISTANCE_ROWS)[number]['key']): void {
+    const value = (drafts[key] ?? '').trim()
+    if (!value || readOnly) return
+    const current = character[key]
+    if (current.some((t) => t.toLowerCase() === value.toLowerCase())) return
+    onSave({ [key]: [...current, value] })
+    setDrafts((prev) => ({ ...prev, [key]: '' }))
+  }
+
+  function removeTag(key: (typeof RESISTANCE_ROWS)[number]['key'], value: string): void {
+    onSave({ [key]: character[key].filter((t) => t !== value) })
+  }
+
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', display: 'flex', flexDirection: 'column', maxWidth: 340 }}>
+      {RESISTANCE_ROWS.map(({ key, label }, i) => (
+        <div
+          key={key}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+            padding: '5px 0',
+            borderBottom: i < RESISTANCE_ROWS.length - 1 ? '1px solid var(--border-subtle)' : undefined
+          }}
+        >
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+            {label}
+          </span>
+          {character[key].length === 0 && buffResistances.length === 0 && key !== 'damageResistances' && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+          )}
+          {character[key].map((tag) => (
+            <span key={tag} className="gb-badge" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '3px 8px' }}>
+              {tag}
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => removeTag(key, tag)}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+          {key === 'damageResistances' &&
+            buffResistances.map((tag) => (
+              <span
+                key={`buff:${tag}`}
+                className="gb-badge gb-badge--accent"
+                style={{ fontSize: 12, padding: '3px 8px' }}
+                title="From an active buff (e.g. Rage) — not a permanent trait, so it isn't saved."
+              >
+                {tag}
+              </span>
+            ))}
+          {!readOnly && (
+            <input
+              className="gb-input"
+              list={`damage-types-${key}`}
+              placeholder="Add…"
+              value={drafts[key] ?? ''}
+              onChange={(e) => setDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addTag(key)
+                }
+              }}
+              style={{ width: 80, marginLeft: 'auto', fontSize: 12, padding: '3px 6px' }}
+            />
+          )}
+          <datalist id={`damage-types-${key}`}>
+            {DAMAGE_TYPES.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+        </div>
+      ))}
     </div>
   )
 }
@@ -779,24 +896,39 @@ function HeaderField({ label, children }: { label: string; children: ReactNode }
   )
 }
 
-/** Read-only — AC/Initiative/Speed/Hit Dice/Proficiency/Perception are all fully derived from ability scores/race/classes (see shared/dnd5e's compute* helpers), so there's nothing to type in here. */
-function VitalStat({ label, value, icon, accent }: { label: string; value: string; icon?: ReactNode; accent?: boolean }): JSX.Element {
+/** Read-only — AC/Initiative/Speed/Proficiency/Perception are all fully derived from ability scores/race/classes (see shared/dnd5e's compute* helpers), so there's nothing to type in here. `large` bumps AC/Initiative/Speed up to match how much more often they're glanced at mid-session than Proficiency/Perception. */
+function VitalStat({
+  label,
+  value,
+  icon,
+  accent,
+  large,
+  badge
+}: {
+  label: string
+  value: string
+  icon?: ReactNode
+  accent?: boolean
+  large?: boolean
+  badge?: ReactNode
+}): JSX.Element {
   return (
-    <div style={{ textAlign: 'center', minWidth: 48 }}>
+    <div style={{ textAlign: 'center', minWidth: large ? 60 : 48 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 2 }}>
         {icon}
         <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{label}</span>
+        {badge}
       </div>
-      <div style={{ fontSize: 16, fontWeight: 600, color: accent ? 'var(--accent)' : 'var(--text-primary)' }}>{value}</div>
+      <div style={{ fontSize: large ? 22 : 16, fontWeight: 700, color: accent ? 'var(--accent)' : 'var(--text-primary)' }}>{value}</div>
     </div>
   )
 }
 
-/** A small green "A" / red "D" badge — advantage or disadvantage currently in effect on a skill (from a feat's skillAdvantage/skillDisadvantage effect, or equipped armor's Stealth disadvantage; see effectiveSkillAdvantage in shared/compendium.ts). Purely informational, same read-only hover-for-detail spirit as the rest of the sheet. */
-function AdvantageTag({ kind, skill }: { kind: 'advantage' | 'disadvantage'; skill: string }): JSX.Element {
+/** A small green "A" / red "D" badge — advantage or disadvantage currently in effect on a skill, ability check, saving throw, attack roll, or Initiative (from a feat's *Advantage/*Disadvantage effect, or equipped armor's Stealth disadvantage; see effective*Advantage in shared/compendium.ts). Purely informational, same read-only hover-for-detail spirit as the rest of the sheet. */
+function AdvantageTag({ kind, label }: { kind: 'advantage' | 'disadvantage'; label: string }): JSX.Element {
   return (
     <span
-      title={kind === 'advantage' ? `Advantage on ${skill} checks` : `Disadvantage on ${skill} checks`}
+      title={kind === 'advantage' ? `Advantage on ${label}` : `Disadvantage on ${label}`}
       style={{
         display: 'inline-block',
         marginLeft: 3,

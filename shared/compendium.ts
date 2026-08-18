@@ -16,6 +16,7 @@ import subclassFeaturesData from './data/srd-subclass-features.json'
 import featsData from './data/srd-feats.json'
 import {
   CLASSES,
+  CLASS_RESOURCES,
   abilityModifier,
   activeAsiSlotChoices,
   activeFeatIds,
@@ -142,6 +143,15 @@ export type FeatEffect =
   | { kind: 'note'; text: string }
   | { kind: 'skillAdvantage'; skill: SkillName }
   | { kind: 'skillDisadvantage'; skill: SkillName }
+  | { kind: 'abilityCheckAdvantage'; ability: Ability }
+  | { kind: 'abilityCheckDisadvantage'; ability: Ability }
+  | { kind: 'savingThrowAdvantage'; ability: Ability }
+  | { kind: 'savingThrowDisadvantage'; ability: Ability }
+  | { kind: 'attackAdvantage' }
+  | { kind: 'attackDisadvantage' }
+  | { kind: 'initiativeAdvantage' }
+  | { kind: 'initiativeDisadvantage' }
+  | { kind: 'armorClass'; amount: number }
 
 /**
  * A feat, sourced from the SRD 5.2.1 (Creative Commons Attribution 4.0 —
@@ -239,6 +249,61 @@ export function featSpeedBonus(featIds: string[]): number {
 }
 
 /**
+ * What "activating" a class resource (character.activeBuffs — see
+ * CLASS_RESOURCES/resourceUsed) actually changes on the sheet while it's
+ * on, keyed by ClassResourceDef.id. Rage is the flagship (and, in the core
+ * SRD resource set, the only) case that's a genuine ongoing buff rather
+ * than an instant effect (Second Wind heals now, Lay on Hands heals now,
+ * Divine Smite triggers on a hit) — but the shape here is generic, so a
+ * homebrew/future resource with similar "toggle on for a bonus" semantics
+ * only needs an entry here, not new plumbing.
+ */
+const BUFF_EFFECTS: Record<
+  string,
+  {
+    abilityCheckAdvantage?: Ability[]
+    savingThrowAdvantage?: Ability[]
+    resistances?: string[]
+    /** Extra melee damage while active, as a function of the buff-granting class's own level (e.g. Rage's +2/+3/+4 ladder). */
+    meleeDamageBonus?: (classLevel: number) => number
+  }
+> = {
+  'barbarian-rage': {
+    abilityCheckAdvantage: ['str'],
+    savingThrowAdvantage: ['str'],
+    resistances: ['Bludgeoning', 'Piercing', 'Slashing'],
+    meleeDamageBonus: (level) => (level >= 16 ? 4 : level >= 9 ? 3 : 2)
+  }
+}
+
+/** Whether this class resource has an "activate for a buff" entry at all (see BUFF_EFFECTS) — gates whether FeaturesTab.tsx shows an Activate/End button on its card instead of just a uses/pool tracker. */
+export function isActivatableResource(resourceId: string): boolean {
+  return resourceId in BUFF_EFFECTS
+}
+
+/** The resource id's owning class's own level (e.g. barbarian level, for 'barbarian-rage') — resolved from CLASS_RESOURCES so BUFF_EFFECTS' level-scaled bonuses (Rage's damage ladder) read the right class, not just the highest/first one on a multiclass character. */
+function ownerClassLevel(resourceId: string, classes: ClassLevel[]): number {
+  for (const c of classes) {
+    const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
+    if (cls && (CLASS_RESOURCES[cls.id] ?? []).some((r) => r.id === resourceId)) return c.level
+  }
+  return 0
+}
+
+/** Every damage type currently resisted purely from an active buff (Rage) — kept separate from character.damageResistances since it's conditional on the buff staying on, not a permanent trait to store. */
+export function activeBuffResistances(activeBuffs: string[]): string[] {
+  return [...new Set(activeBuffs.flatMap((id) => BUFF_EFFECTS[id]?.resistances ?? []))]
+}
+
+/** Bonus melee damage from any currently-active buff (Rage) — add to a Str-based melee weapon attack's damage. */
+export function activeBuffMeleeDamageBonus(activeBuffs: string[], classes: ClassLevel[]): number {
+  return activeBuffs.reduce((sum, id) => {
+    const bonus = BUFF_EFFECTS[id]?.meleeDamageBonus
+    return bonus ? sum + bonus(ownerClassLevel(id, classes)) : sum
+  }, 0)
+}
+
+/**
  * Every skill currently under advantage or disadvantage — from a feat's
  * `skillAdvantage`/`skillDisadvantage` effect, or (the one built-in source
  * right now) Stealth disadvantage from equipped armor with the SRD's
@@ -262,6 +327,67 @@ export function effectiveSkillAdvantage(
   for (const skill of advantaged) if (!disadvantaged.has(skill)) result[skill] = 'advantage'
   for (const skill of disadvantaged) if (!advantaged.has(skill)) result[skill] = 'disadvantage'
   return result
+}
+
+/** Same idea as effectiveSkillAdvantage, but for the six ability checks (e.g. a feat granting advantage on Strength checks, or Rage's Strength-check advantage while active) rather than the eighteen skills. */
+export function effectiveAbilityCheckAdvantage(featIds: string[], activeBuffs: string[] = []): Partial<Record<Ability, 'advantage' | 'disadvantage'>> {
+  const result: Partial<Record<Ability, 'advantage' | 'disadvantage'>> = {}
+  const advantaged = new Set<Ability>()
+  const disadvantaged = new Set<Ability>()
+  for (const effect of resolveFeatEffects(featIds)) {
+    if (effect.kind === 'abilityCheckAdvantage') advantaged.add(effect.ability)
+    else if (effect.kind === 'abilityCheckDisadvantage') disadvantaged.add(effect.ability)
+  }
+  for (const id of activeBuffs) for (const a of BUFF_EFFECTS[id]?.abilityCheckAdvantage ?? []) advantaged.add(a)
+  for (const a of advantaged) if (!disadvantaged.has(a)) result[a] = 'advantage'
+  for (const a of disadvantaged) if (!advantaged.has(a)) result[a] = 'disadvantage'
+  return result
+}
+
+/** Same idea as effectiveSkillAdvantage, but for the six saving throws (including Rage's Strength-save advantage while active). */
+export function effectiveSavingThrowAdvantage(featIds: string[], activeBuffs: string[] = []): Partial<Record<Ability, 'advantage' | 'disadvantage'>> {
+  const result: Partial<Record<Ability, 'advantage' | 'disadvantage'>> = {}
+  const advantaged = new Set<Ability>()
+  const disadvantaged = new Set<Ability>()
+  for (const effect of resolveFeatEffects(featIds)) {
+    if (effect.kind === 'savingThrowAdvantage') advantaged.add(effect.ability)
+    else if (effect.kind === 'savingThrowDisadvantage') disadvantaged.add(effect.ability)
+  }
+  for (const id of activeBuffs) for (const a of BUFF_EFFECTS[id]?.savingThrowAdvantage ?? []) advantaged.add(a)
+  for (const a of advantaged) if (!disadvantaged.has(a)) result[a] = 'advantage'
+  for (const a of disadvantaged) if (!advantaged.has(a)) result[a] = 'disadvantage'
+  return result
+}
+
+/** A blanket advantage/disadvantage on every attack roll (not tied to a specific weapon/ability) — cancels out the same way as the other advantage aggregators if a feat somehow granted both. */
+export function effectiveAttackAdvantage(featIds: string[]): 'advantage' | 'disadvantage' | undefined {
+  let advantaged = false
+  let disadvantaged = false
+  for (const effect of resolveFeatEffects(featIds)) {
+    if (effect.kind === 'attackAdvantage') advantaged = true
+    else if (effect.kind === 'attackDisadvantage') disadvantaged = true
+  }
+  if (advantaged === disadvantaged) return undefined
+  return advantaged ? 'advantage' : 'disadvantage'
+}
+
+/** Advantage/disadvantage on Initiative rolls specifically (distinct from a blanket Dex-check advantage) — e.g. a feat like the SRD's Alert, if it granted advantage instead of a flat proficiency-bonus add. */
+export function effectiveInitiativeAdvantage(featIds: string[]): 'advantage' | 'disadvantage' | undefined {
+  let advantaged = false
+  let disadvantaged = false
+  for (const effect of resolveFeatEffects(featIds)) {
+    if (effect.kind === 'initiativeAdvantage') advantaged = true
+    else if (effect.kind === 'initiativeDisadvantage') disadvantaged = true
+  }
+  if (advantaged === disadvantaged) return undefined
+  return advantaged ? 'advantage' : 'disadvantage'
+}
+
+/** Flat, unconditional AC bonus from taken feats/features — add to computeArmorClassFromEquipment's result. The Defense fighting style is deliberately not modeled through this: its +1 only applies while actually wearing body armor, so computeArmorClassFromEquipment checks for it directly instead of through a flat sum that can't express that condition. */
+export function featArmorClassBonus(featIds: string[]): number {
+  return resolveFeatEffects(featIds)
+    .filter((e): e is Extract<FeatEffect, { kind: 'armorClass' }> => e.kind === 'armorClass')
+    .reduce((sum, e) => sum + e.amount, 0)
 }
 
 /** Non-numeric rules effects from taken feats (e.g. Grappler's grapple-attack advantage) — surfaced as callouts near Feats on the sheet, not folded into any number. */
@@ -461,8 +587,13 @@ export function knownSpellsLimit(classes: ClassLevel[]): number | null {
  * Only compendium-linked equipped items count — a custom "armor" has no
  * formula to draw from, so it's silently ignored here (its `equipped` flag
  * still displays fine in the Inventory UI, it just doesn't feed AC).
+ *
+ * On top of that: any flat, unconditional AC-boosting feat (featArmorClassBonus)
+ * always applies, and the Defense fighting style's +1 applies only while
+ * actual body armor (Light/Medium/Heavy, not just a shield) is equipped —
+ * checked directly here since a flat sum can't express that condition.
  */
-export function computeArmorClassFromEquipment(equipment: EquipmentItem[], abilityScores: AbilityScores): number {
+export function computeArmorClassFromEquipment(equipment: EquipmentItem[], abilityScores: AbilityScores, featIds: string[] = []): number {
   const dexMod = abilityModifier(abilityScores.dex)
   const equipped = equipment.filter((e) => e.equipped && e.compendiumId).map((e) => getEquipmentById(e.compendiumId!)).filter((e): e is CompendiumEquipment => !!e && e.category === 'Armor')
 
@@ -481,7 +612,8 @@ export function computeArmorClassFromEquipment(equipment: EquipmentItem[], abili
     base = 10 + dexMod
   }
 
-  return base + (shield?.armorClassBase ?? 0)
+  const defenseBonus = bodyArmor && featIds.includes('defense') ? 1 : 0
+  return base + (shield?.armorClassBase ?? 0) + defenseBonus + featArmorClassBonus(featIds)
 }
 
 /** Which ability a weapon attack should use by default: Ranged weapons use Dex; Finesse weapons use whichever of Str/Dex is currently higher; everything else uses Str. Only a starting suggestion — the player can still override per-attack (e.g. a reach weapon build, or a feature that changes the rule). */
