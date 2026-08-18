@@ -44,10 +44,17 @@ function connect(): void {
     scheduleReconnect()
   })
 
-  next.connect().catch(() => {
+  // login() (not connect()) — connect() alone only opens the socket, it
+  // never actually emits 'ready'. login() with no scopes does the same
+  // handshake and then emits 'ready' itself, which is all a plain Rich
+  // Presence connection (no OAuth) needs.
+  next.login().catch((err) => {
     // The overwhelmingly common case: Discord's desktop client (not the web
     // app, which has no local RPC socket) simply isn't running right now.
-    // Not an error worth surfacing — just retry later.
+    // Not worth bothering the user about — logged (not surfaced in the UI)
+    // purely so a real misconfiguration is diagnosable instead of silently
+    // invisible — retry either way.
+    console.error('[discord-presence] login failed:', err)
     if (client === next) client = null
     scheduleReconnect()
   })
@@ -74,8 +81,9 @@ function applyActivity(details: string): void {
       largeImageKey: 'notegoblin',
       largeImageText: 'NoteGoblin'
     })
-    .catch(() => {
-      /* best-effort — Discord may have closed between the ready check above and this call */
+    .catch((err) => {
+      // best-effort — Discord may have closed between the ready check above and this call
+      console.error('[discord-presence] setActivity failed:', err)
     })
 }
 

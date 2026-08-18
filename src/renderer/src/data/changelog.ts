@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.2',
+    title: 'Fix Discord Rich Presence never actually showing',
+    highlights: [
+      "Fixed Rich Presence never appearing — it was connecting to Discord successfully but never completing the handshake step that actually marks the connection ready to send a status"
+    ]
+  },
+  {
     version: '0.3.1',
     title: 'Discord Rich Presence',
     highlights: [
