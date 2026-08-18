@@ -11,7 +11,18 @@ import equipmentData from './data/srd-equipment.json'
 import magicItemsData from './data/srd-magic-items.json'
 import spellSlotsData from './data/srd-spell-slots.json'
 import spellsKnownData from './data/srd-spells-known.json'
-import { CLASSES, abilityModifier, proficiencyBonus, type AbilityScores, type ClassLevel, type EquipmentItem } from './dnd5e'
+import subclassesData from './data/srd-subclasses.json'
+import subclassFeaturesData from './data/srd-subclass-features.json'
+import featsData from './data/srd-feats.json'
+import {
+  CLASSES,
+  abilityModifier,
+  proficiencyBonus,
+  type Ability,
+  type AbilityScores,
+  type ClassLevel,
+  type EquipmentItem
+} from './dnd5e'
 
 export interface CompendiumSpell {
   id: string
@@ -76,6 +87,69 @@ export const EQUIPMENT: CompendiumEquipment[] = equipmentData as CompendiumEquip
 export const WEAPONS: CompendiumEquipment[] = EQUIPMENT.filter((e) => e.category === 'Weapon')
 export const ARMOR: CompendiumEquipment[] = EQUIPMENT.filter((e) => e.category === 'Armor')
 export const MAGIC_ITEMS: CompendiumMagicItem[] = magicItemsData as CompendiumMagicItem[]
+
+/** One SRD subclass — the SRD only defines a single subclass per class (Berserker, Life, Champion, etc.), not the full official roster, since the rest is PHB/other-book content that isn't open. */
+export interface CompendiumSubclass {
+  id: string
+  name: string
+  classId: string
+  /** Short flavor blurb from the SRD, shown above the feature list — not full rules text. */
+  flavor?: string
+}
+
+/** One mechanical feature a subclass grants at a specific level — real SRD rules text, used to fill in the generic "Path Feature"/"Archetype Feature" placeholders in dnd5e.ts's CLASS_LEVEL_FEATURES once a character has actually chosen that subclass. */
+export interface CompendiumSubclassFeature {
+  classId: string
+  subclassId: string
+  level: number
+  name: string
+  desc: string
+}
+
+/**
+ * A feat. The SRD's open content only defines one (Grappler) — every other
+ * published feat (Alert, Lucky, Sharpshooter, etc.) is Player's Handbook
+ * content and isn't legally reproducible here. `prerequisiteAbility`, when
+ * present, is checked against the character's ability scores before
+ * offering the feat at an Ability Score Improvement level (see
+ * LevelUpPrompt.tsx) — this is the one feat currently wired to actually
+ * gate on/appear on the sheet; more can be added to srd-feats.json without
+ * touching code, but won't have real SRD text unless it's genuinely SRD
+ * content.
+ */
+export interface CompendiumFeat {
+  id: string
+  name: string
+  prerequisite?: string
+  prerequisiteAbility?: { ability: Ability; minimum: number }
+  desc: string
+}
+
+export const SUBCLASSES: CompendiumSubclass[] = subclassesData as CompendiumSubclass[]
+export const SUBCLASS_FEATURES: CompendiumSubclassFeature[] = subclassFeaturesData as CompendiumSubclassFeature[]
+export const FEATS: CompendiumFeat[] = featsData as CompendiumFeat[]
+
+export function subclassesForClass(classId: string): CompendiumSubclass[] {
+  return SUBCLASSES.filter((s) => s.classId === classId)
+}
+
+/** Real subclass feature content for one class+subclass, levels in `(fromLevel, toLevel]` — mirrors curatedFeaturesForLevelUp's own range semantics, since the two are meant to be merged by the caller (see LevelUpPrompt.tsx). */
+export function subclassFeaturesForLevelUp(
+  classId: string,
+  subclassId: string,
+  fromLevel: number,
+  toLevel: number
+): CompendiumSubclassFeature[] {
+  return SUBCLASS_FEATURES.filter(
+    (f) => f.classId === classId && f.subclassId === subclassId && f.level > fromLevel && f.level <= toLevel
+  )
+}
+
+/** True if the character's ability scores meet this feat's prerequisite (always true for a feat with none). */
+export function meetsFeatPrerequisite(feat: CompendiumFeat, abilityScores: AbilityScores): boolean {
+  if (!feat.prerequisiteAbility) return true
+  return abilityScores[feat.prerequisiteAbility.ability] >= feat.prerequisiteAbility.minimum
+}
 
 const spellById = new Map(SPELLS.map((s) => [s.id, s]))
 const equipmentById = new Map(EQUIPMENT.map((e) => [e.id, e]))

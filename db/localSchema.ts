@@ -45,4 +45,24 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 
 CREATE INDEX IF NOT EXISTS idx_characters_owner ON characters(owner_identity_id);
+
+-- A read-only local copy of a joined campaign's notes/folders (whatever this
+-- identity was actually allowed to see — the DM already filtered by
+-- visibility before it ever left their machine), refreshed every time the
+-- player successfully syncs while connected. Lets "Offline" campaigns stay
+-- browsable when the DM isn't hosting, instead of just showing nothing.
+-- Schemaless JSON blobs (same pattern as characters.sheet_json) since these
+-- mirror the Campaign/Note/Folder wire shapes exactly — no need to duplicate
+-- every field as its own column just to store a point-in-time cache.
+CREATE TABLE IF NOT EXISTS cached_campaigns (
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL,
+  campaign_json TEXT NOT NULL,
+  notes_json TEXT NOT NULL,
+  folders_json TEXT NOT NULL,
+  synced_at TEXT NOT NULL,
+  PRIMARY KEY (identity_id, campaign_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cached_campaigns_identity ON cached_campaigns(identity_id);
 `

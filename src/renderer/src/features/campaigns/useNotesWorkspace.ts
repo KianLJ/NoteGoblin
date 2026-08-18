@@ -129,6 +129,17 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     })
   }
 
+  /** Drag-and-drop tab reordering — moves `draggedId` to sit just before `targetId` in the strip. A no-op if either id isn't currently an open tab. */
+  function moveTab(draggedId: string, targetId: string): void {
+    if (draggedId === targetId) return
+    setOpenTabs((tabs) => {
+      if (!tabs.includes(draggedId) || !tabs.includes(targetId)) return tabs
+      const withoutDragged = tabs.filter((id) => id !== draggedId)
+      const targetIndex = withoutDragged.indexOf(targetId)
+      return [...withoutDragged.slice(0, targetIndex), draggedId, ...withoutDragged.slice(targetIndex)]
+    })
+  }
+
   async function createNote(
     visibility: 'dm' | 'shared' | 'private',
     folderId: string | null = null,
@@ -296,6 +307,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     openNote,
     navigateToNote,
     closeTab,
+    moveTab,
     createNote,
     saveNote,
     deleteNote,

@@ -118,7 +118,7 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
       {open && (
         <div
           className="gb-card"
-          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 280 }}
+          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 280, zIndex: 200 }}
         >
           <h3
             style={{

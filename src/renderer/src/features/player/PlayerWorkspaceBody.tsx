@@ -45,7 +45,11 @@ export function PlayerWorkspaceBody({
     deleteFolder,
     duplicateNote,
     duplicateFolder,
-    error
+    error,
+    isOffline,
+    offlineSyncedAt,
+    offlineSnapshots,
+    openOfflineCampaign
   } = workspace
 
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -85,7 +89,8 @@ export function PlayerWorkspaceBody({
         folders={folders}
         activeTab={activeTab}
         myUserId={myUserId}
-        onSelectNote={(id) => openTab({ kind: 'note', id })}
+        onSelectNote={(id) => navigateToNote(id)}
+        onOpenNoteInNewTab={(id) => openTab({ kind: 'note', id })}
         onCreateNote={createNote}
         onCreateFolder={createFolder}
         onRenameNote={(noteId, title) => saveNote(noteId, { title })}
@@ -97,6 +102,10 @@ export function PlayerWorkspaceBody({
         onPasteNote={duplicateNote}
         onPasteFolder={duplicateFolder}
         connectedLabel={connectedLabel}
+        isOffline={isOffline}
+        offlineSyncedAt={offlineSyncedAt}
+        offlineSnapshots={offlineSnapshots}
+        onOpenOfflineCampaign={openOfflineCampaign}
         footer={
           <>
             <CharacterSwitcher
@@ -123,7 +132,10 @@ export function PlayerWorkspaceBody({
             key={activeNote.id}
             note={activeNote}
             notes={notes ?? []}
-            readOnly={activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? '')}
+            readOnly={
+              isOffline ||
+              (activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? ''))
+            }
             onSave={(patch) => saveNote(activeNote.id, patch)}
             onNavigateToNote={navigateToNote}
             onOpenInNewTab={(id) => openTab({ kind: 'note', id })}
@@ -149,7 +161,7 @@ export function PlayerWorkspaceBody({
         )}
       </div>
 
-      {activeCampaign && (
+      {activeCampaign && !isOffline && (
         <PartySidebar
           sessionId={sessionId}
           campaignId={activeCampaign.id}

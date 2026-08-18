@@ -46,6 +46,11 @@ const api: AppApi = {
       const listener = (_event: Electron.IpcRendererEvent, update: CampaignChangeEvent): void => callback(update)
       ipcRenderer.on('ws:campaign-changed', listener)
       return () => ipcRenderer.removeListener('ws:campaign-changed', listener)
+    },
+    onActiveChanged: (callback) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('ws:active-campaign-changed', listener)
+      return () => ipcRenderer.removeListener('ws:active-campaign-changed', listener)
     }
   },
   notes: {
@@ -65,6 +70,11 @@ const api: AppApi = {
       ipcRenderer.invoke('folders:update', campaignId, folderId, input, sessionId),
     remove: (campaignId, folderId, sessionId) =>
       ipcRenderer.invoke('folders:remove', campaignId, folderId, sessionId)
+  },
+  snapshots: {
+    list: () => ipcRenderer.invoke('snapshots:list'),
+    get: (campaignId) => ipcRenderer.invoke('snapshots:get', campaignId),
+    save: (campaign, notes, folders) => ipcRenderer.invoke('snapshots:save', campaign, notes, folders)
   },
   characters: {
     list: () => ipcRenderer.invoke('characters:list'),

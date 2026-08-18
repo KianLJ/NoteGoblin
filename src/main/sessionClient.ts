@@ -190,4 +190,8 @@ function handleFrame(raw: WebSocket.RawData): void {
       campaignId: frame.campaignId
     })
   }
+
+  if (payload.type === 'active-campaign-changed' && clientWindow) {
+    clientWindow.webContents.send('ws:active-campaign-changed', { sessionId: currentSessionId })
+  }
 }

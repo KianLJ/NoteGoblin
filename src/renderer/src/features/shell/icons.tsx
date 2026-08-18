@@ -80,3 +80,18 @@ export function CloseWindowIcon(): JSX.Element {
     </svg>
   )
 }
+
+/** An open book — the Bestiary's header button. */
+export function BestiaryIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path
+        d="M8 3.4C7 2.6 5.3 2.2 3.2 2.2c-.5 0-.9.4-.9.9v8.6c0 .5.4.9.9.9 1.9 0 3.7.4 4.8 1.2M8 3.4c1-.8 2.7-1.2 4.8-1.2.5 0 .9.4.9.9v8.6c0 .5-.4.9-.9.9-1.9 0-3.7.4-4.8 1.2M8 3.4v10.4"
+        stroke="currentColor"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}

@@ -23,7 +23,7 @@ import {
   type HitDicePool,
   type SkillName
 } from '@shared/dnd5e'
-import { computeArmorClassFromEquipment } from '@shared/compendium'
+import { computeArmorClassFromEquipment, subclassesForClass } from '@shared/compendium'
 import { Button } from '../../../ui/Button'
 import { Modal } from '../../../ui/Modal'
 import { useAutosaveDraft } from '../useAutosaveDraft'
@@ -279,11 +279,11 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
           />
         </HeaderField>
         <HeaderField label="Subclass">
-          <input
-            className="gb-input"
-            style={boxedInputStyle}
+          <SubclassField
+            className={primary?.className ?? ''}
             value={primary?.subclass ?? ''}
-            onChange={(e) => updateClass(0, { subclass: e.target.value })}
+            onChange={(v) => updateClass(0, { subclass: v })}
+            style={boxedInputStyle}
           />
         </HeaderField>
 
@@ -422,12 +422,11 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
                     value={c.level}
                     onChange={(e) => updateClass(i, { level: Number(e.target.value) })}
                   />
-                  <input
-                    className="gb-input"
-                    style={{ width: 150 }}
+                  <SubclassField
+                    className={c.className}
                     value={c.subclass ?? ''}
-                    onChange={(e) => updateClass(i, { subclass: e.target.value })}
-                    placeholder="Subclass (optional)"
+                    onChange={(v) => updateClass(i, { subclass: v })}
+                    style={{ width: 150 }}
                   />
                   <button
                     type="button"
@@ -573,6 +572,37 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
       <div className="gb-label">{label}</div>
       {children}
     </div>
+  )
+}
+
+/** SRD-backed subclass picker — a dropdown of the real SRD subclass(es) for a recognized class (just one per class, per the SRD's own scope; see shared/compendium.ts), falling back to a freeform text input for an unrecognized/homebrew class name. A legacy or homebrew value that doesn't match any SRD option is kept as an extra "(custom)" option instead of being silently dropped. */
+function SubclassField({
+  className,
+  value,
+  onChange,
+  style
+}: {
+  className: string
+  value: string
+  onChange: (value: string) => void
+  style?: CSSProperties
+}): JSX.Element {
+  const classId = CLASSES.find((c) => c.name.toLowerCase() === className.trim().toLowerCase())?.id
+  const options = classId ? subclassesForClass(classId) : []
+  if (options.length === 0) {
+    return <input className="gb-input" style={style} value={value} onChange={(e) => onChange(e.target.value)} placeholder="Subclass" />
+  }
+  const isKnownOrEmpty = value === '' || options.some((o) => o.name === value)
+  return (
+    <select className="gb-input" style={style} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Select subclass…</option>
+      {!isKnownOrEmpty && <option value={value}>{value} (custom)</option>}
+      {options.map((o) => (
+        <option key={o.id} value={o.name}>
+          {o.name}
+        </option>
+      ))}
+    </select>
   )
 }
 

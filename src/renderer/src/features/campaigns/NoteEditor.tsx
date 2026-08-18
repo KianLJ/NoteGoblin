@@ -142,6 +142,19 @@ export function NoteEditor({
     }
   }, [note.title, note.bodyMarkdown])
 
+  // Ctrl+E toggles write/preview — mirrors the toolbar eye/pencil button, just
+  // from the keyboard. Scoped to this note's lifetime since NoteEditor
+  // remounts fresh per open note (see the component doc comment).
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (!e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'e') return
+      e.preventDefault()
+      setMode((m) => (m === 'write' ? 'preview' : 'write'))
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   useEffect(() => {
     if (!linkPickerOpen) return
     function handleClickOutside(e: MouseEvent): void {

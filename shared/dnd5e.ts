@@ -744,6 +744,8 @@ export interface CharacterSheetData {
 
   features: Feature[]
   customClassFeatures: CustomClassFeature[]
+  /** Ids of feats taken at an Ability Score Improvement level (see shared/compendium.ts's FEATS) — chosen instead of the +2/+1+1 ability increase for that level. */
+  feats: string[]
 
   spellcastingAbility: Ability | null
   spellSlots: Record<number, { total: number; used: number }>
@@ -778,6 +780,7 @@ export function emptyCharacterSheet(): CharacterSheetData {
     equipment: [],
     features: [],
     customClassFeatures: [],
+    feats: [],
     spellcastingAbility: null,
     spellSlots: {},
     spells: [],

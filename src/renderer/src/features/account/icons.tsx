@@ -1,6 +1,6 @@
 export function GearIcon(): JSX.Element {
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="21" height="21" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <polygon points="8 3.79 4.35 10.1 11.65 10.1 8 3.79" stroke="currentColor" strokeWidth="0.3" strokeLinejoin="bevel" />
       <polygon points="8 10.14 9.86 6.93 6.14 6.93 8 10.14" stroke="currentColor" strokeWidth="0.35" strokeLinejoin="bevel" />
       <line x1="4.29" y1="5.86" x2="6.14" y2="6.93" stroke="currentColor" strokeWidth="0.3" />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Campaign, CharacterSheet, Folder, Note } from '@shared/ipc'
+import type { Campaign, CampaignSnapshot, CharacterSheet, Folder, Note } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
 
 export type PlayerTabRef = { kind: 'character'; id: string } | { kind: 'note'; id: string }
@@ -24,6 +24,18 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   const [error, setError] = useState<string | null>(null)
   const [tabs, setTabs] = useState<PlayerTabRef[]>([])
   const [activeTab, setActiveTabState] = useState<PlayerTabRef | null>(null)
+  // Sticky across tab switches — unlike activeTab/activeCharacter (which go
+  // null the moment you switch to a note tab), this is what the DM/other
+  // players should keep seeing: whichever character you had open most
+  // recently, not "nothing" just because you're reading a note right now.
+  const [lastCharacterId, setLastCharacterId] = useState<string | null>(null)
+  // Offline snapshots — a read-only fallback for a joined campaign when the
+  // DM isn't currently hosting. `isOffline` is true only while viewing a
+  // cached snapshot (never while actually connected); `offlineSyncedAt` is
+  // that snapshot's timestamp, for the "as of" label in the UI.
+  const [offlineSnapshots, setOfflineSnapshots] = useState<CampaignSnapshot[] | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [offlineSyncedAt, setOfflineSyncedAt] = useState<string | null>(null)
 
   // Auto-dismiss — an error toast that sits there forever just gets in the
   // way of the sidebar/editor beneath it once you've read it.
@@ -35,33 +47,52 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
 
   useEffect(() => {
     refreshCharacters()
+    refreshOfflineSnapshots()
   }, [])
 
   useEffect(() => {
     setActiveCampaign(null)
+    setIsOffline(false)
+    setOfflineSyncedAt(null)
     if (!sessionId) return
     resyncActiveCampaign(sessionId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
   useEffect(() => {
+    if (isOffline) return
     if (!activeCampaign) {
       setNotes(null)
       setFolders(null)
       return
     }
-    refreshNotes(activeCampaign.id)
+    refreshNotes(activeCampaign)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, activeCampaign?.id])
+  }, [sessionId, activeCampaign?.id, isOffline])
 
   useEffect(() => {
-    if (!activeCampaign) return
-    const campaignId = activeCampaign.id
+    if (!activeCampaign || isOffline) return
+    const campaign = activeCampaign
     return window.goblin.campaigns.onChanged((event) => {
-      if (event.campaignId === campaignId) refreshNotes(campaignId)
+      if (event.campaignId === campaign.id) refreshNotes(campaign)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCampaign?.id])
+  }, [activeCampaign?.id, isOffline])
+
+  // Live push for when the DM switches their active campaign after we've
+  // already connected — used to require the manual "Sync" button.
+  useEffect(() => {
+    if (!sessionId) return
+    return window.goblin.campaigns.onActiveChanged(() => resyncActiveCampaign(sessionId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
+
+  // Records whichever character tab you last had open — deliberately never
+  // cleared just because you switched to a note tab, so the table's view of
+  // "who you're playing" survives you reading/writing notes.
+  useEffect(() => {
+    if (activeTab?.kind === 'character') setLastCharacterId(activeTab.id)
+  }, [activeTab])
 
   /** Runs once at startup (see the mount effect below) — characters come back ordered most-recently-updated first, so opening the first one here means whichever character you were last working on is already up when you switch into player mode, instead of landing on an empty state. */
   function refreshCharacters(): void {
@@ -77,7 +108,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     })
   }
 
-  /** Auto-joins whatever campaign the DM currently has active, rather than making you pick one — the DM decides what "the table" is. Also doubles as a manual "catch up" if the DM switches campaigns after you've already connected (there's no live push for that yet). */
+  /** Auto-joins whatever campaign the DM currently has active, rather than making you pick one — the DM decides what "the table" is. Also used by the live active-campaign-changed push, and by the manual "Sync" button as a fallback. */
   function resyncActiveCampaign(addr: string): void {
     setError(null)
     window.goblin.campaigns.joinActive(addr).then((result) => {
@@ -90,20 +121,46 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     })
   }
 
-  function refreshNotes(campaignId: string): void {
-    window.goblin.notes.list(campaignId, sessionId).then((result) => {
-      if (!result.ok) {
-        setError(result.error)
-        return
+  /** Also writes through to the offline snapshot cache once both lists land — see the `snapshots` IPC surface — so this campaign stays browsable read-only once the DM stops hosting. */
+  function refreshNotes(campaign: Campaign): void {
+    const campaignId = campaign.id
+    Promise.all([window.goblin.notes.list(campaignId, sessionId), window.goblin.folders.list(campaignId, sessionId)]).then(
+      ([notesResult, foldersResult]) => {
+        if (!notesResult.ok) {
+          setError(notesResult.error)
+          return
+        }
+        setNotes(notesResult.data)
+        if (!foldersResult.ok) {
+          setError(foldersResult.error)
+          return
+        }
+        setFolders(foldersResult.data)
+        window.goblin.snapshots.save(campaign, notesResult.data, foldersResult.data).then(refreshOfflineSnapshots)
       }
-      setNotes(result.data)
+    )
+  }
+
+  /** Every campaign previously cached while connected — shown as an "Offline" fallback for when the DM isn't currently hosting. */
+  function refreshOfflineSnapshots(): void {
+    window.goblin.snapshots.list().then((result) => {
+      if (result.ok) setOfflineSnapshots(result.data)
     })
-    window.goblin.folders.list(campaignId, sessionId).then((result) => {
-      if (!result.ok) {
-        setError(result.error)
+  }
+
+  /** Opens a cached snapshot read-only — the last-known state of a joined campaign, for browsing while the DM isn't hosting. */
+  function openOfflineCampaign(campaignId: string): void {
+    setError(null)
+    window.goblin.snapshots.get(campaignId).then((result) => {
+      if (!result.ok || !result.data) {
+        setError(result.ok ? "That campaign hasn't been synced yet." : result.error)
         return
       }
-      setFolders(result.data)
+      setIsOffline(true)
+      setOfflineSyncedAt(result.data.syncedAt)
+      setActiveCampaign(result.data.campaign)
+      setNotes(result.data.notes)
+      setFolders(result.data.folders)
     })
   }
 
@@ -131,6 +188,17 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
         current && sameTab(current, ref) ? (next[next.length - 1] ?? null) : current
       )
       return next
+    })
+  }
+
+  /** Drag-and-drop tab reordering — moves `dragged` to sit just before `target` in the strip. A no-op if either ref isn't currently an open tab. */
+  function moveTab(dragged: PlayerTabRef, target: PlayerTabRef): void {
+    if (sameTab(dragged, target)) return
+    setTabs((prev) => {
+      if (!prev.some((t) => sameTab(t, dragged)) || !prev.some((t) => sameTab(t, target))) return prev
+      const withoutDragged = prev.filter((t) => !sameTab(t, dragged))
+      const targetIndex = withoutDragged.findIndex((t) => sameTab(t, target))
+      return [...withoutDragged.slice(0, targetIndex), dragged, ...withoutDragged.slice(targetIndex)]
     })
   }
 
@@ -169,7 +237,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     folderId: string | null = null,
     title: string = 'Untitled'
   ): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     setError(null)
     const result = await window.goblin.notes.create(
       activeCampaign.id,
@@ -194,7 +262,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       editorUserIds?: string[]
     }
   ): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     const result = await window.goblin.notes.update(activeCampaign.id, id, patch, sessionId)
     if (!result.ok) {
       setError(result.error)
@@ -204,7 +272,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   }
 
   async function deleteNote(id: string): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     const result = await window.goblin.notes.remove(activeCampaign.id, id, sessionId)
     if (!result.ok) {
       setError(result.error)
@@ -219,7 +287,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     name: string,
     parentFolderId: string | null = null
   ): Promise<string | undefined> {
-    if (!activeCampaign) return undefined
+    if (!activeCampaign || !guardOnline()) return undefined
     setError(null)
     const result = await window.goblin.folders.create(
       activeCampaign.id,
@@ -235,7 +303,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   }
 
   async function renameFolder(folderId: string, name: string): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     const result = await window.goblin.folders.update(activeCampaign.id, folderId, { name }, sessionId)
     if (!result.ok) {
       setError(result.error)
@@ -249,7 +317,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     parentFolderId: string | null,
     visibility?: 'dm' | 'shared' | 'private'
   ): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     const result = await window.goblin.folders.update(
       activeCampaign.id,
       folderId,
@@ -264,13 +332,13 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   }
 
   async function deleteFolder(folderId: string): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     const result = await window.goblin.folders.remove(activeCampaign.id, folderId, sessionId)
     if (!result.ok) {
       setError(result.error)
       return
     }
-    refreshNotes(activeCampaign.id)
+    refreshNotes(activeCampaign)
   }
 
   /** Copy-paste for a single note. */
@@ -279,7 +347,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     targetFolderId: string | null,
     targetVisibility: 'dm' | 'shared' | 'private'
   ): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     const source = notes?.find((n) => n.id === sourceId)
     if (!source) return
     setError(null)
@@ -301,7 +369,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     targetParentId: string | null,
     targetVisibility: 'dm' | 'shared' | 'private'
   ): Promise<void> {
-    if (!activeCampaign) return
+    if (!activeCampaign || !guardOnline()) return
     const sourceFolders = folders ?? []
     const sourceNotes = notes ?? []
     const source = sourceFolders.find((f) => f.id === sourceId)
@@ -323,10 +391,23 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     await copySubtree(source.id, targetParentId)
   }
 
+  /** Every mutation below goes through this first — an offline snapshot is read-only, so calls simply no-op with an explanatory error rather than pretending to save. */
+  function guardOnline(): boolean {
+    if (isOffline) {
+      setError("You're viewing an offline snapshot — connect to the DM to make changes.")
+      return false
+    }
+    return true
+  }
+
   const activeCharacter =
     activeTab?.kind === 'character' ? (characters?.find((c) => c.id === activeTab.id) ?? null) : null
   const activeNote =
     activeTab?.kind === 'note' ? (notes?.find((n) => n.id === activeTab.id) ?? null) : null
+  // What the table should be told you're playing — falls back to the last
+  // character tab you had open (see the effect above) when you're currently
+  // on a note tab, instead of announcing "nothing selected."
+  const lastActiveCharacter = activeCharacter ?? characters?.find((c) => c.id === lastCharacterId) ?? null
 
   const tabItems = tabs.map((ref) =>
     ref.kind === 'character'
@@ -346,6 +427,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     openTab,
     navigateToNote,
     closeTab,
+    moveTab,
     resync: () => sessionId && resyncActiveCampaign(sessionId),
     createCharacter,
     saveCharacter,
@@ -360,7 +442,13 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     duplicateNote,
     duplicateFolder,
     activeCharacter,
-    activeNote
+    activeNote,
+    lastActiveCharacter,
+    offlineSnapshots,
+    isOffline,
+    offlineSyncedAt,
+    openOfflineCampaign,
+    refreshOfflineSnapshots
   }
 }
 

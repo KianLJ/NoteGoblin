@@ -96,6 +96,14 @@ export interface PlayerCharacterUpdate {
   character: CharacterSheet | null
 }
 
+/** A read-only local cache of a joined campaign, as of the last successful sync while connected — lets it stay browsable once the DM stops hosting. */
+export interface CampaignSnapshot {
+  campaign: Campaign
+  notes: Note[]
+  folders: Folder[]
+  syncedAt: string
+}
+
 /** Fired whenever any participant (DM or a fellow player) mutates notes/folders in a campaign — listeners just re-fetch rather than diffing a pushed payload. */
 export interface CampaignChangeEvent {
   sessionId: string
@@ -161,6 +169,8 @@ export interface AppApi {
     joinActive: (sessionId?: string) => Promise<ApiResult<Campaign>>
     /** Fires when another connected participant changes notes/folders in this campaign — re-fetch on receipt. Only meaningful while hosting or joined to a session. */
     onChanged: (callback: (event: CampaignChangeEvent) => void) => () => void
+    /** Fires (player side only) when the DM switches their active campaign — call getActive/joinActive again on receipt. */
+    onActiveChanged: (callback: () => void) => () => void
   }
   notes: {
     list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Note[]>>
@@ -198,6 +208,16 @@ export interface AppApi {
       sessionId?: string
     ) => Promise<ApiResult<Folder>>
     remove: (campaignId: string, folderId: string, sessionId?: string) => Promise<ApiResult<void>>
+  }
+  // Player-side, entirely local — a read-only cache of a joined campaign's
+  // notes/folders as of the last time you were actually connected, so it
+  // stays browsable when the DM isn't currently hosting. Written through
+  // automatically by usePlayerWorkspace whenever a live sync succeeds; never
+  // touched on the DM's own side (they always have their own data locally).
+  snapshots: {
+    list: () => Promise<ApiResult<CampaignSnapshot[]>>
+    get: (campaignId: string) => Promise<ApiResult<CampaignSnapshot | null>>
+    save: (campaign: Campaign, notes: Note[], folders: Folder[]) => Promise<void>
   }
   // Characters live entirely on your own device, owned by your local
   // identity — campaign-independent, no session/network involved.
