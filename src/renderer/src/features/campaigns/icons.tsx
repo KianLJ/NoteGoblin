@@ -166,7 +166,7 @@ export function LocateIcon(): JSX.Element {
 
 export function ImageIcon(): JSX.Element {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.3" stroke="currentColor" strokeWidth="1.1" />
       <circle cx="5.3" cy="6" r="1.1" stroke="currentColor" strokeWidth="1.1" />
       <path
@@ -181,7 +181,7 @@ export function ImageIcon(): JSX.Element {
 
 export function LinkIcon(): JSX.Element {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path
         d="M6.8 9.2a2.6 2.6 0 0 0 3.9.3l1.7-1.7a2.7 2.7 0 0 0-3.9-3.9L7.2 5.3"
         stroke="currentColor"
@@ -200,7 +200,7 @@ export function LinkIcon(): JSX.Element {
 
 export function TableIcon(): JSX.Element {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.2" stroke="currentColor" strokeWidth="1.1" />
       <path d="M1.8 6.5h12.4M6.3 2.8v10.4M10.7 2.8v10.4" stroke="currentColor" strokeWidth="1.1" />
     </svg>
@@ -209,7 +209,7 @@ export function TableIcon(): JSX.Element {
 
 export function EyeIcon(): JSX.Element {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path
         d="M1.5 8S3.8 3.3 8 3.3 14.5 8 14.5 8 12.2 12.7 8 12.7 1.5 8 1.5 8Z"
         stroke="currentColor"
@@ -223,7 +223,7 @@ export function EyeIcon(): JSX.Element {
 
 export function PencilIcon(): JSX.Element {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path
         d="M10.9 2.6a1.4 1.4 0 0 1 2 2L5.5 11.9l-2.7.7.7-2.7 7.4-7.3Z"
         stroke="currentColor"
@@ -235,9 +235,51 @@ export function PencilIcon(): JSX.Element {
 }
 
 /** Insert statblock — a shield, for a monster/NPC reference card. */
-export function StatblockIcon(): JSX.Element {
+export function ImportFromCodexIcon(): JSX.Element {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M3.25,6.49h0s-.66-.71-.82-2.38C-.05,5.95.49,7.57.49,7.57c.1.84.86,1.45,1.71,1.35s1.45-.86,1.35-1.71c-.03-.28-.14-.52-.3-.73Z"
+        stroke="currentColor"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.14.56c-2.56,2.07-3.21,3.06-3.12,4.02s.74,1.56,1.68,1.56,1.69-.76,1.69-1.69c0-.31.04-1.99-.25-3.88Z"
+        stroke="currentColor"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.95.56c2.56,2.07,3.21,3.06,3.12,4.02s-.74,1.56-1.68,1.56-1.69-.76-1.69-1.69c0-.31-.04-1.99.25-3.88Z"
+        stroke="currentColor"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12.75,6.49h0s.66-.71.82-2.38c2.49,1.84,1.95,3.46,1.95,3.46-.1.84-.86,1.45-1.71,1.35s-1.45-.86-1.35-1.71c.03-.28.14-.52.3-.73Z"
+        stroke="currentColor"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.93,15.2c.68-.27,1.46-.27,2.14,0,.36.14.72.24,1.09.24,1.49,0,2.61-.7,3.07-1.91s-.02-2.5-.95-3.33c-1.82-1.64-2.87-3.05-4.28-3.05-1.41,0-2.45,1.42-4.28,3.05-.93.84-1.4,2.16-.95,3.33s1.58,1.91,3.07,1.91c.37,0,.73-.1,1.09-.24Z"
+        stroke="currentColor"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+export function StatblockIcon(): JSX.Element {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path
         d="M8 1.6 13.4 3.6v4.1c0 3.4-2.2 6.1-5.4 7-3.2-.9-5.4-3.6-5.4-7V3.6L8 1.6Z"
         stroke="currentColor"

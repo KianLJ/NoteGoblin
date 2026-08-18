@@ -283,10 +283,10 @@
 .gb-statblock-rule {
   border: none;
   border-top: 1px solid var(--border-subtle);
-  margin: 0.6em 0;
+  margin: 0.5em 0;
 }
 .gb-statblock-line {
-  margin: 0.2em 0;
+  margin: 0.15em 0;
 }
 .gb-statblock-line strong {
   color: var(--text-secondary);
@@ -295,7 +295,7 @@
   width: 100%;
   border-collapse: collapse;
   text-align: center;
-  margin: 0.4em 0;
+  margin: 0.35em 0;
 }
 .gb-statblock-abilities th {
   font-size: 11px;
@@ -306,18 +306,22 @@
   padding-bottom: 2px;
 }
 .gb-statblock-abilities td {
-  padding: 2px 4px;
+  padding: 1px 4px;
 }
-.gb-statblock-section {
+/* Qualified with .gb-statblock (rather than standing alone) so this beats .gb-markdown h1-h6's own margin rule on
+   specificity — a bare .gb-statblock-section loses that fight (one class vs. one class + one type selector), which
+   is what was giving every section header ("Actions", "Traits", ...) the generic 1.2em heading margin instead of
+   this tighter one, the main source of a statblock reading as too spaced-out. */
+.gb-statblock .gb-statblock-section {
   font-family: var(--font-display);
   font-size: 14px;
   color: var(--accent);
   border-bottom: 1px solid var(--border-subtle);
-  margin: 0.8em 0 0.4em;
+  margin: 0.5em 0 0.3em;
   padding-bottom: 2px;
 }
 .gb-statblock-entry {
-  margin: 0 0 0.5em;
+  margin: 0 0 0.35em;
 }
 .gb-statblock-entry-name {
   font-weight: 700;

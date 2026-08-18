@@ -793,7 +793,7 @@ function ResistancesSection({ character, onSave, readOnly }: { character: Charac
 
   return (
     <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', display: 'flex', flexDirection: 'column', maxWidth: 340 }}>
-      {RESISTANCE_ROWS.map(({ key, label }, i) => (
+      {RESISTANCE_ROWS.map(({ key, label }) => (
         <div
           key={key}
           style={{
@@ -801,16 +801,12 @@ function ResistancesSection({ character, onSave, readOnly }: { character: Charac
             alignItems: 'center',
             gap: 8,
             flexWrap: 'wrap',
-            padding: '5px 0',
-            borderBottom: i < RESISTANCE_ROWS.length - 1 ? '1px solid var(--border-subtle)' : undefined
+            padding: '5px 0'
           }}
         >
           <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
             {label}
           </span>
-          {character[key].length === 0 && buffResistances.length === 0 && key !== 'damageResistances' && (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
-          )}
           {character[key].map((tag) => (
             <span key={tag} className="gb-badge" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '3px 8px' }}>
               {tag}
