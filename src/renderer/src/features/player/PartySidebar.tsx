@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { PlayersIcon } from '../campaigns/panelIcons'
+import { PlayersIcon, InitiativeIcon } from '../campaigns/panelIcons'
+import { PlayerInitiativeView } from './PlayerInitiativeView'
 import type { Note, PresencePlayer } from '@shared/ipc'
 
 interface PartySidebarProps {
@@ -17,6 +18,7 @@ interface PartySidebarProps {
 /** Right-side, player-mode-only panel — mirrors the DM's RightPanel/ConnectedPlayersList (including the ability to open a party member's sheet, read-only), but doubles as where a note's author manages who else can edit it, since that's the author's own call to make (not the DM's). */
 export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onToggleEditor, onViewCharacter }: PartySidebarProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
+  const [tab, setTab] = useState<'party' | 'initiative'>('party')
 
   useEffect(() => {
     if (!sessionId || !campaignId) {
@@ -47,34 +49,27 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
           flexDirection: 'column'
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: 'var(--space-3)',
-            borderBottom: '1px solid var(--border-subtle)',
-            fontSize: 11,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)'
-          }}
-        >
-          <PlayersIcon />
-          Party
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
+          <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'party'} onClick={() => setTab('party')} />
+          <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
         </div>
 
-        {canManage && (
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
-            Grant edit access to "{activeNote!.title || 'Untitled'}"
-          </p>
-        )}
-
-        {players.length === 0 ? (
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-3)' }}>No one else is here yet.</p>
+        {tab === 'initiative' ? (
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <PlayerInitiativeView sessionId={sessionId} />
+          </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <>
+            {canManage && (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
+                Grant edit access to "{activeNote!.title || 'Untitled'}"
+              </p>
+            )}
+
+            {players.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-3)' }}>No one else is here yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
             {players.map((player) => {
               const hasAccess = !!activeNote && activeNote.editorUserIds.includes(player.userId)
               return (
@@ -133,9 +128,46 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
                 </div>
               )
             })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </ResizableSidebar>
+  )
+}
+
+function PartyTabButton({
+  icon,
+  label,
+  active,
+  onClick
+}: {
+  icon: ReactNode
+  label: string
+  active: boolean
+  onClick: () => void
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={onClick}
+      style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        padding: '9px 4px',
+        border: 'none',
+        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+        background: 'transparent',
+        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+        cursor: 'pointer'
+      }}
+    >
+      {icon}
+    </button>
   )
 }

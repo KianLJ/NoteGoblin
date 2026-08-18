@@ -4,6 +4,10 @@ import { renderNoteMarkdown } from '../../markdown'
 import { MarkdownLiveEditor, type MarkdownLiveEditorHandle } from './MarkdownLiveEditor'
 import { EyeIcon, ImageIcon, LinkIcon, PencilIcon, StatblockIcon, TableIcon } from './icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
+import { Bestiary } from '../bestiary/Bestiary'
+import { statblockToFencedBlock } from '../../statblock'
+import { saveCustomMonster } from '../../data/customBestiary'
+import type { BestiaryMonster } from '../../data/bestiary'
 
 interface NoteEditorProps {
   note: Note
@@ -91,6 +95,7 @@ export function NoteEditor({
   const [linkPickerOpen, setLinkPickerOpen] = useState(false)
   const [linkMenu, setLinkMenu] = useState<ContextMenuState | null>(null)
   const [linkQuery, setLinkQuery] = useState('')
+  const [bestiaryPickerOpen, setBestiaryPickerOpen] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
   const editorRef = useRef<MarkdownLiveEditorHandle>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -197,10 +202,27 @@ export function NoteEditor({
   }
 
   function handlePreviewClick(e: ReactMouseEvent<HTMLDivElement>): void {
+    const saveBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-save-statblock]')
+    if (saveBtn) {
+      e.preventDefault()
+      try {
+        const data = JSON.parse(saveBtn.dataset.saveStatblock ?? '{}')
+        const saved = saveCustomMonster(data)
+        saveBtn.textContent = `Saved: ${saved.name}`
+      } catch {
+        /* malformed statblock JSON — nothing sensible to save */
+      }
+      return
+    }
     const link = (e.target as HTMLElement).closest<HTMLElement>('[data-wikilink]')
     if (!link) return
     e.preventDefault()
     resolveWikilink(link.dataset.wikilink as string)
+  }
+
+  function handleBestiaryPick(monster: BestiaryMonster): void {
+    insertText(`\n${statblockToFencedBlock(monster)}\n`)
+    setBestiaryPickerOpen(false)
   }
 
   /** Right-click on a resolved wikilink — a broken one has no target to open, so no menu. */
@@ -356,6 +378,9 @@ export function NoteEditor({
             <ToolbarButton title="Insert statblock" onClick={() => insertText(STATBLOCK_TEMPLATE)}>
               <StatblockIcon />
             </ToolbarButton>
+            <ToolbarButton title="Import from Bestiary" onClick={() => setBestiaryPickerOpen(true)}>
+              <StatblockIcon />
+            </ToolbarButton>
             <div style={{ width: 1, height: 18, background: 'var(--border-subtle)', margin: '0 4px' }} />
           </>
         )}
@@ -398,7 +423,11 @@ export function NoteEditor({
         title={`${formatCount(currentWordCount)} words in this note — ${formatCount(campaignWordCount)} across the whole campaign`}
         style={{
           position: 'absolute',
-          bottom: 'var(--space-2)',
+          // Extra clearance (not just var(--space-2)) — this pane's own
+          // bottom-right corner coincides with the window's when the right
+          // panel is closed, which is exactly where VersionBadge (fixed to
+          // the viewport, not this pane) also sits.
+          bottom: 20,
           right: 'var(--space-3)',
           fontSize: 10,
           color: 'var(--text-muted)',
@@ -412,6 +441,8 @@ export function NoteEditor({
       </div>
 
       <ContextMenu state={linkMenu} onClose={() => setLinkMenu(null)} />
+
+      {bestiaryPickerOpen && <Bestiary onClose={() => setBestiaryPickerOpen(false)} onPick={handleBestiaryPick} />}
     </div>
   )
 }

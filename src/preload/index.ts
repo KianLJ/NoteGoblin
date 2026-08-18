@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppApi, CampaignChangeEvent, PlayerCharacterUpdate, PresenceUpdate } from '../../shared/ipc'
+import type { AppApi, CampaignChangeEvent, InitiativeUpdate, PlayerCharacterUpdate, PresenceUpdate } from '../../shared/ipc'
 
 const api: AppApi = {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
@@ -97,6 +97,14 @@ const api: AppApi = {
       const listener = (_event: Electron.IpcRendererEvent, update: PresenceUpdate): void => callback(update)
       ipcRenderer.on('ws:presence', listener)
       return () => ipcRenderer.removeListener('ws:presence', listener)
+    }
+  },
+  initiative: {
+    broadcast: (state) => ipcRenderer.invoke('initiative:broadcast', state),
+    onUpdate: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, update: InitiativeUpdate): void => callback(update)
+      ipcRenderer.on('ws:initiative', listener)
+      return () => ipcRenderer.removeListener('ws:initiative', listener)
     }
   },
   relay: {

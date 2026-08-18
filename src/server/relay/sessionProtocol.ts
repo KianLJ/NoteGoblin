@@ -1,3 +1,5 @@
+import type { PlayerVisibleInitiativeState } from '@shared/encounter'
+
 /**
  * Frame shapes carried opaquely by the relay's session room (relay/src/session.ts,
  * which never interprets `payload`) between sessionHost.ts (DM) and
@@ -51,4 +53,16 @@ export interface CampaignChangedFrame {
 /** Pushed to every connected player when the DM switches their active campaign, so a player already connected picks it up live instead of needing the manual "Sync" button. */
 export interface ActiveCampaignChangedFrame {
   type: 'active-campaign-changed'
+}
+
+/**
+ * Pushed to each connected player whenever the DM's initiative tracker
+ * changes — unlike PresenceFrame/CampaignChangedFrame this isn't identical
+ * for every recipient: `state` is already sanitized per-viewer (see
+ * shared/encounter.ts's sanitizeForPlayer) before sessionHost.ts sends it,
+ * so a monster's real name/exact HP/position never leaves the DM's process.
+ */
+export interface InitiativeFrame {
+  type: 'initiative'
+  state: PlayerVisibleInitiativeState
 }

@@ -127,6 +127,26 @@ export function parseStatblock(text: string): StatblockData {
   return data
 }
 
+/** Inverse of parseStatblock — turns a StatblockData back into the fenced-block markdown source, for inserting a Bestiary entry into a note (see NoteEditor.tsx's "Import from Bestiary" action). */
+export function statblockToFencedBlock(data: StatblockData): string {
+  const lines: string[] = ['```statblock']
+  for (const key of SCALAR_KEYS) {
+    const value = (data as unknown as Record<string, string | undefined>)[key]
+    if (value) lines.push(`${key}: ${value}`)
+  }
+  for (const key of LIST_KEYS) {
+    const entries = data[key]
+    if (entries.length === 0) continue
+    lines.push(`${key}:`)
+    for (const entry of entries) {
+      lines.push(`  - name: ${entry.name}`)
+      lines.push(`    desc: ${entry.desc}`)
+    }
+  }
+  lines.push('```')
+  return lines.join('\n')
+}
+
 const ABILITY_LABELS: Array<['str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', string]> = [
   ['str', 'STR'],
   ['dex', 'DEX'],
@@ -162,9 +182,16 @@ export function renderStatblockHtml(data: StatblockData): string {
   const subtitleParts = [data.size, data.type, data.alignment].filter(Boolean).join(', ')
   const abilityHeader = ABILITY_LABELS.map(([, label]) => `<th>${label}</th>`).join('')
   const abilityRow = ABILITY_LABELS.map(([key]) => abilityCell(data[key])).join('')
+  // The full parsed statblock round-trips through this one HTML attribute
+  // (escapeHtml covers exactly the characters JSON needs quoted — &, <, >,
+  // ") — so the click handler that saves this to the Bestiary (see
+  // NoteEditor.tsx's handlePreviewClick) doesn't need to re-parse the
+  // fenced code block's raw markdown source itself.
+  const savePayload = escapeHtml(JSON.stringify(data))
 
   return `
     <div class="gb-statblock">
+      <button type="button" class="gb-statblock-save" data-save-statblock="${savePayload}" title="Save to Bestiary">+ Bestiary</button>
       <div class="gb-statblock-name">${escapeHtml(data.name ?? 'Unnamed Creature')}</div>
       ${subtitleParts ? `<div class="gb-statblock-subtitle">${escapeHtml(subtitleParts)}</div>` : ''}
       <hr class="gb-statblock-rule" />

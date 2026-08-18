@@ -24,8 +24,10 @@ import {
   inviteToSession,
   subscribeDmPresence,
   broadcastCampaignChanged,
-  broadcastActiveCampaignChanged
+  broadcastActiveCampaignChanged,
+  broadcastInitiative
 } from './sessionHost'
+import type { InitiativeState } from '@shared/encounter'
 import { joinSession, leaveSession, sendRequest as sendSessionRequest } from './sessionClient'
 import {
   hasRememberedCredentials,
@@ -816,6 +818,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       void sendSessionRequest('presence.selectCharacter', { characterName })
     }
   )
+
+  // --- Initiative tracker -------------------------------------------------
+  // DM-only, fire-and-forget — the tracker's canonical state lives in the
+  // DM's renderer (InitiativeTracker.tsx), this just pushes it out to every
+  // connected player whenever it changes. A no-op while not hosting (a
+  // solo DM still uses the tracker locally without an audience).
+  ipcMain.handle('initiative:broadcast', (_event, state: InitiativeState): void => {
+    if (getHostedSession()) broadcastInitiative(state)
+  })
 
   // --- Relay / Friends -----------------------------------------------------
   // The relay account is the same identity/password as identity.* (synced
