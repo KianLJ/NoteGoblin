@@ -231,6 +231,8 @@ export interface AppApi {
     remove: (id: string) => Promise<ApiResult<void>>
     /** Player-side: pushes your currently-selected character (or null) to the DM you're connected to — call whenever it changes, selection or edits alike. No-op while hosting (nothing to sync to yourself) or not in a joined session. */
     syncSelected: (sessionId: string, character: CharacterSheet | null) => Promise<void>
+    /** Player-side: a one-off fetch of another connected party member's currently-selected character, for PartySidebar's "view sheet" action — a snapshot at the moment you ask, not a live subscription (see sessionHost.ts's 'characters.getPlayerCharacter' case for why). null if they don't have one selected, aren't connected, or you're not in a joined session. */
+    getPlayerCharacter: (userId: string) => Promise<ApiResult<CharacterSheet | null>>
     /** DM-side: fires whenever a connected player's synced character changes — selection, an edit, or them disconnecting (character: null). Only meaningful while hosting. */
     onPlayerCharacterChanged: (callback: (update: PlayerCharacterUpdate) => void) => () => void
   }

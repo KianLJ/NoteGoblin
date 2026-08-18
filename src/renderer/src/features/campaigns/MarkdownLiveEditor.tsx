@@ -1,14 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { Compartment, EditorState, type Extension, type Range, type Text } from '@codemirror/state'
-import {
-  Decoration,
-  type DecorationSet,
-  EditorView,
-  ViewPlugin,
-  type ViewUpdate,
-  WidgetType,
-  keymap
-} from '@codemirror/view'
+import { Compartment, EditorState, StateField, type Extension, type Range, type Text } from '@codemirror/state'
+import { Decoration, type DecorationSet, EditorView, WidgetType, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
 import { markdown } from '@codemirror/lang-markdown'
@@ -189,8 +181,7 @@ class BlockHtmlWidget extends WidgetType {
  * of standard markdown, lezer's parser doesn't know about it — see
  * wikilink.ts) on every doc/selection change.
  */
-function buildDecorations(view: EditorView, knownTitles: Set<string>, campaignId: string): DecorationSet {
-  const state = view.state
+function buildDecorations(state: EditorState, knownTitles: Set<string>, campaignId: string): DecorationSet {
   const doc = state.doc
   const tree = syntaxTree(state)
   const ranges: Range<Decoration>[] = []
@@ -329,20 +320,21 @@ function livePreviewExtension(
   onWikilinkClick: (target: string) => void,
   onWikilinkContextMenu?: (target: string, x: number, y: number) => void
 ): Extension[] {
-  const plugin = ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet
-      constructor(view: EditorView) {
-        this.decorations = buildDecorations(view, knownTitlesRef.current, campaignId)
-      }
-      update(update: ViewUpdate): void {
-        if (update.docChanged || update.selectionSet || update.viewportChanged) {
-          this.decorations = buildDecorations(update.view, knownTitlesRef.current, campaignId)
-        }
-      }
+  // A StateField, not a ViewPlugin — CodeMirror only allows block-level
+  // decorations (the Table/statblock widgets from replaceBlockWithWidget)
+  // to come from a state field; a plugin-provided decoration set throws
+  // "Block decorations may not be specified via plugins" the instant one
+  // shows up, which took the whole editor down (both edit and read mode,
+  // since the crash happened on every keystroke touching the live preview).
+  const field = StateField.define<DecorationSet>({
+    create(state) {
+      return buildDecorations(state, knownTitlesRef.current, campaignId)
     },
-    { decorations: (v) => v.decorations }
-  )
+    update(_value, tr) {
+      return buildDecorations(tr.state, knownTitlesRef.current, campaignId)
+    },
+    provide: (f) => EditorView.decorations.from(f)
+  })
   const clickHandler = EditorView.domEventHandlers({
     mousedown(event, view) {
       const el = (event.target as HTMLElement).closest<HTMLElement>('[data-wikilink]')
@@ -363,7 +355,7 @@ function livePreviewExtension(
       return true
     }
   })
-  return [plugin, clickHandler, imagePasteHandler, imageDropHandler]
+  return [field, clickHandler, imagePasteHandler, imageDropHandler]
 }
 
 const MAX_PASTED_IMAGE_BYTES = 8 * 1024 * 1024

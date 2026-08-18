@@ -44,6 +44,23 @@ export const DEFAULT_ABILITY_SCORES: AbilityScores = {
   cha: 10
 }
 
+/** The SRD's 13 damage types — offered as suggestions in the Resistances/Vulnerabilities/Immunities picker, though a freeform entry (homebrew, a DM-granted one-off) is accepted too. */
+export const DAMAGE_TYPES = [
+  'Acid',
+  'Bludgeoning',
+  'Cold',
+  'Fire',
+  'Force',
+  'Lightning',
+  'Necrotic',
+  'Piercing',
+  'Poison',
+  'Psychic',
+  'Radiant',
+  'Slashing',
+  'Thunder'
+] as const
+
 export type SkillName =
   | 'Acrobatics'
   | 'Animal Handling'
@@ -966,8 +983,6 @@ export type ActionType = 'action' | 'bonus' | 'reaction'
 export interface Attack {
   id: string
   name: string
-  /** Which ability governs the attack roll (proficiency bonus + this ability's modifier — computed, never hand-typed; see shared/compendium.ts's suggestedAttackAbility/weaponAttackBonus). Defaults to 'str' when unset. */
-  attackAbility?: 'str' | 'dex'
   damage: string
   damageType: string
   notes: string
@@ -992,8 +1007,6 @@ export interface EquipmentItem {
   cost?: string
   /** For Armor-category items, feeds into computeArmorClassFromEquipment (shared/compendium.ts) instead of the default unarmored AC formula. For Weapon-category items, an equipped one is what actually puts it on the Combat tab's Attacks list — see weaponAttacksFromEquipment; unequip it there (not a remove button in Combat) to take it off. */
   equipped?: boolean
-  /** Weapon-category items only, and only meaningful once equipped — which ability governs its attack roll (see weaponAttacksFromEquipment/suggestedAttackAbility). Lets a Finesse weapon's wielder pick Str or Dex instead of always defaulting to whichever the weapon suggests. */
-  attackAbility?: 'str' | 'dex'
   /** Links back to a shared/compendium.ts mundane equipment entry — see Attack.compendiumId. */
   compendiumId?: string
   /** Links back to a shared/compendium.ts magic item entry (Potion of Healing, Ring of Protection, etc.) — a separate id space/lookup from compendiumId since magic items are a different SRD list (rarity/category, no weight/cost) from mundane equipment. */
@@ -1130,6 +1143,13 @@ export interface CharacterSheetData {
   subclassFeatureChoices: SubclassFeatureChoice[]
   /** How many charges/points of each class resource (see CLASS_RESOURCES below) have been spent — keyed by ClassResourceDef.id. The max is always computed live from class/level, never stored, so it can't drift out of sync with a level-up. */
   resourceUsed: Record<string, number>
+  /** Class resources (see CLASS_RESOURCES) currently "activated" as an ongoing buff rather than a one-shot effect — e.g. Rage. Activating one also spends a use from resourceUsed, same as any other use of that resource; see BUFF_EFFECTS in shared/compendium.ts for what each one actually changes on the sheet while active. */
+  activeBuffs: string[]
+
+  /** Freeform damage-type tags (Fire, Poison, Bludgeoning, ...) — not gated to a fixed list, since homebrew/DM-granted resistances don't always match a standard type. Rage's resistance while active isn't stored here — it's shown as a separate, non-removable read-only tag (see ResistancesSection in OverviewTab.tsx) since it's conditional, not permanent. */
+  damageResistances: string[]
+  damageVulnerabilities: string[]
+  damageImmunities: string[]
 
   spellcastingAbility: Ability | null
   spellSlots: Record<number, { total: number; used: number }>
@@ -1167,6 +1187,10 @@ export function emptyCharacterSheet(): CharacterSheetData {
     asiSlotChoices: [],
     subclassFeatureChoices: [],
     resourceUsed: {},
+    activeBuffs: [],
+    damageResistances: [],
+    damageVulnerabilities: [],
+    damageImmunities: [],
     spellcastingAbility: null,
     spellSlots: {},
     spells: [],

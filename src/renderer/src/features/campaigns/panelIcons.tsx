@@ -3,10 +3,22 @@
 export function PlayersIcon(): JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="5.5" cy="5" r="2.1" stroke="currentColor" strokeWidth="1.1" />
-      <circle cx="11" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.1" />
-      <path d="M1.6 13.2c.5-2.6 2.2-4 3.9-4s3.2 1.2 3.7 3.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-      <path d="M8.7 9.7c1.4.1 2.9 1.1 3.3 3.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+      <path
+        d="M9.9,15.54s.12-4.12,0-5.49c-.19-2.21-1.76-2.96-2.96-2.96h-3.32c-1.2,0-2.77.74-2.96,2.96-.12,1.36,0,5.49,0,5.49h9.24Z"
+        stroke="currentColor"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="5.3" cy="3.08" r="2.66" stroke="currentColor" strokeWidth="0.7" />
+      <circle cx="11.76" cy="5.45" r="2.08" stroke="currentColor" strokeWidth="0.7" />
+      <path
+        d="M15.36,11.25c-.15-1.73-1.38-2.31-2.31-2.31h-2.59c-.24,0-.51.04-.77.13.1.29.18.61.22.98.12,1.37,0,5.49,0,5.49h5.46s.09-3.22,0-4.29Z"
+        stroke="currentColor"
+        strokeWidth="0.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -14,12 +26,17 @@ export function PlayersIcon(): JSX.Element {
 export function DiceIcon(): JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <rect x="2.5" y="2.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.1" />
-      <circle cx="5.5" cy="5.5" r="0.9" fill="currentColor" />
-      <circle cx="10.5" cy="5.5" r="0.9" fill="currentColor" />
-      <circle cx="8" cy="8" r="0.9" fill="currentColor" />
-      <circle cx="5.5" cy="10.5" r="0.9" fill="currentColor" />
-      <circle cx="10.5" cy="10.5" r="0.9" fill="currentColor" />
+      <polygon points="8 .45 1.46 11.76 14.54 11.76 8 .45" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
+      <polygon points="8 11.84 11.33 6.08 4.67 6.08 8 11.84" stroke="currentColor" strokeWidth="0.5" strokeLinejoin="round" />
+      <line x1="1.35" y1="4.16" x2="4.67" y2="6.08" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
+      <line x1="14.65" y1="4.16" x2="11.33" y2="6.08" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
+      <line x1="8" y1="11.84" x2="8" y2="15.67" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
+      <polygon
+        points="1.35 4.16 1.35 11.84 8 15.67 14.65 11.84 14.65 4.16 8 .33 1.35 4.16"
+        stroke="currentColor"
+        strokeWidth="0.5"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

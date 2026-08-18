@@ -12,8 +12,7 @@ import { BackgroundTab } from './characterSheetTabs/BackgroundTab'
 interface CharacterSheetEditorProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData> & { name?: string }) => void
-  onDelete: () => void
-  /** DM viewing a connected player's synced character — tabs stay switchable, but every field/button underneath is inert (native `inert`, not just visually disabled, so nothing can be typed/dragged/clicked into it) and there's no name field or Delete button, since this isn't your character to rename or remove. */
+  /** DM viewing a connected player's synced character — tabs stay switchable, but every field/button underneath is inert (native `inert`, not just visually disabled, so nothing can be typed/dragged/clicked into it) and there's no name field, since this isn't your character to rename. Deletion lives in CharacterSwitcher now, not here — see its own doc comment for why. */
   readOnly?: boolean
 }
 
@@ -42,7 +41,7 @@ interface PendingLevelUp {
  * unlocked — closing it without deciding anything loses nothing, since the
  * same choice is still sitting there, inline, in Features.
  */
-export function CharacterSheetEditor({ character, onSave, onDelete, readOnly }: CharacterSheetEditorProps): JSX.Element {
+export function CharacterSheetEditor({ character, onSave, readOnly }: CharacterSheetEditorProps): JSX.Element {
   const [tab, setTab] = useState<Tab>('Overview')
   const [nameDraft, setNameDraft] = useAutosaveDraft(character.name, (name) => onSave({ name }))
   const [pendingLevelUp, setPendingLevelUp] = useState<PendingLevelUp | null>(null)
@@ -104,24 +103,6 @@ export function CharacterSheetEditor({ character, onSave, onDelete, readOnly }: 
           )}
           {subtitle && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{subtitle}</div>}
         </div>
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={onDelete}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: 12,
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0,
-              flexShrink: 0
-            }}
-          >
-            Delete
-          </button>
-        )}
       </div>
 
       <div

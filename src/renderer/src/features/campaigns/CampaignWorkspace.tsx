@@ -135,7 +135,6 @@ export function CampaignWorkspace({
                 character={viewedPlayerCharacter}
                 readOnly
                 onSave={() => {}}
-                onDelete={() => {}}
               />
             </div>
           </>

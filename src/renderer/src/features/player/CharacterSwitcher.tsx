@@ -7,20 +7,39 @@ interface CharacterSwitcherProps {
   current: CharacterSheet | null
   onSelect: (character: CharacterSheet) => void
   onRequestCreate: () => void
+  /** Deletion lives here now, not on the sheet itself — a character you're actively looking at is exactly where a stray click is most likely to land, so putting the button somewhere you only visit to switch/manage characters cuts down on that risk on its own, on top of the two-click confirm below. */
+  onDelete: (character: CharacterSheet) => void
 }
 
 /** Player mode's bottom-left corner control — picks/creates a character, the way CampaignSwitcher does for campaigns on the DM side. Fed from the shared player workspace state rather than fetching its own list. Creation itself opens the guided wizard (CharacterCreationWizard) rather than instant-creating here. */
-export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate }: CharacterSwitcherProps): JSX.Element {
+export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onDelete }: CharacterSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
+  // Two clicks to actually delete: the first arms this row (button flips to
+  // "Confirm delete?"), the second (still targeting the same character)
+  // deletes it. Any other click — a different row's delete, selecting a
+  // character, closing the menu — disarms it instead of carrying over.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setConfirmingId(null)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  function handleDeleteClick(character: CharacterSheet): void {
+    if (confirmingId === character.id) {
+      setConfirmingId(null)
+      onDelete(character)
+    } else {
+      setConfirmingId(character.id)
+    }
+  }
 
   return (
     <div ref={containerRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
@@ -58,31 +77,53 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
               }}
             >
               {characters.map((character) => (
-                <button
-                  key={character.id}
-                  type="button"
-                  onClick={() => {
-                    setOpen(false)
-                    onSelect(character)
-                  }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '6px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: current?.id === character.id ? 'var(--accent-subtle)' : 'transparent',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {character.name || 'Untitled'}
-                </button>
+                <div key={character.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false)
+                      onSelect(character)
+                    }}
+                    style={{
+                      display: 'block',
+                      flex: 1,
+                      minWidth: 0,
+                      textAlign: 'left',
+                      padding: '6px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: current?.id === character.id ? 'var(--accent-subtle)' : 'transparent',
+                      color: 'var(--text-primary)',
+                      fontSize: 13,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {character.name || 'Untitled'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteClick(character)}
+                    title={confirmingId === character.id ? 'Click again to permanently delete' : 'Delete this character'}
+                    style={{
+                      flexShrink: 0,
+                      padding: confirmingId === character.id ? '4px 6px' : '4px 6px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1px solid ${confirmingId === character.id ? 'var(--danger)' : 'transparent'}`,
+                      background: confirmingId === character.id ? 'var(--danger)' : 'none',
+                      color: confirmingId === character.id ? 'var(--text-on-accent)' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: confirmingId === character.id ? 10 : 14,
+                      fontWeight: confirmingId === character.id ? 700 : 400,
+                      lineHeight: 1,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {confirmingId === character.id ? 'Confirm?' : '×'}
+                  </button>
+                </div>
               ))}
             </div>
           )}

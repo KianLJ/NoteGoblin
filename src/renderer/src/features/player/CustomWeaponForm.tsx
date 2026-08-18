@@ -16,7 +16,6 @@ export function CustomWeaponForm({ initial, onSave, onClose }: CustomWeaponFormP
   const [damageType, setDamageType] = useState(initial?.damageType ?? '')
   const [weaponRange, setWeaponRange] = useState<'Melee' | 'Ranged'>(initial?.weaponRange ?? 'Melee')
   const [properties, setProperties] = useState(initial?.properties ?? '')
-  const [attackAbility, setAttackAbility] = useState<'str' | 'dex'>(initial?.attackAbility ?? 'str')
   const [notes, setNotes] = useState(initial?.notes ?? '')
 
   function handleSave(): void {
@@ -26,7 +25,6 @@ export function CustomWeaponForm({ initial, onSave, onClose }: CustomWeaponFormP
       damageType: damageType.trim(),
       weaponRange,
       properties: properties.trim(),
-      attackAbility,
       notes,
       actionType: initial?.actionType ?? 'action'
     })
@@ -55,13 +53,6 @@ export function CustomWeaponForm({ initial, onSave, onClose }: CustomWeaponFormP
             </select>
           </Field>
         </div>
-
-        <Field label="Attack Ability">
-          <select className="gb-input" style={{ width: 140 }} value={attackAbility} onChange={(e) => setAttackAbility(e.target.value as 'str' | 'dex')}>
-            <option value="str">Strength</option>
-            <option value="dex">Dexterity</option>
-          </select>
-        </Field>
 
         <Field label="Properties">
           <input className="gb-input" value={properties} onChange={(e) => setProperties(e.target.value)} placeholder="Finesse, Light, Thrown (20/60)…" />

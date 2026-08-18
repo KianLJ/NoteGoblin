@@ -58,7 +58,7 @@ export function AccountSettingsButton(): JSX.Element {
         onClick={() => setOpen((o) => !o)}
         className="gb-btn gb-btn--secondary"
         title="Account settings"
-        style={{ padding: 'var(--space-2)', boxShadow: 'var(--shadow-md)' }}
+        style={{ padding: 'var(--space-2)', height: 37, boxShadow: 'var(--shadow-md)' }}
       >
         <GearIcon />
       </button>
