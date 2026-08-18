@@ -75,7 +75,7 @@ function playerToCombatant(userId: string, character: CharacterSheet): Combatant
     initiative: null,
     maxHp: computeMaxHp(character.classes, character.abilityScores),
     currentHp: character.currentHp,
-    ac: computeArmorClassFromEquipment(character.equipment, effScores, featIds),
+    ac: computeArmorClassFromEquipment(character.equipment, effScores, featIds, character.classes),
     userId,
     ...emptyCombatant()
   }

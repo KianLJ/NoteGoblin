@@ -153,6 +153,19 @@ export type FeatEffect =
   | { kind: 'initiativeAdvantage' }
   | { kind: 'initiativeDisadvantage' }
   | { kind: 'armorClass'; amount: number }
+  /**
+   * "Choose N cantrips and M spells of level `spellLevel` from these
+   * classes' spell lists" — Magic Initiate's whole mechanical effect.
+   * Resolved via a dedicated chooser (MagicInitiateChooser in
+   * AsiChoosers.tsx) instead of the generic ASI/feat flow, since it needs
+   * to pick an actual spellcasting ability (stored on the owning
+   * AsiSlotChoice's `chosenAbility`) and specific spells (stored on
+   * `chosenSpellIds`) rather than a single named option. The chosen spells
+   * get written directly into character.spells (marked `free: true`) so
+   * they're fully real — castable, shown in Spells/Attacks — not just a
+   * flavor note the player has to remember to act on by hand.
+   */
+  | { kind: 'spellChoice'; classes: string[]; cantripCount: number; spellLevel: number; spellCount: number }
 
 /**
  * A feat, sourced from the SRD 5.2.1 (Creative Commons Attribution 4.0 —
@@ -282,6 +295,8 @@ const BUFF_EFFECTS: Record<
     resistances?: string[]
     /** Extra melee damage while active, as a function of the buff-granting class's own level (e.g. Rage's +2/+3/+4 ladder). */
     meleeDamageBonus?: (classLevel: number) => number
+    /** Blanket advantage on this character's own attack rolls while active — Reckless Attack's half of its trade-off (the other half, attacks against you also having advantage, is a DM-facing condition a static sheet can't enforce, so it's surfaced as descriptive text only). */
+    attackAdvantage?: boolean
   }
 > = {
   'barbarian-rage': {
@@ -289,6 +304,9 @@ const BUFF_EFFECTS: Record<
     savingThrowAdvantage: ['str'],
     resistances: ['Bludgeoning', 'Piercing', 'Slashing'],
     meleeDamageBonus: (level) => (level >= 16 ? 4 : level >= 9 ? 3 : 2)
+  },
+  'barbarian-reckless-attack': {
+    attackAdvantage: true
   }
 }
 
@@ -375,14 +393,15 @@ export function effectiveSavingThrowAdvantage(featIds: string[], activeBuffs: st
   return result
 }
 
-/** A blanket advantage/disadvantage on every attack roll (not tied to a specific weapon/ability) — cancels out the same way as the other advantage aggregators if a feat somehow granted both. */
-export function effectiveAttackAdvantage(featIds: string[]): 'advantage' | 'disadvantage' | undefined {
+/** A blanket advantage/disadvantage on every attack roll (not tied to a specific weapon/ability) — from a feat, or a currently-active toggle feature/buff (Reckless Attack, Rage doesn't grant this one). Cancels out the same way as the other advantage aggregators if something somehow granted both. */
+export function effectiveAttackAdvantage(featIds: string[], activeBuffs: string[] = []): 'advantage' | 'disadvantage' | undefined {
   let advantaged = false
   let disadvantaged = false
   for (const effect of resolveFeatEffects(featIds)) {
     if (effect.kind === 'attackAdvantage') advantaged = true
     else if (effect.kind === 'attackDisadvantage') disadvantaged = true
   }
+  for (const id of activeBuffs) if (BUFF_EFFECTS[id]?.attackAdvantage) advantaged = true
   if (advantaged === disadvantaged) return undefined
   return advantaged ? 'advantage' : 'disadvantage'
 }
@@ -633,8 +652,21 @@ export function cantripsKnownLimit(classes: ClassLevel[]): number | null {
  * always applies, and the Defense fighting style's +1 applies only while
  * actual body armor (Light/Medium/Heavy, not just a shield) is equipped —
  * checked directly here since a flat sum can't express that condition.
+ *
+ * Barbarian's and Monk's Unarmored Defense are also handled directly here
+ * (rather than through a flat sum) since they're conditional the same way
+ * Defense is: only while wearing no body armor at all (a shield is still
+ * fine for Barbarian, but Monk's version also requires no shield). Passing
+ * `classes` lets this add the character's Con (Barbarian) or Wis (Monk)
+ * modifier in place of the plain 10 base — if somehow multiclassed into
+ * both, the better of the two applies, matching how you'd actually play it.
  */
-export function computeArmorClassFromEquipment(equipment: EquipmentItem[], abilityScores: AbilityScores, featIds: string[] = []): number {
+export function computeArmorClassFromEquipment(
+  equipment: EquipmentItem[],
+  abilityScores: AbilityScores,
+  featIds: string[] = [],
+  classes: ClassLevel[] = []
+): number {
   const dexMod = abilityModifier(abilityScores.dex)
   const equipped = equipment.filter((e) => e.equipped && e.compendiumId).map((e) => getEquipmentById(e.compendiumId!)).filter((e): e is CompendiumEquipment => !!e && e.category === 'Armor')
 
@@ -650,7 +682,11 @@ export function computeArmorClassFromEquipment(equipment: EquipmentItem[], abili
       : 0
     base = (bodyArmor.armorClassBase ?? 10) + dexContribution
   } else {
-    base = 10 + dexMod
+    const hasBarbarian = classes.some((c) => c.className.toLowerCase() === 'barbarian')
+    const hasMonk = classes.some((c) => c.className.toLowerCase() === 'monk')
+    const barbarianAc = hasBarbarian ? 10 + dexMod + abilityModifier(abilityScores.con) : null
+    const monkAc = hasMonk && !shield ? 10 + dexMod + abilityModifier(abilityScores.wis) : null
+    base = Math.max(10 + dexMod, barbarianAc ?? -Infinity, monkAc ?? -Infinity)
   }
 
   const defenseBonus = bodyArmor && featIds.includes('defense') ? 1 : 0
@@ -709,6 +745,27 @@ export function armorSpeedPenalty(equipment: EquipmentItem[], abilityScores: Abi
   const equippedArmor = equipment.filter((i) => i.equipped && i.compendiumId).map((i) => getEquipmentById(i.compendiumId!))
   const underStrength = equippedArmor.some((a) => a?.category === 'Armor' && a.strMinimum && abilityScores.str < a.strMinimum)
   return underStrength ? -10 : 0
+}
+
+/** Monk's Unarmored Movement speed bonus ladder — +10 ft at 2nd level, growing to +30 ft by 18th. Requires no armor AND no shield equipped (unlike Barbarian/Monk's Unarmored Defense, which only cares about body armor for the Barbarian). */
+function monkUnarmoredMovementBonus(level: number, equipment: EquipmentItem[]): number {
+  const wearingAnyArmorOrShield = equipment.some((i) => i.equipped && i.compendiumId && getEquipmentById(i.compendiumId)?.category === 'Armor')
+  if (wearingAnyArmorOrShield) return 0
+  if (level >= 18) return 30
+  if (level >= 14) return 25
+  if (level >= 10) return 20
+  if (level >= 6) return 15
+  if (level >= 2) return 10
+  return 0
+}
+
+/** Every class feature that adds a flat speed bonus, summed — currently just Monk's Unarmored Movement, but kept as its own aggregator (parallel to featSpeedBonus/armorSpeedPenalty) so a future class feature with the same shape only needs a branch here, not a new call site in OverviewTab.tsx. */
+export function classFeatureSpeedBonus(classes: ClassLevel[], equipment: EquipmentItem[]): number {
+  let bonus = 0
+  for (const c of classes) {
+    if (c.className.toLowerCase() === 'monk') bonus += monkUnarmoredMovementBonus(c.level, equipment)
+  }
+  return bonus
 }
 
 /** True if any currently-equipped armor imposes Stealth disadvantage — surfaced as a small "D" tag on the Stealth skill row in Overview. */
@@ -817,6 +874,43 @@ export function startingEquipmentFor(classId: string): EquipmentItem[] {
       return { id: crypto.randomUUID(), name: item.name, quantity, weight: item.weight ?? 0, notes: '', compendiumId: item.id, equipped: !!equip }
     })
     .filter((i): i is EquipmentItem => !!i)
+}
+
+/** A cantrip that deals damage, whether via an attack roll (attackType set — Fire Bolt) or a saving throw (no attackType, but the description names a damage die and type — Acid Splash, Poison Spray). Broader than just `attackType` so the Combat tab's Attacks list reads as "offensive cantrips", matching how a player actually thinks about them, rather than strictly "requires an attack roll" per the SRD's own narrower rules distinction. */
+const DAMAGE_DICE_PATTERN = /\d+d\d+\s+\w+\s+damage/i
+export function spellDealsDamage(spell: CompendiumSpell): boolean {
+  return !!spell.attackType || DAMAGE_DICE_PATTERN.test(spell.description)
+}
+
+/**
+ * SRD 2014 Circle of the Land spells — one of the "always have these
+ * prepared" spell lists granted at 3rd/5th/7th/9th level once a terrain is
+ * chosen (see the "Circle of the Land: <Terrain>" choice in
+ * srd-subclass-features.json, resolved the same way Draconic Bloodline's
+ * dragon ancestor is). Every spell named here already exists in
+ * srd-spells.json. Not itself consumed automatically anywhere — see
+ * FeaturesTab.tsx's CircleSpellsGrant, which surfaces an explicit "+ Add"
+ * once a threshold level is reached and the terrain is known, writing the
+ * matching Spell rows (marked `free: true`) into character.spells.
+ */
+export const CIRCLE_OF_THE_LAND_SPELLS: Record<string, Record<number, string[]>> = {
+  Arctic: { 3: ['hold-person', 'spike-growth'], 5: ['sleet-storm', 'slow'], 7: ['freedom-of-movement', 'ice-storm'], 9: ['commune-with-nature', 'cone-of-cold'] },
+  Coast: { 3: ['mirror-image', 'misty-step'], 5: ['water-breathing', 'water-walk'], 7: ['control-water', 'freedom-of-movement'], 9: ['conjure-elemental', 'scrying'] },
+  Desert: { 3: ['blur', 'silence'], 5: ['create-food-and-water', 'protection-from-energy'], 7: ['blight', 'hallucinatory-terrain'], 9: ['insect-plague', 'wall-of-stone'] },
+  Forest: { 3: ['barkskin', 'spider-climb'], 5: ['call-lightning', 'plant-growth'], 7: ['divination', 'freedom-of-movement'], 9: ['commune-with-nature', 'tree-stride'] },
+  Grassland: { 3: ['invisibility', 'pass-without-trace'], 5: ['daylight', 'haste'], 7: ['divination', 'freedom-of-movement'], 9: ['dream', 'insect-plague'] },
+  Mountain: { 3: ['spider-climb', 'spike-growth'], 5: ['lightning-bolt', 'meld-into-stone'], 7: ['stone-shape', 'stoneskin'], 9: ['passwall', 'wall-of-stone'] },
+  Swamp: { 3: ['acid-arrow', 'web'], 5: ['stinking-cloud', 'water-walk'], 7: ['freedom-of-movement', 'locate-creature'], 9: ['insect-plague', 'scrying'] }
+}
+
+/** Every circle-spell level threshold (3/5/7/9) reached at `level` for the given terrain, each with its two granted spell ids — used by FeaturesTab.tsx to know which "+ Add Circle Spells" prompts (or resolved chips) to show. */
+export function circleSpellLevelsUpToLevel(terrain: string, level: number): Array<{ level: number; spellIds: string[] }> {
+  const byLevel = CIRCLE_OF_THE_LAND_SPELLS[terrain]
+  if (!byLevel) return []
+  return Object.entries(byLevel)
+    .map(([lvl, spellIds]) => ({ level: Number(lvl), spellIds }))
+    .filter((entry) => entry.level <= level)
+    .sort((a, b) => a.level - b.level)
 }
 
 export function spellLevelLabel(level: number): string {

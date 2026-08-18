@@ -6,6 +6,7 @@ import {
   preparedSpellLimit,
   spellAttackBonus,
   spellSaveDC,
+  spellcasterClassNames,
   type Ability,
   type ActionType,
   type CharacterSheetData,
@@ -104,13 +105,22 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
 
   // Prepared casters (Cleric/Druid/Wizard/Paladin) and known casters (Bard/Sorcerer/Warlock/Ranger) use different SRD rules, but from here they collapse into the same thing: a cap on how many leveled spells you can have on your list at once.
   const spellCap = preparedSpellLimit(character.classes, effScores) ?? knownSpellsLimit(character.classes)
-  const leveledSpellCount = draft.spells.filter((s) => s.level > 0).length
+  // Spells granted for free by a feat or subclass feature (Magic Initiate, Circle Spells) are "always prepared"
+  // on top of the normal cap, not counted against it — see Spell.free in shared/dnd5e.ts.
+  const leveledSpellCount = draft.spells.filter((s) => s.level > 0 && !s.free).length
   const atSpellCap = spellCap !== null && leveledSpellCount >= spellCap
 
   // Cantrips known is a separate cap from leveled spells — every cantrip-using class tracks the two independently.
   const cantripCap = cantripsKnownLimit(character.classes)
-  const cantripCount = draft.spells.filter((s) => s.level === 0).length
+  const cantripCount = draft.spells.filter((s) => s.level === 0 && !s.free).length
   const atCantripCap = cantripCap !== null && cantripCount >= cantripCap
+
+  // Spells offered in the "+ Add Spell" picker are restricted to the character's own caster class list(s) — a
+  // Wizard shouldn't be casually adding Cleric spells here. Magic Initiate deliberately bypasses this via its
+  // own dedicated chooser (see AsiChoosers.tsx), which grants from a fixed class list regardless of the
+  // character's actual class. A character with no recognized caster class (spellcasting enabled by hand via
+  // "+ Enable Spellcasting") has no class list to restrict to, so nothing is filtered for them.
+  const casterClasses = spellcasterClassNames(character.classes).map((c) => c.toLowerCase())
 
   const knownCompendiumSpellIds = new Set(draft.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
 
@@ -301,7 +311,12 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
               >
                 <EntryCard
                   name={<EntryCardTitle value={compendium?.name ?? spell.name} />}
-                  badge={<span className="gb-badge gb-badge--accent">{spellLevelLabel(spell.level)}</span>}
+                  badge={
+                    <span className="gb-badge gb-badge--accent">
+                      {spellLevelLabel(spell.level)}
+                      {spell.free ? ' · Free' : ''}
+                    </span>
+                  }
                   onEdit={compendium ? undefined : () => openEditForm(spell)}
                   onRemove={() => patch({ spells: draft.spells.filter((s) => s.id !== spell.id) })}
                 >
@@ -355,6 +370,7 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
                   if (pickerLevelFilter !== 'all' && s.level !== pickerLevelFilter) return false
                   if (s.level === 0 && atCantripCap) return false
                   if (s.level > 0 && atSpellCap) return false
+                  if (casterClasses.length > 0 && !s.classes.some((c) => casterClasses.includes(c.toLowerCase()))) return false
                   return !knownCompendiumSpellIds.has(s.id)
                 })
               )

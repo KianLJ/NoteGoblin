@@ -7,6 +7,23 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.2.8',
+    title: 'Reactions, actions restructure, and class feature fixes',
+    highlights: [
+      'Reactions granted by a subclass (not just the base class) now show up on the Reactions tab',
+      'Added a Reckless Attack toggle, and broadened the Attacks list to include save-based damaging cantrips (Acid Splash, Poison Spray)',
+      'Magic Initiate is now a real chooser — pick your spellcasting ability plus cantrips/spell from the Cleric/Druid/Wizard list, auto-enabling spellcasting if needed',
+      "The Spells tab's \"+ Add Spell\" picker now restricts to your own class's spell list",
+      'Wild Shape now states its actual beast restrictions per level and becomes unlimited at 20th level',
+      'Circle of the Land now actually grants its circle spells once your terrain and level qualify',
+      "Added the Champion's Additional Fighting Style pick at 10th level",
+      "Monk's Unarmored Movement now increases speed, and Barbarian/Monk Unarmored Defense now affects AC",
+      'Added real Ranger Favored Enemy and Natural Explorer choosers, in Features and the level-up popup',
+      'Sneak Attack now shows its actual scaling dice and a fuller description',
+      'Renamed the Attacks tab to Actions, adding Bonus Actions and Class Resources sections alongside it'
+    ]
+  },
+  {
     version: '0.2.7',
     title: 'Added this changelog',
     highlights: [

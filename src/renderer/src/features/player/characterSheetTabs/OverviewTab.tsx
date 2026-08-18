@@ -31,6 +31,7 @@ import {
   FEATS,
   activeBuffResistances,
   armorSpeedPenalty,
+  classFeatureSpeedBonus,
   computeArmorClassFromEquipment,
   effectiveAbilityCheckAdvantage,
   effectiveAbilityScores,
@@ -118,7 +119,8 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
   const effScores = effectiveAbilityScores(draft.abilityScores, draft.classes, character.asiSlotChoices)
   const effSkillProficiencies = effectiveSkillProficiencies(draft.skillProficiencies, activeFeats)
   const effSaveProficiencies = effectiveSavingThrowProficiencies(draft.savingThrowProficiencies, activeFeats)
-  const speedBonus = featSpeedBonus(activeFeats) + armorSpeedPenalty(character.equipment, effScores)
+  const speedBonus =
+    featSpeedBonus(activeFeats) + armorSpeedPenalty(character.equipment, effScores) + classFeatureSpeedBonus(draft.classes, character.equipment)
   const notes = featNotes(activeFeats)
   const skillAdvantage = effectiveSkillAdvantage(activeFeats, character.equipment)
   const abilityCheckAdvantage = effectiveAbilityCheckAdvantage(activeFeats, character.activeBuffs)
@@ -398,7 +400,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
 
         <VitalStat
           label="AC"
-          value={String(computeArmorClassFromEquipment(character.equipment, effScores, activeFeats))}
+          value={String(computeArmorClassFromEquipment(character.equipment, effScores, activeFeats, draft.classes))}
           icon={<ShieldIcon size={22} style={{ color: 'var(--accent)' }} />}
           accent
           large
