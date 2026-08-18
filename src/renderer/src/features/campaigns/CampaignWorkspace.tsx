@@ -4,8 +4,10 @@ import { RightPanel } from './RightPanel'
 import { CampaignSwitcher } from './CampaignSwitcher'
 import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import { CharacterSheetEditor } from '../player/CharacterSheetEditor'
+import { renderStatblockHtml } from '../../statblock'
 import type { NotesWorkspace } from './useNotesWorkspace'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
+import type { BestiaryMonster } from '../../data/bestiary'
 
 interface CampaignWorkspaceProps {
   /** null while the DM has no campaign open yet — the sidebar (and its switcher/settings footer) still renders so there's always somewhere to create one. */
@@ -21,6 +23,11 @@ interface CampaignWorkspaceProps {
   /** Whose character is being viewed (read-only) instead of a note, if anyone — takes over the main pane until closed or a note is opened. Deliberately just the id, not the character itself: deriving it fresh from playerCharacters on every render (below) is what keeps the read-only view live instead of frozen at whatever it looked like at the moment you clicked. */
   viewedPlayerUserId: string | null
   onViewPlayerUserId: (userId: string | null) => void
+  /** Enemy statblock tabs opened from the Initiative tracker (see InitiativeTracker.tsx's onSelectMonster) — several can be open at once, same as notes; `activeMonsterTab` (an index into this list, or null) is which one currently takes over the main pane, same "until closed or something else is opened" deal viewedPlayerUserId has. */
+  monsterTabs: BestiaryMonster[]
+  activeMonsterTab: string | null
+  onOpenMonsterTab: (monster: BestiaryMonster) => void
+  onSelectMonsterTab: (index: string | null) => void
 }
 
 /** Sidebar + editor + (once a campaign is open) right panel — the tab strip lives in AppShell's header now (see WorkspaceHeaderBar), not here. */
@@ -32,9 +39,14 @@ export function CampaignWorkspace({
   hostedSessionId,
   playerCharacters,
   viewedPlayerUserId,
-  onViewPlayerUserId
+  onViewPlayerUserId,
+  monsterTabs,
+  activeMonsterTab,
+  onOpenMonsterTab,
+  onSelectMonsterTab
 }: CampaignWorkspaceProps): JSX.Element {
   const viewedPlayerCharacter = viewedPlayerUserId ? (playerCharacters.get(viewedPlayerUserId) ?? null) : null
+  const activeMonster = activeMonsterTab ? monsterTabs.find((m) => m.index === activeMonsterTab) ?? null : null
   const {
     notes,
     folders,
@@ -81,10 +93,12 @@ export function CampaignWorkspace({
         campaignId={campaign?.id ?? null}
         onSelect={(id) => {
           onViewPlayerUserId(null)
+          onSelectMonsterTab(null)
           navigateToNote(id)
         }}
         onOpenInNewTab={(id) => {
           onViewPlayerUserId(null)
+          onSelectMonsterTab(null)
           openNote(id)
         }}
         onCreateNote={(visibility, folderId) => createNote(visibility, folderId)}
@@ -138,6 +152,10 @@ export function CampaignWorkspace({
               />
             </div>
           </>
+        ) : activeMonster ? (
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-5)' }}>
+            <div className="gb-markdown" dangerouslySetInnerHTML={{ __html: renderStatblockHtml(activeMonster, false) }} />
+          </div>
         ) : !campaign ? (
           <div
             style={{
@@ -187,7 +205,11 @@ export function CampaignWorkspace({
           sessionId={hostedSessionId ?? null}
           campaignId={campaign.id}
           playerCharacters={playerCharacters}
-          onSelectPlayer={onViewPlayerUserId}
+          onSelectPlayer={(userId) => {
+            onSelectMonsterTab(null)
+            onViewPlayerUserId(userId)
+          }}
+          onSelectMonster={onOpenMonsterTab}
         />
       )}
     </div>

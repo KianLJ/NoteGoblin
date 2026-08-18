@@ -178,7 +178,8 @@ function entrySection(title: string, entries: StatblockEntry[]): string {
   return `<h4 class="gb-statblock-section">${escapeHtml(title)}</h4>${rows}`
 }
 
-export function renderStatblockHtml(data: StatblockData): string {
+/** `showSaveButton` defaults on for the note-preview use case (see markdown.ts) where "this came from a note, maybe save it to the Bestiary" makes sense; pass false when rendering a monster that's already a Bestiary/custom entry (e.g. viewing an enemy's card from the initiative tracker), where the button would just be a pointless re-save of itself. */
+export function renderStatblockHtml(data: StatblockData, showSaveButton = true): string {
   const subtitleParts = [data.size, data.type, data.alignment].filter(Boolean).join(', ')
   const abilityHeader = ABILITY_LABELS.map(([, label]) => `<th>${label}</th>`).join('')
   const abilityRow = ABILITY_LABELS.map(([key]) => abilityCell(data[key])).join('')
@@ -189,31 +190,39 @@ export function renderStatblockHtml(data: StatblockData): string {
   // fenced code block's raw markdown source itself.
   const savePayload = escapeHtml(JSON.stringify(data))
 
-  return `
-    <div class="gb-statblock">
-      <button type="button" class="gb-statblock-save" data-save-statblock="${savePayload}" title="Save to Bestiary">+ Bestiary</button>
-      <div class="gb-statblock-name">${escapeHtml(data.name ?? 'Unnamed Creature')}</div>
-      ${subtitleParts ? `<div class="gb-statblock-subtitle">${escapeHtml(subtitleParts)}</div>` : ''}
-      <hr class="gb-statblock-rule" />
-      ${metaLine('Armor Class', data.ac)}
-      ${metaLine('Hit Points', data.hp)}
-      ${metaLine('Speed', data.speed)}
-      <hr class="gb-statblock-rule" />
-      <table class="gb-statblock-abilities"><thead><tr>${abilityHeader}</tr></thead><tbody><tr>${abilityRow}</tr></tbody></table>
-      <hr class="gb-statblock-rule" />
-      ${metaLine('Saving Throws', data.saves)}
-      ${metaLine('Skills', data.skills)}
-      ${metaLine('Damage Vulnerabilities', data.damage_vulnerabilities)}
-      ${metaLine('Damage Resistances', data.damage_resistances)}
-      ${metaLine('Damage Immunities', data.damage_immunities)}
-      ${metaLine('Condition Immunities', data.condition_immunities)}
-      ${metaLine('Senses', data.senses)}
-      ${metaLine('Languages', data.languages)}
-      ${metaLine('Challenge', data.cr)}
-      ${entrySection('Traits', data.traits)}
-      ${entrySection('Actions', data.actions)}
-      ${entrySection('Reactions', data.reactions)}
-      ${entrySection('Legendary Actions', data.legendary_actions)}
-    </div>
-  `
+  // Built as a flat array and joined with no separator — a multi-line
+  // template literal here (each ${...} on its own indented line) leaves a
+  // whitespace-only text node between every pair of block elements, which
+  // the browser doesn't collapse away between block siblings; it renders
+  // each one as its own empty line instead, at the container's font-size/
+  // line-height. With a dozen-plus rows in a typical statblock, that's a
+  // dozen-plus phantom blank lines stacking up — the actual cause of a
+  // statblock reading as wildly oversized, not any single margin rule.
+  return [
+    '<div class="gb-statblock">',
+    showSaveButton ? `<button type="button" class="gb-statblock-save" data-save-statblock="${savePayload}" title="Save to Bestiary">+ Bestiary</button>` : '',
+    `<div class="gb-statblock-name">${escapeHtml(data.name ?? 'Unnamed Creature')}</div>`,
+    subtitleParts ? `<div class="gb-statblock-subtitle">${escapeHtml(subtitleParts)}</div>` : '',
+    '<hr class="gb-statblock-rule" />',
+    metaLine('Armor Class', data.ac),
+    metaLine('Hit Points', data.hp),
+    metaLine('Speed', data.speed),
+    '<hr class="gb-statblock-rule" />',
+    `<table class="gb-statblock-abilities"><thead><tr>${abilityHeader}</tr></thead><tbody><tr>${abilityRow}</tr></tbody></table>`,
+    '<hr class="gb-statblock-rule" />',
+    metaLine('Saving Throws', data.saves),
+    metaLine('Skills', data.skills),
+    metaLine('Damage Vulnerabilities', data.damage_vulnerabilities),
+    metaLine('Damage Resistances', data.damage_resistances),
+    metaLine('Damage Immunities', data.damage_immunities),
+    metaLine('Condition Immunities', data.condition_immunities),
+    metaLine('Senses', data.senses),
+    metaLine('Languages', data.languages),
+    metaLine('Challenge', data.cr),
+    entrySection('Traits', data.traits),
+    entrySection('Actions', data.actions),
+    entrySection('Reactions', data.reactions),
+    entrySection('Legendary Actions', data.legendary_actions),
+    '</div>'
+  ].join('')
 }

@@ -4,6 +4,7 @@ import { InitiativeTracker } from './InitiativeTracker'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon } from './panelIcons'
 import type { CharacterSheet } from '@shared/ipc'
+import type { BestiaryMonster } from '../../data/bestiary'
 
 // Extend this union as new tools land — a dice roller, etc.
 type RightPanelTab = 'players' | 'initiative'
@@ -14,10 +15,11 @@ interface RightPanelProps {
   campaignId: string
   playerCharacters: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
+  onSelectMonster: (monster: BestiaryMonster) => void
 }
 
 /** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. */
-export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPlayer }: RightPanelProps): JSX.Element {
+export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
   const [tab, setTab] = useState<RightPanelTab>('players')
 
   return (
@@ -50,7 +52,7 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
             />
           </div>
           <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
-            <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} />
+            <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} onSelectMonster={onSelectMonster} />
           </div>
         </div>
       </div>

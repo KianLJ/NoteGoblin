@@ -14,6 +14,7 @@ import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
 import { Bestiary } from '../bestiary/Bestiary'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
+import type { BestiaryMonster } from '../../data/bestiary'
 
 interface AppShellProps {
   displayName: string
@@ -182,6 +183,37 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     })
   }, [])
   const [viewedPlayerUserId, setViewedPlayerUserId] = useState<string | null>(null)
+
+  // Enemy statblock tabs opened from the Initiative tracker (see
+  // InitiativeTracker.tsx's onSelectMonster) — a separate open list from
+  // note tabs (each keyed by the monster's Bestiary/custom index, deduped
+  // the same way notes dedupe by note id) so the DM can have several
+  // enemies' cards open side by side, switching between them the same way
+  // note tabs work. `activeMonsterTab` null means no monster tab is the
+  // active view right now (a note, or nothing, is showing instead).
+  const [monsterTabs, setMonsterTabs] = useState<BestiaryMonster[]>([])
+  const [activeMonsterTab, setActiveMonsterTab] = useState<string | null>(null)
+
+  function openMonsterTab(monster: BestiaryMonster): void {
+    setMonsterTabs((prev) => (prev.some((m) => m.index === monster.index) ? prev : [...prev, monster]))
+    setActiveMonsterTab(monster.index)
+    setViewedPlayerUserId(null)
+  }
+
+  function closeMonsterTab(index: string): void {
+    setMonsterTabs((prev) => {
+      const next = prev.filter((m) => m.index !== index)
+      setActiveMonsterTab((current) => (current === index ? (next[next.length - 1]?.index ?? null) : current))
+      return next
+    })
+  }
+
+  /** Switches which monster tab (if any) is the active view — null deactivates all of them (a note, or nothing, shows instead), same "explicit null clears it" convention as onViewPlayerUserId. Activating a real one also drops the player-character view, same mutual-exclusivity every other "takes over the main pane" view already has. */
+  function selectMonsterTab(index: string | null): void {
+    setActiveMonsterTab(index)
+    if (index) setViewedPlayerUserId(null)
+  }
+
   const [bestiaryOpen, setBestiaryOpen] = useState(false)
 
   return (
@@ -208,7 +240,14 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           {mode === 'dm' && activeCampaign && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
-              <WorkspaceHeaderBar campaign={activeCampaign} workspace={workspace} />
+              <WorkspaceHeaderBar
+                campaign={activeCampaign}
+                workspace={workspace}
+                monsterTabs={monsterTabs}
+                activeMonsterTab={activeMonsterTab}
+                onSelectMonsterTab={selectMonsterTab}
+                onCloseMonsterTab={closeMonsterTab}
+              />
             </>
           )}
 
@@ -280,6 +319,10 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             playerCharacters={playerCharacters}
             viewedPlayerUserId={viewedPlayerUserId}
             onViewPlayerUserId={setViewedPlayerUserId}
+            monsterTabs={monsterTabs}
+            activeMonsterTab={activeMonsterTab}
+            onOpenMonsterTab={openMonsterTab}
+            onSelectMonsterTab={setActiveMonsterTab}
           />
         ) : (
           <PlayerWorkspaceBody

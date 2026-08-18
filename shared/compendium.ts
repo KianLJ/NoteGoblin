@@ -25,9 +25,11 @@ import {
   type Ability,
   type AbilityScores,
   type AsiSlotChoice,
+  type CharacterSheetData,
   type ClassLevel,
   type EquipmentItem,
-  type SkillName
+  type SkillName,
+  type Spell
 } from './dnd5e'
 
 export interface CompendiumSpell {
@@ -247,6 +249,13 @@ export function effectiveAbilityScores(base: AbilityScores, classes: ClassLevel[
   }
   for (const { id } of ABILITIES) result[id] = Math.min(ABILITY_SCORE_CAP, result[id])
   for (const [ability, amount] of Object.entries(epicBoonBonus) as [Ability, number][]) result[ability] += amount
+  // Barbarian's 20th-level capstone, Primal Champion — +4 Str and +4 Con, to a max of 24. Its own separate,
+  // higher cap (not the usual 20) is why this is applied after the general cap above rather than folded into
+  // the same loop, same idea as the Epic Boon exception just above it.
+  if (classes.some((c) => c.className.toLowerCase() === 'barbarian' && c.level >= 20)) {
+    result.str = Math.min(24, result.str + 4)
+    result.con = Math.min(24, result.con + 4)
+  }
   return result
 }
 
@@ -472,6 +481,18 @@ export type GroupedSubclassFeature =
  * is a choice: an entry with no colon in its name (if present) is flavor
  * text shared by every option, not itself a pick; every colon-suffixed entry
  * is one selectable option.
+ *
+ * "Channel Divinity: X" is the one recurring exception to that heuristic —
+ * the SRD writes each Channel Divinity option a subclass grants (Preserve
+ * Life, Sacred Weapon, Turn the Unholy, ...) as its own "Channel Divinity:
+ * <name>" row, but they're all separately, permanently granted (you pick
+ * which one to use each time you activate Channel Divinity, not once at
+ * character-build time) — not a Dragon-Ancestor-style mutually exclusive
+ * pick. Grouping Devotion's two ("Sacred Weapon" and "Turn the Unholy") by
+ * the shared "Channel Divinity" prefix was turning them into exactly that
+ * kind of forced either/or choice, silently hiding whichever one wasn't
+ * picked. Keying by the *full* name instead guarantees each becomes its own
+ * single-row group.
  */
 export function groupedSubclassFeaturesForLevelUp(
   classId: string,
@@ -483,7 +504,7 @@ export function groupedSubclassFeaturesForLevelUp(
   const groups = new Map<string, CompendiumSubclassFeature[]>()
   for (const f of flat) {
     const baseName = f.name.split(':')[0].trim()
-    const key = `${f.level}:${baseName}`
+    const key = baseName === 'Channel Divinity' ? `${f.level}:${f.name}` : `${f.level}:${baseName}`
     const list = groups.get(key) ?? []
     list.push(f)
     groups.set(key, list)
@@ -524,6 +545,37 @@ export function getEquipmentById(id: string): CompendiumEquipment | undefined {
 
 export function getMagicItemById(id: string): CompendiumMagicItem | undefined {
   return magicItemById.get(id)
+}
+
+/**
+ * Builds the full save patch for resolving an ASI-or-feat slot — shared by
+ * FeaturesTab.tsx (where the slot lives permanently) and LevelUpPopup.tsx
+ * (the level-up shortcut), which used to each have their own copy of this;
+ * the popup's copy was a plain `onSave({ asiSlotChoices: [...] })` with none
+ * of the feat side-effects below, so choosing Magic Initiate there silently
+ * skipped granting its spells and enabling spellcasting. A feat with a
+ * `spellChoice` effect (Magic Initiate) needs two extra side effects beyond
+ * recording the choice itself: its picked spells become real, castable
+ * entries on character.spells (marked `free` so they don't eat into the
+ * class's normal known/prepared cap), and if the character had no
+ * spellcasting ability at all yet, this is what turns it on automatically.
+ */
+export function buildAsiSlotResolutionPatch(
+  character: { spells: Spell[]; spellcastingAbility: Ability | null; asiSlotChoices: AsiSlotChoice[] },
+  entry: Omit<AsiSlotChoice, 'id'>
+): Partial<CharacterSheetData> {
+  const patch: Partial<CharacterSheetData> = { asiSlotChoices: [...character.asiSlotChoices, { id: crypto.randomUUID(), ...entry }] }
+  if (entry.kind === 'feat' && entry.chosenSpellIds?.length) {
+    const known = new Set(character.spells.map((s) => s.compendiumId).filter(Boolean))
+    const granted: Spell[] = entry.chosenSpellIds
+      .filter((id) => !known.has(id))
+      .map((id) => getSpellById(id))
+      .filter((s): s is NonNullable<typeof s> => !!s)
+      .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action', compendiumId: s.id, free: true }))
+    patch.spells = [...character.spells, ...granted]
+    if (!character.spellcastingAbility && entry.chosenAbility) patch.spellcastingAbility = entry.chosenAbility
+  }
+  return patch
 }
 
 export function searchMagicItems(query: string, limit = 30, pool: CompendiumMagicItem[] = MAGIC_ITEMS): CompendiumMagicItem[] {

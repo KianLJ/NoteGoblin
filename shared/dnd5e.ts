@@ -793,15 +793,20 @@ export const FAVORED_ENEMY_OPTIONS: NamedOption[] = [
 ]
 
 /** SRD 2014 Ranger Natural Explorer favored terrains — one chosen at 1st level, additional ones at 6th and 10th. */
+/** Natural Explorer's benefits are identical in every favored terrain — only which terrain they apply to changes — so each option gets the same full text (parameterized by name) rather than pointing back at whichever one happened to be listed first. */
+function naturalExplorerDescription(terrain: string): string {
+  return `While traveling for an hour or more in ${terrain.toLowerCase()} terrain, you gain the following benefits: difficult terrain doesn’t slow your group’s travel, you can’t get lost except by magic, you stay alert to danger even while doing another task while traveling (such as foraging, navigating, or tracking), if you’re traveling alone you can move stealthily at a normal pace, when you forage you find twice as much food as you normally would, and while tracking other creatures you also learn their exact number, their sizes, and how long ago they passed through the area.`
+}
+
 export const FAVORED_TERRAIN_OPTIONS: NamedOption[] = [
-  { name: 'Arctic', description: 'In this terrain: difficult terrain doesn’t slow your group’s travel, you can’t get lost except by magic, you stay alert to danger even while doing another task while traveling, you move stealthily at a normal pace when alone, you find twice as much food when foraging, and you learn a creature’s exact number, and the general strength, of a group you’re tracking.' },
-  { name: 'Coast', description: 'Same Natural Explorer benefits as Arctic, applied to coastal terrain.' },
-  { name: 'Desert', description: 'Same Natural Explorer benefits as Arctic, applied to desert terrain.' },
-  { name: 'Forest', description: 'Same Natural Explorer benefits as Arctic, applied to forest terrain.' },
-  { name: 'Grassland', description: 'Same Natural Explorer benefits as Arctic, applied to grassland terrain.' },
-  { name: 'Mountain', description: 'Same Natural Explorer benefits as Arctic, applied to mountain terrain.' },
-  { name: 'Swamp', description: 'Same Natural Explorer benefits as Arctic, applied to swamp terrain.' },
-  { name: 'Underdark', description: 'Same Natural Explorer benefits as Arctic, applied to the Underdark.' }
+  { name: 'Arctic', description: naturalExplorerDescription('Arctic') },
+  { name: 'Coast', description: naturalExplorerDescription('Coast') },
+  { name: 'Desert', description: naturalExplorerDescription('Desert') },
+  { name: 'Forest', description: naturalExplorerDescription('Forest') },
+  { name: 'Grassland', description: naturalExplorerDescription('Grassland') },
+  { name: 'Mountain', description: naturalExplorerDescription('Mountain') },
+  { name: 'Swamp', description: naturalExplorerDescription('Swamp') },
+  { name: 'Underdark', description: naturalExplorerDescription('Underdark') }
 ]
 
 /** Favored Enemy is picked at 1st level, then again at 6th ("Favored Enemy & Explorer Improvement") — same shape as asiSlotLevelsUpToLevel/fightingStyleSlotLevelsUpToLevel. */
@@ -1240,6 +1245,86 @@ export function toggleFeaturesForCharacter(classes: ClassLevel[]): Array<ToggleF
     const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
     if (!cls) continue
     for (const def of TOGGLE_FEATURES) {
+      if (def.classId === cls.id && c.level >= def.minLevel) result.push({ ...def, className: c.className })
+    }
+  }
+  return result
+}
+
+/**
+ * A named, usable ability that spends charges from an existing class
+ * resource (see CLASS_RESOURCES) rather than being its own tracked pool —
+ * Cleric's Turn Undead (spends Channel Divinity), Monk's Flurry of
+ * Blows/Patient Defense/Step of the Wind (each spend 1 ki point). The SRD
+ * only ever describes these inside their owning resource's prose, with
+ * nothing to click — this is what actually surfaces them as their own
+ * "Use" button on the Actions tab (see CombatTab.tsx), spending from the
+ * same currentUsed pool their resource card already tracks.
+ */
+export interface ResourceActionDef {
+  id: string
+  name: string
+  /** The ClassResourceDef.id this spends charges from. */
+  resourceId: string
+  /** Uses (or ki points) spent per activation. */
+  cost: number
+  classId: string
+  minLevel: number
+  actionType: ActionType
+  description: string
+}
+
+export const RESOURCE_ACTIONS: ResourceActionDef[] = [
+  {
+    id: 'cleric-turn-undead',
+    name: 'Turn Undead',
+    resourceId: 'cleric-channel-divinity',
+    cost: 1,
+    classId: 'cleric',
+    minLevel: 2,
+    actionType: 'action',
+    description:
+      'As an action, present your holy symbol and speak a prayer. Each undead within 30 feet that can see or hear you must make a Wisdom saving throw; on a failure, it is turned for 1 minute or until it takes damage.'
+  },
+  {
+    id: 'monk-flurry-of-blows',
+    name: 'Flurry of Blows',
+    resourceId: 'monk-ki',
+    cost: 1,
+    classId: 'monk',
+    minLevel: 2,
+    actionType: 'bonus',
+    description: 'Immediately after you take the Attack action on your turn, spend 1 ki point to make two unarmed strikes as a bonus action.'
+  },
+  {
+    id: 'monk-patient-defense',
+    name: 'Patient Defense',
+    resourceId: 'monk-ki',
+    cost: 1,
+    classId: 'monk',
+    minLevel: 2,
+    actionType: 'bonus',
+    description: 'Spend 1 ki point to take the Dodge action as a bonus action on your turn.'
+  },
+  {
+    id: 'monk-step-of-the-wind',
+    name: 'Step of the Wind',
+    resourceId: 'monk-ki',
+    cost: 1,
+    classId: 'monk',
+    minLevel: 2,
+    actionType: 'bonus',
+    description: 'Spend 1 ki point to take the Disengage or Dash action as a bonus action on your turn, and your jump distance is doubled for the turn.'
+  }
+]
+
+/** Every resource action the character currently qualifies for, across all their classes. */
+export function resourceActionsForCharacter(classes: ClassLevel[]): Array<ResourceActionDef & { className: string }> {
+  const result: Array<ResourceActionDef & { className: string }> = []
+  for (const c of classes) {
+    const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
+    if (!cls) continue
+    for (const def of RESOURCE_ACTIONS) {
       if (def.classId === cls.id && c.level >= def.minLevel) result.push({ ...def, className: c.className })
     }
   }

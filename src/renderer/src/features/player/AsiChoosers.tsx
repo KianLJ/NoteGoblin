@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ABILITIES, type Ability, type AsiSlotChoice, type NamedOption } from '@shared/dnd5e'
-import { FEATS, SPELLS, meetsFeatPrerequisite, type CompendiumSpell, type FeatEffect } from '@shared/compendium'
+import { FEATS, SPELLS, meetsFeatPrerequisite, type CompendiumSpell, type FeatEffect, type SubclassFeatureOption } from '@shared/compendium'
 import { Button } from '../../ui/Button'
 
 // The native +2/+1+1 ASI slot already covers this feat's entire effect (a
@@ -339,6 +339,129 @@ export function NamedOptionChooser({
         </Button>
       </div>
       {selected?.description && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selected.description}</p>}
+    </div>
+  )
+}
+
+/** The one Favored Enemy option (FAVORED_ENEMY_OPTIONS' "Humanoids" entry) that itself carries a further choice — "two races of your choice" per the SRD, rather than a single fixed creature type — so it needs two freeform race fields on top of NamedOptionChooser's plain dropdown. Picking anything else behaves exactly like NamedOptionChooser. */
+const FAVORED_ENEMY_HUMANOID_NAME = 'Humanoids (two races of your choice)'
+
+export function FavoredEnemyChooser({
+  classLabel,
+  level,
+  options,
+  excludeNames,
+  readOnly,
+  onChoose
+}: {
+  classLabel: string
+  level: number
+  options: NamedOption[]
+  excludeNames: string[]
+  readOnly?: boolean
+  onChoose: (name: string) => void
+}): JSX.Element {
+  const available = options.filter((o) => !excludeNames.includes(o.name))
+  const [name, setName] = useState(available[0]?.name ?? '')
+  const [raceA, setRaceA] = useState('')
+  const [raceB, setRaceB] = useState('')
+  const selected = available.find((o) => o.name === name) ?? available[0]
+  const isHumanoid = selected?.name === FAVORED_ENEMY_HUMANOID_NAME
+  const ready = !isHumanoid || (raceA.trim() && raceB.trim())
+
+  function apply(): void {
+    if (!selected) return
+    if (isHumanoid) onChoose(`Humanoids: ${raceA.trim()}, ${raceB.trim()}`)
+    else onChoose(selected.name)
+  }
+
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+      <strong>
+        Favored Enemy — {classLabel} {level}
+      </strong>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <select className="gb-input" value={selected?.name ?? ''} onChange={(e) => setName(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
+          {available.map((o) => (
+            <option key={o.name} value={o.name}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+        <Button variant="primary" onClick={apply} disabled={readOnly || !selected || !ready} style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}>
+          Choose
+        </Button>
+      </div>
+      {isHumanoid && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <input
+            className="gb-input"
+            placeholder="First race (e.g. Orcs)"
+            value={raceA}
+            onChange={(e) => setRaceA(e.target.value)}
+            style={{ fontSize: 12, flex: 1 }}
+          />
+          <input
+            className="gb-input"
+            placeholder="Second race (e.g. Goblinoids)"
+            value={raceB}
+            onChange={(e) => setRaceB(e.target.value)}
+            style={{ fontSize: 12, flex: 1 }}
+          />
+        </div>
+      )}
+      {selected?.description && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selected.description}</p>}
+    </div>
+  )
+}
+
+/** The inline chooser for a subclass feature the SRD writes as several named options (e.g. Draconic Bloodline's dragon ancestor, a Ranger archetype's sub-features) rather than one entry with an embedded choice — see groupedSubclassFeaturesForLevelUp in shared/compendium.ts. Rendered in both FeaturesTab.tsx (permanently, until resolved) and LevelUpPopup.tsx (a shortcut for whichever ones just unlocked) — previously LevelUpPopup.tsx had no equivalent at all, so a subclass whose every post-pick feature is this kind of choice (Ranger's Hunter archetype, whose Defensive Tactics/Multiattack/Superior Hunter's Defense are ALL choice-shaped) looked like it granted nothing at all when leveling up. */
+export function SubclassFeatureOptionChooser({
+  classLabel,
+  subclassLabel,
+  level,
+  baseName,
+  intro,
+  options,
+  readOnly,
+  onChoose
+}: {
+  classLabel: string
+  subclassLabel: string
+  level: number
+  baseName: string
+  intro?: string
+  options: SubclassFeatureOption[]
+  readOnly?: boolean
+  onChoose: (chosenName: string) => void
+}): JSX.Element {
+  const [chosenName, setChosenName] = useState(options[0]?.name ?? '')
+  const chosen = options.find((o) => o.name === chosenName)
+
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+      <strong>
+        {baseName} — {subclassLabel || classLabel} {level}
+      </strong>
+      {intro && <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>{intro}</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <select className="gb-input" value={chosenName} onChange={(e) => setChosenName(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
+          {options.map((o) => (
+            <option key={o.name} value={o.name}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="primary"
+          onClick={() => onChoose(chosenName)}
+          disabled={readOnly || !chosenName}
+          style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}
+        >
+          Choose
+        </Button>
+      </div>
+      {chosen && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{chosen.desc}</p>}
     </div>
   )
 }
