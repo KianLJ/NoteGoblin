@@ -3,7 +3,7 @@ import { ConnectedPlayersList } from './ConnectedPlayersList'
 import { InitiativeTracker } from './InitiativeTracker'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { VerticalSplit } from '../../ui/VerticalSplit'
-import { PlayersIcon, DiceIcon, InitiativeIcon } from './panelIcons'
+import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from './panelIcons'
 import { DiceTray } from '../dice/DiceTray'
 import { ChatPanel } from '../chat/ChatPanel'
 import type { CharacterSheet } from '@shared/ipc'
@@ -15,6 +15,7 @@ interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
   sessionId: string | null
   campaignId: string
+  campaignName: string
   /** The DM's own userId (campaign.dmUserId) — this panel is always the DM's own, so it's always "me" for chat purposes. */
   myUserId: string
   playerCharacters: Map<string, CharacterSheet>
@@ -23,7 +24,7 @@ interface RightPanelProps {
 }
 
 /** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. Chat lives in a fixed-but-resizable strip along the bottom (see VerticalSplit) rather than as another tab, since it's meant to stay visible alongside whichever tab is active. */
-export function RightPanel({ sessionId, campaignId, myUserId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
+export function RightPanel({ sessionId, campaignId, campaignName, myUserId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
   const [tab, setTab] = useState<RightPanelTab>('players')
 
   return (
@@ -44,6 +45,8 @@ export function RightPanel({ sessionId, campaignId, myUserId, playerCharacters, 
                 <TabButton icon={<PlayersIcon />} label="Players" active={tab === 'players'} onClick={() => setTab('players')} />
                 <TabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
                 <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
+                <TabButton icon={<CalendarIcon />} label="Calendar" disabled title="Coming soon" />
+                <TabButton icon={<SessionIcon />} label="Session" disabled title="Coming soon" />
               </div>
 
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -67,7 +70,7 @@ export function RightPanel({ sessionId, campaignId, myUserId, playerCharacters, 
               </div>
             </div>
           }
-          bottom={<ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} isDm />}
+          bottom={<ChatPanel campaignId={campaignId} campaignName={campaignName} sessionId={sessionId} myUserId={myUserId} isDm />}
         />
       </div>
     </ResizableSidebar>

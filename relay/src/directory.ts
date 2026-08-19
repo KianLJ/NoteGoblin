@@ -23,20 +23,55 @@ interface FriendRequests {
   outgoing: string[] // userIds *this* user has requested
 }
 
-type NotificationKind = 'friend-request' | 'friend-accepted' | 'session-invite'
+type NotificationKind = 'friend-request' | 'friend-accepted' | 'session-invite' | 'message'
 
-/** Generic enough to grow a 'message' kind later for DM/private messaging without reshaping this store. */
 interface Notification {
   id: string
   kind: NotificationKind
   fromUserId: string
   fromUsername: string
   sessionId?: string
+  /** Only for kind === 'message' — which conversation kind this is, so the client can route "open this thread" correctly, and so a burst of messages from the same sender/kind collapses into one bumped notification (see pushNotification's dedup) instead of spamming the list. */
+  messageKind?: MessageKind
   createdAt: string
   read: boolean
 }
 
 const MAX_NOTIFICATIONS_PER_USER = 50
+
+/**
+ * 'friend' — either side of any relay friendship, anytime, campaign-
+ * independent. 'whisper' — the DM<->one-player thread for a specific
+ * campaign; campaignId/campaignName are always set (tagging which campaign
+ * it came from, since a whisper history can span every campaign two
+ * accounts have ever shared) and there's no friendship requirement, since a
+ * DM and player don't need to be relay friends to whisper.
+ */
+type MessageKind = 'friend' | 'whisper'
+
+interface StoredMessage {
+  id: string
+  kind: MessageKind
+  senderUserId: string
+  senderUsername: string
+  recipientUserId: string
+  campaignId?: string
+  campaignName?: string
+  body: string
+  createdAt: string
+}
+
+// Chronological (oldest first), unlike Notification's most-recent-first —
+// conversation history reads naturally top-to-bottom. Capped per pair the
+// same "silently drop the oldest" way notifications are, just with far more
+// headroom since this is meant to hold real history, not a transient feed.
+const MAX_MESSAGES_PER_PAIR = 1000
+const MAX_MESSAGE_BODY_LENGTH = 4000
+
+/** Same conversation regardless of who's "a" or "b" — sorting the two ids gives every message between this pair one shared storage key. */
+function pairKey(a: string, b: string): string {
+  return [a, b].sort().join(':')
+}
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } })
@@ -119,6 +154,16 @@ export class Directory extends Server<Env> {
       return this.handleMarkNotificationRead(req)
     }
     if (req.method === 'POST' && action === 'notify') return this.handleInternalNotify(req)
+    if (req.method === 'POST' && action === 'send' && segments[segments.length - 2] === 'messages') {
+      return this.handleSendMessage(req)
+    }
+    if (req.method === 'GET' && action === 'list' && segments[segments.length - 2] === 'messages') {
+      return this.handleListMessages(req)
+    }
+    if (req.method === 'GET' && action === 'whisper-threads') return this.handleListWhisperThreads(req)
+    if (req.method === 'POST' && action === 'mark-read' && segments[segments.length - 2] === 'messages') {
+      return this.handleMarkMessagesRead(req)
+    }
 
     return json({ error: 'Not found' }, 404)
   }
@@ -407,7 +452,8 @@ export class Directory extends Server<Env> {
       `username:${account.username}`,
       `friends:${account.id}`,
       `friendReq:${account.id}`,
-      `notifications:${account.id}`
+      `notifications:${account.id}`,
+      `whisperPeers:${account.id}`
     ])
 
     return json({ ok: true })
@@ -451,6 +497,130 @@ export class Directory extends Server<Env> {
     return json({ ok: true, username })
   }
 
+  /** Friend DMs require an actual friendship; a whisper only requires naming a campaign (campaignId/campaignName), since a DM and player don't need to be relay friends to whisper — campaign membership itself is verified locally by the DM's own campaignService, not here. */
+  private async handleSendMessage(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+
+    const body = (await req.json().catch(() => null)) as
+      | { toUserId?: string; kind?: string; campaignId?: string; campaignName?: string; body?: string }
+      | null
+    if (!body?.toUserId || !body.body?.trim()) return badRequest('toUserId and body are required')
+    if (body.kind !== 'friend' && body.kind !== 'whisper') return badRequest('invalid kind')
+    if (body.body.length > MAX_MESSAGE_BODY_LENGTH) return badRequest('That message is too long.')
+    if (body.toUserId === account.id) return badRequest("You can't message yourself")
+    if (body.kind === 'whisper' && (!body.campaignId || !body.campaignName)) {
+      return badRequest('campaignId and campaignName are required for a whisper')
+    }
+
+    const target = await this.ctx.storage.get<StoredAccount>(`user:${body.toUserId}`)
+    if (!target) return badRequest('No such account')
+
+    if (body.kind === 'friend') {
+      const myFriends = (await this.ctx.storage.get<string[]>(`friends:${account.id}`)) ?? []
+      if (!myFriends.includes(body.toUserId)) return badRequest('You can only message a friend this way')
+    }
+
+    const message: StoredMessage = {
+      id: crypto.randomUUID(),
+      kind: body.kind,
+      senderUserId: account.id,
+      senderUsername: account.username,
+      recipientUserId: body.toUserId,
+      campaignId: body.campaignId,
+      campaignName: body.campaignName,
+      body: body.body.trim(),
+      createdAt: new Date().toISOString()
+    }
+
+    const key = `messages:${pairKey(account.id, body.toUserId)}`
+    const existing = (await this.ctx.storage.get<StoredMessage[]>(key)) ?? []
+    await this.ctx.storage.put(key, [...existing, message].slice(-MAX_MESSAGES_PER_PAIR))
+
+    if (body.kind === 'whisper') {
+      await this.addWhisperPeer(account.id, body.toUserId)
+      await this.addWhisperPeer(body.toUserId, account.id)
+    }
+
+    await this.pushLive(body.toUserId, { type: 'message', message })
+    await this.pushNotification(body.toUserId, 'message', account.id, undefined, body.kind)
+
+    return json(message)
+  }
+
+  /** Marks every unread 'message' notification from one sender/kind as read in one call — used when the recipient opens (or is actively viewing) that thread, rather than requiring the client to fetch the list and mark each id individually. */
+  private async handleMarkMessagesRead(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const body = (await req.json().catch(() => null)) as { fromUserId?: string; kind?: string } | null
+    if (!body?.fromUserId || (body.kind !== 'friend' && body.kind !== 'whisper')) {
+      return badRequest('fromUserId and a valid kind are required')
+    }
+
+    const notifications = (await this.ctx.storage.get<Notification[]>(`notifications:${account.id}`)) ?? []
+    const next = notifications.map((n) =>
+      n.kind === 'message' && n.fromUserId === body.fromUserId && n.messageKind === body.kind ? { ...n, read: true } : n
+    )
+    await this.ctx.storage.put(`notifications:${account.id}`, next)
+    return json({ ok: true })
+  }
+
+  private async addWhisperPeer(userId: string, peerId: string): Promise<void> {
+    const key = `whisperPeers:${userId}`
+    const existing = (await this.ctx.storage.get<string[]>(key)) ?? []
+    if (!existing.includes(peerId)) await this.ctx.storage.put(key, [...existing, peerId])
+  }
+
+  private async handleListMessages(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+
+    const url = new URL(req.url)
+    const withUserId = url.searchParams.get('withUserId')
+    const kind = url.searchParams.get('kind')
+    if (!withUserId || (kind !== 'friend' && kind !== 'whisper')) {
+      return badRequest('withUserId and a valid kind are required')
+    }
+
+    const all = (await this.ctx.storage.get<StoredMessage[]>(`messages:${pairKey(account.id, withUserId)}`)) ?? []
+    return json(all.filter((m) => m.kind === kind))
+  }
+
+  /**
+   * One row per account you've ever whispered with (any campaign), tagged
+   * with whichever campaign the *most recent* whisper in that thread came
+   * from — a thread can legitimately span several campaigns over time, but
+   * the summary list only needs "what to show right now," not the full
+   * history (handleListMessages covers that once a thread's opened).
+   */
+  private async handleListWhisperThreads(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+
+    const peerIds = (await this.ctx.storage.get<string[]>(`whisperPeers:${account.id}`)) ?? []
+    const threads = await Promise.all(
+      peerIds.map(async (peerId) => {
+        const peer = await this.ctx.storage.get<StoredAccount>(`user:${peerId}`)
+        if (!peer) return null
+        const all = (await this.ctx.storage.get<StoredMessage[]>(`messages:${pairKey(account.id, peerId)}`)) ?? []
+        const whispers = all.filter((m) => m.kind === 'whisper')
+        const last = whispers[whispers.length - 1]
+        if (!last) return null
+        return {
+          userId: peer.id,
+          username: peer.username,
+          lastMessageBody: last.body,
+          lastCampaignId: last.campaignId ?? null,
+          lastCampaignName: last.campaignName ?? null,
+          lastAt: last.createdAt
+        }
+      })
+    )
+    const valid = threads.filter((t): t is NonNullable<typeof t> => t !== null)
+    valid.sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1))
+    return json(valid)
+  }
+
   /** Called by other rooms (e.g. session.ts on invite) that want to notify a user but don't own account data themselves — deliberately unauthenticated, same trust model as handleInternalFriendIds. */
   private async handleInternalNotify(req: Request): Promise<Response> {
     const body = (await req.json().catch(() => null)) as
@@ -468,7 +638,8 @@ export class Directory extends Server<Env> {
     userId: string,
     kind: NotificationKind,
     fromUserId: string,
-    sessionId?: string
+    sessionId?: string,
+    messageKind?: MessageKind
   ): Promise<void> {
     const fromAccount = await this.ctx.storage.get<StoredAccount>(`user:${fromUserId}`)
     const notification: Notification = {
@@ -477,11 +648,19 @@ export class Directory extends Server<Env> {
       fromUserId,
       fromUsername: fromAccount?.username ?? 'Unknown',
       sessionId,
+      messageKind,
       createdAt: new Date().toISOString(),
       read: false
     }
 
-    const existing = (await this.ctx.storage.get<Notification[]>(`notifications:${userId}`)) ?? []
+    let existing = (await this.ctx.storage.get<Notification[]>(`notifications:${userId}`)) ?? []
+    // A burst of messages from the same person/thread bumps one notification
+    // to the top instead of piling up a fresh entry per message — otherwise
+    // an active conversation would flood the list (and the 50-item cap)
+    // almost immediately.
+    if (kind === 'message') {
+      existing = existing.filter((n) => !(n.kind === 'message' && n.fromUserId === fromUserId && n.messageKind === messageKind))
+    }
     await this.ctx.storage.put(`notifications:${userId}`, [notification, ...existing].slice(0, MAX_NOTIFICATIONS_PER_USER))
 
     await this.pushLive(userId, { type: 'notification', notification })

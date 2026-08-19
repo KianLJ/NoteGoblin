@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { VerticalSplit } from '../../ui/VerticalSplit'
-import { PlayersIcon, DiceIcon, InitiativeIcon } from '../campaigns/panelIcons'
+import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from '../campaigns/panelIcons'
 import { PlayerInitiativeView } from './PlayerInitiativeView'
 import { DiceTray } from '../dice/DiceTray'
 import { ChatPanel } from '../chat/ChatPanel'
@@ -10,7 +10,11 @@ import type { Note, PresencePlayer } from '@shared/ipc'
 interface PartySidebarProps {
   sessionId: string | null
   campaignId: string | null
+  campaignName: string | null
   myUserId: string | null
+  /** The current campaign's DM — lets ChatPanel's Whispers tab offer "start a whisper" before any history with them exists. */
+  dmUserId: string | null
+  dmDisplayName: string | null
   /** Whichever note is currently open — when you authored it, each party member gets a checkbox to grant/revoke edit access; otherwise this is just a "who's here" list. */
   activeNote: Note | null
   onToggleEditor: (noteId: string, userId: string, grant: boolean) => void
@@ -19,7 +23,17 @@ interface PartySidebarProps {
 }
 
 /** Right-side, player-mode-only panel — mirrors the DM's RightPanel/ConnectedPlayersList (including the ability to open a party member's sheet, read-only), but doubles as where a note's author manages who else can edit it, since that's the author's own call to make (not the DM's). */
-export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onToggleEditor, onViewCharacter }: PartySidebarProps): JSX.Element {
+export function PartySidebar({
+  sessionId,
+  campaignId,
+  campaignName,
+  myUserId,
+  dmUserId,
+  dmDisplayName,
+  activeNote,
+  onToggleEditor,
+  onViewCharacter
+}: PartySidebarProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
   const [tab, setTab] = useState<'party' | 'initiative' | 'dice'>('party')
 
@@ -59,6 +73,8 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
                 <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'party'} onClick={() => setTab('party')} />
                 <PartyTabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
                 <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
+                <PartyTabButton icon={<CalendarIcon />} label="Calendar" disabled title="Coming soon" />
+                <PartyTabButton icon={<SessionIcon />} label="Session" disabled title="Coming soon" />
               </div>
 
               {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — both PlayerInitiativeView
@@ -144,7 +160,17 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
               </div>
             </div>
           }
-          bottom={<ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} isDm={false} />}
+          bottom={
+            <ChatPanel
+              campaignId={campaignId}
+              campaignName={campaignName}
+              sessionId={sessionId}
+              myUserId={myUserId}
+              isDm={false}
+              dmUserId={dmUserId}
+              dmDisplayName={dmDisplayName}
+            />
+          }
         />
       </div>
     </ResizableSidebar>
@@ -155,17 +181,22 @@ function PartyTabButton({
   icon,
   label,
   active,
+  disabled,
+  title,
   onClick
 }: {
   icon: ReactNode
   label: string
-  active: boolean
-  onClick: () => void
+  active?: boolean
+  disabled?: boolean
+  title?: string
+  onClick?: () => void
 }): JSX.Element {
   return (
     <button
       type="button"
-      title={label}
+      disabled={disabled}
+      title={title ?? label}
       onClick={onClick}
       style={{
         flex: 1,
@@ -177,8 +208,9 @@ function PartyTabButton({
         border: 'none',
         borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
         background: 'transparent',
-        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-        cursor: 'pointer'
+        color: disabled ? 'var(--text-muted)' : active ? 'var(--text-primary)' : 'var(--text-secondary)',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.5 : 1
       }}
     >
       {icon}

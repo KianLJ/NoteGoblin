@@ -2,7 +2,7 @@
 // Grows as features (campaigns, characters, etc.) land in later build steps.
 
 import type { CharacterSheetData } from './dnd5e'
-import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification, RelayStatus } from './relay'
+import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, RelayStatus, WhisperThread } from './relay'
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 
@@ -348,6 +348,28 @@ export interface AppApi {
     }
     /** Fires whenever a new notification arrives — listeners re-fetch notifications.list() rather than trying to diff a pushed payload, same convention as onFriendsChanged. */
     onNotificationsChanged: (callback: () => void) => () => void
+    // Private messages, persisted relay-side (not campaign-scoped SQLite —
+    // see messages.* above for that) so history survives regardless of
+    // which campaign, or none, is currently open. 'friend' reaches any
+    // relay friend, campaign-independent; 'whisper' is a DM<->one-player
+    // thread tagged with a campaign, and can span every campaign the two
+    // accounts have ever shared — see relay/src/directory.ts.
+    messages: {
+      send: (input: {
+        toUserId: string
+        kind: 'friend' | 'whisper'
+        campaignId?: string
+        campaignName?: string
+        body: string
+      }) => Promise<ApiResult<RelayMessage>>
+      list: (withUserId: string, kind: 'friend' | 'whisper') => Promise<ApiResult<RelayMessage[]>>
+      /** Every account you've ever whispered with, tagged with the most recent thread's campaign — the "which account" picker for the Whispers tab. */
+      whisperThreads: () => Promise<ApiResult<WhisperThread[]>>
+      /** Fires with the message itself (not just a "changed" nudge) whenever one arrives for you, friend or whisper alike — append directly rather than re-fetching. */
+      onMessage: (callback: (message: RelayMessage) => void) => () => void
+      /** Marks every unread 'message' notification from one sender/kind as read — call when opening (or while actively viewing) that thread, so the tab/thread unread counters clear. */
+      markRead: (fromUserId: string, kind: 'friend' | 'whisper') => Promise<ApiResult<void>>
+    }
     // Relay account management — uses your own relay session under the
     // hood, same as everything else here; the relay itself only allows this
     // for one specific admin username (see Directory.isAdmin), so this is a

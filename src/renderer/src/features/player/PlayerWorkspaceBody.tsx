@@ -266,7 +266,10 @@ export function PlayerWorkspaceBody({
       <PartySidebar
         sessionId={sessionId}
         campaignId={!isOffline ? activeCampaign?.id ?? null : null}
+        campaignName={!isOffline ? activeCampaign?.name ?? null : null}
         myUserId={myUserId}
+        dmUserId={!isOffline ? activeCampaign?.dmUserId ?? null : null}
+        dmDisplayName={!isOffline ? activeCampaign?.dmDisplayName ?? null : null}
         activeNote={activeNote}
         onToggleEditor={(noteId, userId, grant) => {
           const note = notes?.find((n) => n.id === noteId)

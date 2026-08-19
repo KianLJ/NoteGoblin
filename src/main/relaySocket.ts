@@ -116,7 +116,7 @@ export function connectPresence(token: string, window: BrowserWindow): void {
       return
     }
     if (typeof message !== 'object' || message === null) return
-    const msg = message as { type?: unknown; userId?: unknown; sessionId?: unknown; friends?: unknown }
+    const msg = message as { type?: unknown; userId?: unknown; sessionId?: unknown; friends?: unknown; message?: unknown }
 
     if (msg.type === 'online-friends' && Array.isArray(msg.friends)) {
       setOnlineFriends(
@@ -145,6 +145,11 @@ export function connectPresence(token: string, window: BrowserWindow): void {
       // Someone removed or declined us — no bell notification warranted, just
       // a nudge to re-fetch so our own friends list stops disagreeing with theirs.
       window.webContents.send('relay:friends-changed')
+    } else if (msg.type === 'message' && typeof msg.message === 'object' && msg.message !== null) {
+      // The actual message content, not just a "something changed" nudge —
+      // pushed live so ChatPanel.tsx can append it without a refetch,
+      // matching the campaign-chat 'ws:message' push's shape/purpose.
+      window.webContents.send('relay:message', msg.message)
     }
   })
 

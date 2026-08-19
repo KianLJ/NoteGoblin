@@ -17,6 +17,8 @@ function describe(n: RelayNotification): string {
       return `${n.fromUsername} accepted your friend request.`
     case 'session-invite':
       return `${n.fromUsername} invited you to their session.`
+    case 'message':
+      return n.messageKind === 'whisper' ? `${n.fromUsername} whispered you.` : `${n.fromUsername} sent you a message.`
   }
 }
 

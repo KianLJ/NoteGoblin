@@ -41,6 +41,46 @@ export function DiceIcon(): JSX.Element {
   )
 }
 
+export function ChatIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M2 3.6c0-.88.72-1.6 1.6-1.6h8.8c.88 0 1.6.72 1.6 1.6v6.2c0 .88-.72 1.6-1.6 1.6H6.4l-2.9 2.4v-2.4H3.6c-.88 0-1.6-.72-1.6-1.6V3.6Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <line x1="4.6" y1="5.4" x2="11.4" y2="5.4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      <line x1="4.6" y1="7.9" x2="9.2" y2="7.9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function CalendarIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="1.8" y="2.9" width="12.4" height="11.2" rx="1.3" stroke="currentColor" strokeWidth="1.1" />
+      <line x1="1.8" y1="6.1" x2="14.2" y2="6.1" stroke="currentColor" strokeWidth="1.1" />
+      <line x1="4.6" y1="1.4" x2="4.6" y2="4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+      <line x1="11.4" y1="1.4" x2="11.4" y2="4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+      <circle cx="5.4" cy="9" r="0.8" fill="currentColor" />
+      <circle cx="8" cy="9" r="0.8" fill="currentColor" />
+      <circle cx="10.6" cy="9" r="0.8" fill="currentColor" />
+    </svg>
+  )
+}
+
+/** Broadcast-style arcs, for "session" (hosting/connection) management. */
+export function SessionIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="9.4" r="1.4" fill="currentColor" />
+      <path d="M5.4 7.2a3.6 3.6 0 0 1 5.2 0" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+      <path d="M3.2 4.9a6.8 6.8 0 0 1 9.6 0" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /** An order list — one bold, filled row (the active turn) and three lighter ones (everyone else waiting their turn). */
 export function InitiativeIcon(): JSX.Element {
   return (

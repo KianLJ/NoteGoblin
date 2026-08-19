@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.5',
+    title: 'Friend DMs, cross-campaign whispers, and message notifications',
+    highlights: [
+      'Renamed the chat panel to Messages and split it into Party, Friends, and Whispers',
+      'Friends: message any relay friend privately, anytime, independent of any campaign',
+      "Whispers: your DM<->player history now spans every campaign you've shared with that person, each thread tagged with which campaign it came from",
+      'New messages now feed the existing notification system — toast popups and the bell, same as friend requests',
+      'Added unread counters on the Party/Friends/Whispers tabs, plus a "new" marker next to whichever friend or whisper thread has something unread'
+    ]
+  },
+  {
     version: '0.3.4',
     title: 'Campaign chat',
     highlights: [

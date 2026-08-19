@@ -1,4 +1,4 @@
-import type { AdminAccountSummary, FriendRequest, RelayNotification } from '@shared/relay'
+import type { AdminAccountSummary, FriendRequest, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 import { RELAY_URL, RELAY_DIRECTORY_PATH } from './relayConfig'
 
 /** {userId, username} only — the directory doesn't know who's online, that's presence.ts's job. Callers merge in online status separately (see registerIpc.ts). */
@@ -97,4 +97,33 @@ export function adminUpdateAccount(
   input: { username?: string; newPassword?: string }
 ): Promise<ClientResult<{ ok: true; username: string }>> {
   return call('/admin/accounts/update', 'POST', token, { userId, ...input })
+}
+
+/** `kind: 'whisper'` requires campaignId/campaignName (see Directory.handleSendMessage) — a 'friend' message ignores both. */
+export function sendMessage(
+  token: string,
+  input: { toUserId: string; kind: 'friend' | 'whisper'; campaignId?: string; campaignName?: string; body: string }
+): Promise<ClientResult<RelayMessage>> {
+  return call('/messages/send', 'POST', token, input)
+}
+
+export function listMessages(
+  token: string,
+  withUserId: string,
+  kind: 'friend' | 'whisper'
+): Promise<ClientResult<RelayMessage[]>> {
+  return call(`/messages/list?withUserId=${encodeURIComponent(withUserId)}&kind=${kind}`, 'GET', token)
+}
+
+export function listWhisperThreads(token: string): Promise<ClientResult<WhisperThread[]>> {
+  return call('/whisper-threads', 'GET', token)
+}
+
+/** Marks every unread 'message' notification from one sender/kind as read in one call — used when the recipient opens (or is actively viewing) that thread. */
+export function markMessagesRead(
+  token: string,
+  fromUserId: string,
+  kind: 'friend' | 'whisper'
+): Promise<ClientResult<{ ok: true }>> {
+  return call('/messages/mark-read', 'POST', token, { fromUserId, kind })
 }

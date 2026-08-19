@@ -63,7 +63,7 @@ import type {
   Message,
   CharacterSheet
 } from '@shared/ipc'
-import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification } from '@shared/relay'
+import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 
 // --- Vault file watcher ------------------------------------------------
 // In vault mode, notes/folders are real files — someone can add, rename, or
@@ -979,6 +979,48 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (!result.ok) return result
     return { ok: true, data: undefined }
   })
+
+  // --- Relay-persisted private messages (friend DMs, cross-campaign whispers) ---
+  // Entirely separate from the campaign-scoped `messages:*` handlers above —
+  // these are account-to-account, so they only ever need a relay session,
+  // never a hosted/joined campaign session at all.
+  ipcMain.handle(
+    'relay:messages:send',
+    async (
+      _event,
+      input: { toUserId: string; kind: 'friend' | 'whisper'; campaignId?: string; campaignName?: string; body: string }
+    ): Promise<ApiResult<RelayMessage>> => {
+      const session = getRelaySession()
+      if (!session) return { ok: false, error: 'Not connected to the relay.' }
+      return relayClient.sendMessage(session.token, input)
+    }
+  )
+
+  ipcMain.handle(
+    'relay:messages:list',
+    async (_event, withUserId: string, kind: 'friend' | 'whisper'): Promise<ApiResult<RelayMessage[]>> => {
+      const session = getRelaySession()
+      if (!session) return { ok: false, error: 'Not connected to the relay.' }
+      return relayClient.listMessages(session.token, withUserId, kind)
+    }
+  )
+
+  ipcMain.handle('relay:messages:whisper-threads', async (): Promise<ApiResult<WhisperThread[]>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Not connected to the relay.' }
+    return relayClient.listWhisperThreads(session.token)
+  })
+
+  ipcMain.handle(
+    'relay:messages:mark-read',
+    async (_event, fromUserId: string, kind: 'friend' | 'whisper'): Promise<ApiResult<void>> => {
+      const session = getRelaySession()
+      if (!session) return { ok: false, error: 'Not connected to the relay.' }
+      const result = await relayClient.markMessagesRead(session.token, fromUserId, kind)
+      if (!result.ok) return result
+      return { ok: true, data: undefined }
+    }
+  )
 
   ipcMain.handle('relay:admin:list-accounts', async (): Promise<ApiResult<AdminAccountSummary[]>> => {
     const session = getRelaySession()

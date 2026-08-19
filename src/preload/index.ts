@@ -9,6 +9,7 @@ import type {
   PresenceUpdate
 } from '../../shared/ipc'
 import type { DiceRollLogEntry } from '../../shared/dice'
+import type { RelayMessage } from '../../shared/relay'
 
 const api: AppApi = {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
@@ -166,6 +167,17 @@ const api: AppApi = {
       const listener = (): void => callback()
       ipcRenderer.on('relay:notifications-changed', listener)
       return () => ipcRenderer.removeListener('relay:notifications-changed', listener)
+    },
+    messages: {
+      send: (input) => ipcRenderer.invoke('relay:messages:send', input),
+      list: (withUserId, kind) => ipcRenderer.invoke('relay:messages:list', withUserId, kind),
+      whisperThreads: () => ipcRenderer.invoke('relay:messages:whisper-threads'),
+      onMessage: (callback) => {
+        const listener = (_event: Electron.IpcRendererEvent, message: RelayMessage): void => callback(message)
+        ipcRenderer.on('relay:message', listener)
+        return () => ipcRenderer.removeListener('relay:message', listener)
+      },
+      markRead: (fromUserId, kind) => ipcRenderer.invoke('relay:messages:mark-read', fromUserId, kind)
     },
     admin: {
       listAccounts: () => ipcRenderer.invoke('relay:admin:list-accounts'),
