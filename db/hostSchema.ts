@@ -88,9 +88,16 @@ CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id);
 
 -- The campaign-facing copy of a character, created when a player pairs a
 -- locally-owned character (see localSchema.ts) to this campaign.
+-- campaign_id is deliberately NOT a foreign key against campaigns(id):
+-- characters/initiative/messages always stay in SQLite regardless of vault
+-- mode, but campaigns themselves switch to file-backed storage the moment a
+-- vault folder is configured (see vaultStore.ts's CampaignFileRepo) and
+-- never get a row in this database's own campaigns table — a real FK here
+-- throws "FOREIGN KEY constraint failed" the moment a vault-mode campaign is
+-- used, same as host_state's active_campaign_id (see hostDb.ts).
 CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,
-  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL,
   owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   sheet_json TEXT NOT NULL DEFAULT '{}',
@@ -102,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_characters_campaign ON characters(campaign_id);
 
 CREATE TABLE IF NOT EXISTS initiative_entries (
   id TEXT PRIMARY KEY,
-  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL,
   label TEXT NOT NULL,
   initiative_score INTEGER NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 0,
@@ -114,7 +121,7 @@ CREATE INDEX IF NOT EXISTS idx_initiative_campaign ON initiative_entries(campaig
 
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
-  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL,
   -- 'party': the whole table, DM included. 'whisper': DM <-> one player
   -- only (recipient_user_id is that player from the DM's side, or the DM
   -- from a player's side). Both rules are enforced by the server's channel

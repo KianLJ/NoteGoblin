@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.7',
+    title: 'Fixed party chat failing with a FOREIGN KEY error in vault mode',
+    highlights: [
+      'Fixed "FOREIGN KEY constraint failed" when sending a party chat message with local vault file storage enabled',
+      'The same underlying bug could also have hit characters and initiative in vault mode — fixed there too'
+    ]
+  },
+  {
     version: '0.3.6',
     title: 'Messages panel polish and layout fixes',
     highlights: [
