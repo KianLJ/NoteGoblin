@@ -27,7 +27,8 @@ import {
   broadcastCampaignChanged,
   broadcastActiveCampaignChanged,
   broadcastInitiative,
-  broadcastDiceRoll
+  broadcastDiceRoll,
+  broadcastMessage
 } from './sessionHost'
 import type { InitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
@@ -59,6 +60,7 @@ import type {
   Campaign,
   Note,
   Folder,
+  Message,
   CharacterSheet
 } from '@shared/ipc'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayNotification } from '@shared/relay'
@@ -693,6 +695,47 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       const err = requireJoinedSession(sessionId)
       if (err) return err
       return sendSessionRequest<void>('folders.remove', { campaignId, folderId })
+    }
+  )
+
+  // --- Messages (campaign chat) ------------------------------------------
+  ipcMain.handle(
+    'messages:list',
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Message[]>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.listMessages(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Message[]>('messages.list', { campaignId })
+    }
+  )
+
+  ipcMain.handle(
+    'messages:send',
+    async (
+      _event,
+      campaignId: string,
+      input: { channel: 'party' | 'whisper'; recipientUserId?: string; body: string },
+      sessionId?: string
+    ): Promise<ApiResult<Message>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        try {
+          const result = campaignService.sendMessage(me.db, campaignId, me.userId, input)
+          if (result.ok && getHostedSession()) broadcastMessage(campaignId, result.data)
+          return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Message>('messages.send', { campaignId, input })
     }
   )
 

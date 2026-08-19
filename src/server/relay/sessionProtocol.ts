@@ -1,5 +1,6 @@
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
+import type { Message } from '@shared/ipc'
 
 /**
  * Frame shapes carried opaquely by the relay's session room (relay/src/session.ts,
@@ -30,6 +31,8 @@ export type RequestKind =
   | 'characters.getPlayerCharacter'
   | 'initiative.setMine'
   | 'dice.roll'
+  | 'messages.list'
+  | 'messages.send'
 
 export interface RequestFrame {
   reqId: string
@@ -84,4 +87,20 @@ export interface InitiativeFrame {
 export interface DiceRollFrame {
   type: 'dice-roll'
   roll: DiceRollLogEntry
+}
+
+/**
+ * Pushed whenever a new party or whisper message lands — same DM-is-the-hub
+ * shape as dice rolls: a player's message reaches its audience by going
+ * player → DM (as a 'messages.send' request, persisted server-side) → DM
+ * re-broadcasts this frame to whoever else needs it (every connected player
+ * in the campaign for 'party', just the other side of the thread for
+ * 'whisper' — see sessionHost.ts's broadcastMessage). The DM's own window
+ * gets this pushed too rather than assuming it already has a copy, since
+ * the DM might not be the one who sent it; the client dedupes by
+ * `message.id` the same way DiceTray's shared log does.
+ */
+export interface MessageFrame {
+  type: 'message'
+  message: Message
 }

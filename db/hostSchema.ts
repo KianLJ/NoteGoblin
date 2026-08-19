@@ -115,9 +115,11 @@ CREATE INDEX IF NOT EXISTS idx_initiative_campaign ON initiative_entries(campaig
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  -- 'party': visible to players, excludes the DM. 'whisper': DM <-> one
-  -- player only. Both rules are enforced by the server's channel
-  -- membership logic, not by this schema alone.
+  -- 'party': the whole table, DM included. 'whisper': DM <-> one player
+  -- only (recipient_user_id is that player from the DM's side, or the DM
+  -- from a player's side). Both rules are enforced by the server's channel
+  -- membership logic (see messageRepo.ts/campaignService.ts), not by this
+  -- schema alone.
   channel TEXT NOT NULL CHECK (channel IN ('party', 'whisper')),
   sender_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   recipient_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,

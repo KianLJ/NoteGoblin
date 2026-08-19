@@ -6,6 +6,7 @@ import type {
   CampaignChangedFrame,
   DiceRollFrame,
   InitiativeFrame,
+  MessageFrame,
   PresenceFrame,
   RequestFrame,
   RequestKind,
@@ -205,5 +206,10 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'dice-roll' && clientWindow) {
     const frame = payload as DiceRollFrame
     clientWindow.webContents.send('ws:dice-roll', frame.roll)
+  }
+
+  if (payload.type === 'message' && clientWindow) {
+    const frame = payload as MessageFrame
+    clientWindow.webContents.send('ws:message', { sessionId: currentSessionId, message: frame.message })
   }
 }

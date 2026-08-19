@@ -73,6 +73,18 @@ export interface Folder {
   updatedAt: string
 }
 
+export interface Message {
+  id: string
+  campaignId: string
+  channel: 'party' | 'whisper'
+  senderUserId: string
+  senderDisplayName: string
+  /** Only set for a 'whisper' — the other side of the DM<->one-player thread. Null for 'party'. */
+  recipientUserId: string | null
+  body: string
+  createdAt: string
+}
+
 export interface CharacterSheet extends CharacterSheetData {
   id: string
   name: string
@@ -95,6 +107,11 @@ export interface PresenceUpdate {
 export interface InitiativeUpdate {
   sessionId: string
   state: PlayerVisibleInitiativeState
+}
+
+export interface MessageUpdate {
+  sessionId: string | null
+  message: Message
 }
 
 /** DM-side push — a connected player just set their own initiative roll (see InitiativeTracker.tsx). */
@@ -221,6 +238,23 @@ export interface AppApi {
       sessionId?: string
     ) => Promise<ApiResult<Folder>>
     remove: (campaignId: string, folderId: string, sessionId?: string) => Promise<ApiResult<void>>
+  }
+  // Campaign chat — a 'party' message reaches everyone at the table (DM
+  // included), a 'whisper' is always the DM<->one-player thread (see
+  // campaignService.ts's sendMessage for how the recipient is resolved/
+  // enforced server-side regardless of what the caller passes). Not
+  // persisted client-side beyond `list`'s snapshot — onMessage is the live
+  // top-up for whatever arrives after that, same "fetch once, then push"
+  // shape as campaigns.onChanged.
+  messages: {
+    list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Message[]>>
+    send: (
+      campaignId: string,
+      input: { channel: 'party' | 'whisper'; recipientUserId?: string; body: string },
+      sessionId?: string
+    ) => Promise<ApiResult<Message>>
+    /** Fires whenever a new message you're allowed to see lands — from anyone, DM or player, in either channel you're a party to. Only meaningful while hosting or joined to a session. */
+    onMessage: (callback: (message: Message) => void) => () => void
   }
   // Player-side, entirely local — a read-only cache of a joined campaign's
   // notes/folders as of the last time you were actually connected, so it

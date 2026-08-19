@@ -13,10 +13,11 @@ import type {
   CampaignChangedFrame,
   ActiveCampaignChangedFrame,
   InitiativeFrame,
-  DiceRollFrame
+  DiceRollFrame,
+  MessageFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
-import type { CharacterSheet } from '@shared/ipc'
+import type { CharacterSheet, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
 
@@ -232,6 +233,35 @@ export function broadcastDiceRoll(roll: DiceRollLogEntry, excludeUserId?: string
   }
 }
 
+/**
+ * Fans a new message out to whoever else needs it — every connected player
+ * in the campaign for 'party', or just the other side of the thread for
+ * 'whisper' (whichever of sender/recipient is actually a connected player;
+ * the DM is never in `players`, so this naturally targets the right one
+ * regardless of which side originated the message). Always also pushes to
+ * the DM's own subscribed window rather than assuming the DM already has a
+ * copy — they might not be the one who sent it, and if they are, the
+ * renderer dedupes by `message.id` the same way DiceTray's shared log does.
+ */
+export function broadcastMessage(campaignId: string, message: Message): void {
+  const frame: MessageFrame = { type: 'message', message }
+  if (message.channel === 'party') {
+    for (const p of players.values()) {
+      if (p.campaignId === campaignId) sendToRelay(p.userId, frame)
+    }
+  } else {
+    const playerSide = players.has(message.senderUserId)
+      ? message.senderUserId
+      : message.recipientUserId && players.has(message.recipientUserId)
+        ? message.recipientUserId
+        : null
+    if (playerSide) sendToRelay(playerSide, frame)
+  }
+  if (dmSubscribedCampaignId === campaignId && dmWindow) {
+    dmWindow.webContents.send('ws:message', { sessionId: currentSessionId, message })
+  }
+}
+
 function handleFrame(raw: WebSocket.RawData): void {
   let message: unknown
   try {
@@ -415,6 +445,14 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
         broadcastDiceRoll(roll, userId)
       }
       return { reqId: frame.reqId, ok: true, data: undefined }
+    }
+    case 'messages.list':
+      return fromService(frame.reqId, campaignService.listMessages(db, str('campaignId'), userId))
+    case 'messages.send': {
+      const campaignId = str('campaignId')
+      const result = campaignService.sendMessage(db, campaignId, userId, input('input') as never)
+      if (result.ok) broadcastMessage(campaignId, result.data)
+      return fromService(frame.reqId, result)
     }
     default:
       return { reqId: frame.reqId, ok: false, error: 'Unknown request kind.' }

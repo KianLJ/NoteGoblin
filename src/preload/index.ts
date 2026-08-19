@@ -3,6 +3,7 @@ import type {
   AppApi,
   CampaignChangeEvent,
   InitiativeUpdate,
+  MessageUpdate,
   PlayerCharacterUpdate,
   PlayerInitiativeUpdate,
   PresenceUpdate
@@ -78,6 +79,15 @@ const api: AppApi = {
       ipcRenderer.invoke('folders:update', campaignId, folderId, input, sessionId),
     remove: (campaignId, folderId, sessionId) =>
       ipcRenderer.invoke('folders:remove', campaignId, folderId, sessionId)
+  },
+  messages: {
+    list: (campaignId, sessionId) => ipcRenderer.invoke('messages:list', campaignId, sessionId),
+    send: (campaignId, input, sessionId) => ipcRenderer.invoke('messages:send', campaignId, input, sessionId),
+    onMessage: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, update: MessageUpdate): void => callback(update.message)
+      ipcRenderer.on('ws:message', listener)
+      return () => ipcRenderer.removeListener('ws:message', listener)
+    }
   },
   snapshots: {
     list: () => ipcRenderer.invoke('snapshots:list'),

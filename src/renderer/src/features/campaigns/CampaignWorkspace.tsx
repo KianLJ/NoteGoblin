@@ -205,6 +205,7 @@ export function CampaignWorkspace({
         <RightPanel
           sessionId={hostedSessionId ?? null}
           campaignId={campaign.id}
+          myUserId={campaign.dmUserId}
           playerCharacters={playerCharacters}
           onSelectPlayer={(userId) => {
             onSelectMonsterTab(null)

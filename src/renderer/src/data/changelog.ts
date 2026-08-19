@@ -7,6 +7,16 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.4',
+    title: 'Campaign chat',
+    highlights: [
+      'Added live chat, available to the DM and every player regardless of hosting — a resizable strip along the bottom of the right-side panel',
+      'Party chat reaches the whole table, DM included',
+      'Whispers let a player message the DM privately, and the DM message any individual player privately',
+      'Chat history is saved per campaign and reloads when you reopen the panel'
+    ]
+  },
+  {
     version: '0.3.3',
     title: 'Show your character in Discord presence',
     highlights: [

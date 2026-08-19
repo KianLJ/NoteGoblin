@@ -2,6 +2,7 @@ import type { Database as DatabaseType } from 'better-sqlite3'
 import { CampaignRepo, type CampaignRole, type CampaignRow } from '../repositories/campaignRepo'
 import { NoteRepo, type NoteRow } from '../repositories/noteRepo'
 import { FolderRepo, type FolderRow } from '../repositories/folderRepo'
+import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
 import { UserRepo } from '../repositories/userRepo'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
@@ -122,6 +123,18 @@ export interface FolderJson {
   updatedAt: string
 }
 
+export interface MessageJson {
+  id: string
+  campaignId: string
+  channel: 'party' | 'whisper'
+  senderUserId: string
+  senderDisplayName: string
+  /** Only set for a 'whisper' — the other side of the DM<->one-player thread. Null for 'party'. */
+  recipientUserId: string | null
+  body: string
+  createdAt: string
+}
+
 export type ServiceResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string }
 
 function toCampaignJson(
@@ -164,6 +177,20 @@ function toNoteJson(userRepo: UserRepo, row: NoteRow): NoteJson {
     editorUserIds: parseEditorUserIds(row.editor_user_ids),
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+}
+
+function toMessageJson(userRepo: UserRepo, row: MessageRow): MessageJson {
+  const sender = userRepo.findById(row.sender_user_id)
+  return {
+    id: row.id,
+    campaignId: row.campaign_id,
+    channel: row.channel,
+    senderUserId: row.sender_user_id,
+    senderDisplayName: sender?.display_name ?? 'Unknown',
+    recipientUserId: row.recipient_user_id,
+    body: row.body,
+    createdAt: row.created_at
   }
 }
 
@@ -636,4 +663,85 @@ export function deleteFolder(
   }
   folderRepo.remove(folder.id)
   return { ok: true, data: undefined }
+}
+
+const MAX_MESSAGE_LENGTH = 4000
+
+// Messages always live in SQLite regardless of vault mode (see
+// vaultConfig.ts) — no makeMessageRepo/file-backed alternative needed, this
+// is chat scrollback, not campaign content someone would want as a portable
+// file.
+
+export function listMessages(db: DatabaseType, campaignId: string, userId: string): ServiceResult<MessageJson[]> {
+  const userRepo = new UserRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const messageRepo = new MessageRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) {
+    return { ok: false, status: 403, error: 'Join this campaign first.' }
+  }
+  const rows = messageRepo.listVisibleTo(campaign.id, userId)
+  return { ok: true, data: rows.map((row) => toMessageJson(userRepo, row)) }
+}
+
+/**
+ * `channel: 'party'` reaches the whole table (DM included); `'whisper'`
+ * always resolves to the DM<->one-player thread regardless of what the
+ * caller passes as `recipientUserId` — the DM must name which player
+ * (any other campaign member is rejected), while a player's whisper is
+ * always to the DM no matter what they send, since that's the only person
+ * they're ever allowed to whisper.
+ */
+export function sendMessage(
+  db: DatabaseType,
+  campaignId: string,
+  userId: string,
+  input: { channel: unknown; recipientUserId?: unknown; body: unknown }
+): ServiceResult<MessageJson> {
+  const userRepo = new UserRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const messageRepo = new MessageRepo(db)
+
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) {
+    return { ok: false, status: 403, error: 'Join this campaign first.' }
+  }
+
+  const { channel, body } = input
+  if (channel !== 'party' && channel !== 'whisper') {
+    return { ok: false, status: 400, error: 'Invalid channel.' }
+  }
+  if (typeof body !== 'string' || body.trim().length === 0) {
+    return { ok: false, status: 400, error: 'A message needs a body.' }
+  }
+  if (body.length > MAX_MESSAGE_LENGTH) {
+    return { ok: false, status: 400, error: 'That message is too long.' }
+  }
+
+  const isDm = campaign.dm_user_id === userId
+  let recipientUserId: string | null = null
+  if (channel === 'whisper') {
+    if (isDm) {
+      const target = input.recipientUserId
+      if (typeof target !== 'string' || campaignRepo.getRole(campaign.id, target) !== 'player') {
+        return { ok: false, status: 400, error: 'That player is not in this campaign.' }
+      }
+      recipientUserId = target
+    } else {
+      // A player can only ever whisper the DM — whatever recipientUserId
+      // they sent is ignored rather than trusted.
+      recipientUserId = campaign.dm_user_id
+    }
+  }
+
+  const row = messageRepo.create({
+    campaignId: campaign.id,
+    channel,
+    senderUserId: userId,
+    recipientUserId,
+    body: body.trim()
+  })
+  return { ok: true, data: toMessageJson(userRepo, row) }
 }

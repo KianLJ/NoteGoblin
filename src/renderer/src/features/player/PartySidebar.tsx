@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
+import { VerticalSplit } from '../../ui/VerticalSplit'
 import { PlayersIcon, DiceIcon, InitiativeIcon } from '../campaigns/panelIcons'
 import { PlayerInitiativeView } from './PlayerInitiativeView'
 import { DiceTray } from '../dice/DiceTray'
+import { ChatPanel } from '../chat/ChatPanel'
 import type { Note, PresencePlayer } from '@shared/ipc'
 
 interface PartySidebarProps {
@@ -50,93 +52,100 @@ export function PartySidebar({ sessionId, campaignId, myUserId, activeNote, onTo
           flexDirection: 'column'
         }}
       >
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
-          <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'party'} onClick={() => setTab('party')} />
-          <PartyTabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
-          <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
-        </div>
-
-        {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — both PlayerInitiativeView
-            and DiceTray only accumulate their state from live pushes (no fetch-on-mount), so unmounting on every
-            tab switch used to throw away whatever they'd seen until the next push arrived. */}
-        <div style={{ display: tab === 'initiative' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <PlayerInitiativeView sessionId={sessionId} />
-        </div>
-        <div style={{ display: tab === 'dice' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
-          <DiceTray sessionId={sessionId} />
-        </div>
-        <div style={{ display: tab === 'party' ? 'contents' : 'none' }}>
-            {canManage && (
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
-                Grant edit access to "{activeNote!.title || 'Untitled'}"
-              </p>
-            )}
-
-            {players.length === 0 ? (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-3)' }}>No one else is here yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {players.map((player) => {
-              const hasAccess = !!activeNote && activeNote.editorUserIds.includes(player.userId)
-              return (
-                <div
-                  key={player.userId}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 6,
-                    padding: 'var(--space-2) var(--space-3)',
-                    borderBottom: '1px solid var(--border-subtle)'
-                  }}
-                >
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    {player.characterName ? (
-                      <button
-                        type="button"
-                        onClick={() => onViewCharacter(player.userId)}
-                        title="View this character's sheet (read only)"
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          textAlign: 'left',
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          cursor: 'pointer',
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: 'var(--accent)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {player.characterName}
-                      </button>
-                    ) : (
-                      <div style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <em>No character selected</em>
-                      </div>
-                    )}
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player.displayName}</div>
-                  </div>
-                  {canManage && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={hasAccess}
-                        onChange={(e) => onToggleEditor(activeNote!.id, player.userId, e.target.checked)}
-                      />
-                      Edit
-                    </label>
-                  )}
-                </div>
-              )
-            })}
+        <VerticalSplit
+          top={
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
+                <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'party'} onClick={() => setTab('party')} />
+                <PartyTabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
+                <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
               </div>
-            )}
-        </div>
+
+              {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — both PlayerInitiativeView
+                  and DiceTray only accumulate their state from live pushes (no fetch-on-mount), so unmounting on every
+                  tab switch used to throw away whatever they'd seen until the next push arrived. */}
+              <div style={{ display: tab === 'initiative' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <PlayerInitiativeView sessionId={sessionId} />
+              </div>
+              <div style={{ display: tab === 'dice' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
+                <DiceTray sessionId={sessionId} />
+              </div>
+              <div style={{ display: tab === 'party' ? 'contents' : 'none' }}>
+                {canManage && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
+                    Grant edit access to "{activeNote!.title || 'Untitled'}"
+                  </p>
+                )}
+
+                {players.length === 0 ? (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-3)' }}>No one else is here yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {players.map((player) => {
+                      const hasAccess = !!activeNote && activeNote.editorUserIds.includes(player.userId)
+                      return (
+                        <div
+                          key={player.userId}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 6,
+                            padding: 'var(--space-2) var(--space-3)',
+                            borderBottom: '1px solid var(--border-subtle)'
+                          }}
+                        >
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            {player.characterName ? (
+                              <button
+                                type="button"
+                                onClick={() => onViewCharacter(player.userId)}
+                                title="View this character's sheet (read only)"
+                                style={{
+                                  display: 'block',
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  background: 'none',
+                                  border: 'none',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  fontSize: 14,
+                                  fontWeight: 600,
+                                  color: 'var(--accent)',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {player.characterName}
+                              </button>
+                            ) : (
+                              <div style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <em>No character selected</em>
+                              </div>
+                            )}
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player.displayName}</div>
+                          </div>
+                          {canManage && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={hasAccess}
+                                onChange={(e) => onToggleEditor(activeNote!.id, player.userId, e.target.checked)}
+                              />
+                              Edit
+                            </label>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          }
+          bottom={<ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} isDm={false} />}
+        />
       </div>
     </ResizableSidebar>
   )

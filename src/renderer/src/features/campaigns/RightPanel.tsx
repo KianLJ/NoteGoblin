@@ -2,8 +2,10 @@ import { useState, type ReactNode } from 'react'
 import { ConnectedPlayersList } from './ConnectedPlayersList'
 import { InitiativeTracker } from './InitiativeTracker'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
+import { VerticalSplit } from '../../ui/VerticalSplit'
 import { PlayersIcon, DiceIcon, InitiativeIcon } from './panelIcons'
 import { DiceTray } from '../dice/DiceTray'
+import { ChatPanel } from '../chat/ChatPanel'
 import type { CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
 
@@ -13,13 +15,15 @@ interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
   sessionId: string | null
   campaignId: string
+  /** The DM's own userId (campaign.dmUserId) — this panel is always the DM's own, so it's always "me" for chat purposes. */
+  myUserId: string
   playerCharacters: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
   onSelectMonster: (monster: BestiaryMonster) => void
 }
 
-/** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. */
-export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
+/** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. Chat lives in a fixed-but-resizable strip along the bottom (see VerticalSplit) rather than as another tab, since it's meant to stay visible alongside whichever tab is active. */
+export function RightPanel({ sessionId, campaignId, myUserId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
   const [tab, setTab] = useState<RightPanelTab>('players')
 
   return (
@@ -33,31 +37,38 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
           flexDirection: 'column'
         }}
       >
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
-          <TabButton icon={<PlayersIcon />} label="Players" active={tab === 'players'} onClick={() => setTab('players')} />
-          <TabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
-          <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
-        </div>
+        <VerticalSplit
+          top={
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
+                <TabButton icon={<PlayersIcon />} label="Players" active={tab === 'players'} onClick={() => setTab('players')} />
+                <TabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
+                <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
+              </div>
 
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          {/* Both panels stay mounted (hidden via CSS) rather than conditionally rendered — the initiative tracker
-              in particular owns its own live combat state locally, which used to reset to empty every time you
-              switched away from this tab and back, since unmounting threw the whole thing away. */}
-          <div style={{ display: tab === 'players' ? 'block' : 'none', height: '100%', overflowY: 'auto' }}>
-            <ConnectedPlayersList
-              sessionId={sessionId}
-              campaignId={campaignId}
-              playerCharacters={playerCharacters}
-              onSelectPlayer={onSelectPlayer}
-            />
-          </div>
-          <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
-            <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} onSelectMonster={onSelectMonster} />
-          </div>
-          <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
-            <DiceTray sessionId={sessionId} />
-          </div>
-        </div>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — the initiative tracker
+                    in particular owns its own live combat state locally, which used to reset to empty every time you
+                    switched away from this tab and back, since unmounting threw the whole thing away. */}
+                <div style={{ display: tab === 'players' ? 'block' : 'none', height: '100%', overflowY: 'auto' }}>
+                  <ConnectedPlayersList
+                    sessionId={sessionId}
+                    campaignId={campaignId}
+                    playerCharacters={playerCharacters}
+                    onSelectPlayer={onSelectPlayer}
+                  />
+                </div>
+                <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
+                  <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} onSelectMonster={onSelectMonster} />
+                </div>
+                <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
+                  <DiceTray sessionId={sessionId} />
+                </div>
+              </div>
+            </div>
+          }
+          bottom={<ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} isDm />}
+        />
       </div>
     </ResizableSidebar>
   )
