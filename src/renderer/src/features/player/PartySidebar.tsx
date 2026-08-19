@@ -10,11 +10,7 @@ import type { Note, PresencePlayer } from '@shared/ipc'
 interface PartySidebarProps {
   sessionId: string | null
   campaignId: string | null
-  campaignName: string | null
   myUserId: string | null
-  /** The current campaign's DM — lets ChatPanel's Whispers tab offer "start a whisper" before any history with them exists. */
-  dmUserId: string | null
-  dmDisplayName: string | null
   /** Whichever note is currently open — when you authored it, each party member gets a checkbox to grant/revoke edit access; otherwise this is just a "who's here" list. */
   activeNote: Note | null
   onToggleEditor: (noteId: string, userId: string, grant: boolean) => void
@@ -26,10 +22,7 @@ interface PartySidebarProps {
 export function PartySidebar({
   sessionId,
   campaignId,
-  campaignName,
   myUserId,
-  dmUserId,
-  dmDisplayName,
   activeNote,
   onToggleEditor,
   onViewCharacter
@@ -56,7 +49,12 @@ export function PartySidebar({
   const canManage = !!activeNote && activeNote.authorUserId === myUserId && activeNote.visibility !== 'private'
 
   return (
-    <ResizableSidebar defaultWidth={220} handleSide="left">
+    <ResizableSidebar
+      defaultWidth={220}
+      handleSide="left"
+      collapseStorageKey="gb-sidebar-collapsed:party-panel"
+      widthStorageKey="gb-sidebar-width:party-panel"
+    >
       <div
         style={{
           height: '100%',
@@ -67,6 +65,7 @@ export function PartySidebar({
         }}
       >
         <VerticalSplit
+          heightStorageKey="gb-split-height:party-panel"
           top={
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -160,17 +159,7 @@ export function PartySidebar({
               </div>
             </div>
           }
-          bottom={
-            <ChatPanel
-              campaignId={campaignId}
-              campaignName={campaignName}
-              sessionId={sessionId}
-              myUserId={myUserId}
-              isDm={false}
-              dmUserId={dmUserId}
-              dmDisplayName={dmDisplayName}
-            />
-          }
+          bottom={<ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} />}
         />
       </div>
     </ResizableSidebar>

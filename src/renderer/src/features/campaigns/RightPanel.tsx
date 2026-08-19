@@ -15,7 +15,6 @@ interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
   sessionId: string | null
   campaignId: string
-  campaignName: string
   /** The DM's own userId (campaign.dmUserId) — this panel is always the DM's own, so it's always "me" for chat purposes. */
   myUserId: string
   playerCharacters: Map<string, CharacterSheet>
@@ -24,11 +23,16 @@ interface RightPanelProps {
 }
 
 /** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. Chat lives in a fixed-but-resizable strip along the bottom (see VerticalSplit) rather than as another tab, since it's meant to stay visible alongside whichever tab is active. */
-export function RightPanel({ sessionId, campaignId, campaignName, myUserId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
+export function RightPanel({ sessionId, campaignId, myUserId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
   const [tab, setTab] = useState<RightPanelTab>('players')
 
   return (
-    <ResizableSidebar defaultWidth={240} handleSide="left" collapseStorageKey="gb-sidebar-collapsed:right-panel">
+    <ResizableSidebar
+      defaultWidth={240}
+      handleSide="left"
+      collapseStorageKey="gb-sidebar-collapsed:right-panel"
+      widthStorageKey="gb-sidebar-width:right-panel"
+    >
       <div
         style={{
           height: '100%',
@@ -39,6 +43,7 @@ export function RightPanel({ sessionId, campaignId, campaignName, myUserId, play
         }}
       >
         <VerticalSplit
+          heightStorageKey="gb-split-height:right-panel"
           top={
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -70,7 +75,15 @@ export function RightPanel({ sessionId, campaignId, campaignName, myUserId, play
               </div>
             </div>
           }
-          bottom={<ChatPanel campaignId={campaignId} campaignName={campaignName} sessionId={sessionId} myUserId={myUserId} isDm />}
+          // Always null here, deliberately — Party chat's IPC handlers
+          // (messages:list/messages:send) treat a truthy sessionId as "route
+          // this through a joined session," which only ever applies to a
+          // player. The DM always takes the local path, which already
+          // checks getHostedSession() itself to decide whether to broadcast
+          // — passing the DM's own hosted session id here (as if it were a
+          // joined one) was the bug that made this fail with "Not connected
+          // to that session."
+          bottom={<ChatPanel campaignId={campaignId} sessionId={null} myUserId={myUserId} />}
         />
       </div>
     </ResizableSidebar>

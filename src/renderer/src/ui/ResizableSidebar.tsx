@@ -12,6 +12,8 @@ interface ResizableSidebarProps {
   handleSide?: 'left' | 'right'
   /** Persists the collapsed state in localStorage under this key — omit to leave it un-persisted (resets to expanded on remount). */
   collapseStorageKey?: string
+  /** Persists the dragged width in localStorage under this key — omit to leave it un-persisted (resets to defaultWidth on remount). Separate from collapseStorageKey since a caller might want one persisted without the other. */
+  widthStorageKey?: string
 }
 
 function loadCollapsed(key: string | undefined): boolean {
@@ -23,7 +25,18 @@ function loadCollapsed(key: string | undefined): boolean {
   }
 }
 
-/** Wraps a docked sidebar with a drag handle on one edge, and a small always-visible tab to collapse/expand it. Owns its own width and collapsed state locally — nothing outside needs to know either. */
+function loadWidth(key: string | undefined, fallback: number, min: number, max: number): number {
+  if (!key) return fallback
+  try {
+    const raw = localStorage.getItem(key)
+    const parsed = raw ? Number(raw) : NaN
+    return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/** Wraps a docked sidebar with a drag handle on one edge, and a small always-visible tab to collapse/expand it. Owns its own width and collapsed state locally — nothing outside needs to know either, beyond the optional storage keys to persist them across remounts (e.g. switching DM/player mode unmounts and remounts this same sidebar, and a restart always does). */
 export function ResizableSidebar({
   defaultWidth = 220,
   minWidth = 160,
@@ -31,9 +44,10 @@ export function ResizableSidebar({
   children,
   footer,
   handleSide = 'right',
-  collapseStorageKey
+  collapseStorageKey,
+  widthStorageKey
 }: ResizableSidebarProps): JSX.Element {
-  const [width, setWidth] = useState(defaultWidth)
+  const [width, setWidth] = useState(() => loadWidth(widthStorageKey, defaultWidth, minWidth, maxWidth))
   const [dragging, setDragging] = useState(false)
   const [collapsed, setCollapsed] = useState(() => loadCollapsed(collapseStorageKey))
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -46,6 +60,15 @@ export function ResizableSidebar({
       /* best-effort persistence only */
     }
   }, [collapsed, collapseStorageKey])
+
+  useEffect(() => {
+    if (!widthStorageKey) return
+    try {
+      localStorage.setItem(widthStorageKey, String(width))
+    } catch {
+      /* best-effort persistence only */
+    }
+  }, [width, widthStorageKey])
 
   // Tracked on window rather than the (6px-wide) handle itself: pointer
   // capture on that thin a target is unreliable during a fast drag — the

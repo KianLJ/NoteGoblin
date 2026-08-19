@@ -126,6 +126,7 @@ export function PlayerSidebar({
     <ResizableSidebar
       defaultWidth={220}
       collapseStorageKey="gb-sidebar-collapsed:notes"
+      widthStorageKey="gb-sidebar-width:notes"
       footer={
         <div
           style={{

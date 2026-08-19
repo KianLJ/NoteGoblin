@@ -28,10 +28,11 @@ export function NotificationToasts({ notifications: notificationsApi, onJoined }
   const [joinBusyId, setJoinBusyId] = useState<string | null>(null)
   const [joinErrorId, setJoinErrorId] = useState<string | null>(null)
 
-  // Oldest-unread-on-top, newest-on-bottom (closest to the corner) — each new
-  // arrival pushes the stack up rather than shoving already-visible toasts
-  // around underneath it.
-  const unread = notifications.filter((n) => !n.read).slice().reverse()
+  // Newest-on-top (closest to the corner) — relay notifications already come
+  // back most-recent-first (see relay/src/directory.ts's pushNotification),
+  // so no reordering needed. Each new arrival pushes the rest of the stack
+  // down rather than shoving already-visible toasts around above it.
+  const unread = notifications.filter((n) => !n.read)
 
   async function handleJoin(n: RelayNotification): Promise<void> {
     if (!n.sessionId) return
@@ -53,7 +54,11 @@ export function NotificationToasts({ notifications: notificationsApi, onJoined }
     <div
       style={{
         position: 'fixed',
-        bottom: 'var(--space-4)',
+        // Below the 44px title bar, not the bottom-right corner — that's the
+        // Messages panel's chat composer now (RightPanel.tsx/PartySidebar.tsx),
+        // and a session-invite/friend-request toast sitting on top of it was
+        // both visually confusing and stole clicks from the composer.
+        top: 52,
         right: 'var(--space-4)',
         display: 'flex',
         flexDirection: 'column',

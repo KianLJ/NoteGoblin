@@ -1,50 +1,38 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { PresencePlayer } from '@shared/ipc'
-import type { FriendSummary, WhisperThread } from '@shared/relay'
+import type { FriendSummary } from '@shared/relay'
 import { useCampaignChat } from './useCampaignChat'
 import { useRelayMessages, useUnreadMessageNotifications } from './useRelayMessages'
 import { ChatIcon, PlayersIcon } from '../campaigns/panelIcons'
-import { LockIcon as WhisperIcon } from '../campaigns/icons'
 import { UserIcon } from '../player/icons'
 
 interface ChatPanelProps {
-  /** null before a campaign exists (DM) or before one's been joined (player) — Party is unavailable without one, but Friends/Whispers still work (they're account-scoped, not campaign-scoped). */
+  /** null before a campaign exists (DM) or before one's been joined (player) — Party is unavailable without one, but Friends still works (it's account-scoped, not campaign-scoped). */
   campaignId: string | null
-  campaignName: string | null
   sessionId: string | null
   myUserId: string | null
-  /** DM gets a per-connected-player whisper picker; a player whispers their current campaign's DM directly. */
-  isDm: boolean
-  /** Player-only — the current campaign's DM, so a whisper can be started even before any history exists with them. */
-  dmUserId?: string | null
-  dmDisplayName?: string | null
 }
 
-type Section = 'party' | 'friends' | 'whispers'
+type Section = 'party' | 'friends'
 
 /**
  * The bottom-of-the-right-panel messages strip — shared between
- * RightPanel.tsx (DM, isDm) and PartySidebar.tsx (player, !isDm). Three
+ * RightPanel.tsx (DM, isDm) and PartySidebar.tsx (player, !isDm). Two
  * independent kinds of conversation live here:
  *  - Party: the whole table, scoped to whichever campaign is currently
- *    open — unchanged from before, still backed by the DM's local
- *    per-campaign storage (see useCampaignChat) since it only ever needs
- *    to exist while that campaign's session is reachable.
- *  - Friends: any relay friend, anytime, campaign-independent.
- *  - Whispers: the DM<->one-player thread(s) you've ever had, tagged with
- *    whichever campaign each one came from — spans every campaign two
- *    accounts have shared, not just the one currently open.
- * Friends/Whispers are both backed by the relay's persistent store (see
- * useRelayMessages), not local SQLite — see shared/relay.ts and
- * relay/src/directory.ts.
+ *    open, backed by the DM's local per-campaign storage (see
+ *    useCampaignChat) since it only ever needs to exist while that
+ *    campaign's session is reachable.
+ *  - Friends: any relay friend, anytime, campaign-independent — backed by
+ *    the relay's persistent store (see useRelayMessages), not local
+ *    SQLite. (A separate campaign-tagged "Whispers" section used to live
+ *    here too, but it was close enough to Friends to not earn its own
+ *    panel — a DM/player still reach each other fine via Friends.)
  */
-export function ChatPanel({ campaignId, campaignName, sessionId, myUserId, isDm, dmUserId, dmDisplayName }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ campaignId, sessionId, myUserId }: ChatPanelProps): JSX.Element {
   const [section, setSection] = useState<Section>('party')
   const unreadNotifications = useUnreadMessageNotifications()
   const friendsUnread = unreadNotifications.filter((n) => n.messageKind === 'friend')
-  const whispersUnread = unreadNotifications.filter((n) => n.messageKind === 'whisper')
   const unreadFriendIds = new Set(friendsUnread.map((n) => n.fromUserId))
-  const unreadWhisperIds = new Set(whispersUnread.map((n) => n.fromUserId))
 
   // Party has no relay-backed notification to pair with (it's local,
   // per-campaign SQLite) — a lightweight local counter instead: bump it on
@@ -87,27 +75,14 @@ export function ChatPanel({ campaignId, campaignName, sessionId, myUserId, isDm,
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
         <SectionTabButton icon={<PlayersIcon />} label="Party" active={section === 'party'} count={partyUnread} onClick={() => setSection('party')} />
         <SectionTabButton icon={<UserIcon />} label="Friends" active={section === 'friends'} count={friendsUnread.length} onClick={() => setSection('friends')} />
-        <SectionTabButton icon={<WhisperIcon />} label="Whispers" active={section === 'whispers'} count={whispersUnread.length} onClick={() => setSection('whispers')} />
       </div>
 
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <div style={{ display: section === 'party' ? 'block' : 'none', height: '100%' }}>
-          <PartySection campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} isDm={isDm} />
+          <PartySection campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} />
         </div>
         <div style={{ display: section === 'friends' ? 'block' : 'none', height: '100%' }}>
           <FriendsSection myUserId={myUserId} unreadFriendIds={unreadFriendIds} />
-        </div>
-        <div style={{ display: section === 'whispers' ? 'block' : 'none', height: '100%' }}>
-          <WhispersSection
-            campaignId={campaignId}
-            campaignName={campaignName}
-            sessionId={sessionId}
-            myUserId={myUserId}
-            isDm={isDm}
-            dmUserId={dmUserId}
-            dmDisplayName={dmDisplayName}
-            unreadPeerIds={unreadWhisperIds}
-          />
         </div>
       </div>
     </div>
@@ -127,7 +102,6 @@ function PartySection({
   campaignId: string | null
   sessionId: string | null
   myUserId: string | null
-  isDm: boolean
 }): JSX.Element {
   const { messages, error, send } = useCampaignChat(campaignId, sessionId)
   const [draft, setDraft] = useState('')
@@ -221,136 +195,6 @@ function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null
 }
 
 // ---------------------------------------------------------------------------
-// Whispers — the DM<->one-player thread(s), tagged per message with a
-// campaign; can span every campaign two accounts have shared.
-// ---------------------------------------------------------------------------
-
-function WhispersSection({
-  campaignId,
-  campaignName,
-  sessionId,
-  myUserId,
-  isDm,
-  dmUserId,
-  dmDisplayName,
-  unreadPeerIds
-}: {
-  campaignId: string | null
-  campaignName: string | null
-  sessionId: string | null
-  myUserId: string | null
-  isDm: boolean
-  dmUserId?: string | null
-  dmDisplayName?: string | null
-  unreadPeerIds: Set<string>
-}): JSX.Element {
-  const [threads, setThreads] = useState<WhisperThread[]>([])
-  const [players, setPlayers] = useState<PresencePlayer[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedName, setSelectedName] = useState<string>('')
-  const { messages, error, send } = useRelayMessages(selectedId, 'whisper')
-  const [draft, setDraft] = useState('')
-  const listRef = useRef<HTMLDivElement>(null)
-
-  function refreshThreads(): void {
-    window.goblin.relay.messages.whisperThreads().then((result) => {
-      if (result.ok) setThreads(result.data)
-    })
-  }
-
-  useEffect(() => {
-    refreshThreads()
-    return window.goblin.relay.messages.onMessage((m) => {
-      if (m.kind === 'whisper') refreshThreads()
-    })
-  }, [])
-
-  // DM only — who's currently connected, so a whisper can be started with
-  // someone even before any history with them exists.
-  useEffect(() => {
-    if (!isDm || !sessionId || !campaignId) {
-      setPlayers([])
-      return
-    }
-    window.goblin.presence.subscribe(sessionId, campaignId)
-    return window.goblin.presence.onUpdate((update) => {
-      if (update.sessionId === sessionId && update.campaignId === campaignId) setPlayers(update.players)
-    })
-  }, [isDm, sessionId, campaignId])
-
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-  }, [messages.length])
-
-  const threadPeerIds = new Set(threads.map((t) => t.userId))
-  const quickStart = isDm
-    ? players.filter((p) => !threadPeerIds.has(p.userId)).map((p) => ({ id: p.userId, label: p.displayName }))
-    : dmUserId && !threadPeerIds.has(dmUserId) && dmDisplayName
-      ? [{ id: dmUserId, label: dmDisplayName }]
-      : []
-
-  function openThread(id: string, label: string): void {
-    setSelectedId(id)
-    setSelectedName(label)
-  }
-
-  function handleSend(): void {
-    if (!draft.trim() || !campaignId || !campaignName) return
-    void send(draft, campaignId, campaignName)
-    setDraft('')
-  }
-
-  if (selectedId) {
-    const canSend = !!campaignId && !!campaignName
-    return (
-      <div style={sectionStyle}>
-        <ThreadHeader label={selectedName} onBack={() => setSelectedId(null)} />
-        <MessageList
-          listRef={listRef}
-          emptyText={`No whispers with ${selectedName} yet.`}
-          items={messages.map((m) => ({
-            id: m.id,
-            senderName: m.senderUsername,
-            isMine: m.senderUserId === myUserId,
-            body: m.body,
-            createdAt: m.createdAt,
-            tag: m.campaignName ?? undefined
-          }))}
-        />
-        {error && <ErrorLine text={error} />}
-        <Composer
-          placeholder={canSend ? `Whisper ${selectedName}…` : 'Open a campaign to whisper'}
-          value={draft}
-          onChange={setDraft}
-          onSend={handleSend}
-          disabled={!canSend}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <div style={sectionStyle}>
-      {threads.length === 0 && quickStart.length === 0 ? (
-        <EmptyState text="No whispers yet." />
-      ) : (
-        <ThreadPicker
-          items={[
-            ...threads.map((t) => ({ id: t.userId, label: t.username, sublabel: t.lastCampaignName ?? undefined, unread: unreadPeerIds.has(t.userId) })),
-            ...quickStart.map((q) => ({ id: q.id, label: q.label, sublabel: 'Start a whisper', unread: false }))
-          ]}
-          onSelect={(id) => {
-            const thread = threads.find((t) => t.userId === id)
-            const quick = quickStart.find((q) => q.id === id)
-            openThread(id, thread?.username ?? quick?.label ?? '')
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Shared presentational pieces
 // ---------------------------------------------------------------------------
 
@@ -360,8 +204,6 @@ interface MessageItem {
   isMine: boolean
   body: string
   createdAt: string
-  /** A campaign name badge — whisper messages only, since one thread can span several campaigns. */
-  tag?: string
 }
 
 function MessageList({ listRef, items, emptyText }: { listRef: React.RefObject<HTMLDivElement>; items: MessageItem[]; emptyText: string }): JSX.Element {
@@ -373,11 +215,6 @@ function MessageList({ listRef, items, emptyText }: { listRef: React.RefObject<H
           <span style={{ fontWeight: 700, color: item.isMine ? 'var(--accent)' : 'var(--text-primary)' }}>{item.isMine ? 'You' : item.senderName}</span>{' '}
           <span style={{ color: 'var(--text-secondary)', wordBreak: 'break-word' }}>{item.body}</span>{' '}
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatTime(item.createdAt)}</span>
-          {item.tag && (
-            <span className="gb-badge" style={{ fontSize: 9, marginLeft: 4 }}>
-              {item.tag}
-            </span>
-          )}
         </div>
       ))}
     </div>

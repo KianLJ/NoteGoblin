@@ -15,6 +15,8 @@ interface FriendsMenuProps {
   /** The DM's active campaign name, once known — null right after joining, before the auto-join round-trip resolves. */
   activeCampaignName: string | null
   onResync: () => void
+  /** Fired after sessions.leave() resolves — clears the player's joinedSession state, same as the DM-initiated disconnect path AppShell already handles. */
+  onLeaveSession: () => void
 }
 
 /** Friends list + presence + session hosting/joining, all backed by the relay — no IP addresses or invite codes anymore. */
@@ -26,7 +28,8 @@ export function FriendsMenu({
   invitedSessionIds,
   connectedLabel,
   activeCampaignName,
-  onResync
+  onResync,
+  onLeaveSession
 }: FriendsMenuProps): JSX.Element {
   const { status, friends, incomingRequests, error, sendRequest, accept, decline, remove } = useFriends()
   const [open, setOpen] = useState(false)
@@ -35,6 +38,7 @@ export function FriendsMenu({
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [hostingBusy, setHostingBusy] = useState(false)
+  const [leaveBusy, setLeaveBusy] = useState(false)
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null)
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set())
   const [joinBusyId, setJoinBusyId] = useState<string | null>(null)
@@ -86,6 +90,14 @@ export function FriendsMenu({
     setHostingBusy(false)
     setInvitedIds(new Set())
     onHostedSessionChange(null)
+  }
+
+  /** The player's own equivalent of Stop Hosting — until now the only way to disconnect was to wait for the DM to leave/close, which fires onDisconnected on their end (see AppShell.tsx). This is the explicit version, same "tell the main process, then clear local state" shape. */
+  async function leaveSession(): Promise<void> {
+    setLeaveBusy(true)
+    await window.goblin.sessions.leave()
+    setLeaveBusy(false)
+    onLeaveSession()
   }
 
   async function invite(friendUserId: string): Promise<void> {
@@ -214,14 +226,25 @@ export function FriendsMenu({
                   `Connected: ${connectedLabel}`
                 )}
               </span>
-              <Button
-                variant="secondary"
-                onClick={onResync}
-                title="Catch up if the DM switched campaigns"
-                style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
-              >
-                Sync
-              </Button>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <Button
+                  variant="secondary"
+                  onClick={onResync}
+                  title="Catch up if the DM switched campaigns"
+                  style={{ fontSize: 11, padding: '2px 8px' }}
+                >
+                  Sync
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => void leaveSession()}
+                  disabled={leaveBusy}
+                  title="Disconnect from this session"
+                  style={{ fontSize: 11, padding: '2px 8px' }}
+                >
+                  {leaveBusy ? '…' : 'Leave'}
+                </Button>
+              </div>
             </div>
           )}
 

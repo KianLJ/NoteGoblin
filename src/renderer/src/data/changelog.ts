@@ -7,6 +7,18 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.3.6',
+    title: 'Messages panel polish and layout fixes',
+    highlights: [
+      'Fixed party chat failing with "Not connected to that session" while the DM was hosting',
+      'Removed the Whispers panel — Friends already covers DM<->player messaging without the extra tab',
+      'Added a Leave Session button for players, instead of only being able to wait for the DM to disconnect you',
+      'Moved the version badge out of the corner it shared with the chat composer, into the header',
+      'Moved notification toasts to the top-right so they stop covering the Messages panel',
+      "Panel widths and the Messages split now actually save — they'd previously reset every time you switched between DM/player mode or restarted the app"
+    ]
+  },
+  {
     version: '0.3.5',
     title: 'Friend DMs, cross-campaign whispers, and message notifications',
     highlights: [

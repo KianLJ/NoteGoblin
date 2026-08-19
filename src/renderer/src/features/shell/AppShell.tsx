@@ -373,8 +373,10 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             connectedLabel={joinedSession?.label ?? null}
             activeCampaignName={playerWorkspace.activeCampaign?.name ?? null}
             onResync={playerWorkspace.resync}
+            onLeaveSession={() => setJoinedSession(null)}
           />
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{displayName}</span>
+          <VersionBadge variant="inline" />
         </div>
 
         <WindowControls />
@@ -421,7 +423,6 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       </main>
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
-      <VersionBadge />
       {bestiaryOpen && <Bestiary onClose={() => setBestiaryOpen(false)} />}
     </div>
   )
