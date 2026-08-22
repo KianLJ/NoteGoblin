@@ -80,7 +80,17 @@ export function DiceTray({ sessionId }: DiceTrayProps): JSX.Element {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {DIE_SIDES.map((sides) => (
-            <button key={sides} type="button" onClick={() => addDie(sides)} style={dieButtonStyle} title={`Add a d${sides}`}>
+            <button
+              key={sides}
+              type="button"
+              onClick={() => addDie(sides)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                removeDie(sides)
+              }}
+              style={dieButtonStyle}
+              title={`Add a d${sides} — right-click to remove one`}
+            >
               d{sides}
               {pool[sides] > 0 && <span style={dieCountBadgeStyle}>{pool[sides]}</span>}
             </button>
@@ -149,7 +159,9 @@ function RollLogRow({ entry, isMine }: { entry: DiceRollLogEntry; isMine: boolea
     <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
         <strong style={{ fontSize: 13 }}>{entry.rollerName}</strong>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>rolled {entry.formula}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          rolled {entry.label ? `${entry.label} (${entry.formula})` : entry.formula}
+        </span>
         {entry.private && (
           <span className="gb-badge" style={{ fontSize: 10 }}>
             Private
@@ -161,9 +173,17 @@ function RollLogRow({ entry, isMine }: { entry: DiceRollLogEntry; isMine: boolea
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', fontStyle: 'italic' }}>Result hidden — private roll.</p>
       ) : (
         entry.total !== null && (
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>{entry.total}</span>
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{formatBreakdown(entry)}</span>
+            {entry.dc != null && (
+              <span
+                className="gb-badge"
+                style={{ fontSize: 10, color: entry.total >= entry.dc ? 'var(--success)' : 'var(--danger)' }}
+              >
+                DC {entry.dc} — {entry.total >= entry.dc ? 'Success' : 'Failure'}
+              </span>
+            )}
           </div>
         )
       )}

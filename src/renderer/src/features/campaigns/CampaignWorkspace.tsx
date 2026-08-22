@@ -18,6 +18,8 @@ interface CampaignWorkspaceProps {
   onCampaignDeleted: () => void
   /** The session id once hosting is on — passed through so RightPanel can show live presence. */
   hostedSessionId?: string | null
+  /** The DM's own relay account id — null until the relay connects. Passed through to RightPanel for chat's "who am I" purposes; independent of which campaign (if any) is currently open. */
+  myUserId: string | null
   /** Every connected player's currently-selected character, kept live — passed through to RightPanel's ConnectedPlayersList so clicking a player opens their sheet below. */
   playerCharacters: Map<string, CharacterSheet>
   /** Whose character is being viewed (read-only) instead of a note, if anyone — takes over the main pane until closed or a note is opened. Deliberately just the id, not the character itself: deriving it fresh from playerCharacters on every render (below) is what keeps the read-only view live instead of frozen at whatever it looked like at the moment you clicked. */
@@ -37,6 +39,7 @@ export function CampaignWorkspace({
   onSwitchCampaign,
   onCampaignDeleted,
   hostedSessionId,
+  myUserId,
   playerCharacters,
   viewedPlayerUserId,
   onViewPlayerUserId,
@@ -201,19 +204,17 @@ export function CampaignWorkspace({
         )}
       </div>
 
-      {campaign && (
-        <RightPanel
-          sessionId={hostedSessionId ?? null}
-          campaignId={campaign.id}
-          myUserId={campaign.dmUserId}
-          playerCharacters={playerCharacters}
-          onSelectPlayer={(userId) => {
-            onSelectMonsterTab(null)
-            onViewPlayerUserId(userId)
-          }}
-          onSelectMonster={onOpenMonsterTab}
-        />
-      )}
+      <RightPanel
+        sessionId={hostedSessionId ?? null}
+        campaignId={campaign?.id ?? null}
+        myUserId={myUserId}
+        playerCharacters={playerCharacters}
+        onSelectPlayer={(userId) => {
+          onSelectMonsterTab(null)
+          onViewPlayerUserId(userId)
+        }}
+        onSelectMonster={onOpenMonsterTab}
+      />
     </div>
   )
 }

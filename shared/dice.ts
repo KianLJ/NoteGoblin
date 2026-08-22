@@ -19,6 +19,9 @@ export interface DiceGroupResult {
   results: number[]
 }
 
+/** 'normal' rolls the usual single d20; 'advantage'/'disadvantage' roll two and keep the higher/lower — see buildCheckRollEntry. */
+export type AdvantageMode = 'normal' | 'advantage' | 'disadvantage'
+
 /**
  * One entry in the shared roll log. `groups`/`modifier`/`total` are null for
  * a private roll's *broadcast* copy — redacted at the source (see
@@ -38,6 +41,53 @@ export interface DiceRollLogEntry {
   total: number | null
   private: boolean
   createdAt: string
+  /** Set only for a check/save/attack roll built via buildCheckRollEntry (e.g. "Wisdom Saving Throw", "Longsword Attack") — a plain Dice Tray roll has no such concept and leaves this unset. */
+  label?: string
+  /** Set only for a check roll: whether it was rolled with advantage/disadvantage (two d20s, one kept) or normally. */
+  advantage?: AdvantageMode
+  /** The DC the roller was trying to beat, if this was rolled against one (e.g. a DM's forced roll) — used to show a pass/fail badge. Absent for an ordinary roll with no target number. */
+  dc?: number | null
+}
+
+/**
+ * One-stop "roll a d20 check/save/attack + build a loggable entry" — like
+ * buildRollEntry, but specifically for the single-d20-plus-modifier shape
+ * every ability check, saving throw, skill check, and attack roll takes, and
+ * the only place advantage/disadvantage (roll two, keep one) is modeled.
+ * Kept separate from buildRollEntry/DiceGroup's pooled-dice model since
+ * advantage doesn't generalize to an arbitrary pool of mixed dice — it's
+ * specifically "reroll this one d20".
+ */
+export function buildCheckRollEntry(
+  rollerId: string,
+  rollerName: string,
+  modifier: number,
+  advantage: AdvantageMode,
+  isPrivate: boolean,
+  label?: string,
+  dc?: number | null
+): DiceRollLogEntry {
+  const rollCount = advantage === 'normal' ? 1 : 2
+  const results = Array.from({ length: rollCount }, () => rollDie(20))
+  const picked = advantage === 'disadvantage' ? Math.min(...results) : Math.max(...results)
+  // Plain English ("d20 (Advantage)") rather than dice-notation shorthand
+  // ("2d20kh1") — that shorthand is standard among players who already know
+  // it, but reads as a confusing typo to anyone who doesn't.
+  const dicePart = advantage === 'advantage' ? 'd20 (Advantage)' : advantage === 'disadvantage' ? 'd20 (Disadvantage)' : 'd20'
+  return {
+    id: crypto.randomUUID(),
+    rollerId,
+    rollerName,
+    formula: modifier ? `${dicePart} ${formatModifierTerm(modifier)}` : dicePart,
+    groups: [{ sides: 20, results }],
+    modifier,
+    total: picked + modifier,
+    private: isPrivate,
+    createdAt: new Date().toISOString(),
+    label,
+    advantage,
+    dc: dc ?? null
+  }
 }
 
 export function rollDie(sides: number): number {
@@ -70,6 +120,17 @@ function formatModifierTerm(modifier: number): string {
 /** "[4, 5] + [2] + 3" — the actual per-die breakdown, for the log's "how did we get there" line. Only meaningful on an unredacted (non-private, or your-own) entry. */
 export function formatBreakdown(entry: DiceRollLogEntry): string {
   if (!entry.groups) return ''
+  // A check roll with advantage/disadvantage stores both d20 results in one
+  // group but only one of them counted toward the total — show which,
+  // rather than the plain "[a, b]" a reader would otherwise misread as a sum.
+  if (entry.advantage && entry.advantage !== 'normal' && entry.groups.length === 1 && entry.groups[0].results.length === 2) {
+    const [a, b] = entry.groups[0].results
+    const kept = entry.advantage === 'advantage' ? Math.max(a, b) : Math.min(a, b)
+    const dropped = kept === a && a !== b ? b : kept === b ? a : b
+    let result = `${a} & ${b} (kept ${kept}, dropped ${dropped})`
+    if (entry.modifier) result += entry.modifier >= 0 ? ` + ${entry.modifier}` : ` - ${Math.abs(entry.modifier)}`
+    return result
+  }
   const parts = entry.groups.map((g) => `[${g.results.join(', ')}]`)
   let result = parts.join(' + ')
   if (entry.modifier) result += entry.modifier >= 0 ? ` + ${entry.modifier}` : ` - ${Math.abs(entry.modifier)}`

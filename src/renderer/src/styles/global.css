@@ -110,3 +110,201 @@ button {
 .gb-toast-fade {
   animation: gb-fade-out 5s ease forwards;
 }
+
+/* Dramatic dice roll popup (RollAnimationOverlay.tsx) — a d20 tumbles for the
+   full spin (duration here must match SPIN_MS in the component so the
+   animation ends exactly as the tip-flip to the real number begins), then
+   ticks over from a nearby wrong number to the real one, then pops in once
+   revealed. Crit/fumble get their own emphasis on top of the same pop-in. */
+@keyframes gb-die-tumble {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  20% {
+    transform: rotate(230deg) scale(1.1);
+  }
+  40% {
+    transform: rotate(430deg) scale(0.92);
+  }
+  60% {
+    transform: rotate(660deg) scale(1.1);
+  }
+  80% {
+    transform: rotate(880deg) scale(0.95);
+  }
+  100% {
+    transform: rotate(1080deg) scale(1);
+  }
+}
+.gb-die-tumble {
+  animation: gb-die-tumble 1.3s cubic-bezier(0.32, 0.1, 0.2, 1) forwards;
+}
+
+/* The die winding down instead of stopping dead or snapping — plays across
+   both tip stages (duration must match TIP_OUT_MS + TIP_IN_MS combined; the
+   className doesn't change between those two phases, so this one animation
+   just keeps running uninterrupted), one more lazy turn that continuously
+   decelerates to a complete, smooth stop exactly as the real number finishes
+   revealing. Ends on a multiple of 360deg (same trick gb-die-tumble uses) so
+   nothing visibly jumps when it settles. */
+@keyframes gb-die-settle {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  18% {
+    transform: rotate(175deg) scale(1.05);
+  }
+  40% {
+    transform: rotate(275deg) scale(1.02);
+  }
+  65% {
+    transform: rotate(330deg) scale(1);
+  }
+  85% {
+    transform: rotate(352deg) scale(1);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+.gb-die-settle {
+  /* The deceleration curve is already encoded in how close together the
+     keyframe stops above get (fast at first, barely moving by the end) —
+     "linear" here interpolates between them as written instead of a bezier
+     re-shaping it on top and cancelling that out into a stall partway through. */
+  animation: gb-die-settle 1.5s linear forwards;
+}
+
+/* Each random number flickering past while the die spins — quick and
+   understated, since these aren't the result, just noise building suspense
+   (see flickerColor() in RollAnimationOverlay.tsx for the grey-to-bright
+   color ramp layered on top of this). */
+@keyframes gb-digit-flicker {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) rotateX(35deg);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1) rotateX(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotateX(0deg);
+  }
+}
+.gb-digit-flicker {
+  animation: gb-digit-flicker 0.14s ease-out forwards;
+}
+
+/* The two-stage tip: whichever number the flicker landed on holds still,
+   then visibly rotates away face-down (gb-digit-tip-out) — so it's actually
+   legible as "the closest number" before it's replaced — and only then does
+   the real result rotate in from the opposite side (gb-digit-tip-in).
+   Durations here must match TIP_OUT_MS/TIP_IN_MS in the component. */
+@keyframes gb-digit-tip-out {
+  0% {
+    opacity: 1;
+    transform: rotateX(0deg);
+  }
+  85% {
+    opacity: 1;
+    transform: rotateX(88deg);
+  }
+  100% {
+    opacity: 0;
+    transform: rotateX(95deg);
+  }
+}
+.gb-digit-tip-out {
+  /* A steady ease-in, not the near-frozen-then-snap curve this had before —
+     that front-loaded easing made the rotation invisible for most of the
+     duration, reading as a stuck/paused animation rather than a slow tip. */
+  animation: gb-digit-tip-out 0.75s ease-in forwards;
+}
+
+@keyframes gb-digit-tip-in {
+  0% {
+    opacity: 0;
+    transform: rotateX(-95deg);
+  }
+  15% {
+    opacity: 1;
+    transform: rotateX(-88deg);
+  }
+  100% {
+    opacity: 1;
+    transform: rotateX(0deg);
+  }
+}
+.gb-digit-tip-in {
+  animation: gb-digit-tip-in 0.75s ease-out forwards;
+}
+
+@keyframes gb-roll-pop-in {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.gb-roll-pop-in {
+  animation: gb-roll-pop-in 0.4s cubic-bezier(0.2, 0.8, 0.3, 1.3) forwards;
+}
+
+@keyframes gb-roll-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-8px) rotate(-2deg);
+  }
+  40% {
+    transform: translateX(7px) rotate(2deg);
+  }
+  60% {
+    transform: translateX(-5px) rotate(-1deg);
+  }
+  80% {
+    transform: translateX(4px) rotate(1deg);
+  }
+}
+.gb-roll-shake {
+  animation: gb-roll-shake 0.5s ease;
+}
+
+@keyframes gb-roll-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.gb-roll-backdrop-in {
+  animation: gb-roll-backdrop-in 0.2s ease forwards;
+}
+
+/* The die sitting idle, waiting for its own click before it actually rolls
+   (RollAnimationOverlay.tsx's "pending" phase) — a slow breathing pulse so
+   it reads as "waiting on you," not just a static, possibly-broken image. */
+@keyframes gb-die-idle-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+.gb-die-idle-pulse {
+  animation: gb-die-idle-pulse 1.6s ease-in-out infinite;
+}

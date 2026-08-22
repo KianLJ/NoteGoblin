@@ -1,4 +1,4 @@
-import { buildRollEntry, redactRollForBroadcast, type DiceGroup, type DiceRollLogEntry } from '@shared/dice'
+import { buildCheckRollEntry, buildRollEntry, redactRollForBroadcast, type AdvantageMode, type DiceGroup, type DiceRollLogEntry } from '@shared/dice'
 
 /**
  * The one shared roll log, outside React — a module-level singleton rather
@@ -57,6 +57,29 @@ export function performRoll(
   isPrivate: boolean
 ): DiceRollLogEntry {
   const entry = buildRollEntry(rollerId, rollerName, groups, modifier, isPrivate)
+  appendToLog(entry)
+  if (sessionId) void window.goblin.dice.broadcast(sessionId, redactRollForBroadcast(entry))
+  return entry
+}
+
+/**
+ * Same shape as performRoll, but for a labeled d20 check/save/attack roll
+ * (character sheet buttons, a DM's forced roll) instead of the Dice Tray's
+ * pooled-dice model — see buildCheckRollEntry for why advantage needs its
+ * own path. Still lands in the exact same shared log/broadcast as every
+ * other roll.
+ */
+export function performCheckRoll(
+  sessionId: string | null,
+  rollerId: string,
+  rollerName: string,
+  modifier: number,
+  advantage: AdvantageMode,
+  isPrivate: boolean,
+  label?: string,
+  dc?: number | null
+): DiceRollLogEntry {
+  const entry = buildCheckRollEntry(rollerId, rollerName, modifier, advantage, isPrivate, label, dc)
   appendToLog(entry)
   if (sessionId) void window.goblin.dice.broadcast(sessionId, redactRollForBroadcast(entry))
   return entry

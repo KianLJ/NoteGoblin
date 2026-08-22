@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
-import type { CharacterSheet, PresencePlayer } from '@shared/ipc'
+import { useEffect, useState, type MouseEvent } from 'react'
+import type { CharacterSheet, ForceRollRequest, PresencePlayer } from '@shared/ipc'
+import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
+import { ForceRollDialog } from './ForceRollDialog'
+import { DiceIcon } from '../player/characterSheetTabs/icons'
 
 interface ConnectedPlayersListProps {
   sessionId: string | null
-  campaignId: string
+  /** null before the DM has any campaign open — there's no membership to show presence for yet. */
+  campaignId: string | null
   playerCharacters: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
 }
@@ -15,9 +19,32 @@ export function ConnectedPlayersList({
   onSelectPlayer
 }: ConnectedPlayersListProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
+  const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  const [forceRollTarget, setForceRollTarget] = useState<PresencePlayer | null>(null)
+  const [myName, setMyName] = useState('The DM')
 
   useEffect(() => {
-    if (!sessionId) {
+    window.goblin.identity.getCurrent().then((identity) => {
+      if (identity) setMyName(identity.displayName)
+    })
+  }, [])
+
+  function openMenu(e: MouseEvent, player: PresencePlayer): void {
+    e.preventDefault()
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [{ label: 'Force a roll…', icon: <DiceIcon size={13} />, onSelect: () => setForceRollTarget(player) }]
+    })
+  }
+
+  function sendForceRoll(player: PresencePlayer, request: ForceRollRequest): void {
+    if (!sessionId) return
+    void window.goblin.dice.forceRoll(sessionId, player.userId, request)
+  }
+
+  useEffect(() => {
+    if (!sessionId || !campaignId) {
       setPlayers([])
       return
     }
@@ -28,6 +55,10 @@ export function ConnectedPlayersList({
       }
     })
   }, [sessionId, campaignId])
+
+  if (!campaignId) {
+    return <EmptyState>Open or create a campaign to see connected players.</EmptyState>
+  }
 
   if (!sessionId) {
     return (
@@ -49,7 +80,8 @@ export function ConnectedPlayersList({
           <div
             key={player.userId}
             onClick={character ? () => onSelectPlayer(player.userId) : undefined}
-            title={character ? `View ${character.name}'s sheet` : undefined}
+            onContextMenu={(e) => openMenu(e, player)}
+            title={character ? `View ${character.name}'s sheet — right-click to force a roll` : 'Right-click to force a roll'}
             style={{
               padding: 'var(--space-2) var(--space-3)',
               borderBottom: '1px solid var(--border-subtle)',
@@ -78,6 +110,16 @@ export function ConnectedPlayersList({
           </div>
         )
       })}
+
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
+      {forceRollTarget && (
+        <ForceRollDialog
+          playerName={forceRollTarget.displayName}
+          fromDisplayName={myName}
+          onClose={() => setForceRollTarget(null)}
+          onSend={(request) => sendForceRoll(forceRollTarget, request)}
+        />
+      )}
     </div>
   )
 }

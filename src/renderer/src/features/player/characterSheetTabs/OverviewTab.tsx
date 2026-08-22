@@ -48,6 +48,8 @@ import { Button } from '../../../ui/Button'
 import { Modal } from '../../../ui/Modal'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { HoverDetailCard } from '../HoverDetailCard'
+import { useSheetRoller } from '../../dice/useSheetRoller'
+import { RollButton } from '../../dice/RollButton'
 import { CombatTab } from './CombatTab'
 import { AbilityIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
 
@@ -72,6 +74,8 @@ interface OverviewTabProps {
   /** Fired when a class's level is raised (not lowered) — CharacterSheetEditor pops LevelUpPopup, a shortcut for whatever the level you just crossed unlocked. Purely a convenience: the same choice is always available inline in Combat's Features tab (see FeaturesTab.tsx) whether or not this fires. */
   onLevelUp?: (className: string, fromLevel: number, toLevel: number) => void
   readOnly?: boolean
+  /** Threaded down to the roll buttons here and in CombatTab — see CharacterSheetEditor.tsx's doc comment. */
+  sessionId?: string | null
 }
 
 const CLASS_NAMES = CLASSES.map((c) => c.name)
@@ -81,7 +85,8 @@ function resetAllSlots(slots: Record<number, { total: number; used: number }>): 
   return Object.fromEntries(Object.entries(slots).map(([lvl, s]) => [lvl, { ...s, used: 0 }]))
 }
 
-export function OverviewTab({ character, onSave, onLevelUp, readOnly }: OverviewTabProps): JSX.Element {
+export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId = null }: OverviewTabProps): JSX.Element {
+  const { rollCheck } = useSheetRoller(sessionId)
   const [customRows, setCustomRows] = useState<Set<number>>(new Set())
   const [shortRestOpen, setShortRestOpen] = useState(false)
   const [abilityEditMode, setAbilityEditMode] = useState(false)
@@ -652,7 +657,21 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
                       )}
                     </div>
                   )}
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{formatModifier(abilityModifier(effScores[id]))}</div>
+                  {readOnly ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{formatModifier(abilityModifier(effScores[id]))}</div>
+                  ) : (
+                    <div style={{ marginTop: 4 }}>
+                      <RollButton
+                        value={formatModifier(abilityModifier(effScores[id]))}
+                        size="sm"
+                        onRoll={(advantage) =>
+                          rollCheck(`${label} Check`, abilityModifier(effScores[id]), {
+                            advantage: advantage !== 'normal' ? advantage : (abilityCheckAdvantage[id] ?? 'normal')
+                          })
+                        }
+                      />
+                    </div>
+                  )}
                   {abilityEditMode && bonuses.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 6 }}>
                       {bonuses.map((b) => (
@@ -697,11 +716,10 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
           {ABILITIES.map(({ id, label }) => {
             const proficient = effSaveProficiencies.includes(id)
+            const bonus = savingThrowBonus(id, effScores, effSaveProficiencies, draft.classes)
             return (
-              <button
+              <div
                 key={id}
-                type="button"
-                onClick={() => toggleSave(id)}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -710,18 +728,46 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
                   padding: '6px 2px',
                   borderRadius: 'var(--radius-sm)',
                   border: `1px solid ${proficient ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                  background: proficient ? 'var(--accent-subtle)' : 'transparent',
-                  cursor: 'pointer'
+                  background: proficient ? 'var(--accent-subtle)' : 'transparent'
                 }}
               >
-                <span style={{ fontSize: 10, textTransform: 'uppercase', color: proficient ? 'var(--accent-hover)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                <button
+                  type="button"
+                  onClick={() => toggleSave(id)}
+                  title={proficient ? 'Remove save proficiency' : 'Mark as a proficient save'}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: 10,
+                    textTransform: 'uppercase',
+                    color: proficient ? 'var(--accent-hover)' : 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    cursor: readOnly ? 'default' : 'pointer'
+                  }}
+                  disabled={readOnly}
+                >
                   {label.slice(0, 3)}
                   {savingThrowAdvantage[id] && <AdvantageTag kind={savingThrowAdvantage[id]!} label={`${label} saves`} />}
-                </span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: proficient ? 'var(--accent-hover)' : 'var(--text-primary)' }}>
-                  {formatModifier(savingThrowBonus(id, effScores, effSaveProficiencies, draft.classes))}
-                </span>
-              </button>
+                </button>
+                {readOnly ? (
+                  <span style={{ fontSize: 14, fontWeight: 700, color: proficient ? 'var(--accent-hover)' : 'var(--text-primary)' }}>
+                    {formatModifier(bonus)}
+                  </span>
+                ) : (
+                  <RollButton
+                    value={formatModifier(bonus)}
+                    size="sm"
+                    onRoll={(advantage) =>
+                      rollCheck(`${label} Saving Throw`, bonus, {
+                        advantage: advantage !== 'normal' ? advantage : (savingThrowAdvantage[id] ?? 'normal')
+                      })
+                    }
+                  />
+                )}
+              </div>
             )
           })}
         </div>
@@ -731,24 +777,35 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly }: Overview
         <div>
           <div className="gb-label">Skills</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', rowGap: 5, columnGap: 'var(--space-2)', alignItems: 'center' }}>
-            {SKILLS.map(({ id, ability }) => (
-              <div key={id} style={{ display: 'contents' }}>
-                <span style={{ fontSize: 12 }}>
-                  {id} <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>({ability.toUpperCase()})</span>
-                  {skillAdvantage[id] && <AdvantageTag kind={skillAdvantage[id]!} label={`${id} checks`} />}
-                </span>
-                <ProficiencyDot value={effSkillProficiencies[id] ?? 'none'} onClick={() => cycleSkillProficiency(id)} />
-                <span style={{ fontSize: 12, width: 28, textAlign: 'right' }}>
-                  {formatModifier(skillBonus(id, effScores, effSkillProficiencies, draft.classes))}
-                </span>
-              </div>
-            ))}
+            {SKILLS.map(({ id, ability }) => {
+              const bonus = skillBonus(id, effScores, effSkillProficiencies, draft.classes)
+              return (
+                <div key={id} style={{ display: 'contents' }}>
+                  <span style={{ fontSize: 12 }}>
+                    {id} <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>({ability.toUpperCase()})</span>
+                    {skillAdvantage[id] && <AdvantageTag kind={skillAdvantage[id]!} label={`${id} checks`} />}
+                  </span>
+                  <ProficiencyDot value={effSkillProficiencies[id] ?? 'none'} onClick={() => cycleSkillProficiency(id)} />
+                  {readOnly ? (
+                    <span style={{ fontSize: 12, width: 28, textAlign: 'right' }}>{formatModifier(bonus)}</span>
+                  ) : (
+                    <RollButton
+                      value={formatModifier(bonus)}
+                      size="sm"
+                      onRoll={(advantage) =>
+                        rollCheck(`${id} Check`, bonus, { advantage: advantage !== 'normal' ? advantage : (skillAdvantage[id] ?? 'normal') })
+                      }
+                    />
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
 
         <div>
           <div className="gb-label">Combat</div>
-          <CombatTab character={character} onSave={onSave} readOnly={readOnly} />
+          <CombatTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
         </div>
       </div>
 

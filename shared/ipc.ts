@@ -1,10 +1,29 @@
 // Contract between the preload bridge and the renderer.
 // Grows as features (campaigns, characters, etc.) land in later build steps.
 
-import type { CharacterSheetData } from './dnd5e'
+import type { Ability, CharacterSheetData, SkillName } from './dnd5e'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, RelayStatus, WhisperThread } from './relay'
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
+
+/**
+ * A DM's "make this player roll" prompt — sent as a targeted push (see
+ * sessionHost.ts's pushForceRoll), not a broadcast, and not itself a
+ * dice roll: the player's client resolves `mode`/`ability`/`skill` against
+ * their own character sheet (abilityModifier/savingThrowBonus/skillBonus,
+ * shared/dnd5e.ts) to find the modifier and rolls locally, the same
+ * performCheckRoll path any other check goes through — the DM never sees or
+ * sets the numeric bonus, only what's being rolled and the target DC.
+ */
+export interface ForceRollRequest {
+  id: string
+  mode: 'ability-check' | 'saving-throw' | 'skill-check' | 'flat'
+  ability?: Ability
+  skill?: SkillName
+  dc: number | null
+  label: string
+  fromDisplayName: string
+}
 
 export interface Identity {
   id: string
@@ -319,6 +338,10 @@ export interface AppApi {
     broadcast: (sessionId: string, roll: DiceRollLogEntry) => Promise<void>
     /** Fires whenever anyone else at the table rolls — DM receives every player's roll (relayed via the DM, who also re-broadcasts it to the rest of the table); a player receives the DM's rolls and every other player's. */
     onRoll: (callback: (roll: DiceRollLogEntry) => void) => () => void
+    /** DM-only — pushes a "roll this" prompt to one specific connected player. A no-op if that player isn't currently connected to this session. */
+    forceRoll: (sessionId: string, targetUserId: string, request: ForceRollRequest) => Promise<void>
+    /** Player-only — fires when the DM targets you with a forced roll. */
+    onForceRoll: (callback: (request: ForceRollRequest) => void) => () => void
   }
   // Friends/presence, backed by the relay (see relay/) rather than local
   // storage. The relay account itself is transparent — it's the same

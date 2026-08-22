@@ -40,6 +40,9 @@ import { HoverDetailCard } from '../HoverDetailCard'
 import { EntryCard, EntryCardTitle } from '../EntryCard'
 import { CustomWeaponForm } from '../CustomWeaponForm'
 import { Button } from '../../../ui/Button'
+import { useSheetRoller } from '../../dice/useSheetRoller'
+import { RollButton } from '../../dice/RollButton'
+import { DIE_SIDES, type AdvantageMode, type DieSides } from '@shared/dice'
 
 interface CombatDraft {
   attacks: Attack[]
@@ -53,6 +56,18 @@ interface CombatTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
+  /** Threaded down from OverviewTab/CharacterSheetEditor — see CharacterSheetEditor.tsx's doc comment. */
+  sessionId?: string | null
+}
+
+/** "1d8" -> a single rollable DiceGroup; anything with more than one dice term (e.g. a homebrew "1d8+1d6") or a non-standard die size just isn't rollable from here — the plain text display is the fallback either way. */
+function parseDamageDice(dice: string): { sides: DieSides; count: number } | null {
+  const match = /^\s*(\d+)\s*d\s*(\d+)\s*$/i.exec(dice)
+  if (!match) return null
+  const count = parseInt(match[1], 10)
+  const sides = parseInt(match[2], 10)
+  if (count < 1 || !(DIE_SIDES as readonly number[]).includes(sides)) return null
+  return { sides: sides as DieSides, count }
 }
 
 const ACTION_TYPES: { id: ActionType; label: string }[] = [
@@ -108,7 +123,8 @@ function customWeaponFields(attack: Attack): DetailField[] {
 }
 
 /** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells/Features inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
-export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.Element {
+export function CombatTab({ character, onSave, readOnly, sessionId = null }: CombatTabProps): JSX.Element {
+  const { rollCheck, rollDamage } = useSheetRoller(sessionId)
   const isCaster =
     character.spellcastingAbility !== null ||
     character.classes.some((c) => CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())?.spellcastingAbility)
@@ -254,6 +270,15 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
 
   const matchesSearch = (name: string): boolean => listSearch.trim() === '' || name.toLowerCase().includes(listSearch.trim().toLowerCase())
 
+  function rollAttack(label: string, bonus: number): ((advantage: AdvantageMode) => void) | undefined {
+    return readOnly ? undefined : (advantage) => rollCheck(label, bonus, { advantage: advantage !== 'normal' ? advantage : (attackAdvantage ?? 'normal') })
+  }
+  function rollWeaponDamage(label: string, dice: string, modifier: number): (() => void) | undefined {
+    if (readOnly) return undefined
+    const group = parseDamageDice(dice)
+    return group ? () => rollDamage([group], modifier, label) : undefined
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       {formOpen && (
@@ -318,8 +343,15 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
           {matchesSearch(UNARMED_STRIKE.name) && (
             <HoverDetailCard title={UNARMED_STRIKE.name} subtitle="Always available" fields={[]} description={UNARMED_STRIKE.description}>
               <EntryCard name={<EntryCardTitle value={UNARMED_STRIKE.name} />} badge={<span className="gb-badge">{UNARMED_STRIKE.damageType}</span>}>
-                <MiniStat label="Atk" value={formatModifier(weaponAttackBonus('str', effScores, character.classes))} />
-                <LockedValue value={weaponDamageDisplay(UNARMED_STRIKE.damage, 'str', effScores, meleeBuffDamage)} />
+                <MiniStat
+                  label="Atk"
+                  value={formatModifier(weaponAttackBonus('str', effScores, character.classes))}
+                  onRoll={rollAttack(`${UNARMED_STRIKE.name} Attack`, weaponAttackBonus('str', effScores, character.classes))}
+                />
+                <LockedValue
+                  value={weaponDamageDisplay(UNARMED_STRIKE.damage, 'str', effScores, meleeBuffDamage)}
+                  onRoll={rollWeaponDamage(`${UNARMED_STRIKE.name} Damage`, UNARMED_STRIKE.damage, abilityModifier(effScores.str) + meleeBuffDamage)}
+                />
                 <LockedValue value="Action" />
               </EntryCard>
             </HoverDetailCard>
@@ -339,11 +371,18 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
                 >
                   <EntryCard name={<EntryCardTitle value={compendium.name} />} badge={<span className="gb-badge">Cantrip</span>}>
                     {compendium.attackType ? (
-                      <MiniStat label="Atk" value={cantripAttackBonus !== null ? formatModifier(cantripAttackBonus) : '—'} />
+                      <MiniStat
+                        label="Atk"
+                        value={cantripAttackBonus !== null ? formatModifier(cantripAttackBonus) : '—'}
+                        onRoll={cantripAttackBonus !== null ? rollAttack(`${compendium.name} Attack`, cantripAttackBonus) : undefined}
+                      />
                     ) : (
                       <MiniStat label="DC" value={spellSaveDc !== null ? String(spellSaveDc) : '—'} />
                     )}
-                    <LockedValue value={diceMatch ? diceMatch[0] : 'See spell'} />
+                    <LockedValue
+                      value={diceMatch ? diceMatch[0] : 'See spell'}
+                      onRoll={diceMatch ? rollWeaponDamage(`${compendium.name} Damage`, diceMatch[0], 0) : undefined}
+                    />
                     <LockedValue value={ACTION_TYPE_LABEL[spell.actionType ?? 'action']} />
                   </EntryCard>
                 </HoverDetailCard>
@@ -358,13 +397,18 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
               return (
                 <HoverDetailCard key={item.id} title={weapon.name} subtitle="Equipped weapon" fields={weaponFields(weapon)} description={weapon.description ?? ''}>
                   <EntryCard name={<EntryCardTitle value={weapon.name} />} badge={weapon.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}>
-                    <MiniStat label="Atk" value={formatModifier(bonus)} />
+                    <MiniStat label="Atk" value={formatModifier(bonus)} onRoll={rollAttack(`${weapon.name} Attack`, bonus)} />
                     <LockedValue
                       value={weaponDamageDisplay(
                         weapon.damageDice ?? '',
                         ability,
                         effScores,
                         ability === 'str' && weapon.weaponRange !== 'Ranged' ? meleeBuffDamage : 0
+                      )}
+                      onRoll={rollWeaponDamage(
+                        `${weapon.name} Damage`,
+                        weapon.damageDice ?? '',
+                        abilityModifier(effScores[ability]) + (ability === 'str' && weapon.weaponRange !== 'Ranged' ? meleeBuffDamage : 0)
                       )}
                     />
                   </EntryCard>
@@ -389,8 +433,11 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
                   badge={weapon?.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}
                   onRemove={() => patch({ attacks: draft.attacks.filter((a) => a.id !== attack.id) })}
                 >
-                  <MiniStat label="Atk" value={formatModifier(bonus)} />
-                  <LockedValue value={weaponDamageDisplay(attack.damage, ability, effScores)} />
+                  <MiniStat label="Atk" value={formatModifier(bonus)} onRoll={rollAttack(`${weapon?.name ?? attack.name} Attack`, bonus)} />
+                  <LockedValue
+                    value={weaponDamageDisplay(attack.damage, ability, effScores)}
+                    onRoll={rollWeaponDamage(`${weapon?.name ?? attack.name} Damage`, attack.damage, abilityModifier(effScores[ability]))}
+                  />
                 </EntryCard>
               </HoverDetailCard>
             )
@@ -407,8 +454,11 @@ export function CombatTab({ character, onSave, readOnly }: CombatTabProps): JSX.
                   onEdit={() => openEditForm(attack)}
                   onRemove={() => patch({ attacks: draft.attacks.filter((a) => a.id !== attack.id) })}
                 >
-                  <MiniStat label="Atk" value={formatModifier(bonus)} />
-                  <LockedValue value={weaponDamageDisplay(attack.damage, ability, effScores)} />
+                  <MiniStat label="Atk" value={formatModifier(bonus)} onRoll={rollAttack(`${attack.name || 'Attack'} Attack`, bonus)} />
+                  <LockedValue
+                    value={weaponDamageDisplay(attack.damage, ability, effScores)}
+                    onRoll={rollWeaponDamage(`${attack.name || 'Attack'} Damage`, attack.damage, abilityModifier(effScores[ability]))}
+                  />
                   <select
                     className="gb-input"
                     style={miniSelectStyle}
@@ -683,16 +733,19 @@ function ResourceCard({
   )
 }
 
-function MiniStat({ label, value }: { label: string; value: string }): JSX.Element {
+function MiniStat({ label, value, onRoll }: { label: string; value: string; onRoll?: (advantage: AdvantageMode) => void }): JSX.Element {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
       <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label}</span>
-      <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{value}</span>
+      {onRoll ? <RollButton value={value} onRoll={onRoll} size="sm" /> : <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{value}</span>}
     </div>
   )
 }
 
-function LockedValue({ value }: { value: string }): JSX.Element {
+function LockedValue({ value, onRoll }: { value: string; onRoll?: () => void }): JSX.Element {
+  if (onRoll) {
+    return <RollButton value={value || '—'} onRoll={onRoll} supportsAdvantage={false} size="sm" />
+  }
   return <div style={lockedValueStyle}>{value || '—'}</div>
 }
 

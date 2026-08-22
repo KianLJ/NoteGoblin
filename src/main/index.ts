@@ -37,6 +37,13 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'vault-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false } }
 ])
 
+// Chromium's default mouse-wheel scrolling animates each notch over ~150-250ms
+// of easing rather than moving immediately — on a real trackpad this reads as
+// smooth, but on a discrete mouse wheel (this app's primary input) it reads
+// as a felt "delay" before anything moves, everywhere scrollable. Must be set
+// before the app is ready.
+app.commandLine.appendSwitch('disable-smooth-scrolling')
+
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',

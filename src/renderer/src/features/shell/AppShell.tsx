@@ -5,6 +5,7 @@ import { VersionBadge } from './VersionBadge'
 import { BestiaryIcon } from './icons'
 import { FriendsMenu } from '../friends/FriendsMenu'
 import { NotificationToasts } from '../notifications/NotificationToasts'
+import { RollAnimationOverlay } from '../dice/RollAnimationOverlay'
 import { useNotifications } from '../notifications/useNotifications'
 import { CampaignWorkspace } from '../campaigns/CampaignWorkspace'
 import { WorkspaceHeaderBar } from '../campaigns/WorkspaceHeaderBar'
@@ -404,6 +405,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             onSwitchCampaign={setActiveCampaign}
             onCampaignDeleted={() => setActiveCampaign(null)}
             hostedSessionId={hostedSessionId}
+            myUserId={myRelayUserId}
             playerCharacters={playerCharacters}
             viewedPlayerUserId={viewedPlayerUserId}
             onViewPlayerUserId={setViewedPlayerUserId}
@@ -423,6 +425,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       </main>
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
+      <RollAnimationOverlay />
       {bestiaryOpen && <Bestiary onClose={() => setBestiaryOpen(false)} />}
     </div>
   )

@@ -14,10 +14,11 @@ import type {
   ActiveCampaignChangedFrame,
   InitiativeFrame,
   DiceRollFrame,
-  MessageFrame
+  MessageFrame,
+  ForceRollFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
-import type { CharacterSheet, Message } from '@shared/ipc'
+import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
 
@@ -231,6 +232,13 @@ export function broadcastDiceRoll(roll: DiceRollLogEntry, excludeUserId?: string
   for (const p of players.values()) {
     if (p.userId !== excludeUserId) sendToRelay(p.userId, frame)
   }
+}
+
+/** Pushes a "roll this" prompt to one specific connected player — a no-op if they're not currently connected (the DM's own UI only offers this for players it can see in ConnectedPlayersList, so that shouldn't normally happen). */
+export function pushForceRoll(targetUserId: string, request: ForceRollRequest): void {
+  if (!players.has(targetUserId)) return
+  const frame: ForceRollFrame = { type: 'force-roll', request }
+  sendToRelay(targetUserId, frame)
 }
 
 /**

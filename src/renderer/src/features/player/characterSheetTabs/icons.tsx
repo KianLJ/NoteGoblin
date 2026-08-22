@@ -46,6 +46,21 @@ export function StarIcon({ size = 20, style, filled }: IconProps & { filled?: bo
   )
 }
 
+/** A d20 outline — used on the roll buttons next to ability/save/skill/attack bonuses (OverviewTab.tsx/CombatTab.tsx). */
+export function DiceIcon({ size = 14, style }: IconProps): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" style={style}>
+      <path
+        d="M8 1.2 14 4.6v6.8L8 14.8 2 11.4V4.6L8 1.2Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <path d="M8 1.2v6.4M8 7.6 2 4.6M8 7.6l6-3M8 7.6v7.2M8 7.6 2 11.4M8 7.6l6 3.8" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function PencilIcon({ size = 14, style }: IconProps): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" style={style}>

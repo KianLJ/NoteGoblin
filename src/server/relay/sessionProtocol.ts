@@ -1,6 +1,6 @@
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
-import type { Message } from '@shared/ipc'
+import type { ForceRollRequest, Message } from '@shared/ipc'
 
 /**
  * Frame shapes carried opaquely by the relay's session room (relay/src/session.ts,
@@ -103,4 +103,18 @@ export interface DiceRollFrame {
 export interface MessageFrame {
   type: 'message'
   message: Message
+}
+
+/**
+ * Pushed straight from the DM to one specific player — not a broadcast, and
+ * unlike every other frame here it's a one-way command, not a state sync:
+ * the target's client resolves the request against their own character
+ * sheet and rolls locally (see sessionHost.ts's pushForceRoll and
+ * ForceRollPrompt.tsx), then that roll reaches the table the same way any
+ * other roll does — a normal 'dice.roll' request, no response frame needed
+ * for the prompt itself.
+ */
+export interface ForceRollFrame {
+  type: 'force-roll'
+  request: ForceRollRequest
 }

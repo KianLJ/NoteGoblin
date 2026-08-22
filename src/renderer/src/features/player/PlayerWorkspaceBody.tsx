@@ -4,6 +4,7 @@ import { PartySidebar } from './PartySidebar'
 import { CharacterSheetEditor } from './CharacterSheetEditor'
 import { CharacterCreationWizard } from './CharacterCreationWizard'
 import { CharacterSwitcher } from './CharacterSwitcher'
+import { ForceRollPrompt } from './ForceRollPrompt'
 import { NoteEditor } from '../campaigns/NoteEditor'
 import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import { Modal } from '../../ui/Modal'
@@ -224,6 +225,7 @@ export function PlayerWorkspaceBody({
             key={activeCharacter.id}
             character={activeCharacter}
             onSave={(patch) => saveCharacter(activeCharacter.id, patch)}
+            sessionId={sessionId}
           />
         ) : activeNote ? (
           <NoteEditor
@@ -276,6 +278,7 @@ export function PlayerWorkspaceBody({
         }}
         onViewCharacter={viewPartyMemberCharacter}
       />
+      <ForceRollPrompt sessionId={sessionId} character={activeCharacter ?? null} />
     </div>
   )
 }

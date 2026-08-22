@@ -7,6 +7,19 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.0',
+    title: 'Character sheet dice rolls, forced rolls, and a dramatic reveal',
+    highlights: [
+      'Ability checks, saving throws, skill checks, and attack/damage rolls on the character sheet now actually roll — click the bonus to open a dramatic roll popup, click the die to roll it, logged in the Dice Tray like any other roll',
+      'Right-click a check/save/skill/attack roll button to roll with Advantage or Disadvantage instead of the default',
+      'A Baldur’s Gate 3-style full-screen reveal for those rolls — random numbers flicker and brighten as the die spins, then visibly tip over from the closest flickered number to the real result, with crit/fumble callouts and a DC pass/fail badge',
+      'DMs can right-click a connected player in the Players tab to force a roll — pick the check/save/skill and an optional DC, and the player gets a can’t-dismiss prompt with their own modifier already applied',
+      'Right-click a die in the Dice Tray to remove one from the pool instead of only being able to add',
+      'The right side panel (Dice/Players/Initiative) is now always visible for the DM, even before any campaign is open',
+      'Fixed a felt input delay when scrolling anywhere in the app'
+    ]
+  },
+  {
     version: '0.3.7',
     title: 'Fixed party chat failing with a FOREIGN KEY error in vault mode',
     highlights: [

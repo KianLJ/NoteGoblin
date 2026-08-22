@@ -5,6 +5,7 @@ import { RELAY_URL, relaySessionPath } from '@server/relay/relayConfig'
 import type {
   CampaignChangedFrame,
   DiceRollFrame,
+  ForceRollFrame,
   InitiativeFrame,
   MessageFrame,
   PresenceFrame,
@@ -211,5 +212,10 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'message' && clientWindow) {
     const frame = payload as MessageFrame
     clientWindow.webContents.send('ws:message', { sessionId: currentSessionId, message: frame.message })
+  }
+
+  if (payload.type === 'force-roll' && clientWindow) {
+    const frame = payload as ForceRollFrame
+    clientWindow.webContents.send('ws:force-roll', frame.request)
   }
 }

@@ -14,15 +14,16 @@ type RightPanelTab = 'players' | 'initiative' | 'dice'
 interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
   sessionId: string | null
-  campaignId: string
-  /** The DM's own userId (campaign.dmUserId) — this panel is always the DM's own, so it's always "me" for chat purposes. */
-  myUserId: string
+  /** null before the DM has any campaign open — the panel still renders (Dice/Initiative work standalone; Players/Chat just show an empty state until one exists). */
+  campaignId: string | null
+  /** The DM's own userId — this panel is always the DM's own, so it's always "me" for chat purposes. null until the relay connects. */
+  myUserId: string | null
   playerCharacters: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
   onSelectMonster: (monster: BestiaryMonster) => void
 }
 
-/** DM-only bar on the right of the workspace — starts with live connected players, designed to grow more tabs (dice roller, initiative tracker) without restructuring. Chat lives in a fixed-but-resizable strip along the bottom (see VerticalSplit) rather than as another tab, since it's meant to stay visible alongside whichever tab is active. */
+/** DM-only bar on the right of the workspace — always visible regardless of whether a campaign is open or hosting is active, so Dice/Initiative are there from the moment the app opens, not just once something's connected. Starts with live connected players, designed to grow more tabs without restructuring. Chat lives in a fixed-but-resizable strip along the bottom (see VerticalSplit) rather than as another tab, since it's meant to stay visible alongside whichever tab is active. */
 export function RightPanel({ sessionId, campaignId, myUserId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
   const [tab, setTab] = useState<RightPanelTab>('players')
 

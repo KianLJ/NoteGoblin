@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppApi,
   CampaignChangeEvent,
+  ForceRollRequest,
   InitiativeUpdate,
   MessageUpdate,
   PlayerCharacterUpdate,
@@ -138,6 +139,12 @@ const api: AppApi = {
       const listener = (_event: Electron.IpcRendererEvent, roll: DiceRollLogEntry): void => callback(roll)
       ipcRenderer.on('ws:dice-roll', listener)
       return () => ipcRenderer.removeListener('ws:dice-roll', listener)
+    },
+    forceRoll: (sessionId, targetUserId, request) => ipcRenderer.invoke('dice:force-roll', sessionId, targetUserId, request),
+    onForceRoll: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, request: ForceRollRequest): void => callback(request)
+      ipcRenderer.on('ws:force-roll', listener)
+      return () => ipcRenderer.removeListener('ws:force-roll', listener)
     }
   },
   discord: {

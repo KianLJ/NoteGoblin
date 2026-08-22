@@ -28,10 +28,12 @@ import {
   broadcastActiveCampaignChanged,
   broadcastInitiative,
   broadcastDiceRoll,
-  broadcastMessage
+  broadcastMessage,
+  pushForceRoll
 } from './sessionHost'
 import type { InitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
+import type { ForceRollRequest } from '@shared/ipc'
 import { joinSession, leaveSession, sendRequest as sendSessionRequest } from './sessionClient'
 import {
   hasRememberedCredentials,
@@ -892,6 +894,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('dice:broadcast', (_event, sessionId: string, roll: DiceRollLogEntry): void => {
     if (getHostedSession()?.sessionId === sessionId) broadcastDiceRoll(roll)
     else void sendSessionRequest('dice.roll', { roll })
+  })
+
+  // DM-only — pushes a "roll this" prompt to one connected player, targeted
+  // (not a broadcast). Only meaningful while hosting; a no-op otherwise
+  // since a player has no one to force a roll on.
+  ipcMain.handle('dice:force-roll', (_event, sessionId: string, targetUserId: string, request: ForceRollRequest): void => {
+    if (getHostedSession()?.sessionId === sessionId) pushForceRoll(targetUserId, request)
   })
 
   // --- Discord Rich Presence -------------------------------------------------
