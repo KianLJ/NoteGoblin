@@ -39,7 +39,7 @@ export function Modal({ onClose, children, width = 560, dismissible = true }: Mo
         style={{
           width,
           maxWidth: 'calc(100vw - var(--space-6))',
-          maxHeight: 'calc(100vh - var(--space-6))',
+          maxHeight: 'calc(100vh / var(--font-scale, 1) - var(--space-6))',
           overflowY: 'auto',
           boxShadow: 'var(--shadow-lg)'
         }}

@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.2',
+    title: 'Fixed the corner menu and header becoming unreachable at larger font sizes',
+    highlights: [
+      'Fixed the bottom-left corner menu (and the top header) rendering past the edge of the window — and becoming unclickable — whenever font size was increased above the default, or a note was tall enough to need scrolling',
+      'Root cause: the font-size setting scales the app via the browser\'s zoom, which inflates anything sized off the real window height unless it\'s explicitly compensated for — now it is, everywhere that matters (the main window, the login screen, the Codex, and modals)'
+    ]
+  },
+  {
     version: '0.4.1',
     title: 'Messages redesign, session controls moved, and polish',
     highlights: [

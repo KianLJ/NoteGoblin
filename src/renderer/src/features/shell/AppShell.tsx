@@ -303,7 +303,12 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [bestiaryOpen, setBestiaryOpen] = useState(false)
 
   return (
-    <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    // Divides out the current font-scale zoom (see theme.ts's applyFontScale)
+    // so this box's *rendered* height still lands on exactly 100vh instead of
+    // 100vh × scale — otherwise the header/footer at the top and bottom of
+    // this flex column render past the real window edge and become
+    // unreachable the moment font scale goes above 1.
+    <div style={{ height: 'calc(100vh / var(--font-scale, 1))', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <header
         className="gb-drag"
         style={{

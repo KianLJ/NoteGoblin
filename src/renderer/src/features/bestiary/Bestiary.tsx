@@ -144,7 +144,7 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
         className="gb-card"
         style={{
           width: 'calc(100vw - var(--space-6) * 2)',
-          height: 'calc(100vh - var(--space-6) * 2)',
+          height: 'calc(100vh / var(--font-scale, 1) - var(--space-6) * 2)',
           maxWidth: 1100,
           display: 'flex',
           flexDirection: 'column',

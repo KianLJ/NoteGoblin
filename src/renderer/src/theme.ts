@@ -264,9 +264,21 @@ export function getStoredFontScale(): number {
  * in raw pixels rather than rem. This is what an oversized custom/system
  * font (whose glyphs render far bigger than its declared px size implies)
  * can be scaled back down to compensate for, without needing to change fonts.
+ *
+ * `zoom` inflates an element's own rendered box by the same factor, even
+ * when that box's height came from a `vh` unit — `vh` always resolves
+ * against the *real* viewport, so a `100vh` container inside the zoomed
+ * `<html>` computes its nominal height correctly but then renders `scale`×
+ * taller than that, overflowing the actual window. `--font-scale` is set
+ * here alongside `zoom` so the handful of true viewport-anchored containers
+ * (AppShell.tsx, LoginScreen.tsx) can pre-shrink by dividing their own
+ * height by it, cancelling the zoom back out to exactly the real window
+ * size — otherwise anything pinned to the bottom of that box (the corner
+ * menu, in particular) renders past the bottom edge and out of reach.
  */
 export function applyFontScale(scale: number): void {
   ;(document.documentElement.style as unknown as { zoom: string }).zoom = String(scale)
+  document.documentElement.style.setProperty('--font-scale', String(scale))
 }
 
 export function setFontScale(scale: number): void {
