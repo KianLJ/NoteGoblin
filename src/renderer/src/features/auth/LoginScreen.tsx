@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Button } from '../../ui/Button'
-import { Mark } from '../../ui/Mark'
 import { WindowControls } from '../shell/WindowControls'
 import { VersionBadge } from '../shell/VersionBadge'
+import appIcon from '../../assets/icon.png'
 import type { Identity } from '@shared/ipc'
 
 interface LoginScreenProps {
@@ -128,7 +128,7 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
         style={{ maxWidth: 380, width: '100%' }}
       >
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-4)' }}>
-          <Mark size={40} />
+          <img src={appIcon} alt="" width={56} height={56} />
         </div>
         <h1 style={{ fontSize: 24, textAlign: 'center' }}>
           {returning ? 'Welcome back' : 'Create your NoteGoblin identity'}

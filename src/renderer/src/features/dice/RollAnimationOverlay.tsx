@@ -135,7 +135,15 @@ export function RollAnimationOverlay(): JSX.Element | null {
   const dieAnimationClass =
     phase === 'rolling' ? 'gb-die-tumble' : phase === 'tipping-out' || phase === 'tipping-in' ? 'gb-die-settle' : undefined
 
-  const natural = entry && revealed ? naturalRoll(entry) : null
+  // A natural 20/1 has no special RAW meaning against a DC (that's an
+  // attack-roll-only rule) — showing "CRITICAL!" right next to "DC —
+  // Failure" (e.g. rolling with advantage, keeping a natural 20 on one die,
+  // but the total with modifiers still misses the DC) reads as a flat
+  // contradiction, so the banner only shows for a roll with no target
+  // number to fail against (attacks, or a plain sheet check with no forced
+  // DC) — see naturalRoll's own doc comment for the "only ever a d20 check
+  // roll" scope this already assumes.
+  const natural = entry && revealed && entry.dc == null ? naturalRoll(entry) : null
   const passFail = entry && revealed && entry.dc != null && entry.total != null ? (entry.total >= entry.dc ? 'success' : 'failure') : null
 
   const dieColor = natural === 'crit' ? 'var(--success)' : natural === 'fumble' || passFail === 'failure' ? 'var(--danger)' : 'var(--accent)'

@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { VerticalSplit } from '../../ui/VerticalSplit'
 import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from '../campaigns/panelIcons'
 import { PlayerInitiativeView } from './PlayerInitiativeView'
 import { DiceTray } from '../dice/DiceTray'
-import { ChatPanel } from '../chat/ChatPanel'
+import { useDiceRollToast } from '../dice/useDiceRollToast'
+import { DiceRollToast } from '../dice/DiceRollToast'
 import type { Note, PresencePlayer } from '@shared/ipc'
 
 interface PartySidebarProps {
@@ -29,6 +29,7 @@ export function PartySidebar({
 }: PartySidebarProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
   const [tab, setTab] = useState<'party' | 'initiative' | 'dice'>('party')
+  const diceToast = useDiceRollToast(tab === 'dice')
 
   useEffect(() => {
     if (!sessionId || !campaignId) {
@@ -38,10 +39,10 @@ export function PartySidebar({
     window.goblin.presence.subscribe(sessionId, campaignId)
     return window.goblin.presence.onUpdate((update) => {
       if (update.sessionId === sessionId && update.campaignId === campaignId) {
-        setPlayers(update.players.filter((p) => p.userId !== myUserId))
+        setPlayers(update.players)
       }
     })
-  }, [sessionId, campaignId, myUserId])
+  }, [sessionId, campaignId])
 
   // Private notes never appear in anyone else's list regardless of editorUserIds
   // (see noteRepo.listVisibleTo), so granting access to one would be a no-op —
@@ -64,13 +65,13 @@ export function PartySidebar({
           flexDirection: 'column'
         }}
       >
-        <VerticalSplit
-          heightStorageKey="gb-split-height:party-panel"
-          top={
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
                 <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'party'} onClick={() => setTab('party')} />
-                <PartyTabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
+                <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
+                  <PartyTabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
+                  {diceToast && <DiceRollToast key={diceToast.id} entry={diceToast} />}
+                </div>
                 <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
                 <PartyTabButton icon={<CalendarIcon />} label="Calendar" disabled title="Coming soon" />
                 <PartyTabButton icon={<SessionIcon />} label="Session" disabled title="Coming soon" />
@@ -93,10 +94,11 @@ export function PartySidebar({
                 )}
 
                 {players.length === 0 ? (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-3)' }}>No one else is here yet.</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-3)' }}>No one's connected yet.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     {players.map((player) => {
+                      const isSelf = player.userId === myUserId
                       const hasAccess = !!activeNote && activeNote.editorUserIds.includes(player.userId)
                       return (
                         <div
@@ -112,36 +114,54 @@ export function PartySidebar({
                         >
                           <div style={{ minWidth: 0, flex: 1 }}>
                             {player.characterName ? (
-                              <button
-                                type="button"
-                                onClick={() => onViewCharacter(player.userId)}
-                                title="View this character's sheet (read only)"
-                                style={{
-                                  display: 'block',
-                                  width: '100%',
-                                  textAlign: 'left',
-                                  background: 'none',
-                                  border: 'none',
-                                  padding: 0,
-                                  cursor: 'pointer',
-                                  fontSize: 14,
-                                  fontWeight: 600,
-                                  color: 'var(--accent)',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                {player.characterName}
-                              </button>
+                              isSelf ? (
+                                <div
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: 600,
+                                    color: 'var(--text-primary)',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {player.characterName}
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => onViewCharacter(player.userId)}
+                                  title="View this character's sheet (read only)"
+                                  style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    fontSize: 14,
+                                    fontWeight: 600,
+                                    color: 'var(--accent)',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {player.characterName}
+                                </button>
+                              )
                             ) : (
                               <div style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 <em>No character selected</em>
                               </div>
                             )}
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player.displayName}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              {player.displayName}
+                              {isSelf && ' (You)'}
+                            </div>
                           </div>
-                          {canManage && (
+                          {canManage && !isSelf && (
                             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
@@ -157,10 +177,7 @@ export function PartySidebar({
                   </div>
                 )}
               </div>
-            </div>
-          }
-          bottom={<ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} />}
-        />
+        </div>
       </div>
     </ResizableSidebar>
   )

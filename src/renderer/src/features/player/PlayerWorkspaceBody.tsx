@@ -16,16 +16,19 @@ interface PlayerWorkspaceBodyProps {
   workspace: PlayerWorkspace
   /** Your own relay account id — null until the relay connects. This is what authorUserId on a note/folder you create gets stamped with (see sessionHost.ts's dispatch()), so it's what ownership checks in the sidebar compare against. */
   myUserId: string | null
-  /** The joined session id — needed directly (not just via workspace) for PartySidebar's presence subscription. */
+  /** The joined session id — needed directly (not just via workspace) for PartySidebar's presence subscription, and for CharacterSwitcher's own Leave control. */
   sessionId: string | null
   connectedLabel: string | null
+  /** Fired after sessions.leave() resolves — clears the parent's joinedSession state, same as the DM-initiated disconnect path AppShell already handles. */
+  onLeaveSession: () => void
 }
 
 export function PlayerWorkspaceBody({
   workspace,
   myUserId,
   sessionId,
-  connectedLabel
+  connectedLabel,
+  onLeaveSession
 }: PlayerWorkspaceBodyProps): JSX.Element {
   const {
     characters,
@@ -178,6 +181,8 @@ export function PlayerWorkspaceBody({
               onSelect={(character) => openTab({ kind: 'character', id: character.id })}
               onRequestCreate={() => setWizardOpen(true)}
               onDelete={(character) => deleteCharacter(character.id)}
+              sessionId={sessionId}
+              onLeaveSession={onLeaveSession}
             />
             <AccountSettingsButton />
           </>
@@ -237,6 +242,7 @@ export function PlayerWorkspaceBody({
               isOffline ||
               (activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? ''))
             }
+            hideMonsters={!!sessionId}
             onSave={(patch) => saveNote(activeNote.id, patch)}
             onNavigateToNote={navigateToNote}
             onOpenInNewTab={(id) => openTab({ kind: 'note', id })}

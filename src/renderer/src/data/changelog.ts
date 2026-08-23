@@ -7,6 +7,23 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.1',
+    title: 'Messages redesign, session controls moved, and polish',
+    highlights: [
+      'Messages moved out of the side panels into a small button in the header, next to Friends — new messages now pop out of it for a few seconds instead of living in a persistent panel',
+      'Start/Stop Hosting moved from the Friends menu into the Campaign Selector, and Leave Session into the Character Selector — both now need a second click to confirm',
+      'The Messages panel remembers which tab (and which friend thread) you last had open',
+      'Dice rolls now show the character who rolled instead of your account name, and the Dice tab\'s pop-up notification shows the type of dice rolled',
+      'You now show up in your own Party tab, not just everyone else',
+      'Fixed a "critical success" banner showing up alongside a DC failure — a natural 20 doesn\'t auto-succeed a check or save against a DC in 5e, only attack rolls',
+      'A DM-forced roll\'s DC can no longer be set below 0',
+      'Players connected to a campaign can no longer see monster stat blocks in the Codex (or import one into a note) — everything else in the Codex still works',
+      'The app now enforces a single running instance — launching it again just refocuses the existing window',
+      'The login screen now shows NoteGoblin\'s actual logo instead of a placeholder icon',
+      'Various dice roll popup polish: slower, smoother tumble and reveal, no more jerky stop, and the Inspiration label sits above its icon instead of below'
+    ]
+  },
+  {
     version: '0.4.0',
     title: 'Character sheet dice rolls, forced rolls, and a dramatic reveal',
     highlights: [

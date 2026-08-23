@@ -6,7 +6,6 @@ import type { Mode } from '../shell/ModeToggle'
 interface FriendsMenuProps {
   mode: Mode
   hostedSessionId: string | null
-  onHostedSessionChange: (sessionId: string | null) => void
   onJoinedSession: (sessionId: string, label: string) => void
   /** Session ids we've actually been invited to (from session-invite notifications) — a friend showing as "hosting" via presence alone doesn't mean the DM has invited us yet, so Join stays hidden until it's in here. */
   invitedSessionIds: Set<string>
@@ -15,21 +14,17 @@ interface FriendsMenuProps {
   /** The DM's active campaign name, once known — null right after joining, before the auto-join round-trip resolves. */
   activeCampaignName: string | null
   onResync: () => void
-  /** Fired after sessions.leave() resolves — clears the player's joinedSession state, same as the DM-initiated disconnect path AppShell already handles. */
-  onLeaveSession: () => void
 }
 
-/** Friends list + presence + session hosting/joining, all backed by the relay — no IP addresses or invite codes anymore. */
+/** Friends list + presence + session hosting/joining, all backed by the relay — no IP addresses or invite codes anymore. Start/Stop Hosting and Leave used to live here too — they moved to CampaignSwitcher.tsx/CharacterSwitcher.tsx respectively, next to whichever campaign/character they actually apply to. */
 export function FriendsMenu({
   mode,
   hostedSessionId,
-  onHostedSessionChange,
   onJoinedSession,
   invitedSessionIds,
   connectedLabel,
   activeCampaignName,
-  onResync,
-  onLeaveSession
+  onResync
 }: FriendsMenuProps): JSX.Element {
   const { status, friends, incomingRequests, error, sendRequest, accept, decline, remove } = useFriends()
   const [open, setOpen] = useState(false)
@@ -37,8 +32,6 @@ export function FriendsMenu({
   const [sendError, setSendError] = useState<string | null>(null)
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
-  const [hostingBusy, setHostingBusy] = useState(false)
-  const [leaveBusy, setLeaveBusy] = useState(false)
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null)
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set())
   const [joinBusyId, setJoinBusyId] = useState<string | null>(null)
@@ -70,34 +63,6 @@ export function FriendsMenu({
     } else {
       setSendError(result.error ?? 'Could not send request.')
     }
-  }
-
-  async function startHosting(): Promise<void> {
-    setHostingBusy(true)
-    setActionError(null)
-    const result = await window.goblin.sessions.start()
-    setHostingBusy(false)
-    if (!result.ok) {
-      setActionError(result.error)
-      return
-    }
-    onHostedSessionChange(result.sessionId)
-  }
-
-  async function stopHosting(): Promise<void> {
-    setHostingBusy(true)
-    await window.goblin.sessions.stop()
-    setHostingBusy(false)
-    setInvitedIds(new Set())
-    onHostedSessionChange(null)
-  }
-
-  /** The player's own equivalent of Stop Hosting — until now the only way to disconnect was to wait for the DM to leave/close, which fires onDisconnected on their end (see AppShell.tsx). This is the explicit version, same "tell the main process, then clear local state" shape. */
-  async function leaveSession(): Promise<void> {
-    setLeaveBusy(true)
-    await window.goblin.sessions.leave()
-    setLeaveBusy(false)
-    onLeaveSession()
   }
 
   async function invite(friendUserId: string): Promise<void> {
@@ -171,32 +136,6 @@ export function FriendsMenu({
             </p>
           )}
 
-          {mode === 'dm' && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 6,
-                marginBottom: 'var(--space-3)',
-                paddingBottom: 'var(--space-2)',
-                borderBottom: '1px solid var(--border-subtle)'
-              }}
-            >
-              <span style={{ fontSize: 12, color: hostedSessionId ? 'var(--success)' : 'var(--text-muted)' }}>
-                {hostedSessionId ? 'Hosting — invite friends below' : 'Not hosting'}
-              </span>
-              <Button
-                variant={hostedSessionId ? 'ghost' : 'primary'}
-                onClick={hostedSessionId ? stopHosting : startHosting}
-                disabled={hostingBusy}
-                style={{ fontSize: 11, padding: '2px 8px' }}
-              >
-                {hostingBusy ? '…' : hostedSessionId ? 'Stop Hosting' : 'Start Hosting'}
-              </Button>
-            </div>
-          )}
-
           {mode === 'player' && connectedLabel && (
             <div
               style={{
@@ -226,25 +165,14 @@ export function FriendsMenu({
                   `Connected: ${connectedLabel}`
                 )}
               </span>
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                <Button
-                  variant="secondary"
-                  onClick={onResync}
-                  title="Catch up if the DM switched campaigns"
-                  style={{ fontSize: 11, padding: '2px 8px' }}
-                >
-                  Sync
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => void leaveSession()}
-                  disabled={leaveBusy}
-                  title="Disconnect from this session"
-                  style={{ fontSize: 11, padding: '2px 8px' }}
-                >
-                  {leaveBusy ? '…' : 'Leave'}
-                </Button>
-              </div>
+              <Button
+                variant="secondary"
+                onClick={onResync}
+                title="Catch up if the DM switched campaigns"
+                style={{ fontSize: 11, padding: '2px 8px' }}
+              >
+                Sync
+              </Button>
             </div>
           )}
 

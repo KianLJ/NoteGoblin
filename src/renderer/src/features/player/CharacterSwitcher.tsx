@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
+import { ConfirmButton } from '../../ui/ConfirmButton'
 import type { CharacterSheet } from '@shared/ipc'
 
 interface CharacterSwitcherProps {
@@ -9,17 +10,30 @@ interface CharacterSwitcherProps {
   onRequestCreate: () => void
   /** Deletion lives here now, not on the sheet itself — a character you're actively looking at is exactly where a stray click is most likely to land, so putting the button somewhere you only visit to switch/manage characters cuts down on that risk on its own, on top of the two-click confirm below. */
   onDelete: (character: CharacterSheet) => void
+  /** The joined session id, if any — Leave only makes sense (and only shows) while actually connected to someone's table. Was FriendsMenu's own concern until it moved here, alongside the character you're playing that session as. */
+  sessionId: string | null
+  /** Fired after sessions.leave() resolves — clears the player's joinedSession state, same as the DM-initiated disconnect path AppShell already handles. */
+  onLeaveSession: () => void
 }
 
 /** Player mode's bottom-left corner control — picks/creates a character, the way CampaignSwitcher does for campaigns on the DM side. Fed from the shared player workspace state rather than fetching its own list. Creation itself opens the guided wizard (CharacterCreationWizard) rather than instant-creating here. */
-export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onDelete }: CharacterSwitcherProps): JSX.Element {
+export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onDelete, sessionId, onLeaveSession }: CharacterSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   // Two clicks to actually delete: the first arms this row (button flips to
   // "Confirm delete?"), the second (still targeting the same character)
   // deletes it. Any other click — a different row's delete, selecting a
   // character, closing the menu — disarms it instead of carrying over.
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [leaveBusy, setLeaveBusy] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  async function leaveSession(): Promise<void> {
+    setLeaveBusy(true)
+    await window.goblin.sessions.leave()
+    setLeaveBusy(false)
+    setOpen(false)
+    onLeaveSession()
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent): void {
@@ -48,6 +62,32 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
           className="gb-card"
           style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 260, zIndex: 200 }}
         >
+          {sessionId && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 6,
+                marginBottom: 'var(--space-3)',
+                paddingBottom: 'var(--space-2)',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <span style={{ fontSize: 12, color: 'var(--success)' }}>Connected</span>
+              <ConfirmButton
+                label="Leave"
+                confirmLabel="Confirm?"
+                variant="ghost"
+                danger
+                disabled={leaveBusy}
+                onConfirm={() => void leaveSession()}
+                title="Disconnect from this session"
+                style={{ fontSize: 11, padding: '2px 8px' }}
+              />
+            </div>
+          )}
+
           <h3
             style={{
               fontSize: 11,

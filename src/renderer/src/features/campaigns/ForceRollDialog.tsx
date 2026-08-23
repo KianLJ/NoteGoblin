@@ -34,7 +34,7 @@ export function ForceRollDialog({ playerName, fromDisplayName, onClose, onSend }
       mode,
       ability: mode === 'ability-check' || mode === 'saving-throw' ? ability : undefined,
       skill: mode === 'skill-check' ? skill : undefined,
-      dc: Number.isFinite(parsedDc) ? parsedDc : null,
+      dc: Number.isFinite(parsedDc) ? Math.max(0, parsedDc as number) : null,
       label: labelFor(mode, ability, skill),
       fromDisplayName
     }
@@ -86,6 +86,7 @@ export function ForceRollDialog({ playerName, fromDisplayName, onClose, onSend }
           DC (optional)
           <input
             type="number"
+            min={0}
             className="gb-input"
             value={dc}
             onChange={(e) => setDc(e.target.value)}

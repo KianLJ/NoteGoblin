@@ -18,6 +18,8 @@ interface BestiaryProps {
   onClose: () => void
   /** Present only when opened from a note's "Import from Bestiary" toolbar action — swaps the browse-only footer for an "Insert" button, restricts browsing to Monsters (the only category a note statblock can embed), and closes automatically once picked. */
   onPick?: (monster: BestiaryMonster) => void
+  /** True only while a player is connected to a live campaign — monster stats are the DM's to reveal, not something to browse freely mid-game. Equipment/Spells/Magic Items stay open since none of that is secret. Never true for the DM's own view, or for a player who isn't currently connected to anyone. */
+  hideMonsters?: boolean
 }
 
 type Category = 'Monsters' | 'Equipment' | 'Spells' | 'Magic Items'
@@ -39,16 +41,20 @@ function toTitleCase(s: string): string {
  * own instead of only while building a character. Entirely local, no
  * network needed for any of it.
  */
-export function Bestiary({ onClose, onPick }: BestiaryProps): JSX.Element {
-  const [category, setCategory] = useState<Category>('Monsters')
+export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.Element {
+  const [category, setCategory] = useState<Category>(hideMonsters ? 'Equipment' : 'Monsters')
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [selectedIndex, setSelectedIndex] = useState<string | null>(null)
   const [customMonsters, setCustomMonsters] = useState(() => loadCustomMonsters())
 
+  const visibleCategories = hideMonsters ? CATEGORIES.filter((c) => c !== 'Monsters') : CATEGORIES
+
   // Opened as a note's "Import from Bestiary" picker — only a monster can become a ```statblock block, so the
-  // other categories would just be dead ends here.
-  const effectiveCategory: Category = onPick ? 'Monsters' : category
+  // other categories would just be dead ends here. hideMonsters wins over a stale 'Monsters' category value
+  // (e.g. the DM had it selected before a player joined mid-session, though that specific case can't happen
+  // today since this prop is only ever true for a connected player's own view).
+  const effectiveCategory: Category = onPick ? 'Monsters' : hideMonsters && category === 'Monsters' ? 'Equipment' : category
 
   const allMonsters = useMemo(() => [...customMonsters, ...BESTIARY], [customMonsters])
 
@@ -161,7 +167,7 @@ export function Bestiary({ onClose, onPick }: BestiaryProps): JSX.Element {
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16, flexShrink: 0 }}>Codex</span>
           {!onPick && (
             <div style={{ display: 'flex', gap: 4, flex: 1 }}>
-              {CATEGORIES.map((c) => (
+              {visibleCategories.map((c) => (
                 <button
                   key={c}
                   type="button"

@@ -36,7 +36,7 @@ function toAdvantageMode(value: 'advantage' | 'disadvantage' | undefined): Advan
  */
 export function ForceRollPrompt({ sessionId, character }: ForceRollPromptProps): JSX.Element | null {
   const [request, setRequest] = useState<ForceRollRequest | null>(null)
-  const { rollCheck } = useSheetRoller(sessionId)
+  const { rollCheck } = useSheetRoller(sessionId, character?.name)
 
   useEffect(() => window.goblin.dice.onForceRoll((req) => setRequest(req)), [])
 

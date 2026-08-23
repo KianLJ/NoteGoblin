@@ -4,6 +4,7 @@ import { WindowControls } from './WindowControls'
 import { VersionBadge } from './VersionBadge'
 import { BestiaryIcon } from './icons'
 import { FriendsMenu } from '../friends/FriendsMenu'
+import { MessagesButton } from '../chat/MessagesButton'
 import { NotificationToasts } from '../notifications/NotificationToasts'
 import { RollAnimationOverlay } from '../dice/RollAnimationOverlay'
 import { useNotifications } from '../notifications/useNotifications'
@@ -365,16 +366,19 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           >
             <BestiaryIcon />
           </button>
+          <MessagesButton
+            campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
+            sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}
+            myUserId={myRelayUserId}
+          />
           <FriendsMenu
             mode={mode}
             hostedSessionId={hostedSessionId}
-            onHostedSessionChange={setHostedSessionId}
             invitedSessionIds={invitedSessionIds}
             onJoinedSession={handleJoinedSession}
             connectedLabel={joinedSession?.label ?? null}
             activeCampaignName={playerWorkspace.activeCampaign?.name ?? null}
             onResync={playerWorkspace.resync}
-            onLeaveSession={() => setJoinedSession(null)}
           />
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{displayName}</span>
           <VersionBadge variant="inline" />
@@ -405,7 +409,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             onSwitchCampaign={setActiveCampaign}
             onCampaignDeleted={() => setActiveCampaign(null)}
             hostedSessionId={hostedSessionId}
-            myUserId={myRelayUserId}
+            onHostedSessionChange={setHostedSessionId}
             playerCharacters={playerCharacters}
             viewedPlayerUserId={viewedPlayerUserId}
             onViewPlayerUserId={setViewedPlayerUserId}
@@ -420,13 +424,14 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             myUserId={myRelayUserId}
             sessionId={joinedSession?.sessionId ?? null}
             connectedLabel={joinedSession?.label ?? null}
+            onLeaveSession={() => setJoinedSession(null)}
           />
         )}
       </main>
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
       <RollAnimationOverlay />
-      {bestiaryOpen && <Bestiary onClose={() => setBestiaryOpen(false)} />}
+      {bestiaryOpen && <Bestiary onClose={() => setBestiaryOpen(false)} hideMonsters={mode === 'player' && !!joinedSession} />}
     </div>
   )
 }

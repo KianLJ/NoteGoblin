@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
+import { ConfirmButton } from '../../ui/ConfirmButton'
 import { Modal } from '../../ui/Modal'
 import type { Campaign } from '@shared/ipc'
 
@@ -9,10 +10,13 @@ interface CampaignSwitcherProps {
   onSelect: (campaign: Campaign) => void
   /** Fired after deleting whichever campaign is currently open, so the parent can drop it from view instead of continuing to show a now-nonexistent campaign. */
   onCurrentDeleted: () => void
+  /** null while not hosting — Start/Stop Hosting used to live in FriendsMenu, but hosting is really a property of whichever campaign is currently open, so it moved in here next to it. */
+  hostedSessionId: string | null
+  onHostedSessionChange: (sessionId: string | null) => void
 }
 
 /** Bottom-left "which campaign am I in" control — replaces the old always-visible campaign list with an Obsidian-style corner switcher. Always the DM's own table; a joined session's campaigns are driven by the DM instead (see usePlayerWorkspace's auto-join). */
-export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDeleted }: CampaignSwitcherProps): JSX.Element {
+export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDeleted, hostedSessionId, onHostedSessionChange }: CampaignSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -21,7 +25,27 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [pendingDelete, setPendingDelete] = useState<Campaign | null>(null)
+  const [hostingBusy, setHostingBusy] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  async function startHosting(): Promise<void> {
+    setHostingBusy(true)
+    setError(null)
+    const result = await window.goblin.sessions.start()
+    setHostingBusy(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    onHostedSessionChange(result.sessionId)
+  }
+
+  async function stopHosting(): Promise<void> {
+    setHostingBusy(true)
+    await window.goblin.sessions.stop()
+    setHostingBusy(false)
+    onHostedSessionChange(null)
+  }
 
   useEffect(() => {
     if (open) refresh()
@@ -120,6 +144,32 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
           className="gb-card"
           style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 280, zIndex: 200 }}
         >
+          {current && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 6,
+                marginBottom: 'var(--space-3)',
+                paddingBottom: 'var(--space-2)',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <span style={{ fontSize: 12, color: hostedSessionId ? 'var(--success)' : 'var(--text-muted)' }}>
+                {hostedSessionId ? 'Hosting — invite friends to join' : 'Not hosting'}
+              </span>
+              <ConfirmButton
+                label={hostedSessionId ? 'Stop Hosting' : 'Start Hosting'}
+                confirmLabel="Confirm?"
+                variant={hostedSessionId ? 'ghost' : 'primary'}
+                disabled={hostingBusy}
+                onConfirm={() => void (hostedSessionId ? stopHosting() : startHosting())}
+                style={{ fontSize: 11, padding: '2px 8px' }}
+              />
+            </div>
+          )}
+
           <h3
             style={{
               fontSize: 11,

@@ -16,10 +16,9 @@ interface CampaignWorkspaceProps {
   onSwitchCampaign: (campaign: Campaign) => void
   /** Fired when the currently-open campaign gets deleted from the switcher — drops back to "no campaign open" instead of continuing to show one that no longer exists. */
   onCampaignDeleted: () => void
-  /** The session id once hosting is on — passed through so RightPanel can show live presence. */
+  /** The session id once hosting is on — passed through so RightPanel can show live presence, and to CampaignSwitcher for its own Start/Stop Hosting control. */
   hostedSessionId?: string | null
-  /** The DM's own relay account id — null until the relay connects. Passed through to RightPanel for chat's "who am I" purposes; independent of which campaign (if any) is currently open. */
-  myUserId: string | null
+  onHostedSessionChange: (sessionId: string | null) => void
   /** Every connected player's currently-selected character, kept live — passed through to RightPanel's ConnectedPlayersList so clicking a player opens their sheet below. */
   playerCharacters: Map<string, CharacterSheet>
   /** Whose character is being viewed (read-only) instead of a note, if anyone — takes over the main pane until closed or a note is opened. Deliberately just the id, not the character itself: deriving it fresh from playerCharacters on every render (below) is what keeps the read-only view live instead of frozen at whatever it looked like at the moment you clicked. */
@@ -39,7 +38,7 @@ export function CampaignWorkspace({
   onSwitchCampaign,
   onCampaignDeleted,
   hostedSessionId,
-  myUserId,
+  onHostedSessionChange,
   playerCharacters,
   viewedPlayerUserId,
   onViewPlayerUserId,
@@ -116,7 +115,14 @@ export function CampaignWorkspace({
         onPasteFolder={duplicateFolder}
         footer={
           <>
-            <CampaignSwitcher canCreate current={campaign} onSelect={onSwitchCampaign} onCurrentDeleted={onCampaignDeleted} />
+            <CampaignSwitcher
+              canCreate
+              current={campaign}
+              onSelect={onSwitchCampaign}
+              onCurrentDeleted={onCampaignDeleted}
+              hostedSessionId={hostedSessionId ?? null}
+              onHostedSessionChange={onHostedSessionChange}
+            />
             <AccountSettingsButton />
           </>
         }
@@ -207,7 +213,6 @@ export function CampaignWorkspace({
       <RightPanel
         sessionId={hostedSessionId ?? null}
         campaignId={campaign?.id ?? null}
-        myUserId={myUserId}
         playerCharacters={playerCharacters}
         onSelectPlayer={(userId) => {
           onSelectMonsterTab(null)

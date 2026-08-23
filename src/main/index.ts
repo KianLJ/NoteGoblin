@@ -12,6 +12,19 @@ import { resolveVaultAssetPath } from '@server/files/vaultStore'
 
 const { autoUpdater } = electronUpdater
 
+// Only one instance of the app may run at a time — a DM's/player's local
+// host/identity databases aren't built for two processes writing to the same
+// SQLite file concurrently. Must be the very first thing requested, before
+// any other startup work (nothing below has run yet, so there's nothing to
+// clean up) — a failed lock means another instance already holds it, so this
+// one just hands off (that other instance gets the 'second-instance' event
+// registered further down) and exits immediately rather than continuing to
+// load the rest of this module.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+  process.exit(0)
+}
+
 const isDev = !app.isPackaged
 
 // Electron derives the userData folder from the app name alone, so an
@@ -40,9 +53,23 @@ protocol.registerSchemesAsPrivileged([
 // Chromium's default mouse-wheel scrolling animates each notch over ~150-250ms
 // of easing rather than moving immediately — on a real trackpad this reads as
 // smooth, but on a discrete mouse wheel (this app's primary input) it reads
-// as a felt "delay" before anything moves, everywhere scrollable. Must be set
-// before the app is ready.
+// as a felt "delay" before anything moves, everywhere scrollable. Both the
+// switch and the Blink runtime-feature flag are set — recent Chromium moved
+// part of this behind the feature flag, so the switch alone doesn't always
+// take on every build. Must be set before the app is ready.
 app.commandLine.appendSwitch('disable-smooth-scrolling')
+app.commandLine.appendSwitch('disable-features', 'SmoothScrolling')
+
+// Set once createWindow() actually runs (inside app.whenReady()) — the
+// 'second-instance' handler below needs to reach the real window instance,
+// not just know one exists.
+let mainWindow: BrowserWindow | null = null
+
+app.on('second-instance', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
+})
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -177,13 +204,14 @@ app.whenReady().then(() => {
     }
   })
 
-  const mainWindow = createWindow()
-  registerIpcHandlers(mainWindow)
+  const win = createWindow()
+  mainWindow = win
+  registerIpcHandlers(win)
 
   if (!isDev) checkForUpdates()
 
   app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
 })
 

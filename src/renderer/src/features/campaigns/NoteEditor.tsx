@@ -26,6 +26,8 @@ interface NoteEditorProps {
   onCreateAndLinkNote: (title: string) => void
   /** True when the viewer is neither the author nor a granted editor — the server would reject a save anyway (see campaignService.updateNote), so the fields are made inert here too rather than silently discarding keystrokes on a failed autosave. */
   readOnly?: boolean
+  /** True only for a player connected to a live campaign — hides "Import from Codex" (the only thing it can ever insert is a monster statblock, see Bestiary.tsx's onPick prop), for the same reason the main Codex browser hides Monsters for them. Never true for the DM. */
+  hideMonsters?: boolean
 }
 
 const AUTOSAVE_DELAY_MS = 700
@@ -65,7 +67,8 @@ export function NoteEditor({
   onNavigateToNote,
   onOpenInNewTab,
   onCreateAndLinkNote,
-  readOnly
+  readOnly,
+  hideMonsters
 }: NoteEditorProps): JSX.Element {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.bodyMarkdown)
@@ -370,9 +373,11 @@ export function NoteEditor({
             <ToolbarButton title="Insert table" onClick={() => insertText(TABLE_TEMPLATE)}>
               <TableIcon />
             </ToolbarButton>
-            <ToolbarButton title="Import from Codex" onClick={() => setBestiaryPickerOpen(true)}>
-              <ImportFromCodexIcon />
-            </ToolbarButton>
+            {!hideMonsters && (
+              <ToolbarButton title="Import from Codex" onClick={() => setBestiaryPickerOpen(true)}>
+                <ImportFromCodexIcon />
+              </ToolbarButton>
+            )}
             <div style={{ width: 1, height: 22, background: 'var(--border-subtle)', margin: '0 4px' }} />
           </>
         )}

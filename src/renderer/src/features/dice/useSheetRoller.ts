@@ -9,8 +9,18 @@ import { queuePendingCheck, queuePendingDamage } from './rollAnimationStore'
  * *pending* roll (see rollAnimationStore.ts) — the popup's own die then
  * needs its own click before performCheckRoll/performRoll ever runs, so a
  * misclick on the sheet never burns a real roll.
+ *
+ * `characterName` is what actually shows up as the roll's "who rolled this"
+ * everywhere (the log, the dramatic reveal, the dice-tab toast) — pass the
+ * character the roll is coming from (every caller here always has one in
+ * scope, being a sheet button or a forced roll) so the table sees "Aria
+ * rolled a Stealth check," not the account's display name. Falls back to
+ * the account's own display name if the character has no name yet.
  */
-export function useSheetRoller(sessionId: string | null): {
+export function useSheetRoller(
+  sessionId: string | null,
+  characterName?: string
+): {
   myId: string
   myName: string
   rollCheck: (label: string, modifier: number, options?: { advantage?: AdvantageMode; dc?: number | null }) => void
@@ -28,6 +38,8 @@ export function useSheetRoller(sessionId: string | null): {
     })
   }, [])
 
+  const rollerName = characterName || myName
+
   function rollCheck(label: string, modifier: number, options?: { advantage?: AdvantageMode; dc?: number | null }): void {
     queuePendingCheck({
       label,
@@ -36,12 +48,12 @@ export function useSheetRoller(sessionId: string | null): {
       dc: options?.dc ?? null,
       sessionId,
       rollerId: myId,
-      rollerName: myName
+      rollerName
     })
   }
 
   function rollDamage(groups: DiceGroup[], modifier: number, label = 'Damage'): void {
-    queuePendingDamage({ label, groups, modifier, sessionId, rollerId: myId, rollerName: myName })
+    queuePendingDamage({ label, groups, modifier, sessionId, rollerId: myId, rollerName })
   }
 
   return { myId, myName, rollCheck, rollDamage }

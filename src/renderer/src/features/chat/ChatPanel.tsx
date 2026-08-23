@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import type { FriendSummary } from '@shared/relay'
 import { useCampaignChat } from './useCampaignChat'
 import { useRelayMessages, useUnreadMessageNotifications } from './useRelayMessages'
-import { ChatIcon, PlayersIcon } from '../campaigns/panelIcons'
+import { PlayersIcon } from '../campaigns/panelIcons'
 import { UserIcon } from '../player/icons'
 
 interface ChatPanelProps {
@@ -10,9 +10,22 @@ interface ChatPanelProps {
   campaignId: string | null
   sessionId: string | null
   myUserId: string | null
+  /** Fired whenever the combined Party+Friends unread count changes — lets MessagesButton.tsx show a badge on the header button without duplicating this panel's own unread tracking. Omitted entirely when this panel isn't hosted inside that button (there's currently no other caller). */
+  onUnreadTotalChange?: (total: number) => void
 }
 
 type Section = 'party' | 'friends'
+
+const SECTION_STORAGE_KEY = 'gb-messages-section'
+const FRIEND_THREAD_STORAGE_KEY = 'gb-messages-friend-thread'
+
+function loadSection(): Section {
+  try {
+    return localStorage.getItem(SECTION_STORAGE_KEY) === 'friends' ? 'friends' : 'party'
+  } catch {
+    return 'party'
+  }
+}
 
 /**
  * The bottom-of-the-right-panel messages strip — shared between
@@ -28,8 +41,16 @@ type Section = 'party' | 'friends'
  *    here too, but it was close enough to Friends to not earn its own
  *    panel — a DM/player still reach each other fine via Friends.)
  */
-export function ChatPanel({ campaignId, sessionId, myUserId }: ChatPanelProps): JSX.Element {
-  const [section, setSection] = useState<Section>('party')
+export function ChatPanel({ campaignId, sessionId, myUserId, onUnreadTotalChange }: ChatPanelProps): JSX.Element {
+  const [section, setSection] = useState<Section>(loadSection)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SECTION_STORAGE_KEY, section)
+    } catch {
+      /* best-effort persistence only */
+    }
+  }, [section])
   const unreadNotifications = useUnreadMessageNotifications()
   const friendsUnread = unreadNotifications.filter((n) => n.messageKind === 'friend')
   const unreadFriendIds = new Set(friendsUnread.map((n) => n.fromUserId))
@@ -50,28 +71,14 @@ export function ChatPanel({ campaignId, sessionId, myUserId }: ChatPanelProps): 
     if (section === 'party') setPartyUnread(0)
   }, [section])
 
+  const friendsUnreadCount = friendsUnread.length
+  useEffect(() => {
+    onUnreadTotalChange?.(partyUnread + friendsUnreadCount)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyUnread, friendsUnreadCount])
+
   return (
     <div style={containerStyle}>
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            padding: '9px 4px',
-            flex: 1,
-            borderBottom: '2px solid var(--accent)',
-            color: 'var(--text-primary)',
-            fontSize: 11,
-            fontWeight: 700
-          }}
-        >
-          <ChatIcon />
-          Messages
-        </div>
-      </div>
-
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
         <SectionTabButton icon={<PlayersIcon />} label="Party" active={section === 'party'} count={partyUnread} onClick={() => setSection('party')} />
         <SectionTabButton icon={<UserIcon />} label="Friends" active={section === 'friends'} count={friendsUnread.length} onClick={() => setSection('friends')} />
@@ -138,10 +145,26 @@ function PartySection({
 
 function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null; unreadFriendIds: Set<string> }): JSX.Element {
   const [friends, setFriends] = useState<FriendSummary[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(FRIEND_THREAD_STORAGE_KEY)
+    } catch {
+      return null
+    }
+  })
   const { messages, error, send } = useRelayMessages(selectedId, 'friend')
   const [draft, setDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
+
+  function selectThread(id: string | null): void {
+    setSelectedId(id)
+    try {
+      if (id) localStorage.setItem(FRIEND_THREAD_STORAGE_KEY, id)
+      else localStorage.removeItem(FRIEND_THREAD_STORAGE_KEY)
+    } catch {
+      /* best-effort persistence only */
+    }
+  }
 
   useEffect(() => {
     function refresh(): void {
@@ -168,7 +191,7 @@ function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null
   if (selectedId && selected) {
     return (
       <div style={sectionStyle}>
-        <ThreadHeader label={selected.username} onBack={() => setSelectedId(null)} />
+        <ThreadHeader label={selected.username} onBack={() => selectThread(null)} />
         <MessageList
           listRef={listRef}
           emptyText={`No messages with ${selected.username} yet.`}
@@ -187,7 +210,7 @@ function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null
       ) : (
         <ThreadPicker
           items={friends.map((f) => ({ id: f.userId, label: f.username, sublabel: f.online ? 'Online' : undefined, unread: unreadFriendIds.has(f.userId) }))}
-          onSelect={setSelectedId}
+          onSelect={selectThread}
         />
       )}
     </div>

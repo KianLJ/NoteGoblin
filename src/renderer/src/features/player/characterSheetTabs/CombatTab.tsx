@@ -124,7 +124,7 @@ function customWeaponFields(attack: Attack): DetailField[] {
 
 /** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells/Features inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
 export function CombatTab({ character, onSave, readOnly, sessionId = null }: CombatTabProps): JSX.Element {
-  const { rollCheck, rollDamage } = useSheetRoller(sessionId)
+  const { rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
   const isCaster =
     character.spellcastingAbility !== null ||
     character.classes.some((c) => CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())?.spellcastingAbility)

@@ -32,7 +32,10 @@ export function NotificationToasts({ notifications: notificationsApi, onJoined }
   // back most-recent-first (see relay/src/directory.ts's pushNotification),
   // so no reordering needed. Each new arrival pushes the rest of the stack
   // down rather than shoving already-visible toasts around above it.
-  const unread = notifications.filter((n) => !n.read)
+  // 'message' is deliberately excluded — it pops out of the Messages header
+  // button instead (see useMessageToast.ts), the same way a roll pops out of
+  // the Dice tab, rather than sitting in this corner stack.
+  const unread = notifications.filter((n) => !n.read && n.kind !== 'message')
 
   async function handleJoin(n: RelayNotification): Promise<void> {
     if (!n.sessionId) return

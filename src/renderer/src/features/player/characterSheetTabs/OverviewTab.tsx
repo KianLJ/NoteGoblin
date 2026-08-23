@@ -86,7 +86,7 @@ function resetAllSlots(slots: Record<number, { total: number; used: number }>): 
 }
 
 export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId = null }: OverviewTabProps): JSX.Element {
-  const { rollCheck } = useSheetRoller(sessionId)
+  const { rollCheck } = useSheetRoller(sessionId, character.name)
   const [customRows, setCustomRows] = useState<Set<number>>(new Set())
   const [shortRestOpen, setShortRestOpen] = useState(false)
   const [abilityEditMode, setAbilityEditMode] = useState(false)
@@ -397,8 +397,8 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
             cursor: readOnly ? 'default' : 'pointer'
           }}
         >
-          <StarIcon size={22} filled={draft.inspiration} style={{ color: draft.inspiration ? 'var(--accent)' : 'var(--text-muted)' }} />
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Inspiration</span>
+          <StarIcon size={22} filled={draft.inspiration} style={{ color: draft.inspiration ? 'var(--accent)' : 'var(--text-muted)' }} />
         </button>
 
         <Divider />
