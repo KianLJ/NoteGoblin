@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.0',
+    title: 'A full in-world campaign calendar',
+    highlights: [
+      'New Calendar tab in the DM/player side panel — a DM-built calendar with custom weekdays, months, leap days, and eras, viewable day/week/month, with a click-through day detail panel below',
+      'Seasons with their own climate (temperature, rain chance, cloudiness, wind range, sunrise/sunset) — weather for any day is generated deterministically from a per-calendar seed, so the same day always has the same weather without rolling and storing it',
+      'Locations can override a season\'s climate for specific months, and weather/cloudiness/rain are described in plain weather-report language ("grey, overcast", "heavy downpour") instead of raw numbers',
+      'Moons with deterministic 8-phase cycles, and each season\'s sunrise/sunset drives a simple day/night indicator for the current time',
+      'Full event system — one-time or repeating (yearly/monthly/weekly) events with categories, colors shown as dots on the calendar, and the option to pair an event with an existing campaign note',
+      'Players get a read-only view of the same calendar — browse freely, but only the DM can edit dates, weather, or events',
+      'The DM/player right-side panel now remembers which tab you had open (Players/Party, Initiative, Dice, Calendar) across mode switches and app restarts',
+      'Added the ability to remove a previously-joined campaign\'s cached offline data from the player tab',
+      'Backend hardening: a malformed or older-shaped stored calendar now degrades gracefully (defaults, or a blank calendar as a last resort) instead of ever crashing the window'
+    ]
+  },
+  {
     version: '0.4.3',
     title: 'Fixed a long-standing scroll stutter across the whole app',
     highlights: [

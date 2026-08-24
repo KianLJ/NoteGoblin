@@ -65,4 +65,9 @@ export class SnapshotRepo {
       .get(identityId, campaignId) as CachedCampaignRow | undefined
     return row ? toSnapshot(row) : undefined
   }
+
+  /** Forgets a cached campaign — just the local read-only copy, not anything on the DM's actual host. Rejoining the same campaign later (if the DM is hosting again) would re-cache it from scratch. */
+  remove(identityId: string, campaignId: string): void {
+    this.db.prepare('DELETE FROM cached_campaigns WHERE identity_id = ? AND campaign_id = ?').run(identityId, campaignId)
+  }
 }

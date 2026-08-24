@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from '../campaigns/panelIcons'
+import { CalendarPanel } from '../campaigns/CalendarPanel'
+import { loadRightPanelTab, saveRightPanelTab } from '../campaigns/rightPanelTab'
 import { PlayerInitiativeView } from './PlayerInitiativeView'
 import { DiceTray } from '../dice/DiceTray'
 import { useDiceRollToast } from '../dice/useDiceRollToast'
@@ -28,7 +30,11 @@ export function PartySidebar({
   onViewCharacter
 }: PartySidebarProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
-  const [tab, setTab] = useState<'party' | 'initiative' | 'dice'>('party')
+  const [tab, setTabState] = useState(loadRightPanelTab)
+  function setTab(next: typeof tab): void {
+    setTabState(next)
+    saveRightPanelTab(next)
+  }
   const diceToast = useDiceRollToast(tab === 'dice')
 
   useEffect(() => {
@@ -67,13 +73,13 @@ export function PartySidebar({
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
-                <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'party'} onClick={() => setTab('party')} />
+                <PartyTabButton icon={<PlayersIcon />} label="Party" active={tab === 'players'} onClick={() => setTab('players')} />
                 <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
                   <PartyTabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
                   {diceToast && <DiceRollToast key={diceToast.id} entry={diceToast} />}
                 </div>
                 <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
-                <PartyTabButton icon={<CalendarIcon />} label="Calendar" disabled title="Coming soon" />
+                <PartyTabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
                 <PartyTabButton icon={<SessionIcon />} label="Session" disabled title="Coming soon" />
               </div>
 
@@ -86,7 +92,10 @@ export function PartySidebar({
               <div style={{ display: tab === 'dice' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
                 <DiceTray sessionId={sessionId} />
               </div>
-              <div style={{ display: tab === 'party' ? 'contents' : 'none' }}>
+              <div style={{ display: tab === 'calendar' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <CalendarPanel sessionId={sessionId} campaignId={campaignId} readOnly />
+              </div>
+              <div style={{ display: tab === 'players' ? 'contents' : 'none' }}>
                 {canManage && (
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
                     Grant edit access to "{activeNote!.title || 'Untitled'}"

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
+import { ConfirmButton } from '../../ui/ConfirmButton'
 import { BackArrowIcon, LockIcon, PlusIcon } from '../campaigns/icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
 import { getStoredFontScale } from '../../theme'
@@ -51,6 +52,8 @@ interface PlayerSidebarProps {
   onOpenOfflineCampaign: (campaignId: string) => void
   /** Leaves the offline snapshot currently being viewed, back to the "pick a cached campaign" list — only relevant while isOffline. */
   onCloseOfflineCampaign: () => void
+  /** Forgets one cached campaign entirely — just the local read-only copy, not anything on the DM's actual host. */
+  onDeleteOfflineCampaign: (campaignId: string) => void
   /** The character switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
   footer: ReactNode
 }
@@ -81,6 +84,7 @@ export function PlayerSidebar({
   offlineSnapshots,
   onOpenOfflineCampaign,
   onCloseOfflineCampaign,
+  onDeleteOfflineCampaign,
   footer
 }: PlayerSidebarProps): JSX.Element {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null)
@@ -295,35 +299,55 @@ export function PlayerSidebar({
               <Section title="Offline">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 var(--space-2)' }}>
                   {offlineSnapshots.map((snap) => (
-                    <button
+                    <div
                       key={snap.campaign.id}
-                      type="button"
-                      title={`Last synced ${formatSyncedAt(snap.syncedAt)}`}
-                      onClick={() => onOpenOfflineCampaign(snap.campaign.id)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 6,
-                        padding: '6px 8px',
-                        border: 'none',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'transparent',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        color: 'var(--text-primary)',
-                        fontSize: 13
+                        gap: 4,
+                        borderRadius: 'var(--radius-sm)'
                       }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-raised)')}
                       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {snap.campaign.name}
-                      </span>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-                        {formatSyncedAt(snap.syncedAt)}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        title={`Last synced ${formatSyncedAt(snap.syncedAt)}`}
+                        onClick={() => onOpenOfflineCampaign(snap.campaign.id)}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 6,
+                          padding: '6px 8px',
+                          border: 'none',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'transparent',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          color: 'var(--text-primary)',
+                          fontSize: 13
+                        }}
+                      >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {snap.campaign.name}
+                        </span>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
+                          {formatSyncedAt(snap.syncedAt)}
+                        </span>
+                      </button>
+                      <ConfirmButton
+                        label="✕"
+                        confirmLabel="Sure?"
+                        variant="ghost"
+                        danger
+                        title="Remove this campaign's offline data from this device — the DM's own copy is untouched"
+                        style={{ fontSize: 11, padding: '2px 6px', flexShrink: 0 }}
+                        onConfirm={() => onDeleteOfflineCampaign(snap.campaign.id)}
+                      />
+                    </div>
                   ))}
                 </div>
               </Section>

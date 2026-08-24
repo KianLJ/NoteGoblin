@@ -73,6 +73,11 @@ const api: AppApi = {
     remove: (campaignId, noteId, sessionId) =>
       ipcRenderer.invoke('notes:remove', campaignId, noteId, sessionId)
   },
+  calendar: {
+    get: (campaignId, sessionId) => ipcRenderer.invoke('calendar:get', campaignId, sessionId),
+    save: (campaignId, config, sessionId) => ipcRenderer.invoke('calendar:save', campaignId, config, sessionId),
+    remove: (campaignId, sessionId) => ipcRenderer.invoke('calendar:remove', campaignId, sessionId)
+  },
   folders: {
     list: (campaignId, sessionId) => ipcRenderer.invoke('folders:list', campaignId, sessionId),
     create: (campaignId, input, sessionId) =>
@@ -94,7 +99,8 @@ const api: AppApi = {
   snapshots: {
     list: () => ipcRenderer.invoke('snapshots:list'),
     get: (campaignId) => ipcRenderer.invoke('snapshots:get', campaignId),
-    save: (campaign, notes, folders) => ipcRenderer.invoke('snapshots:save', campaign, notes, folders)
+    save: (campaign, notes, folders) => ipcRenderer.invoke('snapshots:save', campaign, notes, folders),
+    remove: (campaignId) => ipcRenderer.invoke('snapshots:remove', campaignId)
   },
   characters: {
     list: () => ipcRenderer.invoke('characters:list'),

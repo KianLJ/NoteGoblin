@@ -175,6 +175,18 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     setActiveTabState((current) => (current?.kind === 'note' ? null : current))
   }
 
+  /** Forgets a cached campaign — just the local read-only copy (nothing on the DM's actual host). Closes it first if it's the one currently being viewed offline, since its data is about to disappear out from under the open tabs. */
+  function deleteOfflineCampaign(campaignId: string): void {
+    if (isOffline && activeCampaign?.id === campaignId) closeOfflineCampaign()
+    window.goblin.snapshots.remove(campaignId).then((result) => {
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      refreshOfflineSnapshots()
+    })
+  }
+
 
   function openTab(ref: PlayerTabRef): void {
     setTabs((prev) => (prev.some((t) => sameTab(t, ref)) ? prev : [...prev, ref]))
@@ -460,6 +472,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     offlineSyncedAt,
     openOfflineCampaign,
     closeOfflineCampaign,
+    deleteOfflineCampaign,
     refreshOfflineSnapshots
   }
 }

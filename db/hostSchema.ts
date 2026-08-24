@@ -135,4 +135,21 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_campaign_channel ON messages(campaign_id, channel);
+
+-- One calendar per campaign — config_json holds the whole CalendarConfig
+-- (months/weekdays/eras/current date/etc, see shared/calendar.ts) as a
+-- single document, same reasoning as characters.sheet_json: it's edited and
+-- read as one whole shape, never queried by individual field. campaign_id is
+-- deliberately NOT a foreign key against campaigns(id), same as
+-- characters/initiative_entries/messages — see the comment above the
+-- characters table.
+CREATE TABLE IF NOT EXISTS campaign_calendars (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL UNIQUE,
+  config_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendars_campaign ON campaign_calendars(campaign_id);
 `

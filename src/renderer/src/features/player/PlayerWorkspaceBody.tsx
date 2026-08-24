@@ -58,7 +58,8 @@ export function PlayerWorkspaceBody({
     offlineSyncedAt,
     offlineSnapshots,
     openOfflineCampaign,
-    closeOfflineCampaign
+    closeOfflineCampaign,
+    deleteOfflineCampaign
   } = workspace
 
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -173,6 +174,7 @@ export function PlayerWorkspaceBody({
         offlineSnapshots={offlineSnapshots}
         onOpenOfflineCampaign={openOfflineCampaign}
         onCloseOfflineCampaign={closeOfflineCampaign}
+        onDeleteOfflineCampaign={deleteOfflineCampaign}
         footer={
           <>
             <CharacterSwitcher

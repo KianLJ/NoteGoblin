@@ -5,6 +5,7 @@ import type { Ability, CharacterSheetData, SkillName } from './dnd5e'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, RelayStatus, WhisperThread } from './relay'
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
+import type { CalendarConfig } from './calendar'
 
 /**
  * A DM's "make this player roll" prompt — sent as a targeted push (see
@@ -159,6 +160,14 @@ export interface CampaignChangeEvent {
   campaignId: string
 }
 
+export interface CampaignCalendar {
+  id: string
+  campaignId: string
+  config: CalendarConfig
+  createdAt: string
+  updatedAt: string
+}
+
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
 export interface AppApi {
@@ -243,6 +252,17 @@ export interface AppApi {
     ) => Promise<ApiResult<Note>>
     remove: (campaignId: string, noteId: string, sessionId?: string) => Promise<ApiResult<void>>
   }
+  // One calendar per campaign, DM-editable/player-read-only — every campaign
+  // member can `get` it (null until the DM has created one); `save` replaces
+  // the whole config and is rejected server-side for anyone but the DM.
+  // Reuses campaigns.onChanged (not a dedicated event) to tell other windows
+  // to re-fetch after a save, same as notes/folders.
+  calendar: {
+    get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignCalendar | null>>
+    save: (campaignId: string, config: CalendarConfig, sessionId?: string) => Promise<ApiResult<CampaignCalendar>>
+    /** DM-only — irreversible, the client is expected to confirm with the user first. */
+    remove: (campaignId: string, sessionId?: string) => Promise<ApiResult<void>>
+  }
   folders: {
     list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Folder[]>>
     create: (
@@ -284,6 +304,8 @@ export interface AppApi {
     list: () => Promise<ApiResult<CampaignSnapshot[]>>
     get: (campaignId: string) => Promise<ApiResult<CampaignSnapshot | null>>
     save: (campaign: Campaign, notes: Note[], folders: Folder[]) => Promise<void>
+    /** Forgets a cached campaign — just the local read-only copy, not anything on the DM's actual host. */
+    remove: (campaignId: string) => Promise<ApiResult<void>>
   }
   // Characters live entirely on your own device, owned by your local
   // identity — campaign-independent, no session/network involved.

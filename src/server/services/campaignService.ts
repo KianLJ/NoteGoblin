@@ -3,9 +3,28 @@ import { CampaignRepo, type CampaignRole, type CampaignRow } from '../repositori
 import { NoteRepo, type NoteRow } from '../repositories/noteRepo'
 import { FolderRepo, type FolderRow } from '../repositories/folderRepo'
 import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
+import { CalendarRepo, type CalendarRow } from '../repositories/calendarRepo'
 import { UserRepo } from '../repositories/userRepo'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
+import {
+  defaultCalendarConfig,
+  generateWeatherSeed,
+  SEASON_CLIMATE_PRESETS,
+  type CalendarConfig,
+  type CalendarWeekday,
+  type CalendarMonth,
+  type CalendarLeapRule,
+  type CalendarEra,
+  type CalendarDate,
+  type CalendarSeason,
+  type CalendarLocation,
+  type CalendarClimate,
+  type CalendarLocationClimateOverride,
+  type CalendarDayNote,
+  type CalendarMoon,
+  type CalendarEvent
+} from '@shared/calendar'
 
 /**
  * Campaign/note logic shared by two callers: the host's HTTP API (for remote
@@ -289,6 +308,7 @@ export function deleteCampaign(db: DatabaseType, campaignId: string, userId: str
   db.prepare('DELETE FROM characters WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM initiative_entries WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM messages WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM campaign_calendars WHERE campaign_id = ?').run(campaignId)
   return { ok: true, data: undefined }
 }
 
@@ -744,4 +764,368 @@ export function sendMessage(
     body: body.trim()
   })
   return { ok: true, data: toMessageJson(userRepo, row) }
+}
+
+// Calendars always live in SQLite regardless of vault mode (see the note
+// above characters/initiative_entries/messages) — no makeCalendarRepo/
+// file-backed alternative, so this uses CalendarRepo directly.
+
+export interface CalendarJson {
+  id: string
+  campaignId: string
+  config: CalendarConfig
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Re-validates rather than just casting the parsed JSON — a calendar saved
+ * before a later stage added fields (seasons/locations/selectedLocationId/
+ * currentWeather all landed after the first shippable version) would
+ * otherwise come back missing them entirely, and every pure function in
+ * shared/calendar.ts that reads e.g. `config.seasons.length` assumes that
+ * array always exists. validateCalendarConfig already treats every field
+ * added after `currentDate` as optional-with-a-default for exactly this
+ * "older saved data" reason, so running old rows through it here normalizes
+ * them the same way a save always would.
+ */
+function toCalendarJson(row: CalendarRow): CalendarJson {
+  const parsed: unknown = JSON.parse(row.config_json)
+  const validated = validateCalendarConfig(parsed)
+  // Falling back to the raw, unvalidated JSON here was the actual bug behind
+  // two prior "blank window" crashes: every pure function in
+  // shared/calendar.ts assumes a fully-shaped CalendarConfig, and a
+  // genuinely invalid stored row (rather than just one with older-shape
+  // optional fields, which validateCalendarConfig already defaults) would
+  // otherwise be handed straight to the renderer as-is. Falling back to a
+  // blank calendar instead guarantees this can never crash the render again
+  // — at worst a DM sees an empty calendar and has to rebuild it, instead of
+  // the whole window going blank.
+  const config = 'config' in validated ? validated.config : defaultCalendarConfig()
+  return {
+    id: row.id,
+    campaignId: row.campaign_id,
+    config,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function isString(v: unknown): v is string {
+  return typeof v === 'string'
+}
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v)
+}
+
+/**
+ * Defensive but not exhaustive — this only needs to guarantee the shape
+ * shared/calendar.ts's pure date-math functions can safely run against
+ * (no missing arrays, no NaN indices), not validate every field's semantic
+ * sanity (e.g. a month named ''). A DM building their own calendar can type
+ * whatever names/lengths they want.
+ */
+function validateCalendarConfig(input: unknown): { config: CalendarConfig } | { error: string } {
+  if (typeof input !== 'object' || input === null) return { error: 'Invalid calendar.' }
+  const obj = input as Record<string, unknown>
+
+  if (!isString(obj.name)) return { error: 'A calendar needs a name.' }
+  if (!isString(obj.description)) return { error: 'Invalid calendar description.' }
+  if (!isString(obj.dateFormat) || obj.dateFormat.trim().length === 0) return { error: 'Invalid date format.' }
+  if (!isString(obj.timeOfDay)) return { error: 'Invalid time of day.' }
+  const temperatureUnit = obj.temperatureUnit === 'F' ? 'F' : 'C'
+
+  if (!Array.isArray(obj.weekdays) || obj.weekdays.length === 0) return { error: 'Define at least one weekday.' }
+  const weekdays: CalendarWeekday[] = []
+  for (const w of obj.weekdays) {
+    if (typeof w !== 'object' || w === null || !isString((w as never)['name']) || !isString((w as never)['abbreviation'])) {
+      return { error: 'Invalid weekday.' }
+    }
+    weekdays.push({ name: (w as CalendarWeekday).name, abbreviation: (w as CalendarWeekday).abbreviation })
+  }
+
+  if (!Array.isArray(obj.months) || obj.months.length === 0) return { error: 'Define at least one month.' }
+  const months: CalendarMonth[] = []
+  for (const m of obj.months) {
+    if (
+      typeof m !== 'object' ||
+      m === null ||
+      !isString((m as never)['name']) ||
+      !isFiniteNumber((m as never)['length']) ||
+      (m as CalendarMonth).length < 1
+    ) {
+      return { error: 'Invalid month.' }
+    }
+    months.push({ name: (m as CalendarMonth).name, length: Math.floor((m as CalendarMonth).length) })
+  }
+
+  const leapRules: CalendarLeapRule[] = []
+  if (obj.leapRules !== undefined) {
+    if (!Array.isArray(obj.leapRules)) return { error: 'Invalid leap day rules.' }
+    for (const r of obj.leapRules) {
+      const rule = r as Partial<CalendarLeapRule>
+      if (!isFiniteNumber(rule.monthIndex) || !isFiniteNumber(rule.interval) || !isFiniteNumber(rule.offset)) {
+        return { error: 'Invalid leap day rule.' }
+      }
+      if (rule.monthIndex < 0 || rule.monthIndex >= months.length || rule.interval < 1) {
+        return { error: 'A leap day rule points at a month that does not exist, or has a non-positive interval.' }
+      }
+      leapRules.push({ monthIndex: rule.monthIndex, interval: rule.interval, offset: rule.offset })
+    }
+  }
+
+  const eras: CalendarEra[] = []
+  if (obj.eras !== undefined) {
+    if (!Array.isArray(obj.eras)) return { error: 'Invalid eras.' }
+    for (const e of obj.eras) {
+      const era = e as Partial<CalendarEra>
+      if (!isString(era.id) || !isString(era.name) || !isString(era.description) || !isString(era.displayFormat) || !isFiniteNumber(era.startYear)) {
+        return { error: 'Invalid era.' }
+      }
+      eras.push({ id: era.id, name: era.name, description: era.description, displayFormat: era.displayFormat, startYear: era.startYear })
+    }
+  }
+
+  const rawDate = obj.currentDate as Partial<CalendarDate> | undefined
+  if (
+    typeof rawDate !== 'object' ||
+    rawDate === null ||
+    !isFiniteNumber(rawDate.year) ||
+    !isFiniteNumber(rawDate.monthIndex) ||
+    !isFiniteNumber(rawDate.day) ||
+    rawDate.monthIndex < 0 ||
+    rawDate.monthIndex >= months.length ||
+    rawDate.day < 1
+  ) {
+    return { error: 'Invalid current date.' }
+  }
+
+  // Defaults rather than rejects a missing/malformed climate — seasons/
+  // locations predate the climate model (they used to carry a discrete
+  // `weatherTypes` list instead), and toCalendarJson re-runs stored data
+  // through this same validator on every read to normalize it. If this
+  // returned an error for that older shape, the whole config would fail
+  // validation and toCalendarJson would fall back to the raw, still-broken
+  // parsed JSON — which is exactly what crashed CalendarPanel/DayNoteEditor
+  // (reading `.climate`/`.dayNotes` off data that never got normalized).
+  const climateResult = (raw: unknown): { climate: CalendarClimate } => {
+    const c = raw as Partial<CalendarClimate> | undefined
+    if (
+      typeof c !== 'object' ||
+      c === null ||
+      !isFiniteNumber(c.tempMin) ||
+      !isFiniteNumber(c.tempMax) ||
+      !isFiniteNumber(c.rainChance) ||
+      !isFiniteNumber(c.cloudiness) ||
+      !isFiniteNumber(c.windMinMph) ||
+      !isFiniteNumber(c.windMaxMph)
+    ) {
+      return { climate: SEASON_CLIMATE_PRESETS.spring }
+    }
+    return {
+      climate: {
+        tempMin: c.tempMin,
+        tempMax: c.tempMax,
+        rainChance: Math.min(1, Math.max(0, c.rainChance)),
+        cloudiness: Math.min(1, Math.max(0, c.cloudiness)),
+        windMinMph: Math.max(0, c.windMinMph),
+        windMaxMph: Math.max(0, c.windMaxMph)
+      }
+    }
+  }
+
+  const seasons: CalendarSeason[] = []
+  if (obj.seasons !== undefined) {
+    if (!Array.isArray(obj.seasons)) return { error: 'Invalid seasons.' }
+    for (const s of obj.seasons) {
+      const season = s as Partial<CalendarSeason>
+      if (
+        !isString(season.id) ||
+        !isString(season.name) ||
+        !isString(season.color) ||
+        !isFiniteNumber(season.startMonthIndex) ||
+        !isFiniteNumber(season.startDay) ||
+        season.startMonthIndex < 0 ||
+        season.startMonthIndex >= months.length ||
+        season.startDay < 1
+      ) {
+        return { error: 'Invalid season.' }
+      }
+      const climate = climateResult(season.climate)
+      // Defaults rather than rejects, same reasoning as climateResult — a
+      // season saved before sunrise/sunset existed shouldn't fail the whole
+      // config's validation on read.
+      const sunriseHour = isFiniteNumber(season.sunriseHour) ? season.sunriseHour : 6
+      const sunsetHour = isFiniteNumber(season.sunsetHour) ? season.sunsetHour : 18
+      seasons.push({
+        id: season.id,
+        name: season.name,
+        color: season.color,
+        startMonthIndex: season.startMonthIndex,
+        startDay: season.startDay,
+        climate: climate.climate,
+        sunriseHour,
+        sunsetHour
+      })
+    }
+  }
+
+  const locations: CalendarLocation[] = []
+  if (obj.locations !== undefined) {
+    if (!Array.isArray(obj.locations)) return { error: 'Invalid locations.' }
+    for (const l of obj.locations) {
+      const location = l as Partial<CalendarLocation>
+      if (!isString(location.id) || !isString(location.name) || !isString(location.description)) {
+        return { error: 'Invalid location.' }
+      }
+      const monthOverrides: CalendarLocationClimateOverride[] = []
+      if (location.monthOverrides !== undefined) {
+        if (!Array.isArray(location.monthOverrides)) return { error: 'Invalid location climate overrides.' }
+        for (const o of location.monthOverrides) {
+          const override = o as Partial<CalendarLocationClimateOverride>
+          if (!isFiniteNumber(override.monthIndex) || override.monthIndex < 0 || override.monthIndex >= months.length) {
+            return { error: 'A location climate override points at a month that does not exist.' }
+          }
+          const climate = climateResult(override.climate)
+          monthOverrides.push({ monthIndex: override.monthIndex, climate: climate.climate })
+        }
+      }
+      locations.push({ id: location.id, name: location.name, description: location.description, monthOverrides })
+    }
+  }
+
+  const selectedLocationId =
+    isString(obj.selectedLocationId) && locations.some((l) => l.id === obj.selectedLocationId) ? obj.selectedLocationId : null
+
+  const weatherSeed = isString(obj.weatherSeed) && obj.weatherSeed.trim().length > 0 ? obj.weatherSeed : generateWeatherSeed()
+
+  const dayNotes: CalendarDayNote[] = []
+  if (obj.dayNotes !== undefined) {
+    if (!Array.isArray(obj.dayNotes)) return { error: 'Invalid day notes.' }
+    for (const n of obj.dayNotes) {
+      const note = n as Partial<CalendarDayNote>
+      const noteDate = note.date as Partial<CalendarDate> | undefined
+      if (
+        typeof noteDate !== 'object' ||
+        noteDate === null ||
+        !isFiniteNumber(noteDate.year) ||
+        !isFiniteNumber(noteDate.monthIndex) ||
+        !isFiniteNumber(noteDate.day) ||
+        !isString(note.text)
+      ) {
+        return { error: 'Invalid day note.' }
+      }
+      dayNotes.push({ date: { year: noteDate.year, monthIndex: noteDate.monthIndex, day: noteDate.day }, text: note.text })
+    }
+  }
+
+  const moons: CalendarMoon[] = []
+  if (obj.moons !== undefined) {
+    if (!Array.isArray(obj.moons)) return { error: 'Invalid moons.' }
+    for (const m of obj.moons) {
+      const moon = m as Partial<CalendarMoon>
+      if (!isString(moon.id) || !isString(moon.name) || !isString(moon.color) || !isFiniteNumber(moon.cycleDays) || !isFiniteNumber(moon.offset)) {
+        return { error: 'Invalid moon.' }
+      }
+      moons.push({ id: moon.id, name: moon.name, color: moon.color, cycleDays: moon.cycleDays, offset: moon.offset })
+    }
+  }
+
+  const events: CalendarEvent[] = []
+  if (obj.events !== undefined) {
+    if (!Array.isArray(obj.events)) return { error: 'Invalid events.' }
+    for (const ev of obj.events) {
+      const event = ev as Partial<CalendarEvent>
+      const eventDate = event.date as Partial<CalendarDate> | undefined
+      if (
+        !isString(event.id) ||
+        !isString(event.name) ||
+        !isString(event.description) ||
+        !isString(event.category) ||
+        !isString(event.color) ||
+        (event.repeat !== 'none' && event.repeat !== 'yearly' && event.repeat !== 'monthly' && event.repeat !== 'weekly') ||
+        typeof eventDate !== 'object' ||
+        eventDate === null ||
+        !isFiniteNumber(eventDate.year) ||
+        !isFiniteNumber(eventDate.monthIndex) ||
+        !isFiniteNumber(eventDate.day)
+      ) {
+        return { error: 'Invalid event.' }
+      }
+      events.push({
+        id: event.id,
+        name: event.name,
+        description: event.description,
+        category: event.category,
+        color: event.color,
+        repeat: event.repeat,
+        date: { year: eventDate.year, monthIndex: eventDate.monthIndex, day: eventDate.day },
+        linkedNoteId: isString(event.linkedNoteId) ? event.linkedNoteId : null
+      })
+    }
+  }
+
+  return {
+    config: {
+      name: obj.name.trim(),
+      description: obj.description,
+      dateFormat: obj.dateFormat,
+      timeOfDay: obj.timeOfDay,
+      temperatureUnit,
+      weekdays,
+      months,
+      leapRules,
+      eras,
+      currentDate: { year: rawDate.year, monthIndex: rawDate.monthIndex, day: rawDate.day },
+      seasons,
+      locations,
+      selectedLocationId,
+      weatherSeed,
+      dayNotes,
+      moons,
+      events
+    }
+  }
+}
+
+/** Every campaign member can read the calendar — null if the DM hasn't created one yet. */
+export function getCalendar(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CalendarJson | null> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) {
+    return { ok: false, status: 403, error: 'Join this campaign first.' }
+  }
+  const row = new CalendarRepo(db).findByCampaignId(campaignId)
+  return { ok: true, data: row ? toCalendarJson(row) : null }
+}
+
+/** Only the DM can create or edit their campaign's calendar — replaces the whole config (creation and every later edit, including just advancing the current date, all go through this one entry point). */
+export function saveCalendar(
+  db: DatabaseType,
+  campaignId: string,
+  userId: string,
+  input: unknown
+): ServiceResult<CalendarJson> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can edit the calendar.' }
+
+  const validated = validateCalendarConfig(input)
+  if ('error' in validated) return { ok: false, status: 400, error: validated.error }
+
+  const row = new CalendarRepo(db).upsert(campaignId, JSON.stringify(validated.config))
+  return { ok: true, data: toCalendarJson(row) }
+}
+
+/** Only the DM can delete their campaign's calendar — irreversible, the same as deleting a note/folder/campaign. The client is expected to have already confirmed with the user. */
+export function deleteCalendar(db: DatabaseType, campaignId: string, userId: string): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can delete the calendar.' }
+  new CalendarRepo(db).remove(campaignId)
+  return { ok: true, data: undefined }
 }

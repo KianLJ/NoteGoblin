@@ -63,8 +63,10 @@ import type {
   Note,
   Folder,
   Message,
-  CharacterSheet
+  CharacterSheet,
+  CampaignCalendar
 } from '@shared/ipc'
+import type { CalendarConfig } from '@shared/calendar'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 
 // --- Vault file watcher ------------------------------------------------
@@ -616,6 +618,66 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   )
 
   ipcMain.handle(
+    'calendar:get',
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<CampaignCalendar | null>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.getCalendar(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<CampaignCalendar | null>('calendar.get', { campaignId })
+    }
+  )
+
+  ipcMain.handle(
+    'calendar:save',
+    async (
+      _event,
+      campaignId: string,
+      config: CalendarConfig,
+      sessionId?: string
+    ): Promise<ApiResult<CampaignCalendar>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        try {
+          const result = campaignService.saveCalendar(me.db, campaignId, me.userId, config)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<CampaignCalendar>('calendar.save', { campaignId, config })
+    }
+  )
+
+  ipcMain.handle(
+    'calendar:remove',
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<void>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        try {
+          const result = campaignService.deleteCalendar(me.db, campaignId, me.userId)
+          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+        }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<void>('calendar.remove', { campaignId })
+    }
+  )
+
+  ipcMain.handle(
     'folders:list',
     async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Folder[]>> => {
       if (!sessionId) {
@@ -842,6 +904,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       snapshotRepo.save(identity.id, campaign, notes, folders)
     }
   )
+
+  ipcMain.handle('snapshots:remove', (_event, campaignId: string): ApiResult<void> => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    snapshotRepo.remove(identity.id, campaignId)
+    return { ok: true, data: undefined }
+  })
 
   // --- Presence ---------------------------------------------------------
   // sessionId tells us which of the two roles this call is: the DM viewing

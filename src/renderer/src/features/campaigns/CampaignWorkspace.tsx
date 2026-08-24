@@ -219,6 +219,7 @@ export function CampaignWorkspace({
           onViewPlayerUserId(userId)
         }}
         onSelectMonster={onOpenMonsterTab}
+        notes={notes ?? []}
       />
     </div>
   )

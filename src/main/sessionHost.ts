@@ -372,6 +372,20 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (result.ok) broadcastCampaignChanged(campaignId)
       return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
     }
+    case 'calendar.get':
+      return fromService(frame.reqId, campaignService.getCalendar(db, str('campaignId'), userId))
+    case 'calendar.save': {
+      const campaignId = str('campaignId')
+      const result = campaignService.saveCalendar(db, campaignId, userId, input('config'))
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return fromService(frame.reqId, result)
+    }
+    case 'calendar.remove': {
+      const campaignId = str('campaignId')
+      const result = campaignService.deleteCalendar(db, campaignId, userId)
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
+    }
     case 'folders.list':
       return fromService(frame.reqId, campaignService.listFolders(db, str('campaignId'), userId))
     case 'folders.create': {

@@ -1,15 +1,15 @@
 import { useState, type ReactNode } from 'react'
 import { ConnectedPlayersList } from './ConnectedPlayersList'
 import { InitiativeTracker } from './InitiativeTracker'
+import { CalendarPanel } from './CalendarPanel'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from './panelIcons'
 import { DiceTray } from '../dice/DiceTray'
 import { useDiceRollToast } from '../dice/useDiceRollToast'
 import { DiceRollToast } from '../dice/DiceRollToast'
-import type { CharacterSheet } from '@shared/ipc'
+import { loadRightPanelTab, saveRightPanelTab } from './rightPanelTab'
+import type { CharacterSheet, Note } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
-
-type RightPanelTab = 'players' | 'initiative' | 'dice'
 
 interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
@@ -19,11 +19,17 @@ interface RightPanelProps {
   playerCharacters: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
   onSelectMonster: (monster: BestiaryMonster) => void
+  /** For CalendarPanel's event editor — lets an event pair with an existing note. */
+  notes: Note[]
 }
 
 /** DM-only bar on the right of the workspace — always visible regardless of whether a campaign is open or hosting is active, so Dice/Initiative are there from the moment the app opens, not just once something's connected. Messages moved up into the header's Messages button (see AppShell.tsx/MessagesButton.tsx) rather than living here, so this is just the tab strip now. */
-export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPlayer, onSelectMonster }: RightPanelProps): JSX.Element {
-  const [tab, setTab] = useState<RightPanelTab>('players')
+export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPlayer, onSelectMonster, notes }: RightPanelProps): JSX.Element {
+  const [tab, setTabState] = useState(loadRightPanelTab)
+  function setTab(next: typeof tab): void {
+    setTabState(next)
+    saveRightPanelTab(next)
+  }
   const diceToast = useDiceRollToast(tab === 'dice')
 
   return (
@@ -49,7 +55,7 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
             {diceToast && <DiceRollToast key={diceToast.id} entry={diceToast} />}
           </div>
           <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
-          <TabButton icon={<CalendarIcon />} label="Calendar" disabled title="Coming soon" />
+          <TabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
           <TabButton icon={<SessionIcon />} label="Session" disabled title="Coming soon" />
         </div>
 
@@ -65,6 +71,9 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
           </div>
           <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
             <DiceTray sessionId={sessionId} />
+          </div>
+          <div style={{ display: tab === 'calendar' ? 'block' : 'none', height: '100%' }}>
+            <CalendarPanel sessionId={sessionId} campaignId={campaignId} readOnly={false} notes={notes} />
           </div>
         </div>
       </div>
