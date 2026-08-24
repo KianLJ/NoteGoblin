@@ -7,6 +7,20 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.1',
+    title: 'Calendar bug fixes, initiative fairness, exhaustion, and character portraits',
+    highlights: [
+      'Fixed the calendar being unusable while hosting a session, and edits failing with "not connected to that session"',
+      'Fixed a crash (blank window) from setting a calendar month to an extreme length, both when creating and when it happens to already be stored',
+      'Fixed a crash when dragging a note folder between Party/DM/Private visibility',
+      'Fixed the unread message/notification counter not clearing after opening a conversation',
+      'Initiative tracker now keeps a player\'s max HP and AC in sync with their character sheet automatically',
+      'Players can no longer infer monster initiative order or see exact monster initiative rolls when initiative is hidden — monster order is now shuffled per view',
+      'Added an exhaustion tracker (0-6, with SRD effects) to the character sheet',
+      'Added a portrait slot to the character sheet'
+    ]
+  },
+  {
     version: '0.5.0',
     title: 'A full in-world campaign calendar',
     highlights: [
