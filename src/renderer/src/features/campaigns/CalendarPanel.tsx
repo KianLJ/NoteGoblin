@@ -850,10 +850,13 @@ function DayCell({
   )
 }
 
+/** Hard ceiling on how many day cells a single month ever renders — regardless of what a month's configured length actually is (the wizard/server already clamp new input to a sane max, but this is the last line of defense against any already-bad stored data ever freezing the render again, the way a 999999-day month once did). */
+const MAX_RENDERED_MONTH_DAYS = 500
+
 /** One cell per weekday slot, `null` for the leading blanks before day 1 — a flat array so it drops straight into a CSS grid with `weekdays.length` columns. */
 function buildMonthGrid(config: CalendarConfig, year: number, monthIndex: number): (number | null)[] {
   const leading = weekdayIndexForDate(config, { year, monthIndex, day: 1 })
-  const total = monthLength(config, year, monthIndex)
+  const total = Math.min(MAX_RENDERED_MONTH_DAYS, monthLength(config, year, monthIndex))
   const cells: (number | null)[] = Array.from({ length: leading }, () => null)
   for (let day = 1; day <= total; day++) cells.push(day)
   return cells

@@ -73,7 +73,14 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
             <DiceTray sessionId={sessionId} />
           </div>
           <div style={{ display: tab === 'calendar' ? 'block' : 'none', height: '100%' }}>
-            <CalendarPanel sessionId={sessionId} campaignId={campaignId} readOnly={false} notes={notes} />
+            {/* Always the local/direct path, never the hosted session id — `sessionId` here means
+                "the session I'm hosting" (for presence/broadcast elsewhere in this panel), not "a
+                session I've joined". The DM reaching their own calendar is never a joined
+                participant of their own hosted session, so passing it through would route calendar
+                reads/writes over the relay and fail with "not connected to that session." Saves
+                still broadcast to connected players regardless — see registerIpc.ts's calendar:save
+                handler, which already checks getHostedSession() server-side. */}
+            <CalendarPanel sessionId={null} campaignId={campaignId} readOnly={false} notes={notes} />
           </div>
         </div>
       </div>

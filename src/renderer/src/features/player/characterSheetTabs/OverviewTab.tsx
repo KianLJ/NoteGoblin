@@ -12,6 +12,7 @@ import {
   DAMAGE_TYPES,
   computeMaxHp,
   computeSpeed,
+  EXHAUSTION_EFFECTS,
   formatModifier,
   hitDicePools,
   passivePerception,
@@ -66,6 +67,34 @@ interface OverviewDraft {
   inspiration: boolean
   deathSaves: DeathSaves
   hitDiceUsed: Record<string, number>
+  exhaustionLevel: number
+  portraitDataUrl: string | null
+}
+
+const PORTRAIT_MAX_DIMENSION = 256
+
+/** Downscales/re-encodes an uploaded image client-side before it's stored inline in the sheet, so a large photo doesn't bloat every sheet read/write/sync. */
+function readPortraitFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error)
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('Could not read image.'))
+      img.onload = () => {
+        const scale = Math.min(1, PORTRAIT_MAX_DIMENSION / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('Canvas unavailable.'))
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 interface OverviewTabProps {
@@ -103,7 +132,9 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
       tempHp: character.tempHp,
       inspiration: character.inspiration,
       deathSaves: character.deathSaves,
-      hitDiceUsed: character.hitDiceUsed
+      hitDiceUsed: character.hitDiceUsed,
+      exhaustionLevel: character.exhaustionLevel,
+      portraitDataUrl: character.portraitDataUrl
     },
     onSave,
     readOnly
@@ -111,6 +142,12 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
 
   function patch(fields: Partial<OverviewDraft>): void {
     setDraft((prev) => ({ ...prev, ...fields }))
+  }
+
+  async function handlePortraitFile(file: File): Promise<void> {
+    const dataUrl = await readPortraitFile(file)
+    patch({ portraitDataUrl: dataUrl })
+    onSave({ portraitDataUrl: dataUrl })
   }
 
   // Every taken feat's mechanical effects folded on top of the base sheet
@@ -285,21 +322,57 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         </Modal>
       )}
 
-      <div
-        style={{
-          display: 'inline-flex',
-          alignSelf: 'flex-start',
-          maxWidth: '100%',
-          width: 'fit-content',
-          gap: 'var(--space-4)',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          padding: 'var(--space-3) var(--space-4)',
-          background: 'var(--bg-surface-raised)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)'
-        }}
-      >
+      <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <label
+          title={readOnly ? undefined : 'Click to upload a portrait'}
+          style={{
+            width: 72,
+            height: 72,
+            flexShrink: 0,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface-raised)',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: readOnly ? 'default' : 'pointer'
+          }}
+        >
+          {draft.portraitDataUrl ? (
+            <img src={draft.portraitDataUrl} alt="Character portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <span style={{ fontSize: 24, color: 'var(--text-muted)' }}>?</span>
+          )}
+          {!readOnly && (
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) void handlePortraitFile(file)
+                e.target.value = ''
+              }}
+            />
+          )}
+        </label>
+
+        <div
+          style={{
+            display: 'inline-flex',
+            alignSelf: 'flex-start',
+            maxWidth: '100%',
+            width: 'fit-content',
+            gap: 'var(--space-4)',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            padding: 'var(--space-3) var(--space-4)',
+            background: 'var(--bg-surface-raised)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)'
+          }}
+        >
         <HeaderField label="Race">
           <input className="gb-input" style={boxedInputStyle} value={draft.race} onChange={(e) => patch({ race: e.target.value })} />
         </HeaderField>
@@ -401,6 +474,41 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           <StarIcon size={22} filled={draft.inspiration} style={{ color: draft.inspiration ? 'var(--accent)' : 'var(--text-muted)' }} />
         </button>
 
+        <HeaderField label="Exhaustion">
+          <div
+            title={EXHAUSTION_EFFECTS[draft.exhaustionLevel]}
+            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <button
+              type="button"
+              disabled={readOnly || draft.exhaustionLevel <= 0}
+              onClick={() => {
+                const next = Math.max(0, draft.exhaustionLevel - 1)
+                patch({ exhaustionLevel: next })
+                onSave({ exhaustionLevel: next })
+              }}
+              className="gb-input"
+              style={{ ...boxedInputStyle, width: 24, padding: 0, cursor: readOnly ? 'default' : 'pointer' }}
+            >
+              −
+            </button>
+            <span style={{ fontSize: 13, width: 16, textAlign: 'center' }}>{draft.exhaustionLevel}</span>
+            <button
+              type="button"
+              disabled={readOnly || draft.exhaustionLevel >= 6}
+              onClick={() => {
+                const next = Math.min(6, draft.exhaustionLevel + 1)
+                patch({ exhaustionLevel: next })
+                onSave({ exhaustionLevel: next })
+              }}
+              className="gb-input"
+              style={{ ...boxedInputStyle, width: 24, padding: 0, cursor: readOnly ? 'default' : 'pointer' }}
+            >
+              +
+            </button>
+          </div>
+        </HeaderField>
+
         <Divider />
 
         <VitalStat
@@ -493,6 +601,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         <Divider />
 
         <ResistancesSection character={character} onSave={onSave} readOnly={readOnly} />
+        </div>
       </div>
 
       {additionalClasses.length > 0 && (

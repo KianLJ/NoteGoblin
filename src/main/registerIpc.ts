@@ -1055,6 +1055,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (!session) return { ok: false, error: 'Not connected to the relay.' }
     const result = await relayClient.markNotificationRead(session.token, id)
     if (!result.ok) return result
+    // The renderer's notification list (and every unread badge/counter
+    // derived from it) only otherwise refreshes when the relay itself
+    // pushes a live 'notification' WS event (see relaySocket.ts) — nothing
+    // told it to re-fetch after marking read ourselves, so a badge stayed
+    // stuck showing unread until some unrelated later event happened to
+    // trigger a refresh. This nudges it immediately instead.
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.send('relay:notifications-changed')
     return { ok: true, data: undefined }
   })
 
@@ -1096,6 +1103,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!session) return { ok: false, error: 'Not connected to the relay.' }
       const result = await relayClient.markMessagesRead(session.token, fromUserId, kind)
       if (!result.ok) return result
+      // Same reasoning as relay:notifications:mark-read above — without
+      // this, opening a thread (which calls this) marks it read on the
+      // relay, but the unread badge stays showing the stale count until
+      // some unrelated notification happens to arrive and trigger a
+      // refetch, which looks exactly like "clicking it doesn't work."
+      if (!mainWindow.isDestroyed()) mainWindow.webContents.send('relay:notifications-changed')
       return { ok: true, data: undefined }
     }
   )

@@ -133,6 +133,33 @@ export function InitiativeTracker({ sessionId, playerCharacters, onSelectMonster
     })
   }, [])
 
+  // Max HP and AC are derived from the character sheet (level/HP die,
+  // equipped armor), not something the DM tracks by hand — once a player
+  // combatant was added, those two used to freeze at whatever they were at
+  // add-time and silently drift out of sync with the actual sheet (a level
+  // up, new armor, etc). Re-derives them from the live playerCharacters map
+  // on every change. Deliberately leaves currentHp alone — that's real
+  // combat state the DM is actively tracking (damage taken this fight), not
+  // something a sheet edit should ever overwrite mid-encounter.
+  useEffect(() => {
+    setState((prev) => {
+      let changed = false
+      const combatants = prev.combatants.map((c) => {
+        if (c.kind !== 'player' || !c.userId) return c
+        const character = playerCharacters.get(c.userId)
+        if (!character) return c
+        const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
+        const featIds = activeFeatIds(character.classes, character.asiSlotChoices)
+        const maxHp = computeMaxHp(character.classes, character.abilityScores)
+        const ac = computeArmorClassFromEquipment(character.equipment, effScores, featIds, character.classes)
+        if (maxHp === c.maxHp && ac === c.ac) return c
+        changed = true
+        return { ...c, maxHp, ac }
+      })
+      return changed ? { ...prev, combatants } : prev
+    })
+  }, [playerCharacters])
+
   const allMonstersForQuickAdd = useMemo(
     () => [...loadCustomMonsters(), ...BESTIARY].sort((a, b) => a.name.localeCompare(b.name)),
     []

@@ -102,22 +102,59 @@ export interface PlayerVisibleInitiativeState {
   combatants: PlayerVisibleCombatant[]
 }
 
+/** Fisher-Yates — used only to scramble monster display order for players (see sanitizeForPlayer), not anything gameplay-affecting. */
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
 export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string): PlayerVisibleInitiativeState {
   // `combatants` is stored in add-order, not turn order — turnIndex is only
   // ever meaningful against the initiative-sorted view, so both the DM's
   // own UI and this player-facing view have to derive that same sort from
   // the same deterministic function to agree on what index N means.
   const ordered = sortedByInitiative(state.combatants)
+
+  // A monster's exact initiative number is already hidden from players
+  // (see PlayerVisibleCombatant.initiative being real only for player
+  // combatants below) — but its position in a real-initiative-sorted list
+  // still leaks its roll relative to the other monsters (and to the
+  // player's own real initiative). Shuffling just the monster slots among
+  // themselves removes that, while player combatants keep their real
+  // positions (normal party knowledge). Reshuffled fresh on every
+  // broadcast/request, independently per viewer, so there's no stable
+  // pattern to correlate against, and it fixes up turnIndex to still point
+  // at whoever's actually active after the reorder.
+  const activeId = state.turnIndex >= 0 ? ordered[state.turnIndex]?.id : undefined
+  const monsterSlots = ordered.reduce<number[]>((slots, c, i) => {
+    if (c.kind === 'monster') slots.push(i)
+    return slots
+  }, [])
+  const shuffledMonsters = shuffle(monsterSlots.map((i) => ordered[i]))
+  const display = [...ordered]
+  monsterSlots.forEach((slotIndex, k) => {
+    display[slotIndex] = shuffledMonsters[k]
+  })
+  const turnIndex = activeId !== undefined ? display.findIndex((c) => c.id === activeId) : state.turnIndex
+
   return {
     round: state.round,
-    turnIndex: state.turnIndex,
-    combatants: ordered.map((c) => {
+    turnIndex,
+    combatants: display.map((c) => {
       const isSelf = c.kind === 'player' && c.userId === viewerUserId
       return {
         id: c.id,
         kind: c.kind,
         name: c.name,
-        initiative: c.initiative,
+        // Real number for a player (party members already announce their
+        // own rolls), but null for a monster — the shuffle above already
+        // hides its relative position, and there's no reason to also hand
+        // over its literal roll on top of that.
+        initiative: c.kind === 'player' ? c.initiative : null,
         currentHp: c.kind === 'player' ? c.currentHp : null,
         maxHp: c.kind === 'player' ? c.maxHp : null,
         injury: injuryLevel(c.currentHp, c.maxHp),

@@ -289,7 +289,8 @@ export function renameCampaign(
   if (!row) return { ok: false, status: 404, error: 'Campaign not found.' }
   if (row.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can rename this campaign.' }
   const updated = campaignRepo.update(campaignId, name.trim())
-  return { ok: true, data: toCampaignJson(userRepo, campaignRepo, updated as CampaignRow, userId) }
+  if (!updated) return { ok: false, status: 404, error: 'Campaign not found.' }
+  return { ok: true, data: toCampaignJson(userRepo, campaignRepo, updated, userId) }
 }
 
 /** Only the DM (campaign owner) can delete their own campaign — irreversible, everything in it (notes, folders, characters, messages, initiative) goes with it. The client is expected to have already confirmed with the user. */
@@ -514,7 +515,13 @@ export function updateNote(
     ...(visibility ? { visibility } : {}),
     ...(editorUserIds !== undefined ? { editorUserIds } : {})
   })
-  return { ok: true, data: toNoteJson(userRepo, updated as NoteRow) }
+  // Can genuinely come back undefined in vault mode: changing visibility
+  // moves the note's underlying file into a different folder tree (Party
+  // Notes/DM Only/Private), and update()'s own re-fetch-by-id can race that
+  // move and miss it. Surfacing a clean error here beats crashing on
+  // `undefined.author_user_id` in toNoteJson.
+  if (!updated) return { ok: false, status: 404, error: 'Note not found after update — try again.' }
+  return { ok: true, data: toNoteJson(userRepo, updated) }
 }
 
 export function deleteNote(
@@ -662,7 +669,14 @@ export function updateFolder(
     name: typeof input.name === 'string' ? input.name.trim() : undefined,
     ...(parentFolderId !== undefined ? { parentFolderId } : {})
   })
-  return { ok: true, data: toFolderJson(userRepo, updated as FolderRow) }
+  // Can genuinely come back undefined in vault mode: the visibility cascade
+  // above just moved this folder's underlying files into a different
+  // folder tree (Party Notes/DM Only/Private), and update()'s own
+  // re-fetch-by-id can race that move and miss it — this is exactly what
+  // crashed on `undefined.author_user_id` in toFolderJson when dragging a
+  // folder across visibility (e.g. DM Only -> Party Notes).
+  if (!updated) return { ok: false, status: 404, error: 'Folder not found after update — try again.' }
+  return { ok: true, data: toFolderJson(userRepo, updated) }
 }
 
 export function deleteFolder(
@@ -857,7 +871,12 @@ function validateCalendarConfig(input: unknown): { config: CalendarConfig } | { 
     ) {
       return { error: 'Invalid month.' }
     }
-    months.push({ name: (m as CalendarMonth).name, length: Math.floor((m as CalendarMonth).length) })
+    // Clamped, not just floored — an absurd length (a fat-fingered extra
+    // digit or two) used to sail straight through into the calendar grid,
+    // which would then try to render that many day cells and freeze the
+    // whole window. 366 comfortably covers a real calendar's leap day and
+    // any homebrew month within reason.
+    months.push({ name: (m as CalendarMonth).name, length: Math.min(366, Math.max(1, Math.floor((m as CalendarMonth).length))) })
   }
 
   const leapRules: CalendarLeapRule[] = []

@@ -1492,6 +1492,10 @@ export interface CharacterSheetData {
   /** The DM-awarded kind (advantage on one roll, spent to use it) — a simple on/off flag, not the Bard's Bardic Inspiration die pool. */
   inspiration: boolean
   deathSaves: DeathSaves
+  /** SRD exhaustion, 0 (none) to 6 (death) — each level's mechanical effects stack with the ones below it (see EXHAUSTION_EFFECTS). */
+  exhaustionLevel: number
+  /** A small portrait image, stored as a data URL directly in the sheet — no separate asset pipeline, so it round-trips with the rest of the sheet (export, sync, snapshots) for free. Kept small (see the wizard's downscale-on-upload) so it doesn't bloat every sheet read/write. */
+  portraitDataUrl: string | null
   /** Hit dice spent (not yet recovered), keyed by class name — one pool per class since each contributes `level` dice of its own hit die size. Spent on a Short Rest to heal, recovered (half the total, minimum one) on a Long Rest. */
   hitDiceUsed: Record<string, number>
   attacks: Attack[]
@@ -1544,6 +1548,8 @@ export function emptyCharacterSheet(): CharacterSheetData {
     tempHp: 0,
     inspiration: false,
     deathSaves: { successes: 0, failures: 0 },
+    exhaustionLevel: 0,
+    portraitDataUrl: null,
     hitDiceUsed: {},
     attacks: [],
     currency: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
@@ -1568,6 +1574,17 @@ export function emptyCharacterSheet(): CharacterSheetData {
     notes: ''
   }
 }
+
+/** SRD exhaustion table — index matches CharacterSheetData.exhaustionLevel (0-6), each level's text describing only what that level adds on top of every level below it. */
+export const EXHAUSTION_EFFECTS: string[] = [
+  'None.',
+  'Disadvantage on ability checks.',
+  'Speed halved.',
+  'Disadvantage on attack rolls and saving throws.',
+  'Hit point maximum halved.',
+  'Speed reduced to 0.',
+  'Death.'
+]
 
 // --- Derived-stat helpers (pure, computed at render time — nothing here is stored) ---
 

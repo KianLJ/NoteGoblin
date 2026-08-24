@@ -356,9 +356,10 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
               className="gb-input"
               type="number"
               min={1}
+              max={366}
               style={{ flex: 1 }}
               value={m.length}
-              onChange={(e) => updateMonth(i, { length: Math.max(1, Number(e.target.value) || 1) })}
+              onChange={(e) => updateMonth(i, { length: Math.min(366, Math.max(1, Number(e.target.value) || 1)) })}
               placeholder="Days"
             />
             <Button variant="ghost" onClick={() => removeMonth(i)}>
