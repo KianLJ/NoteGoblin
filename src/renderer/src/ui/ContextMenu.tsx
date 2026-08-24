@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { getStoredFontScale } from '../theme'
 
 export interface ContextMenuItem {
   label: string
@@ -30,15 +31,23 @@ export function ContextMenu({
       return
     }
     // Measure after mount so we can clamp to the viewport, then reveal.
+    // `state.x`/`state.y` (from the triggering MouseEvent) and window/rect
+    // measurements are always in real screen pixels, regardless of the
+    // app-wide transform: scale() wrapper (see App.tsx) — but this menu's
+    // own `position: fixed` is anchored to that transformed ancestor, so its
+    // CSS left/top are read in the wrapper's *local*, pre-scale coordinate
+    // system. Dividing by the current scale is what keeps the menu glued to
+    // the actual cursor instead of drifting away from it as scale increases.
+    const scale = getStoredFontScale()
     const el = menuRef.current
     if (!el) {
-      setPos({ x: state.x, y: state.y })
+      setPos({ x: state.x / scale, y: state.y / scale })
       return
     }
     const rect = el.getBoundingClientRect()
     const x = Math.min(state.x, window.innerWidth - rect.width - 8)
     const y = Math.min(state.y, window.innerHeight - rect.height - 8)
-    setPos({ x: Math.max(4, x), y: Math.max(4, y) })
+    setPos({ x: Math.max(4, x) / scale, y: Math.max(4, y) / scale })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 

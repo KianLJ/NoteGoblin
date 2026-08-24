@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.4.3',
+    title: 'Fixed a long-standing scroll stutter across the whole app',
+    highlights: [
+      'Fixed a background performance bug — present since the Dice Tray was added — that made scrolling stutter everywhere (most noticeably in the Codex, notes, and character sheets), and that never went away once it started',
+      'Root cause: a bug in how the DM header\'s tab strip merged note and monster tabs meant it was quietly re-rendering the entire app, over and over, forever, from the moment a campaign was opened',
+      'Font/UI scaling now uses a real CSS transform instead of the browser\'s zoom, fixing a separate issue where scrolling would visibly pause and "snap" at non-default font sizes'
+    ]
+  },
+  {
     version: '0.4.2',
     title: 'Fixed the corner menu and header becoming unreachable at larger font sizes',
     highlights: [

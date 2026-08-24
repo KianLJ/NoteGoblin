@@ -303,12 +303,13 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [bestiaryOpen, setBestiaryOpen] = useState(false)
 
   return (
-    // Divides out the current font-scale zoom (see theme.ts's applyFontScale)
-    // so this box's *rendered* height still lands on exactly 100vh instead of
-    // 100vh × scale — otherwise the header/footer at the top and bottom of
-    // this flex column render past the real window edge and become
-    // unreachable the moment font scale goes above 1.
-    <div style={{ height: 'calc(100vh / var(--font-scale, 1))', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    // height:100% (not 100vh) deliberately — this box is nested inside
+    // App.tsx's ScaledApp wrapper, which already pre-divides its own size by
+    // the current font scale so the whole subtree renders back to exactly
+    // the real window size once transformed; 100vh here would bypass that
+    // and read the true (un-compensated) viewport directly, reintroducing
+    // the "footer pushed off-screen" bug the scale wrapper exists to avoid.
+    <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <header
         className="gb-drag"
         style={{

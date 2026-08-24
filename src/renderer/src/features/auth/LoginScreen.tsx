@@ -96,7 +96,7 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
 
   if (stage === 'checking') {
     return (
-      <div className="gb-drag" style={{ minHeight: 'calc(100vh / var(--font-scale, 1))' }}>
+      <div className="gb-drag" style={{ minHeight: '100%' }}>
         <div style={{ position: 'absolute', top: 0, right: 0 }}>
           <WindowControls />
         </div>
@@ -111,7 +111,7 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
     <div
       className="gb-drag"
       style={{
-        minHeight: 'calc(100vh / var(--font-scale, 1))',
+        minHeight: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

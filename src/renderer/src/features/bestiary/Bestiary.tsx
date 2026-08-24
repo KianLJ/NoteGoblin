@@ -112,10 +112,18 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
     }).sort((a, b) => a.name.localeCompare(b.name))
   }, [query, typeFilter])
 
-  const selectedMonster: BestiaryMonster | undefined = allMonsters.find((m) => m.index === selectedIndex) ?? filteredMonsters[0]
-  const selectedEquipment: CompendiumEquipment | undefined = EQUIPMENT.find((e) => e.id === selectedIndex) ?? filteredEquipment[0]
-  const selectedSpell: CompendiumSpell | undefined = SPELLS.find((s) => s.id === selectedIndex) ?? filteredSpells[0]
-  const selectedMagicItem: CompendiumMagicItem | undefined = MAGIC_ITEMS.find((m) => m.id === selectedIndex) ?? filteredMagicItems[0]
+  // Deliberately no "?? filteredX[0]" fallback — auto-rendering an entry's
+  // full detail (a monster's stat block especially, the heaviest one) the
+  // instant the Codex opens, before any click, turned out to be the actual
+  // cause of a lasting scroll stutter across the whole app: something about
+  // that immediate render (still not narrowed down further) leaves the
+  // renderer in a degraded state that doesn't clear even after the Codex is
+  // closed. Nothing selected until the user actually picks one avoids
+  // triggering it at all.
+  const selectedMonster: BestiaryMonster | undefined = allMonsters.find((m) => m.index === selectedIndex)
+  const selectedEquipment: CompendiumEquipment | undefined = EQUIPMENT.find((e) => e.id === selectedIndex)
+  const selectedSpell: CompendiumSpell | undefined = SPELLS.find((s) => s.id === selectedIndex)
+  const selectedMagicItem: CompendiumMagicItem | undefined = MAGIC_ITEMS.find((m) => m.id === selectedIndex)
 
   function handleDeleteCustom(index: string): void {
     removeCustomMonster(index)
@@ -143,8 +151,12 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
       <div
         className="gb-card"
         style={{
-          width: 'calc(100vw - var(--space-6) * 2)',
-          height: 'calc(100vh / var(--font-scale, 1) - var(--space-6) * 2)',
+          // % of the fixed, inset:0 backdrop (below), not vh/vw — vh/vw
+          // always mean the *true* viewport, which no longer matches this
+          // element's actual rendered size once App.tsx's font-scale
+          // transform is anything other than 1.
+          width: 'calc(100% - var(--space-6) * 2)',
+          height: 'calc(100% - var(--space-6) * 2)',
           maxWidth: 1100,
           display: 'flex',
           flexDirection: 'column',

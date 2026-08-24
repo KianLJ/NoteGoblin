@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { BackArrowIcon, LockIcon, PlusIcon } from '../campaigns/icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../campaigns/NoteTreeSection'
+import { getStoredFontScale } from '../../theme'
 import type { Campaign, CampaignSnapshot, Folder, Note } from '@shared/ipc'
 import type { PlayerTabRef } from './usePlayerWorkspace'
 
@@ -94,8 +95,13 @@ export function PlayerSidebar({
     function handleMove(e: PointerEvent): void {
       if (!splitRef.current) return
       const rect = splitRef.current.getBoundingClientRect()
+      // rect/clientY are always real screen pixels — clamp in that space,
+      // then convert to the local, pre-scale unit `partyHeight` is rendered
+      // in (see App.tsx's transform: scale() wrapper), or the pane would
+      // resize scale× faster than the actual drag.
       const raw = e.clientY - rect.top
-      setPartyHeight(Math.min(rect.height - MIN_PANE_HEIGHT, Math.max(MIN_PANE_HEIGHT, raw)))
+      const clamped = Math.min(rect.height - MIN_PANE_HEIGHT, Math.max(MIN_PANE_HEIGHT, raw))
+      setPartyHeight(clamped / getStoredFontScale())
     }
     function handleUp(): void {
       setDragging(false)
@@ -112,7 +118,9 @@ export function PlayerSidebar({
     const el = splitRef.current
     if (!el) return
     const observer = new ResizeObserver(() => {
-      const height = el.getBoundingClientRect().height
+      // getBoundingClientRect is real screen pixels; partyHeight (prev) is in
+      // the local, pre-scale unit it's rendered in — convert before comparing.
+      const height = el.getBoundingClientRect().height / getStoredFontScale()
       setPartyHeight((prev) => Math.min(prev, Math.max(MIN_PANE_HEIGHT, height - MIN_PANE_HEIGHT)))
     })
     observer.observe(el)

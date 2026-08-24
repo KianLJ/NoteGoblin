@@ -260,24 +260,36 @@ export function getStoredFontScale(): number {
 
 /**
  * Scales the whole rendered app proportionally to each element's own size —
- * not just font-size — via Chromium's `zoom`, since most of the UI is sized
- * in raw pixels rather than rem. This is what an oversized custom/system
- * font (whose glyphs render far bigger than its declared px size implies)
- * can be scaled back down to compensate for, without needing to change fonts.
+ * not just font-size — since most of the UI is sized in raw pixels rather
+ * than rem. This is what an oversized custom/system font (whose glyphs
+ * render far bigger than its declared px size implies) can be scaled back
+ * down to compensate for, without needing to change fonts.
  *
- * `zoom` inflates an element's own rendered box by the same factor, even
- * when that box's height came from a `vh` unit — `vh` always resolves
- * against the *real* viewport, so a `100vh` container inside the zoomed
- * `<html>` computes its nominal height correctly but then renders `scale`×
- * taller than that, overflowing the actual window. `--font-scale` is set
- * here alongside `zoom` so the handful of true viewport-anchored containers
- * (AppShell.tsx, LoginScreen.tsx) can pre-shrink by dividing their own
- * height by it, cancelling the zoom back out to exactly the real window
- * size — otherwise anything pinned to the bottom of that box (the corner
- * menu, in particular) renders past the bottom edge and out of reach.
+ * Applied as a CSS `transform: scale()` on a single wrapper around the whole
+ * app (see App.tsx), not either flavor of browser zoom — both were tried and
+ * both had a real problem:
+ *
+ *  - The CSS `zoom` property inflates an element's rendered box by the
+ *    factor even when that box's height came from a `vh` unit, and `vh`
+ *    resolves against the real (un-zoomed) viewport — so `100vh` containers
+ *    rendered taller than the actual window and pushed the header/corner
+ *    menu out of reach. It also forces scrolling off Chromium's composited
+ *    fast path, causing visible scroll lag in content-heavy views.
+ *  - `webContents.setZoomFactor` (real browser zoom, main-process side) fixed
+ *    both of those, but introduced its own Chromium quirk: scroll repaint
+ *    gets deferred until the scroll gesture ends, felt as the view "sticking"
+ *    then snapping into place.
+ *
+ * `transform: scale()` is a pure compositor-layer operation — no layout
+ * recalculation, no repaint-throttling — so scrolling underneath it stays
+ * smooth at any scale. The tradeoff: it changes the positioning context for
+ * every `position: fixed` descendant (dividing raw clientX/clientY-derived
+ * pixel math by the current scale is what compensates for that — see
+ * ContextMenu.tsx, HoverDetailCard.tsx, ResizableSidebar.tsx, NoteSidebar.tsx/
+ * PlayerSidebar.tsx's drag-resize handlers), and callers still read the scale
+ * via getStoredFontScale() rather than a DOM zoom query.
  */
 export function applyFontScale(scale: number): void {
-  ;(document.documentElement.style as unknown as { zoom: string }).zoom = String(scale)
   document.documentElement.style.setProperty('--font-scale', String(scale))
 }
 

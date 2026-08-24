@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Folder, Note } from '@shared/ipc'
 
 /**
@@ -292,9 +292,15 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   }
 
   const activeNote = notes?.find((n) => n.id === activeId) ?? null
-  const tabNotes = notes
-    ? (openTabs.map((id) => notes.find((n) => n.id === id)).filter(Boolean) as Note[])
-    : []
+  // Memoized: AppShell's dmTabOrder-reconciling effect depends on this array's
+  // identity, and a fresh reference on every render (this used to rebuild
+  // unconditionally) made that effect fire on every render forever — a
+  // permanent low-priority re-render loop across the whole app, not just
+  // while a note tab was actually open/closing.
+  const tabNotes = useMemo(
+    () => (notes ? (openTabs.map((id) => notes.find((n) => n.id === id)).filter(Boolean) as Note[]) : []),
+    [notes, openTabs]
+  )
 
   return {
     notes,

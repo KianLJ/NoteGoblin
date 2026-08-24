@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { getStoredFontScale } from '../../theme'
 import type { DetailField } from './CompendiumDetailModal'
 
 interface HoverDetailCardProps {
@@ -38,16 +39,50 @@ export function HoverDetailCard({ title, subtitle, fields, description, extra, c
   const contentRef = useRef<HTMLDivElement>(null)
   const posRef = useRef(pos)
   posRef.current = pos
+  // Every attack/spell/skill/ability row on the sheet wraps its own
+  // HoverDetailCard, so `onMouseMove` here fires at raw native event
+  // frequency (often 120+/s) across dozens of rows at once. Calling setPos
+  // straight from that handler used to mean a React re-render *and* the
+  // getBoundingClientRect() below on every single one of those events — real
+  // layout-thrashing, felt as the whole app's input queue backing up (a
+  // scroll gesture right after moving the mouse would visibly stall then
+  // "catch up"). Coalescing into at most one update per animation frame
+  // caps the real work to the display's own refresh rate regardless of how
+  // fast the raw mousemove events arrive.
+  const rafRef = useRef<number | null>(null)
+  const latestMoveRef = useRef<{ clientX: number; clientY: number } | null>(null)
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    },
+    []
+  )
 
   // Defaults to the cursor's right, but flips to its left when there isn't
   // room — e.g. weapon/spell rows in the right-side panel, where clamping
   // the card to stay on-screen used to land it right on top of the row's
   // own buttons (prepare/edit/delete) instead of actually moving out of
   // the way of them.
+  // `e.clientX/Y` and `window.innerWidth/Height` are always real screen
+  // pixels, regardless of the app-wide transform: scale() wrapper (see
+  // App.tsx) — but this card renders through a portal into that same
+  // transformed subtree as a `position: fixed` element, so its CSS
+  // left/top are read in the wrapper's *local*, pre-scale coordinate
+  // system. Dividing by the current scale is what keeps the tooltip glued
+  // to the actual cursor instead of drifting away from it as scale increases.
   function handleMove(e: React.MouseEvent): void {
-    const spaceRight = window.innerWidth - e.clientX - OFFSET
-    const x = spaceRight >= CARD_WIDTH + 8 ? e.clientX + OFFSET : Math.max(8, e.clientX - OFFSET - CARD_WIDTH)
-    setPos({ x, y: e.clientY + OFFSET })
+    latestMoveRef.current = { clientX: e.clientX, clientY: e.clientY }
+    if (rafRef.current !== null) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      const move = latestMoveRef.current
+      if (!move) return
+      const scale = getStoredFontScale()
+      const spaceRight = window.innerWidth - move.clientX - OFFSET
+      const x = spaceRight >= CARD_WIDTH + 8 ? move.clientX + OFFSET : Math.max(8, move.clientX - OFFSET - CARD_WIDTH)
+      setPos({ x: x / scale, y: (move.clientY + OFFSET) / scale })
+    })
   }
 
   // Measure the actual rendered card after each move and nudge it up only if it would run past the bottom edge — keeps it close to the cursor instead of the old fixed-height guess that could land it far away.
@@ -56,7 +91,8 @@ export function HoverDetailCard({ title, subtitle, fields, description, extra, c
     const rect = cardRef.current.getBoundingClientRect()
     const overflowBottom = rect.bottom - (window.innerHeight - 8)
     if (overflowBottom > 0.5) {
-      setPos((prev) => (prev ? { ...prev, y: Math.max(8, prev.y - overflowBottom) } : prev))
+      const scale = getStoredFontScale()
+      setPos((prev) => (prev ? { ...prev, y: Math.max(8, prev.y - overflowBottom / scale) } : prev))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pos?.x, pos?.y])
@@ -73,8 +109,16 @@ export function HoverDetailCard({ title, subtitle, fields, description, extra, c
     return () => el.removeEventListener('wheel', handleWheel)
   }, [])
 
+  function handleLeave(): void {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    setPos(null)
+  }
+
   return (
-    <div ref={wrapperRef} onMouseMove={handleMove} onMouseLeave={() => setPos(null)}>
+    <div ref={wrapperRef} onMouseMove={handleMove} onMouseLeave={handleLeave}>
       {children}
       {pos &&
         createPortal(

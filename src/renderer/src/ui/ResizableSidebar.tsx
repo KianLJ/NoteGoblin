@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { getStoredFontScale } from '../theme'
 
 interface ResizableSidebarProps {
   defaultWidth?: number
@@ -80,7 +81,11 @@ export function ResizableSidebar({
     function handleMove(e: globalThis.PointerEvent): void {
       if (!wrapperRef.current) return
       const rect = wrapperRef.current.getBoundingClientRect()
-      const raw = handleSide === 'right' ? e.clientX - rect.left : rect.right - e.clientX
+      // rect/clientX are always real screen pixels; dividing by the current
+      // font scale converts that into the local, pre-scale unit `width`
+      // itself is rendered in (see App.tsx's transform: scale() wrapper) —
+      // otherwise the panel would resize scale× faster than the actual drag.
+      const raw = (handleSide === 'right' ? e.clientX - rect.left : rect.right - e.clientX) / getStoredFontScale()
       setWidth(Math.min(maxWidth, Math.max(minWidth, raw)))
     }
     function handleUp(): void {

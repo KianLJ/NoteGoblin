@@ -38,8 +38,10 @@ export function Modal({ onClose, children, width = 560, dismissible = true }: Mo
         className="gb-card"
         style={{
           width,
-          maxWidth: 'calc(100vw - var(--space-6))',
-          maxHeight: 'calc(100vh / var(--font-scale, 1) - var(--space-6))',
+          // % of the fixed, inset:0 backdrop (above), not vh/vw — see
+          // Bestiary.tsx's identical comment for why.
+          maxWidth: 'calc(100% - var(--space-6))',
+          maxHeight: 'calc(100% - var(--space-6))',
           overflowY: 'auto',
           boxShadow: 'var(--shadow-lg)'
         }}

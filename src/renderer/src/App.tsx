@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { LoginScreen } from './features/auth/LoginScreen'
 import { onIdentitySwitched } from './features/auth/identityEvents'
 import { AppShell } from './features/shell/AppShell'
@@ -9,14 +9,46 @@ function App(): JSX.Element {
 
   useEffect(() => onIdentitySwitched(setIdentity), [])
 
-  if (!identity) {
-    return <LoginScreen onAuthenticated={setIdentity} />
-  }
+  return (
+    <ScaledApp>
+      {!identity ? (
+        <LoginScreen onAuthenticated={setIdentity} />
+      ) : (
+        // Keyed by identity.id so switching accounts remounts AppShell from
+        // scratch — otherwise the previous identity's open campaign,
+        // connected host, etc. would still be sitting in AppShell's state.
+        <AppShell key={identity.id} displayName={identity.displayName} />
+      )}
+    </ScaledApp>
+  )
+}
 
-  // Keyed by identity.id so switching accounts remounts AppShell from
-  // scratch — otherwise the previous identity's open campaign, connected
-  // host, etc. would still be sitting in AppShell's state.
-  return <AppShell key={identity.id} displayName={identity.displayName} />
+/**
+ * Applies the font-size setting (theme.ts's applyFontScale/--font-scale) to
+ * the whole app via a single `transform: scale()` — see applyFontScale's own
+ * doc comment for why this, and not either flavor of browser zoom. The
+ * width/height compensate for the transform (dividing by the same factor it
+ * multiplies by) so this box's *rendered* size still lands on exactly
+ * #root's real size — everything inside it can then use ordinary
+ * percentage/vh sizing without knowing scaling is happening at all, except
+ * for the small set of places that read raw MouseEvent client coordinates
+ * (context menus, the hover tooltip, drag-resize handles), which divide by
+ * getStoredFontScale() themselves since real screen pixels and this box's
+ * local coordinate system no longer match once scale isn't 1.
+ */
+function ScaledApp({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <div
+      style={{
+        width: 'calc(100% / var(--font-scale, 1))',
+        height: 'calc(100% / var(--font-scale, 1))',
+        transform: 'scale(var(--font-scale, 1))',
+        transformOrigin: 'top left'
+      }}
+    >
+      {children}
+    </div>
+  )
 }
 
 export default App
