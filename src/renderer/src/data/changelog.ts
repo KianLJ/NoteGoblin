@@ -7,6 +7,27 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.4',
+    title: 'Goblin Bard sync fixes',
+    highlights: [
+      'Fixed switching moods/tracks again before the previous crossfade finished sometimes leaving an old track stuck playing forever, immune to pause and the volume slider',
+      'Fixed stale music from a previous session (or your own earlier solo tinkering) sometimes still playing after joining or leaving a session',
+      'The volume slider now syncs to connected players, not just your own device',
+      'Turning off "Broadcast to players" now stops players immediately instead of only affecting future picks',
+      "Fixed custom tracks never actually reaching players — the relay's connection caps a single message's size, which was silently dropping a custom track's audio; it's now sent in smaller pieces and reassembled on their end"
+    ]
+  },
+  {
+    version: '0.5.3',
+    title: 'Goblin Bard — synced music and sound effects',
+    highlights: [
+      'New Goblin Bard music system: pick a mood from a bundled library of tracks, played on loop with a configurable crossfade, optionally broadcast (with pause/resume/skip) to every connected player',
+      'Right-click a mood to play one of its tracks specifically, or add/remove your own custom local tracks per mood — custom tracks broadcast to players too',
+      'Session scenes can link a mood (and optionally a specific track) right in the scene note itself, alongside the existing Encounter link — auto-plays when that scene goes live',
+      'Added curated sound effects for hosting, joining, disconnecting, dice rolls, resting, and messages'
+    ]
+  },
+  {
     version: '0.5.2',
     title: 'Live session presentations, pinned notes, custom NPCs, and reliability fixes',
     highlights: [
