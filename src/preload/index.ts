@@ -183,6 +183,12 @@ const api: AppApi = {
       ipcRenderer.on('ws:music-changed', listener)
       return () => ipcRenderer.removeListener('ws:music-changed', listener)
     },
+    broadcastVolume: (volume) => ipcRenderer.invoke('music:broadcast-volume', volume),
+    onVolumeChange: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, volume: number): void => callback(volume)
+      ipcRenderer.on('ws:music-volume-changed', listener)
+      return () => ipcRenderer.removeListener('ws:music-volume-changed', listener)
+    },
     listCustom: () => ipcRenderer.invoke('music:list-custom'),
     addCustomTrack: (groupId) => ipcRenderer.invoke('music:add-custom-track', groupId),
     removeCustomTrack: (groupId, trackId) => ipcRenderer.invoke('music:remove-custom-track', groupId, trackId)

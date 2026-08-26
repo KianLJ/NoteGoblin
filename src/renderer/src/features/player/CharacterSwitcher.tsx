@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
+import { stopMusic } from '../audio/musicEngine'
 import type { CharacterSheet } from '@shared/ipc'
 
 interface CharacterSwitcherProps {
@@ -30,6 +31,7 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
   async function leaveSession(): Promise<void> {
     setLeaveBusy(true)
     await window.goblin.sessions.leave()
+    stopMusic()
     setLeaveBusy(false)
     setOpen(false)
     onLeaveSession()

@@ -13,7 +13,9 @@ import type {
   RequestKind,
   ResponseFrame,
   SceneChangedFrame,
-  MusicChangedFrame
+  MusicChangedFrame,
+  MusicTrackChunkFrame,
+  MusicVolumeChangedFrame
 } from '@server/relay/sessionProtocol'
 import type { ApiResult } from '@shared/ipc'
 
@@ -30,6 +32,13 @@ let socket: WebSocket | null = null
 let currentSessionId: string | null = null
 let clientWindow: BrowserWindow | null = null
 const pending = new Map<string, { resolve: (response: ResponseFrame) => void; timer: NodeJS.Timeout }>()
+
+// A DM-local custom track's audio arrives as several MusicTrackChunkFrames
+// (see that frame's doc comment) before the MusicChangedFrame that actually
+// names it — reassembled here, keyed by trackId, and handed to the renderer
+// only once the corresponding music-changed frame arrives.
+const pendingCustomTrackChunks = new Map<string, { title: string; mimeType: string; chunks: string[]; received: number }>()
+const assembledCustomTracks = new Map<string, { title: string; mimeType: string; dataBase64: string }>()
 
 function wsUrl(sessionId: string): string {
   return RELAY_URL.replace(/^http/, 'ws') + relaySessionPath(sessionId)
@@ -121,6 +130,8 @@ export function leaveSession(): void {
   }
   socket = null
   currentSessionId = null
+  pendingCustomTrackChunks.clear()
+  assembledCustomTracks.clear()
   failAllPending('Left the session.')
 }
 
@@ -231,8 +242,29 @@ function handleFrame(raw: WebSocket.RawData): void {
     })
   }
 
+  if (payload.type === 'music-track-chunk') {
+    const frame = payload as MusicTrackChunkFrame
+    let entry = pendingCustomTrackChunks.get(frame.trackId)
+    if (!entry) {
+      entry = { title: frame.title, mimeType: frame.mimeType, chunks: new Array(frame.total), received: 0 }
+      pendingCustomTrackChunks.set(frame.trackId, entry)
+    }
+    entry.chunks[frame.index] = frame.chunkBase64
+    entry.received++
+    if (entry.received >= frame.total) {
+      assembledCustomTracks.set(frame.trackId, { title: entry.title, mimeType: entry.mimeType, dataBase64: entry.chunks.join('') })
+      pendingCustomTrackChunks.delete(frame.trackId)
+    }
+  }
+
   if (payload.type === 'music-changed' && clientWindow) {
     const frame = payload as MusicChangedFrame
-    clientWindow.webContents.send('ws:music-changed', { trackId: frame.trackId, fadeMs: frame.fadeMs, customTrack: frame.customTrack })
+    const customTrack = frame.trackId ? assembledCustomTracks.get(frame.trackId) : undefined
+    clientWindow.webContents.send('ws:music-changed', { trackId: frame.trackId, fadeMs: frame.fadeMs, customTrack })
+  }
+
+  if (payload.type === 'music-volume-changed' && clientWindow) {
+    const frame = payload as MusicVolumeChangedFrame
+    clientWindow.webContents.send('ws:music-volume-changed', frame.volume)
   }
 }

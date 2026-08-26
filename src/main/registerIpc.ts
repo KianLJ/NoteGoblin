@@ -30,6 +30,8 @@ import {
   broadcastInitiative,
   broadcastDiceRoll,
   broadcastMusic,
+  broadcastMusicTrackData,
+  broadcastMusicVolume,
   broadcastMessage,
   pushForceRoll,
   startPresentingDeck,
@@ -1118,9 +1120,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // initiate, since only the DM ever picks the mood.
   // A custom track's actual audio never leaves this machine unless there's
   // someone hosted to send it to and it's small enough to be worth the
-  // relay round trip — a multi-hundred-MB file would otherwise stall the
-  // whole session socket for everyone. Bundled tracks never hit this path:
-  // getCustomMusicTrack only ever resolves the DM's own local additions.
+  // relay round trip — a multi-hundred-MB file would otherwise take a long
+  // time to chunk-transfer for everyone. Bundled tracks never hit this
+  // path: getCustomMusicTrack only ever resolves the DM's own local
+  // additions. The relay's own per-message size cap is handled by chunking
+  // (see broadcastMusicTrackData), not by this limit.
   const MAX_BROADCAST_CUSTOM_TRACK_BYTES = 30 * 1024 * 1024
 
   ipcMain.handle('music:broadcast', async (_event, trackId: string | null, fadeMs: number): Promise<void> => {
@@ -1136,10 +1140,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         broadcastMusic(trackId, fadeMs)
         return
       }
-      broadcastMusic(trackId, fadeMs, { title: custom.title, mimeType: mimeTypeForPath(custom.path), dataBase64: buffer.toString('base64') })
+      // Must land before the music-changed frame below — sessionClient.ts
+      // assumes every chunk for a track has already arrived by the time
+      // that track's music-changed frame does (see MusicTrackChunkFrame's
+      // doc comment), which the underlying per-connection WebSocket
+      // ordering guarantees as long as these are sent in this order.
+      broadcastMusicTrackData(trackId!, custom.title, mimeTypeForPath(custom.path), buffer.toString('base64'))
+      broadcastMusic(trackId, fadeMs)
     } catch {
       broadcastMusic(trackId, fadeMs)
     }
+  })
+
+  ipcMain.handle('music:broadcast-volume', (_event, volume: number): void => {
+    if (getHostedSession()) broadcastMusicVolume(volume)
   })
 
   // DM's own local additions to a mood — see customMusic.ts's doc comment.

@@ -152,21 +152,44 @@ export interface SceneChangedFrame {
  * this is just "which one," not a stream — each client loops/crossfades to
  * it locally at `fadeMs`, using the same fade duration so everyone's
  * transition feels the same length even though playback isn't
- * sample-synced.
+ * sample-synced. For a DM-local custom addition, sessionHost.ts sends the
+ * actual audio first as one or more MusicTrackChunkFrames, then this frame
+ * — see that frame's doc comment for why it's chunked instead of inlined
+ * here.
  */
 export interface MusicChangedFrame {
   type: 'music-changed'
   trackId: string | null
   fadeMs: number
-  /**
-   * Present only when `trackId` names a DM-local custom addition (see
-   * main/customMusic.ts) rather than something every client already has
-   * bundled — the actual audio, base64-encoded, so a connected player can
-   * play it too without the file existing on their own disk. Sent inline on
-   * every broadcast of that track (not just the first) since the relay
-   * never stores anything and a player might join or reconnect mid-session
-   * with no earlier copy to fall back on; the receiving end (musicEngine.ts)
-   * caches the decoded blob URL by trackId so it only ever decodes once.
-   */
-  customTrack?: { title: string; mimeType: string; dataBase64: string }
+}
+
+/**
+ * One piece of a DM-local custom track's actual audio (see
+ * main/customMusic.ts), base64-encoded — bundled tracks never need this,
+ * every client already has the file. Chunked rather than inlined in
+ * MusicChangedFrame because the relay's Durable-Object WebSocket connection
+ * (Cloudflare Workers) hard-caps a single message at 1 MiB; a real MP3's
+ * base64 form routinely exceeds that in one piece. Sent as `total`
+ * sequential frames sharing one `trackId`, immediately followed by the
+ * corresponding MusicChangedFrame — the underlying WebSocket preserves
+ * per-connection order, so sessionClient.ts can safely assume every chunk
+ * for a track has arrived by the time that track's music-changed frame
+ * does. Sent in full on every broadcast of that track (not just the first)
+ * since the relay never stores anything and a player might join or
+ * reconnect mid-session with no earlier copy to fall back on.
+ */
+export interface MusicTrackChunkFrame {
+  type: 'music-track-chunk'
+  trackId: string
+  title: string
+  mimeType: string
+  index: number
+  total: number
+  chunkBase64: string
+}
+
+/** Pushed to every connected player whenever the DM adjusts the Goblin Bard volume slider — keeps everyone's playback level in sync the same way a mood pick does, rather than each client only ever reflecting its own locally-stored preference. */
+export interface MusicVolumeChangedFrame {
+  type: 'music-volume-changed'
+  volume: number
 }

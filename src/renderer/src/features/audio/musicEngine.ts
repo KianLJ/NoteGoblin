@@ -1,5 +1,5 @@
 import { MUSIC_LIBRARY, findTrack, type MusicTrack } from '../../data/musicLibrary'
-import { getStoredMusicVolume, getStoredMusicBroadcastEnabled } from './soundSettings'
+import { getStoredMusicVolume, setMusicVolume, getStoredMusicBroadcastEnabled } from './soundSettings'
 import { getCustomTracks, findCustomTrack, findCustomTrackGroupId } from './customMusicStore'
 
 /**
@@ -24,8 +24,22 @@ let currentTrackId: string | null = null
 let currentGroupId: string | null = null
 let currentTrackIndex = 0
 let playing = false
-let fadeTimer: ReturnType<typeof setInterval> | undefined
 let listening = false
+
+/**
+ * One fade-in-progress per audio element, keyed by the element itself —
+ * not a single shared timer. A crossfade's "outgoing" element used to share
+ * one module-level `fadeTimer` with whatever came next: starting a second
+ * crossfade before the first one's fade-out finished would cancel that
+ * timer to start the new one, orphaning the still-playing outgoing element
+ * with nothing left to ever pause it — it kept looping forever, untouched
+ * by pause/volume/anything else, since it was no longer `currentAudio` and
+ * no longer had a timer watching it. Tracking fades per-element instead
+ * means a new crossfade only ever touches the two elements it's actually
+ * swapping between, so an earlier fade-out always keeps running to
+ * completion (and its own cleanup) regardless of what gets picked next.
+ */
+const activeFades = new Map<HTMLAudioElement, ReturnType<typeof setInterval>>()
 
 const listeners = new Set<() => void>()
 
@@ -55,8 +69,10 @@ function tracksForGroup(groupId: string): MusicTrack[] {
   return [...(group?.tracks ?? []), ...getCustomTracks(groupId)]
 }
 
-/** Fades one element's volume toward `to` and calls `onDone` once it arrives — the building block both crossfadeTo (two elements swapping) and pause/resume (one element, no swap) use. */
+/** Fades one element's volume toward `to` and calls `onDone` once it arrives — the building block both crossfadeTo (two elements swapping) and pause/resume (one element, no swap) use. Cancels any fade already in progress on that same element first, so pausing mid-crossfade-in (or picking again mid-fade-out) replaces its target instead of fighting the old interval for control of `.volume`. */
 function fadeElementVolume(el: HTMLAudioElement, to: number, fadeMs: number, onDone?: () => void): void {
+  const existing = activeFades.get(el)
+  if (existing) clearInterval(existing)
   const from = el.volume
   const stepMs = 50
   const steps = Math.max(1, Math.round(fadeMs / stepMs))
@@ -67,9 +83,11 @@ function fadeElementVolume(el: HTMLAudioElement, to: number, fadeMs: number, onD
     el.volume = from + (to - from) * t
     if (t >= 1) {
       clearInterval(timer)
+      activeFades.delete(el)
       onDone?.()
     }
   }, stepMs)
+  activeFades.set(el, timer)
 }
 
 /** Crossfades from whatever's currently playing to a brand-new element for `url` (or to silence, if `url` is null) — used only for an actual track change (a new mood, a skip), never for pause/resume, which keep the same element (and its playback position) alive instead. */
@@ -88,28 +106,50 @@ function crossfadeTo(url: string | null, fadeMs: number): void {
   }
   currentAudio = incoming
 
-  if (fadeTimer) clearInterval(fadeTimer)
-  const stepMs = 50
-  const steps = Math.max(1, Math.round(fadeMs / stepMs))
-  let step = 0
-  fadeTimer = setInterval(() => {
-    step++
-    const t = Math.min(1, step / steps)
-    if (outgoing) outgoing.volume = Math.max(0, targetVolume * (1 - t))
-    if (incoming) incoming.volume = Math.min(targetVolume, targetVolume * t)
-    if (t >= 1) {
-      clearInterval(fadeTimer)
-      if (outgoing) {
-        outgoing.pause()
-        outgoing.src = ''
-      }
-    }
-  }, stepMs)
+  if (outgoing) {
+    fadeElementVolume(outgoing, 0, fadeMs, () => {
+      outgoing.pause()
+      outgoing.src = ''
+    })
+  }
+  if (incoming) fadeElementVolume(incoming, targetVolume, fadeMs)
 }
 
-/** Applies a new volume to whatever's currently playing immediately — separate from the fade above, for when the DM just drags the volume slider mid-track. */
+/** Applies a new volume to whatever's currently playing immediately — separate from the fade above, for when the DM just drags the volume slider mid-track. Cancels any fade still running on this element first, so a drag mid-crossfade/mid-pause sticks instead of being overwritten by that fade's next tick. */
 export function applyLiveVolume(volume: number): void {
-  if (currentAudio) currentAudio.volume = volume
+  if (!currentAudio) return
+  const existing = activeFades.get(currentAudio)
+  if (existing) {
+    clearInterval(existing)
+    activeFades.delete(currentAudio)
+  }
+  currentAudio.volume = volume
+}
+
+/**
+ * Hard-stops whatever's currently playing and clears every bit of state
+ * tied to it — used whenever the "which table am I at" context changes
+ * (joining a session, leaving one, getting disconnected), not during
+ * ordinary play. Goblin Bard's state is a module-level singleton with no
+ * idea which campaign/session it belongs to, so without this, a track
+ * started in one context (a DM's own solo tinkering, an earlier session)
+ * would otherwise just keep looping straight through a mode switch or a
+ * fresh join, audible in a session it was never picked for.
+ */
+export function stopMusic(): void {
+  if (currentAudio) {
+    const existing = activeFades.get(currentAudio)
+    if (existing) clearInterval(existing)
+    activeFades.delete(currentAudio)
+    currentAudio.pause()
+    currentAudio.src = ''
+  }
+  currentAudio = null
+  currentTrackId = null
+  currentGroupId = null
+  currentTrackIndex = 0
+  playing = false
+  notify()
 }
 
 /** Plays a specific track by id from the top — used for an actual track change (pickMood/skip, or an incoming broadcast for a *different* track than whatever's already loaded). Leaves currentGroupId/currentTrackIndex pointing at it so pause/resume/skip all stay consistent regardless of how the track was reached. */
@@ -141,7 +181,6 @@ function setTrack(trackId: string, fadeMs: number): void {
 /** Fades the current element down and pauses it in place — its playback position is untouched, so resumeCurrent picks up right where this left off rather than restarting the track. Keeps the current selection (trackId/groupId), unlike an actual track change. */
 function pauseCurrent(fadeMs: number): void {
   playing = false
-  if (fadeTimer) clearInterval(fadeTimer)
   const el = currentAudio
   if (el) fadeElementVolume(el, 0, fadeMs, () => el.pause())
   notify()
@@ -158,7 +197,6 @@ function resumeCurrent(fadeMs: number): void {
     setTrack(currentTrackId, fadeMs)
     return
   }
-  if (fadeTimer) clearInterval(fadeTimer)
   void currentAudio.play().catch(() => {
     /* autoplay blocked or similar — not worth surfacing */
   })
@@ -188,6 +226,14 @@ export function ensureMusicListening(): void {
       setTrack(trackId, fadeMs)
     }
   })
+  // Keeps this client's playback level in step with the DM's slider —
+  // also persisted (not just applied live) so the *next* track this client
+  // plays picks it up too, instead of reverting to whatever this device had
+  // stored before the DM last touched the slider.
+  window.goblin.music.onVolumeChange((volume) => {
+    setMusicVolume(volume)
+    applyLiveVolume(volume)
+  })
 }
 
 /**
@@ -200,6 +246,25 @@ export function ensureMusicListening(): void {
  */
 function effectiveSessionId(sessionId: string | null): string | null {
   return getStoredMusicBroadcastEnabled() ? sessionId : null
+}
+
+/** DM-only — applies a volume change locally and, while hosting with broadcasting on, syncs it to every connected player too (see MusicButton.tsx's slider). */
+export function changeVolume(volume: number, sessionId: string | null): void {
+  applyLiveVolume(volume)
+  const target = effectiveSessionId(sessionId)
+  if (target) void window.goblin.music.broadcastVolume(volume)
+}
+
+/**
+ * DM-only — tells every connected player to stop immediately, without
+ * touching this device's own playback. Used when the "Broadcast to
+ * players" toggle switches off mid-track: turning it off is the DM's only
+ * way to signal "you should stop hearing this," since nothing else ever
+ * tells a player's client to stop on its own once it's already playing a
+ * synced track.
+ */
+export function stopPlayersOnly(fadeMs: number, sessionId: string | null): void {
+  if (sessionId) void window.goblin.music.broadcast(null, fadeMs)
 }
 
 /** DM-only — picks a random track from the mood and plays it locally, then (while hosting, and broadcasting is on) broadcasts that exact track id so every connected player crossfades to the same one. */

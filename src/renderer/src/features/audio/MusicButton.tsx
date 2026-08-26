@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MUSIC_LIBRARY, findTrack } from '../../data/musicLibrary'
-import { getMusicState, subscribeMusic, pickMood, playSpecificTrack, togglePlayPause, skipTrack, applyLiveVolume } from './musicEngine'
+import { getMusicState, subscribeMusic, pickMood, playSpecificTrack, togglePlayPause, skipTrack, changeVolume, stopPlayersOnly } from './musicEngine'
 import { getStoredMusicVolume, setMusicVolume, getStoredMusicBroadcastEnabled, setMusicBroadcastEnabled } from './soundSettings'
 import { MusicNoteIcon } from '../shell/icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
@@ -27,6 +27,13 @@ export function MusicButton({ sessionId }: MusicButtonProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
 
   function chooseBroadcastEnabled(enabled: boolean): void {
+    // Turning it off is the only signal a connected player's client ever
+    // gets to stop hearing a synced track — nothing else tells them to,
+    // once they're already playing it, so this has to be an explicit
+    // "stop" push rather than just letting future picks silently stop
+    // reaching them. Only fires when it was actually on before (no-op if
+    // it was already off) and doesn't touch this device's own playback.
+    if (broadcastEnabled && !enabled) stopPlayersOnly(fadeMs, sessionId)
     setMusicBroadcastEnabled(enabled)
     setBroadcastEnabledState(enabled)
   }
@@ -49,7 +56,7 @@ export function MusicButton({ sessionId }: MusicButtonProps): JSX.Element {
   function handleVolumeChange(next: number): void {
     setVolume(next)
     setMusicVolume(next)
-    applyLiveVolume(next)
+    changeVolume(next, sessionId)
   }
 
   const nowPlaying = musicState.groupId ? MUSIC_LIBRARY.find((g) => g.id === musicState.groupId) : null

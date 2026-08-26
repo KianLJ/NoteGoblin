@@ -422,19 +422,23 @@ export interface AppApi {
   music: {
     /** `trackId: null` stops music entirely. A no-op unless actually hosting. */
     broadcast: (trackId: string | null, fadeMs: number) => Promise<void>
-    /** Fires for every connected player (never the DM's own broadcast, which they already applied locally when they picked it) whenever the DM changes or stops the music. `customTrack` is present when `trackId` is one of the DM's own local additions — see MusicChangedFrame's doc comment. */
+    /** Fires for every connected player (never the DM's own broadcast, which they already applied locally when they picked it) whenever the DM changes or stops the music. `customTrack` is present when `trackId` is one of the DM's own local additions — its actual audio, reassembled from however many MusicTrackChunkFrames it took to arrive (see sessionProtocol.ts). */
     onChange: (
       callback: (update: { trackId: string | null; fadeMs: number; customTrack?: { title: string; mimeType: string; dataBase64: string } }) => void
     ) => () => void
+    /** DM-only, fire-and-forget — keeps every connected player's playback level in sync with the slider, not just their own locally-stored preference. A no-op unless actually hosting. */
+    broadcastVolume: (volume: number) => Promise<void>
+    /** Fires for every connected player whenever the DM adjusts the volume slider. */
+    onVolumeChange: (callback: (volume: number) => void) => () => void
     /**
      * A DM's own local additions to a mood — a file picked off their own
      * disk, played the same way a bundled track is (crossfade, loop,
      * broadcast). Stored in userData, not the vault/campaign, since it's a
      * per-machine music library, not campaign content. Broadcasting one of
-     * these to players is still just an id: a player's client that doesn't
-     * have this file simply can't resolve it and stays silent on that pick
-     * (see musicEngine.ts's setTrack no-op-on-miss behavior) — there's no
-     * attempt to ship the actual audio to them.
+     * these to connected players sends the actual audio too (chunked over
+     * the relay — see sessionProtocol.ts's MusicTrackChunkFrame), not just
+     * the id, since a player's client has no other way to resolve a file
+     * that only exists on the DM's own disk.
      */
     listCustom: () => Promise<Record<string, { id: string; title: string }[]>>
     /** Opens a native file picker scoped to audio files; returns the added track, or null if cancelled. */

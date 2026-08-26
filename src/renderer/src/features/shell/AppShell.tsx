@@ -16,7 +16,7 @@ import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
 import { Bestiary } from '../bestiary/Bestiary'
 import { MusicButton } from '../audio/MusicButton'
-import { ensureMusicListening } from '../audio/musicEngine'
+import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
 
@@ -79,6 +79,12 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     notifications.notifications.filter((n) => n.kind === 'session-invite' && n.sessionId).map((n) => n.sessionId!)
   )
   function handleJoinedSession(sessionId: string, label: string): void {
+    // Whatever Goblin Bard track was playing before (this DM's own solo
+    // tinkering, an earlier session) belongs to that context, not this new
+    // one — without this it just keeps looping straight through the join,
+    // audible in a table it was never picked for. The new session's DM
+    // still gets to pick something fresh whenever they next broadcast.
+    stopMusic()
     setJoinedSession({ sessionId, label })
     setMode('player')
   }
@@ -129,6 +135,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   useEffect(() => {
     return window.goblin.sessions.onDisconnected((reason) => {
       window.goblin.sessions.leave()
+      stopMusic()
       setJoinedSession(null)
       setDisconnectMessage(reason === 'dm-left' ? 'The DM disconnected.' : 'Lost connection to the DM.')
       setTimeout(() => setDisconnectMessage(null), 6000)

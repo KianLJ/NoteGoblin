@@ -17,7 +17,9 @@ import type {
   MessageFrame,
   ForceRollFrame,
   SceneChangedFrame,
-  MusicChangedFrame
+  MusicChangedFrame,
+  MusicTrackChunkFrame,
+  MusicVolumeChangedFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
@@ -241,9 +243,30 @@ export function broadcastDiceRoll(roll: DiceRollLogEntry, excludeUserId?: string
   }
 }
 
-/** Pushes the DM's Goblin Bard pick to every connected player, table-wide (not scoped to a campaign — music is a "whole session" thing, unlike scene decks). `trackId: null` means "stop." `customTrack` carries the actual audio for a DM-local addition (see MusicChangedFrame's doc comment) — omitted for anything from the bundled library, which every client already has. */
-export function broadcastMusic(trackId: string | null, fadeMs: number, customTrack?: { title: string; mimeType: string; dataBase64: string }): void {
-  const frame: MusicChangedFrame = { type: 'music-changed', trackId, fadeMs, customTrack }
+/** Pushes the DM's Goblin Bard pick to every connected player, table-wide (not scoped to a campaign — music is a "whole session" thing, unlike scene decks). `trackId: null` means "stop." */
+export function broadcastMusic(trackId: string | null, fadeMs: number): void {
+  const frame: MusicChangedFrame = { type: 'music-changed', trackId, fadeMs }
+  for (const p of players.values()) sendToRelay(p.userId, frame)
+}
+
+// Kept safely under the relay's Durable-Object WebSocket 1 MiB message cap
+// even after the JSON envelope's own overhead — see MusicTrackChunkFrame's
+// doc comment.
+const MUSIC_CHUNK_BASE64_CHARS = 500_000
+
+/** Sends a DM-local custom track's actual audio to every connected player, split into MusicTrackChunkFrame pieces — call this immediately before broadcastMusic() for that same trackId (see MusicTrackChunkFrame's doc comment on why order matters here). */
+export function broadcastMusicTrackData(trackId: string, title: string, mimeType: string, dataBase64: string): void {
+  const total = Math.max(1, Math.ceil(dataBase64.length / MUSIC_CHUNK_BASE64_CHARS))
+  for (let index = 0; index < total; index++) {
+    const chunkBase64 = dataBase64.slice(index * MUSIC_CHUNK_BASE64_CHARS, (index + 1) * MUSIC_CHUNK_BASE64_CHARS)
+    const frame: MusicTrackChunkFrame = { type: 'music-track-chunk', trackId, title, mimeType, index, total, chunkBase64 }
+    for (const p of players.values()) sendToRelay(p.userId, frame)
+  }
+}
+
+/** Pushes a Goblin Bard volume change to every connected player, table-wide — same "whole session" scope as broadcastMusic. */
+export function broadcastMusicVolume(volume: number): void {
+  const frame: MusicVolumeChangedFrame = { type: 'music-volume-changed', volume }
   for (const p of players.values()) sendToRelay(p.userId, frame)
 }
 
