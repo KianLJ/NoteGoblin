@@ -15,12 +15,14 @@ import type {
   InitiativeFrame,
   DiceRollFrame,
   MessageFrame,
-  ForceRollFrame
+  ForceRollFrame,
+  SceneChangedFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
+import type { LiveSceneState } from '@shared/sessionDeck'
 
 /**
  * DM side of a hosted session — like-for-like replacement of hostServer.ts's
@@ -44,6 +46,8 @@ let currentSessionId: string | null = null
 const players = new Map<string, PlayerConn>()
 let dmWindow: BrowserWindow | null = null
 let dmSubscribedCampaignId: string | null = null
+/** Purely runtime, never persisted — if the DM closes the app mid-presentation, the presentation just stops; the deck's actual content is still safely in session_decks. */
+let liveScene: { campaignId: string; deckId: string; sceneIndex: number } | null = null
 
 function wsUrl(sessionId: string): string {
   return RELAY_URL.replace(/^http/, 'ws') + relaySessionPath(sessionId)
@@ -101,6 +105,7 @@ export function startSessionHost(
         currentSessionId = null
         players.clear()
         dmSubscribedCampaignId = null
+        liveScene = null
         announceHostingStatus(null)
       }
       if (!settled) {
@@ -129,6 +134,7 @@ export function stopSessionHost(): void {
   currentSessionId = null
   players.clear()
   dmSubscribedCampaignId = null
+  liveScene = null
   announceHostingStatus(null)
 }
 
@@ -232,6 +238,43 @@ export function broadcastDiceRoll(roll: DiceRollLogEntry, excludeUserId?: string
   for (const p of players.values()) {
     if (p.userId !== excludeUserId) sendToRelay(p.userId, frame)
   }
+}
+
+function broadcastSceneChangedFor(campaignId: string, deckId: string | null, sceneIndex: number): void {
+  const frame: SceneChangedFrame = { type: 'scene-changed', campaignId, deckId, sceneIndex }
+  for (const p of players.values()) {
+    if (p.campaignId === campaignId) sendToRelay(p.userId, frame)
+  }
+  if (dmSubscribedCampaignId === campaignId && dmWindow) {
+    dmWindow.webContents.send('ws:scene-changed', { sessionId: currentSessionId, campaignId, deckId, sceneIndex })
+  }
+}
+
+/** DM-only, called locally (never over the relay — presenting is the DM's own action on their own machine) — starts a live presentation of `deckId` at its first scene and pushes it to every connected player in that campaign. */
+export function startPresentingDeck(campaignId: string, deckId: string): void {
+  liveScene = { campaignId, deckId, sceneIndex: 0 }
+  broadcastSceneChangedFor(campaignId, deckId, 0)
+}
+
+/** DM-only — moves the live cursor to `sceneIndex` within whatever deck is currently being presented. A no-op if nothing is currently live (e.g. a stray click after the DM already stopped presenting). */
+export function setLiveScene(sceneIndex: number): void {
+  if (!liveScene) return
+  liveScene = { ...liveScene, sceneIndex }
+  broadcastSceneChangedFor(liveScene.campaignId, liveScene.deckId, sceneIndex)
+}
+
+/** DM-only — ends the live presentation; every connected player's "DM has moved on" cue clears since there's no longer a live scene to be behind on. */
+export function stopPresentingDeck(): void {
+  if (!liveScene) return
+  const { campaignId } = liveScene
+  liveScene = null
+  broadcastSceneChangedFor(campaignId, null, -1)
+}
+
+/** What a given campaign's live cursor currently is — `{ deckId: null, sceneIndex: -1 }` if nobody's presenting. Used both to answer a player's `sessionDecks.getLive` request (e.g. opening the Sessions tab mid-presentation) and by the DM's own renderer to know whether "Present" or "Stop Presenting" should show. */
+export function getLiveSceneState(campaignId: string): LiveSceneState {
+  if (liveScene && liveScene.campaignId === campaignId) return { deckId: liveScene.deckId, sceneIndex: liveScene.sceneIndex }
+  return { deckId: null, sceneIndex: -1 }
 }
 
 /** Pushes a "roll this" prompt to one specific connected player — a no-op if they're not currently connected (the DM's own UI only offers this for players it can see in ConnectedPlayersList, so that shouldn't normally happen). */
@@ -468,6 +511,40 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       }
       return { reqId: frame.reqId, ok: true, data: undefined }
     }
+    case 'sessionDecks.list':
+      return fromService(frame.reqId, campaignService.listSessionDecks(db, str('campaignId'), userId))
+    case 'sessionDecks.create': {
+      const campaignId = str('campaignId')
+      const result = campaignService.createSessionDeck(db, campaignId, userId, str('title'))
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return fromService(frame.reqId, result)
+    }
+    case 'sessionDecks.update': {
+      const campaignId = str('campaignId')
+      const result = campaignService.updateSessionDeck(db, campaignId, str('deckId'), userId, input('input'))
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return fromService(frame.reqId, result)
+    }
+    case 'sessionDecks.remove': {
+      const campaignId = str('campaignId')
+      const result = campaignService.deleteSessionDeck(db, campaignId, str('deckId'), userId)
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
+    }
+    case 'sessionDecks.addScene': {
+      const campaignId = str('campaignId')
+      const result = campaignService.addSceneToDeck(db, campaignId, str('deckId'), userId, str('title'))
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return fromService(frame.reqId, result)
+    }
+    case 'sessionDecks.removeScene': {
+      const campaignId = str('campaignId')
+      const result = campaignService.removeSceneFromDeck(db, campaignId, str('deckId'), userId, str('noteId'))
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
+    }
+    case 'sessionDecks.getLive':
+      return { reqId: frame.reqId, ok: true, data: getLiveSceneState(str('campaignId')) }
     case 'messages.list':
       return fromService(frame.reqId, campaignService.listMessages(db, str('campaignId'), userId))
     case 'messages.send': {

@@ -115,6 +115,7 @@ interface NoteTreeSectionProps {
   onCreateFolder: (name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
   onDeleteNote: (noteId: string) => void
+  onTogglePinNote: (noteId: string, pinned: boolean) => void
   onRenameFolder: (folderId: string, name: string) => void
   onDeleteFolder: (folderId: string) => void
   onMoveNote: (noteId: string, folderId: string | null, visibility: 'dm' | 'shared' | 'private') => void
@@ -160,6 +161,7 @@ export function NoteTreeSection({
   onCreateFolder,
   onRenameNote,
   onDeleteNote,
+  onTogglePinNote,
   onRenameFolder,
   onDeleteFolder,
   onMoveNote,
@@ -542,6 +544,10 @@ export function NoteTreeSection({
             setRenameValue(note.title)
           }
         })
+        items.push({
+          label: note.pinned ? 'Unpin' : 'Pin',
+          onSelect: () => onTogglePinNote(note.id, !note.pinned)
+        })
       }
     }
     items.push({
@@ -792,6 +798,7 @@ export function NoteTreeSection({
 
   const rootFolders = childFolders(null)
   const rootNotes = childNotes(null)
+  const pinnedNotes = [...notes.filter((n) => n.pinned)].sort((a, b) => compareByMode(sortMode, { ...a, name: a.title }, { ...b, name: b.title }))
 
   return (
     <div
@@ -888,6 +895,24 @@ export function NoteTreeSection({
           </ToolbarButton>
         </div>
       </div>
+
+      {pinnedNotes.length > 0 && (
+        <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: 2, marginBottom: 2 }}>
+          <div
+            style={{
+              padding: '2px var(--space-3)',
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.03em',
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)'
+            }}
+          >
+            Pinned
+          </div>
+          {pinnedNotes.map((n) => renderNote(n, 0))}
+        </div>
+      )}
 
       <div
         onContextMenu={openBackgroundMenu}

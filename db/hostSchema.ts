@@ -79,6 +79,16 @@ CREATE TABLE IF NOT EXISTS notes (
   -- only — visibility, folder, and this list itself stay author-only).
   -- Meaningless on a 'dm'-visibility note since only the author can ever see it.
   editor_user_ids TEXT NOT NULL DEFAULT '[]',
+  -- Author-only, purely a display convenience (see NoteTreeSection.tsx's Pinned section) — doesn't gate visibility or editing.
+  pinned INTEGER NOT NULL DEFAULT 0,
+  -- Set only for a note that's actually a session-deck scene (see
+  -- shared/sessionDeck.ts) — no FK (session_decks is defined after this
+  -- table, and deleting a deck cleans up its scene notes explicitly in
+  -- campaignService rather than relying on cascade). Marks this note as
+  -- (a) hidden from the normal note sidebar tree and (b) subject to
+  -- ::-prefixed DM-only-line stripping for non-DM readers, on every read
+  -- path, not just the session-deck one.
+  scene_deck_id TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -106,6 +116,28 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 
 CREATE INDEX IF NOT EXISTS idx_characters_campaign ON characters(campaign_id);
+
+-- One row per DM-authored session deck (see shared/sessionDeck.ts) — scenes
+-- are always read/written as one whole array, never individually, so they're
+-- kept as one JSON blob rather than a child table (same reasoning as
+-- campaign_calendars' config_json). campaign_id is NOT a foreign key, same
+-- reasoning as characters/initiative_entries/messages above.
+CREATE TABLE IF NOT EXISTS session_decks (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  scenes_json TEXT NOT NULL DEFAULT '[]',
+  -- NULL until the DM presents this deck for the first time — players never
+  -- see a deck (or its scenes) that hasn't gone live at least once, so
+  -- future-session prep doesn't leak early. Once set, stays set even after
+  -- presenting stops, so past sessions stay browsable (see the offline-style
+  -- "go back and view what happened" requirement this feature started from).
+  presented_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_decks_campaign ON session_decks(campaign_id);
 
 CREATE TABLE IF NOT EXISTS initiative_entries (
   id TEXT PRIMARY KEY,

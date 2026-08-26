@@ -1,5 +1,6 @@
 import type { Database as DatabaseType } from 'better-sqlite3'
 import type { Campaign, Folder, Note } from '@shared/ipc'
+import type { SessionDeck } from '@shared/sessionDeck'
 
 export interface CachedCampaignRow {
   identity_id: string
@@ -7,6 +8,7 @@ export interface CachedCampaignRow {
   campaign_json: string
   notes_json: string
   folders_json: string
+  session_decks_json: string
   synced_at: string
 }
 
@@ -14,6 +16,7 @@ export interface CampaignSnapshot {
   campaign: Campaign
   notes: Note[]
   folders: Folder[]
+  sessionDecks: SessionDeck[]
   syncedAt: string
 }
 
@@ -22,6 +25,8 @@ function toSnapshot(row: CachedCampaignRow): CampaignSnapshot {
     campaign: JSON.parse(row.campaign_json) as Campaign,
     notes: JSON.parse(row.notes_json) as Note[],
     folders: JSON.parse(row.folders_json) as Folder[],
+    // '[]' default covers a row saved before session_decks_json existed.
+    sessionDecks: JSON.parse(row.session_decks_json || '[]') as SessionDeck[],
     syncedAt: row.synced_at
   }
 }
@@ -38,18 +43,19 @@ export class SnapshotRepo {
   constructor(private db: DatabaseType) {}
 
   /** Overwrites whatever was cached for this campaign before — a snapshot is always the latest known state, never a history. */
-  save(identityId: string, campaign: Campaign, notes: Note[], folders: Folder[]): void {
+  save(identityId: string, campaign: Campaign, notes: Note[], folders: Folder[], sessionDecks: SessionDeck[]): void {
     this.db
       .prepare(
-        `INSERT INTO cached_campaigns (identity_id, campaign_id, campaign_json, notes_json, folders_json, synced_at)
-         VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        `INSERT INTO cached_campaigns (identity_id, campaign_id, campaign_json, notes_json, folders_json, session_decks_json, synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
          ON CONFLICT (identity_id, campaign_id) DO UPDATE SET
            campaign_json = excluded.campaign_json,
            notes_json = excluded.notes_json,
            folders_json = excluded.folders_json,
+           session_decks_json = excluded.session_decks_json,
            synced_at = excluded.synced_at`
       )
-      .run(identityId, campaign.id, JSON.stringify(campaign), JSON.stringify(notes), JSON.stringify(folders))
+      .run(identityId, campaign.id, JSON.stringify(campaign), JSON.stringify(notes), JSON.stringify(folders), JSON.stringify(sessionDecks))
   }
 
   list(identityId: string): CampaignSnapshot[] {

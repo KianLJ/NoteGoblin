@@ -15,6 +15,9 @@ export function getLocalDb(userDataDir: string): DatabaseType {
       if (tableIsMissingColumn(database, 'known_hosts', 'cert_pem')) {
         database.exec('DROP TABLE known_hosts')
       }
+      if (tableIsMissingColumn(database, 'cached_campaigns', 'session_decks_json')) {
+        database.exec("ALTER TABLE cached_campaigns ADD COLUMN session_decks_json TEXT NOT NULL DEFAULT '[]'")
+      }
     })
   }
   return db

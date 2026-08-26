@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS cached_campaigns (
   campaign_json TEXT NOT NULL,
   notes_json TEXT NOT NULL,
   folders_json TEXT NOT NULL,
+  -- Added after this table shipped — see hostDb.ts-style migration in localDb.ts. Defaults to '[]' so an old row (or a fresh insert before this cache is first populated) reads back as no decks rather than a JSON parse error.
+  session_decks_json TEXT NOT NULL DEFAULT '[]',
   synced_at TEXT NOT NULL,
   PRIMARY KEY (identity_id, campaign_id)
 );

@@ -4,7 +4,9 @@ import { NoteRepo, type NoteRow } from '../repositories/noteRepo'
 import { FolderRepo, type FolderRow } from '../repositories/folderRepo'
 import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
 import { CalendarRepo, type CalendarRow } from '../repositories/calendarRepo'
+import { SessionDeckRepo, type SessionDeckRow } from '../repositories/sessionDeckRepo'
 import { UserRepo } from '../repositories/userRepo'
+import { stripDmAsides, type SessionScene } from '@shared/sessionDeck'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
 import {
@@ -65,6 +67,7 @@ interface NoteRepoLike {
     bodyMarkdown: string
     visibility: NoteRow['visibility']
     folderId: string | null
+    sceneDeckId?: string | null
   }): NoteRow
   update(
     id: string,
@@ -74,6 +77,7 @@ interface NoteRepoLike {
       folderId?: string | null
       visibility?: NoteRow['visibility']
       editorUserIds?: string[]
+      pinned?: boolean
     }
   ): NoteRow | undefined
   remove(id: string): void
@@ -126,6 +130,9 @@ export interface NoteJson {
   folderId: string | null
   /** userIds (besides the author) allowed to edit this note's title/body — granted by the author only. */
   editorUserIds: string[]
+  pinned: boolean
+  /** Set only when this note is actually a session-deck scene (see shared/sessionDeck.ts) — hides it from the normal note sidebar tree client-side. */
+  sceneDeckId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -182,7 +189,14 @@ function parseEditorUserIds(raw: string): string[] {
   }
 }
 
-function toNoteJson(userRepo: UserRepo, row: NoteRow): NoteJson {
+/**
+ * `viewerIsDm` only matters for a scene note (row.scene_deck_id set) — its
+ * `::`-prefixed lines are DM-only asides (see shared/sessionDeck.ts) that
+ * must never reach a player, on ANY read path that can return this row, not
+ * just the session-deck-specific one. A normal (non-scene) note ignores it
+ * entirely since it has no such lines to strip.
+ */
+function toNoteJson(userRepo: UserRepo, row: NoteRow, viewerIsDm: boolean): NoteJson {
   const author = userRepo.findById(row.author_user_id)
   return {
     id: row.id,
@@ -190,10 +204,12 @@ function toNoteJson(userRepo: UserRepo, row: NoteRow): NoteJson {
     authorUserId: row.author_user_id,
     authorDisplayName: author?.display_name ?? 'Unknown',
     title: row.title,
-    bodyMarkdown: row.body_markdown,
+    bodyMarkdown: row.scene_deck_id && !viewerIsDm ? stripDmAsides(row.body_markdown) : row.body_markdown,
     visibility: row.visibility,
     folderId: row.folder_id,
     editorUserIds: parseEditorUserIds(row.editor_user_ids),
+    pinned: !!row.pinned,
+    sceneDeckId: row.scene_deck_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -310,6 +326,7 @@ export function deleteCampaign(db: DatabaseType, campaignId: string, userId: str
   db.prepare('DELETE FROM initiative_entries WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM messages WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM campaign_calendars WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM session_decks WHERE campaign_id = ?').run(campaignId)
   return { ok: true, data: undefined }
 }
 
@@ -373,7 +390,15 @@ export function listNotes(
     return { ok: false, status: 403, error: 'Join this campaign first.' }
   }
   const rows = noteRepo.listVisibleTo(campaign.id, userId)
-  return { ok: true, data: rows.map((row) => toNoteJson(userRepo, row)) }
+  const viewerIsDm = campaign.dm_user_id === userId
+  // A scene note is 'shared' visibility (every member can normally read it),
+  // but a player shouldn't be able to find one at all — via this list, a
+  // wikilink, anything — until the DM has actually presented its deck at
+  // least once (see markDeckPresented/listSessionDecks's matching filter).
+  const visibleRows = viewerIsDm
+    ? rows
+    : rows.filter((row) => !row.scene_deck_id || !!new SessionDeckRepo(db).findById(row.scene_deck_id)?.presented_at)
+  return { ok: true, data: visibleRows.map((row) => toNoteJson(userRepo, row, viewerIsDm)) }
 }
 
 export function createNote(
@@ -415,7 +440,7 @@ export function createNote(
     visibility,
     folderId: resolvedFolderId
   })
-  return { ok: true, data: toNoteJson(userRepo, row) }
+  return { ok: true, data: toNoteJson(userRepo, row, campaign.dm_user_id === userId) }
 }
 
 export function updateNote(
@@ -429,6 +454,7 @@ export function updateNote(
     folderId?: unknown
     visibility?: unknown
     editorUserIds?: unknown
+    pinned?: unknown
   }
 ): ServiceResult<NoteJson> {
   const userRepo = new UserRepo(db)
@@ -455,6 +481,11 @@ export function updateNote(
   // grant/revoke someone else's access.
   if (!isAuthor && 'editorUserIds' in input) {
     return { ok: false, status: 403, error: "Only the author can change this note's editors." }
+  }
+  // A purely personal display preference (see NoteTreeSection's Pinned
+  // section) — no reason for anyone but the author to toggle it.
+  if (!isAuthor && 'pinned' in input) {
+    return { ok: false, status: 403, error: 'Only the author can pin this note.' }
   }
   // Actually reassigning visibility (not just re-sending the current value —
   // the sidebar's drag/drop always includes a `visibility` field, even for a
@@ -513,7 +544,8 @@ export function updateNote(
     bodyMarkdown: typeof input.bodyMarkdown === 'string' ? input.bodyMarkdown : undefined,
     ...(folderId !== undefined ? { folderId } : {}),
     ...(visibility ? { visibility } : {}),
-    ...(editorUserIds !== undefined ? { editorUserIds } : {})
+    ...(editorUserIds !== undefined ? { editorUserIds } : {}),
+    ...(typeof input.pinned === 'boolean' ? { pinned: input.pinned } : {})
   })
   // Can genuinely come back undefined in vault mode: changing visibility
   // moves the note's underlying file into a different folder tree (Party
@@ -521,7 +553,7 @@ export function updateNote(
   // move and miss it. Surfacing a clean error here beats crashing on
   // `undefined.author_user_id` in toNoteJson.
   if (!updated) return { ok: false, status: 404, error: 'Note not found after update — try again.' }
-  return { ok: true, data: toNoteJson(userRepo, updated) }
+  return { ok: true, data: toNoteJson(userRepo, updated, isDm) }
 }
 
 export function deleteNote(
@@ -788,6 +820,18 @@ export interface CalendarJson {
   id: string
   campaignId: string
   config: CalendarConfig
+  createdAt: string
+  updatedAt: string
+}
+
+// Session decks always live in SQLite regardless of vault mode, same as
+// calendars/characters/initiative_entries/messages above.
+
+export interface SessionDeckJson {
+  id: string
+  campaignId: string
+  title: string
+  scenes: SessionScene[]
   createdAt: string
   updatedAt: string
 }
@@ -1146,5 +1190,196 @@ export function deleteCalendar(db: DatabaseType, campaignId: string, userId: str
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
   if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can delete the calendar.' }
   new CalendarRepo(db).remove(campaignId)
+  return { ok: true, data: undefined }
+}
+
+function parseScenes(raw: string): SessionScene[] {
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((s): s is { noteId: unknown; encounterId?: unknown } => typeof s === 'object' && s !== null && typeof s.noteId === 'string')
+      .map((s) => ({
+        noteId: s.noteId as string,
+        encounterId: typeof s.encounterId === 'string' ? s.encounterId : null
+      }))
+  } catch {
+    return []
+  }
+}
+
+/** Validates and normalizes a `scenes` patch straight off the wire (reordering, or changing which encounter a scene links to) — every entry must reference a noteId that's genuinely one of this deck's existing scenes; you can't smuggle in an arbitrary note by id, or drop/add entries this way (see addSceneToDeck/removeSceneFromDeck for the only ways a scene's membership actually changes). */
+function validateSceneReorder(existing: SessionScene[], input: unknown): { scenes: SessionScene[] } | { error: string } {
+  if (!Array.isArray(input)) return { error: 'Scenes must be an array.' }
+  const existingIds = new Set(existing.map((s) => s.noteId))
+  const scenes: SessionScene[] = []
+  for (const s of input) {
+    if (typeof s !== 'object' || s === null) return { error: 'Invalid scene.' }
+    const noteId = (s as { noteId?: unknown }).noteId
+    if (typeof noteId !== 'string' || !existingIds.has(noteId)) return { error: 'Invalid scene.' }
+    const encounterId = (s as { encounterId?: unknown }).encounterId
+    scenes.push({ noteId, encounterId: typeof encounterId === 'string' ? encounterId : null })
+  }
+  if (scenes.length !== existing.length || new Set(scenes.map((s) => s.noteId)).size !== existing.length) {
+    return { error: 'Scenes must match the deck\'s existing scenes exactly (reorder/relink only).' }
+  }
+  return { scenes }
+}
+
+function toSessionDeckJson(row: SessionDeckRow): SessionDeckJson {
+  return {
+    id: row.id,
+    campaignId: row.campaign_id,
+    title: row.title,
+    // Just the ordering + encounter link — a scene's actual title/body is a
+    // real Note (see toNoteJson's DM-aside stripping for how the content
+    // itself stays safe for players). encounterId IS dropped for players,
+    // but that happens in registerIpc/sessionHost before this reaches them
+    // (see campaignService.listSessionDecks), not here.
+    scenes: parseScenes(row.scenes_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+/** Every campaign member can list session decks — players get every scene's encounterId dropped (DM-only metadata, same reasoning as a scene note's `::` asides), the DM sees everything. A scene's actual content is a real Note, fetched the normal way via listNotes/notes:list. */
+export function listSessionDecks(db: DatabaseType, campaignId: string, userId: string): ServiceResult<SessionDeckJson[]> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) {
+    return { ok: false, status: 403, error: 'Join this campaign first.' }
+  }
+  const isDm = campaign.dm_user_id === userId
+  const rows = new SessionDeckRepo(db).listByCampaign(campaignId)
+  return {
+    ok: true,
+    data: rows
+      // A deck the DM hasn't presented yet is future-session prep — never
+      // listed for a player at all, not just its scenes hidden, so there's
+      // nothing to browse ahead of the DM's narration. Once presented, a
+      // deck stays visible forever (presented_at never resets), so past
+      // sessions stay browsable exactly like the DM's own view.
+      .filter((row) => isDm || row.presented_at !== null)
+      .map((row) => {
+        const deck = toSessionDeckJson(row)
+        return isDm ? deck : { ...deck, scenes: deck.scenes.map((s) => ({ noteId: s.noteId, encounterId: null })) }
+      })
+  }
+}
+
+/** Only the DM can present a deck — flips its one-way "has this ever gone live" flag (see the schema comment), which is what makes it visible to players at all (see listSessionDecks). A no-op if it's already been presented before. */
+export function markDeckPresented(db: DatabaseType, campaignId: string, deckId: string, userId: string): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can present a session deck.' }
+  const deckRepo = new SessionDeckRepo(db)
+  const existing = deckRepo.findById(deckId)
+  if (!existing || existing.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
+  deckRepo.markPresented(deckId)
+  return { ok: true, data: undefined }
+}
+
+/** Only the DM can create a session deck. */
+export function createSessionDeck(db: DatabaseType, campaignId: string, userId: string, title: unknown): ServiceResult<SessionDeckJson> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can create a session deck.' }
+  const row = new SessionDeckRepo(db).create({ campaignId, title: typeof title === 'string' && title.trim() ? title.trim() : 'Untitled Session' })
+  return { ok: true, data: toSessionDeckJson(row) }
+}
+
+/** Only the DM can rename a deck, or reorder/relink (not add/remove) its scenes. */
+export function updateSessionDeck(
+  db: DatabaseType,
+  campaignId: string,
+  deckId: string,
+  userId: string,
+  input: { title?: unknown; scenes?: unknown }
+): ServiceResult<SessionDeckJson> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can edit a session deck.' }
+
+  const deckRepo = new SessionDeckRepo(db)
+  const existing = deckRepo.findById(deckId)
+  if (!existing || existing.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
+
+  let scenesJson: string | undefined
+  if ('scenes' in input) {
+    const validated = validateSceneReorder(parseScenes(existing.scenes_json), input.scenes)
+    if ('error' in validated) return { ok: false, status: 400, error: validated.error }
+    scenesJson = JSON.stringify(validated.scenes)
+  }
+
+  const updated = deckRepo.update(deckId, {
+    title: typeof input.title === 'string' ? input.title.trim() : undefined,
+    scenesJson
+  })
+  if (!updated) return { ok: false, status: 404, error: 'Session deck not found after update — try again.' }
+  return { ok: true, data: toSessionDeckJson(updated) }
+}
+
+/** Only the DM can delete a session deck — irreversible, and takes every one of its scene notes with it (they're not meaningful as free-floating notes). The client is expected to have already confirmed with the user. */
+export function deleteSessionDeck(db: DatabaseType, campaignId: string, deckId: string, userId: string): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can delete a session deck.' }
+  const deckRepo = new SessionDeckRepo(db)
+  const existing = deckRepo.findById(deckId)
+  if (!existing || existing.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
+  const noteRepo = makeNoteRepo(db)
+  for (const scene of parseScenes(existing.scenes_json)) noteRepo.remove(scene.noteId)
+  deckRepo.remove(deckId)
+  return { ok: true, data: undefined }
+}
+
+/** Only the DM can add a scene — creates a real 'shared'-visibility Note (marked via sceneDeckId so it's hidden from the normal sidebar tree and has its `::` asides stripped for players — see toNoteJson) and appends it to the deck. Returns the new Note, not the deck — the caller already has the deck's other data and just needs this scene's note to open as a tab. */
+export function addSceneToDeck(db: DatabaseType, campaignId: string, deckId: string, userId: string, title: unknown): ServiceResult<NoteJson> {
+  const userRepo = new UserRepo(db)
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can add a scene.' }
+
+  const deckRepo = new SessionDeckRepo(db)
+  const deck = deckRepo.findById(deckId)
+  if (!deck || deck.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
+
+  const noteRepo = makeNoteRepo(db)
+  const note = noteRepo.create({
+    campaignId,
+    authorUserId: userId,
+    title: typeof title === 'string' && title.trim() ? title.trim() : 'Untitled Scene',
+    bodyMarkdown: '',
+    visibility: 'shared',
+    folderId: null,
+    sceneDeckId: deckId
+  })
+
+  const scenes = [...parseScenes(deck.scenes_json), { noteId: note.id, encounterId: null }]
+  deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes) })
+
+  return { ok: true, data: toNoteJson(userRepo, note, true) }
+}
+
+/** Only the DM can remove a scene — removes it from the deck's ordering AND deletes the underlying note (a scene note isn't meaningful floating around outside its deck). */
+export function removeSceneFromDeck(db: DatabaseType, campaignId: string, deckId: string, userId: string, noteId: string): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can remove a scene.' }
+
+  const deckRepo = new SessionDeckRepo(db)
+  const deck = deckRepo.findById(deckId)
+  if (!deck || deck.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
+
+  const scenes = parseScenes(deck.scenes_json).filter((s) => s.noteId !== noteId)
+  deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes) })
+  makeNoteRepo(db).remove(noteId)
   return { ok: true, data: undefined }
 }

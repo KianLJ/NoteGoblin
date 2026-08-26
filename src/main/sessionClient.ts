@@ -11,7 +11,8 @@ import type {
   PresenceFrame,
   RequestFrame,
   RequestKind,
-  ResponseFrame
+  ResponseFrame,
+  SceneChangedFrame
 } from '@server/relay/sessionProtocol'
 import type { ApiResult } from '@shared/ipc'
 
@@ -217,5 +218,15 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'force-roll' && clientWindow) {
     const frame = payload as ForceRollFrame
     clientWindow.webContents.send('ws:force-roll', frame.request)
+  }
+
+  if (payload.type === 'scene-changed' && clientWindow) {
+    const frame = payload as SceneChangedFrame
+    clientWindow.webContents.send('ws:scene-changed', {
+      sessionId: currentSessionId,
+      campaignId: frame.campaignId,
+      deckId: frame.deckId,
+      sceneIndex: frame.sceneIndex
+    })
   }
 }

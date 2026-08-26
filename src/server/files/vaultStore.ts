@@ -270,6 +270,8 @@ export interface NoteFileRow {
   folder_id: string | null
   /** JSON-encoded array, matching NoteRow's shape so campaignService's parseEditorUserIds works unmodified. */
   editor_user_ids: string
+  pinned: 0 | 1
+  scene_deck_id: string | null
   created_at: string
   updated_at: string
 }
@@ -388,7 +390,7 @@ function walkSection(
           // From this point on it's a normal tracked note.
           const owner = privateOwnerUserId(rel) ?? dmUserId
           const now = new Date().toISOString()
-          const fm: NoteFrontmatter = { id: uuid(), authorUserId: owner, editorUserIds: [], createdAt: now, updatedAt: now }
+          const fm: NoteFrontmatter = { id: uuid(), authorUserId: owner, editorUserIds: [], pinned: false, sceneDeckId: null, createdAt: now, updatedAt: now }
           try {
             writeFileSync(absPath, serializeNote(fm, raw), 'utf8')
           } catch {
@@ -405,6 +407,8 @@ function walkSection(
           visibility,
           folder_id: parentFolderId,
           editor_user_ids: JSON.stringify(parsed.frontmatter.editorUserIds),
+          pinned: parsed.frontmatter.pinned ? 1 : 0,
+          scene_deck_id: parsed.frontmatter.sceneDeckId,
           created_at: parsed.frontmatter.createdAt,
           updated_at: parsed.frontmatter.updatedAt
         })
@@ -518,6 +522,8 @@ function noteRowFrom(absPath: string, campaignDir: string, campaignId: string, v
     visibility,
     folder_id: folderId,
     editor_user_ids: JSON.stringify(fm.editorUserIds),
+    pinned: fm.pinned ? 1 : 0,
+    scene_deck_id: fm.sceneDeckId,
     created_at: fm.createdAt,
     updated_at: fm.updatedAt
   }
@@ -544,6 +550,8 @@ export class NoteFileRepo {
     bodyMarkdown: string
     visibility: FileVisibility
     folderId: string | null
+    /** Set only when this note is actually a session-deck scene — never passed for a normal user-created note. */
+    sceneDeckId?: string | null
   }): NoteFileRow {
     const found = findCampaignDir(input.campaignId)
     if (!found) throw new Error('Campaign not found.')
@@ -554,7 +562,15 @@ export class NoteFileRepo {
     const fileName = sanitizeFileName(input.title) + NOTE_EXT
     const absPath = uniqueFilePath(dirAbs, fileName)
     const now = new Date().toISOString()
-    const fm: NoteFrontmatter = { id: uuid(), authorUserId: input.authorUserId, editorUserIds: [], createdAt: now, updatedAt: now }
+    const fm: NoteFrontmatter = {
+      id: uuid(),
+      authorUserId: input.authorUserId,
+      editorUserIds: [],
+      pinned: false,
+      sceneDeckId: input.sceneDeckId ?? null,
+      createdAt: now,
+      updatedAt: now
+    }
     writeFileSync(absPath, serializeNote(fm, input.bodyMarkdown), 'utf8')
     return noteRowFrom(absPath, found.dir, input.campaignId, input.visibility, input.folderId, fm, input.bodyMarkdown)
   }
@@ -567,6 +583,7 @@ export class NoteFileRepo {
       folderId?: string | null
       visibility?: FileVisibility
       editorUserIds?: string[]
+      pinned?: boolean
     }
   ): NoteFileRow | undefined {
     const found = findNoteEverywhere(id)
@@ -589,6 +606,7 @@ export class NoteFileRepo {
     const fm: NoteFrontmatter = {
       ...found.frontmatter,
       editorUserIds: input.editorUserIds ?? found.frontmatter.editorUserIds,
+      pinned: input.pinned ?? found.frontmatter.pinned,
       updatedAt: new Date().toISOString()
     }
     const body = input.bodyMarkdown ?? found.body

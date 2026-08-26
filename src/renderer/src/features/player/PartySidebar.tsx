@@ -2,22 +2,32 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from '../campaigns/panelIcons'
 import { CalendarPanel } from '../campaigns/CalendarPanel'
+import { SessionDeckPanel } from '../campaigns/SessionDeckPanel'
 import { loadRightPanelTab, saveRightPanelTab } from '../campaigns/rightPanelTab'
 import { PlayerInitiativeView } from './PlayerInitiativeView'
 import { DiceTray } from '../dice/DiceTray'
 import { useDiceRollToast } from '../dice/useDiceRollToast'
 import { DiceRollToast } from '../dice/DiceRollToast'
 import type { Note, PresencePlayer } from '@shared/ipc'
+import type { SessionDeck } from '@shared/sessionDeck'
 
 interface PartySidebarProps {
   sessionId: string | null
   campaignId: string | null
   myUserId: string | null
+  /** The campaign id to use for SessionDeckPanel specifically — unlike `campaignId` above (nulled by the caller while viewing an offline snapshot, since Calendar/etc have no offline story yet), this stays set so a cached deck list still has something to key off of. */
+  sessionCampaignId: string | null
+  /** Non-null while viewing a cached offline snapshot — see usePlayerWorkspace.ts's `sessionDecks` state. */
+  offlineSessionDecks: SessionDeck[] | null
   /** Whichever note is currently open — when you authored it, each party member gets a checkbox to grant/revoke edit access; otherwise this is just a "who's here" list. */
   activeNote: Note | null
   onToggleEditor: (noteId: string, userId: string, grant: boolean) => void
   /** Opens a party member's currently-selected character as a read-only sheet — omitted (no button shown) for a player with no character selected, since there'd be nothing to open. */
   onViewCharacter: (userId: string) => void
+  /** Every note in this campaign already loaded — used only by SessionDeckPanel to look up a scene's title by id. */
+  notes: Note[]
+  /** Opens a scene's note as a tab in the main pane, exactly like any other note. */
+  onOpenScene: (noteId: string) => void
 }
 
 /** Right-side, player-mode-only panel — mirrors the DM's RightPanel/ConnectedPlayersList (including the ability to open a party member's sheet, read-only), but doubles as where a note's author manages who else can edit it, since that's the author's own call to make (not the DM's). */
@@ -27,7 +37,11 @@ export function PartySidebar({
   myUserId,
   activeNote,
   onToggleEditor,
-  onViewCharacter
+  onViewCharacter,
+  notes,
+  onOpenScene,
+  sessionCampaignId,
+  offlineSessionDecks
 }: PartySidebarProps): JSX.Element {
   const [players, setPlayers] = useState<PresencePlayer[]>([])
   const [tab, setTabState] = useState(loadRightPanelTab)
@@ -80,7 +94,7 @@ export function PartySidebar({
                 </div>
                 <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
                 <PartyTabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
-                <PartyTabButton icon={<SessionIcon />} label="Session" disabled title="Coming soon" />
+                <PartyTabButton icon={<SessionIcon />} label="Sessions" active={tab === 'sessions'} onClick={() => setTab('sessions')} />
               </div>
 
               {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — both PlayerInitiativeView
@@ -94,6 +108,16 @@ export function PartySidebar({
               </div>
               <div style={{ display: tab === 'calendar' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <CalendarPanel sessionId={sessionId} campaignId={campaignId} readOnly />
+              </div>
+              <div style={{ display: tab === 'sessions' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <SessionDeckPanel
+                  sessionId={sessionId}
+                  campaignId={sessionCampaignId}
+                  readOnly
+                  notes={notes}
+                  onOpenScene={onOpenScene}
+                  offlineDecks={offlineSessionDecks}
+                />
               </div>
               <div style={{ display: tab === 'players' ? 'contents' : 'none' }}>
                 {canManage && (

@@ -35,6 +35,7 @@ export function PlayerWorkspaceBody({
     activeCampaign,
     notes,
     folders,
+    sessionDecks,
     activeTab,
     activeCharacter,
     lastActiveCharacter,
@@ -161,6 +162,7 @@ export function PlayerWorkspaceBody({
         onCreateNote={createNote}
         onCreateFolder={createFolder}
         onRenameNote={(noteId, title) => saveNote(noteId, { title })}
+        onTogglePinNote={(noteId, pinned) => saveNote(noteId, { pinned })}
         onDeleteNote={deleteNote}
         onRenameFolder={renameFolder}
         onDeleteFolder={deleteFolder}
@@ -242,6 +244,10 @@ export function PlayerWorkspaceBody({
             sessionId={sessionId}
             readOnly={
               isOffline ||
+              // A scene is always DM-authored/edited — never editable by a
+              // player even in the (currently unreachable, but not worth
+              // relying on) case an editor grant somehow got applied to one.
+              !!activeNote.sceneDeckId ||
               (activeNote.authorUserId !== myUserId && !activeNote.editorUserIds.includes(myUserId ?? ''))
             }
             hideMonsters={!!sessionId}
@@ -285,6 +291,10 @@ export function PlayerWorkspaceBody({
           saveNote(noteId, { editorUserIds: next })
         }}
         onViewCharacter={viewPartyMemberCharacter}
+        notes={notes ?? []}
+        onOpenScene={navigateToNote}
+        sessionCampaignId={activeCampaign?.id ?? null}
+        offlineSessionDecks={isOffline ? sessionDecks ?? [] : null}
       />
       <ForceRollPrompt sessionId={sessionId} character={activeCharacter ?? null} />
     </div>

@@ -160,9 +160,30 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     openNote(result.data.id)
   }
 
+  /**
+   * Adopts a Note this hook didn't create itself — used when a scene note is
+   * created through the sessionDecks IPC surface instead of notes:create
+   * (see useSessionDecks.ts's addScene). Without this, a newly added scene
+   * only ever reaches this hook's `notes` array via the campaigns.onChanged
+   * broadcast, which the local (non-relay) IPC path only fires while
+   * actually hosting a live session — so opening a scene you just added
+   * while testing solo (not hosting) would silently fail to find it, the
+   * same way createNote's own optimistic setNotes below avoids that gap for
+   * regular notes.
+   */
+  function addNoteLocally(note: Note): void {
+    setNotes((prev) => (prev ? [note, ...prev.filter((n) => n.id !== note.id)] : [note]))
+  }
+
+  /** The removeScene counterpart to addNoteLocally — see its doc comment. */
+  function removeNoteLocally(noteId: string): void {
+    setNotes((prev) => prev?.filter((n) => n.id !== noteId) ?? prev)
+    closeTab(noteId)
+  }
+
   async function saveNote(
     noteId: string,
-    patch: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' | 'private' }
+    patch: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' | 'private'; pinned?: boolean }
   ): Promise<void> {
     if (!campaignId) return
     const result = await window.goblin.notes.update(campaignId, noteId, patch, sessionId)
@@ -317,6 +338,8 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     createNote,
     saveNote,
     deleteNote,
+    addNoteLocally,
+    removeNoteLocally,
     createFolder,
     renameFolder,
     moveFolder,

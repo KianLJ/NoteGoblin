@@ -59,6 +59,8 @@ export function CampaignWorkspace({
     createNote,
     saveNote,
     deleteNote,
+    addNoteLocally,
+    removeNoteLocally,
     createFolder,
     renameFolder,
     moveFolder,
@@ -106,6 +108,7 @@ export function CampaignWorkspace({
         onCreateNote={(visibility, folderId) => createNote(visibility, folderId)}
         onCreateFolder={(visibility, name, parentFolderId) => createFolder(visibility, name, parentFolderId)}
         onRenameNote={(noteId, title) => saveNote(noteId, { title })}
+        onTogglePinNote={(noteId, pinned) => saveNote(noteId, { pinned })}
         onDeleteNote={deleteNote}
         onRenameFolder={renameFolder}
         onDeleteFolder={deleteFolder}
@@ -220,6 +223,16 @@ export function CampaignWorkspace({
         }}
         onSelectMonster={onOpenMonsterTab}
         notes={notes ?? []}
+        onOpenNote={(id) => {
+          onViewPlayerUserId(null)
+          onSelectMonsterTab(null)
+          // navigateToNote (not openNote) — every scene reuses the same tab,
+          // "Next"/"Prev" just swap that tab's note rather than piling up a
+          // tab per scene the DM clicks through.
+          navigateToNote(id)
+        }}
+        onSceneCreated={addNoteLocally}
+        onSceneRemoved={removeNoteLocally}
       />
     </div>
   )

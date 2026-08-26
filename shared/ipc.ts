@@ -6,6 +6,7 @@ import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, R
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
+import type { SessionDeck, SessionScene, LiveSceneState } from './sessionDeck'
 
 /**
  * A DM's "make this player roll" prompt — sent as a targeted push (see
@@ -76,6 +77,10 @@ export interface Note {
   folderId: string | null
   /** userIds (besides the author) granted edit access to title/bodyMarkdown — set by the author only, see campaignService.updateNote. */
   editorUserIds: string[]
+  /** Author-only display preference — pinned notes show in their own section above the regular hierarchy (see NoteTreeSection.tsx). */
+  pinned: boolean
+  /** Set only when this note is actually a session-deck scene (see shared/sessionDeck.ts) — hidden from the normal note sidebar tree; its `::`-prefixed DM-only lines are already stripped out of bodyMarkdown here for anyone but the DM. */
+  sceneDeckId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -140,6 +145,14 @@ export interface PlayerInitiativeUpdate {
   initiative: number | null
 }
 
+/** Pushed to every connected participant whenever the DM's live session-deck cursor changes — `deckId: null` means nobody's presenting right now. */
+export interface SceneChangedUpdate {
+  sessionId: string | null
+  campaignId: string
+  deckId: string | null
+  sceneIndex: number
+}
+
 export interface PlayerCharacterUpdate {
   userId: string
   /** null means they deselected, or (a plain disconnect) just dropped — either way, nothing to show for them anymore. */
@@ -151,6 +164,8 @@ export interface CampaignSnapshot {
   campaign: Campaign
   notes: Note[]
   folders: Folder[]
+  /** Optional — absent on a snapshot saved before session decks existed; callers should default to []. */
+  sessionDecks?: SessionDeck[]
   syncedAt: string
 }
 
@@ -247,6 +262,8 @@ export interface AppApi {
         visibility?: 'dm' | 'shared' | 'private'
         /** Author-only — replaces the full grant list. */
         editorUserIds?: string[]
+        /** Author-only display preference. */
+        pinned?: boolean
       },
       sessionId?: string
     ) => Promise<ApiResult<Note>>
@@ -262,6 +279,38 @@ export interface AppApi {
     save: (campaignId: string, config: CalendarConfig, sessionId?: string) => Promise<ApiResult<CampaignCalendar>>
     /** DM-only — irreversible, the client is expected to confirm with the user first. */
     remove: (campaignId: string, sessionId?: string) => Promise<ApiResult<void>>
+  }
+  // DM-authored, scene-by-scene session decks (see shared/sessionDeck.ts) —
+  // list/create/update/remove work exactly like notes (DM-write, member-
+  // read, players get every scene's DM-only asides already stripped
+  // server-side). present/setScene/stopPresenting are DM-only, local-only
+  // (there's no relay path — only the host can ever be presenting their own
+  // deck) live-broadcast controls, pushed to every connected player via
+  // onSceneChanged the same way initiative.broadcast/onUpdate works.
+  sessionDecks: {
+    list: (campaignId: string, sessionId?: string) => Promise<ApiResult<SessionDeck[]>>
+    create: (campaignId: string, title: string, sessionId?: string) => Promise<ApiResult<SessionDeck>>
+    update: (
+      campaignId: string,
+      deckId: string,
+      input: { title?: string; scenes?: SessionScene[] },
+      sessionId?: string
+    ) => Promise<ApiResult<SessionDeck>>
+    remove: (campaignId: string, deckId: string, sessionId?: string) => Promise<ApiResult<void>>
+    /** Creates a real Note (marked as this deck's scene) and appends it to the deck's ordering — open the returned note's id as a tab to edit it, exactly like any other note. */
+    addScene: (campaignId: string, deckId: string, title: string, sessionId?: string) => Promise<ApiResult<Note>>
+    /** Removes the scene from the deck's ordering AND deletes the underlying note. */
+    removeScene: (campaignId: string, deckId: string, noteId: string, sessionId?: string) => Promise<ApiResult<void>>
+    /** What campaignId's live cursor currently is — `{ deckId: null, sceneIndex: -1 }` if nobody's presenting. Called once on opening the Sessions tab to catch up; onSceneChanged covers everything live after that. */
+    getLive: (campaignId: string, sessionId?: string) => Promise<ApiResult<LiveSceneState>>
+    /** DM-only — starts presenting `deckId` from its first scene. */
+    present: (campaignId: string, deckId: string) => Promise<void>
+    /** DM-only — moves the live cursor within whatever's currently being presented. */
+    setScene: (sceneIndex: number) => Promise<void>
+    /** DM-only — ends the live presentation. */
+    stopPresenting: () => Promise<void>
+    /** Fires for every connected participant (DM included) whenever the live cursor changes — filter on `update.campaignId` before applying. */
+    onSceneChanged: (callback: (update: SceneChangedUpdate) => void) => () => void
   }
   folders: {
     list: (campaignId: string, sessionId?: string) => Promise<ApiResult<Folder[]>>
@@ -303,7 +352,7 @@ export interface AppApi {
   snapshots: {
     list: () => Promise<ApiResult<CampaignSnapshot[]>>
     get: (campaignId: string) => Promise<ApiResult<CampaignSnapshot | null>>
-    save: (campaign: Campaign, notes: Note[], folders: Folder[]) => Promise<void>
+    save: (campaign: Campaign, notes: Note[], folders: Folder[], sessionDecks: SessionDeck[]) => Promise<void>
     /** Forgets a cached campaign — just the local read-only copy, not anything on the DM's actual host. */
     remove: (campaignId: string) => Promise<ApiResult<void>>
   }

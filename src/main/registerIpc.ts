@@ -29,11 +29,16 @@ import {
   broadcastInitiative,
   broadcastDiceRoll,
   broadcastMessage,
-  pushForceRoll
+  pushForceRoll,
+  startPresentingDeck,
+  setLiveScene,
+  stopPresentingDeck,
+  getLiveSceneState
 } from './sessionHost'
 import type { InitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
 import type { ForceRollRequest } from '@shared/ipc'
+import type { SessionDeck, SessionScene, LiveSceneState } from '@shared/sessionDeck'
 import { joinSession, leaveSession, sendRequest as sendSessionRequest } from './sessionClient'
 import {
   hasRememberedCredentials,
@@ -577,7 +582,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       _event,
       campaignId: string,
       noteId: string,
-      input: { title?: string; bodyMarkdown?: string; folderId?: string | null; visibility?: 'dm' | 'shared' | 'private' },
+      input: {
+        title?: string
+        bodyMarkdown?: string
+        folderId?: string | null
+        visibility?: 'dm' | 'shared' | 'private'
+        editorUserIds?: string[]
+        pinned?: boolean
+      },
       sessionId?: string
     ): Promise<ApiResult<Note>> => {
       if (!sessionId) {
@@ -676,6 +688,140 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return sendSessionRequest<void>('calendar.remove', { campaignId })
     }
   )
+
+  ipcMain.handle(
+    'sessionDecks:list',
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<SessionDeck[]>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        return runService(() => campaignService.listSessionDecks(me.db, campaignId, me.userId))
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<SessionDeck[]>('sessionDecks.list', { campaignId })
+    }
+  )
+
+  ipcMain.handle(
+    'sessionDecks:create',
+    async (_event, campaignId: string, title: string, sessionId?: string): Promise<ApiResult<SessionDeck>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = runService(() => campaignService.createSessionDeck(me.db, campaignId, me.userId, title))
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+        return result
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<SessionDeck>('sessionDecks.create', { campaignId, title })
+    }
+  )
+
+  ipcMain.handle(
+    'sessionDecks:update',
+    async (
+      _event,
+      campaignId: string,
+      deckId: string,
+      input: { title?: string; scenes?: SessionScene[] },
+      sessionId?: string
+    ): Promise<ApiResult<SessionDeck>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = runService(() => campaignService.updateSessionDeck(me.db, campaignId, deckId, me.userId, input))
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+        return result
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<SessionDeck>('sessionDecks.update', { campaignId, deckId, input })
+    }
+  )
+
+  ipcMain.handle(
+    'sessionDecks:remove',
+    async (_event, campaignId: string, deckId: string, sessionId?: string): Promise<ApiResult<void>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = runService(() => campaignService.deleteSessionDeck(me.db, campaignId, deckId, me.userId))
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+        return result
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<void>('sessionDecks.remove', { campaignId, deckId })
+    }
+  )
+
+  ipcMain.handle(
+    'sessionDecks:addScene',
+    async (_event, campaignId: string, deckId: string, title: string, sessionId?: string): Promise<ApiResult<Note>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = runService(() => campaignService.addSceneToDeck(me.db, campaignId, deckId, me.userId, title))
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+        return result
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Note>('sessionDecks.addScene', { campaignId, deckId, title })
+    }
+  )
+
+  ipcMain.handle(
+    'sessionDecks:removeScene',
+    async (_event, campaignId: string, deckId: string, noteId: string, sessionId?: string): Promise<ApiResult<void>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = runService(() => campaignService.removeSceneFromDeck(me.db, campaignId, deckId, me.userId, noteId))
+        if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+        return result
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<void>('sessionDecks.removeScene', { campaignId, deckId, noteId })
+    }
+  )
+
+  ipcMain.handle(
+    'sessionDecks:getLive',
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<LiveSceneState>> => {
+      if (!sessionId) {
+        return { ok: true, data: getLiveSceneState(campaignId) }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<LiveSceneState>('sessionDecks.getLive', { campaignId })
+    }
+  )
+
+  // Presenting itself is always a purely local, DM-only action — there's no
+  // relay path for these three, since only the host can ever be the one
+  // presenting their own deck (mirrors initiative:broadcast's shape below).
+  ipcMain.handle('sessionDecks:present', (_event, campaignId: string, deckId: string): void => {
+    const me = ensureMyHostUser()
+    if (!('error' in me)) {
+      const result = campaignService.markDeckPresented(me.db, campaignId, deckId, me.userId)
+      // Flips the deck from invisible-to-players to visible — even a player
+      // just sitting on the Sessions tab (not yet auto-followed anything)
+      // needs their notes/decks lists to refetch and reveal it right as
+      // presenting starts, same as any other note/deck change.
+      if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+    }
+    if (getHostedSession()) startPresentingDeck(campaignId, deckId)
+  })
+  ipcMain.handle('sessionDecks:setScene', (_event, sceneIndex: number): void => {
+    if (getHostedSession()) setLiveScene(sceneIndex)
+  })
+  ipcMain.handle('sessionDecks:stopPresenting', (): void => {
+    if (getHostedSession()) stopPresentingDeck()
+  })
 
   ipcMain.handle(
     'folders:list',
@@ -898,10 +1044,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(
     'snapshots:save',
-    (_event, campaign: Campaign, notes: Note[], folders: Folder[]): void => {
+    (_event, campaign: Campaign, notes: Note[], folders: Folder[], sessionDecks: SessionDeck[]): void => {
       const identity = getCurrentIdentity()
       if (!identity) return
-      snapshotRepo.save(identity.id, campaign, notes, folders)
+      snapshotRepo.save(identity.id, campaign, notes, folders, sessionDecks)
     }
   )
 

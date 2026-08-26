@@ -7,7 +7,8 @@ import type {
   MessageUpdate,
   PlayerCharacterUpdate,
   PlayerInitiativeUpdate,
-  PresenceUpdate
+  PresenceUpdate,
+  SceneChangedUpdate
 } from '../../shared/ipc'
 import type { DiceRollLogEntry } from '../../shared/dice'
 import type { RelayMessage } from '../../shared/relay'
@@ -78,6 +79,25 @@ const api: AppApi = {
     save: (campaignId, config, sessionId) => ipcRenderer.invoke('calendar:save', campaignId, config, sessionId),
     remove: (campaignId, sessionId) => ipcRenderer.invoke('calendar:remove', campaignId, sessionId)
   },
+  sessionDecks: {
+    list: (campaignId, sessionId) => ipcRenderer.invoke('sessionDecks:list', campaignId, sessionId),
+    create: (campaignId, title, sessionId) => ipcRenderer.invoke('sessionDecks:create', campaignId, title, sessionId),
+    update: (campaignId, deckId, input, sessionId) =>
+      ipcRenderer.invoke('sessionDecks:update', campaignId, deckId, input, sessionId),
+    remove: (campaignId, deckId, sessionId) => ipcRenderer.invoke('sessionDecks:remove', campaignId, deckId, sessionId),
+    addScene: (campaignId, deckId, title, sessionId) => ipcRenderer.invoke('sessionDecks:addScene', campaignId, deckId, title, sessionId),
+    removeScene: (campaignId, deckId, noteId, sessionId) =>
+      ipcRenderer.invoke('sessionDecks:removeScene', campaignId, deckId, noteId, sessionId),
+    getLive: (campaignId, sessionId) => ipcRenderer.invoke('sessionDecks:getLive', campaignId, sessionId),
+    present: (campaignId, deckId) => ipcRenderer.invoke('sessionDecks:present', campaignId, deckId),
+    setScene: (sceneIndex) => ipcRenderer.invoke('sessionDecks:setScene', sceneIndex),
+    stopPresenting: () => ipcRenderer.invoke('sessionDecks:stopPresenting'),
+    onSceneChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, update: SceneChangedUpdate): void => callback(update)
+      ipcRenderer.on('ws:scene-changed', listener)
+      return () => ipcRenderer.removeListener('ws:scene-changed', listener)
+    }
+  },
   folders: {
     list: (campaignId, sessionId) => ipcRenderer.invoke('folders:list', campaignId, sessionId),
     create: (campaignId, input, sessionId) =>
@@ -99,7 +119,7 @@ const api: AppApi = {
   snapshots: {
     list: () => ipcRenderer.invoke('snapshots:list'),
     get: (campaignId) => ipcRenderer.invoke('snapshots:get', campaignId),
-    save: (campaign, notes, folders) => ipcRenderer.invoke('snapshots:save', campaign, notes, folders),
+    save: (campaign, notes, folders, sessionDecks) => ipcRenderer.invoke('snapshots:save', campaign, notes, folders, sessionDecks),
     remove: (campaignId) => ipcRenderer.invoke('snapshots:remove', campaignId)
   },
   characters: {

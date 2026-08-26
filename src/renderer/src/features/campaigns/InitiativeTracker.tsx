@@ -13,6 +13,7 @@ import {
 } from '@shared/encounter'
 import { BESTIARY, formatCr } from '../../data/bestiary'
 import { loadCustomMonsters, isCustomMonster } from '../../data/customBestiary'
+import { loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { Button } from '../../ui/Button'
 
@@ -21,9 +22,10 @@ interface InitiativeTrackerProps {
   playerCharacters: Map<string, CharacterSheet>
   /** Clicking a monster combatant's name opens its full statblock in the main pane (see CampaignWorkspace.tsx) — DM-only, since this whole tracker only ever renders on the DM's side (the player-facing view is PlayerInitiativeView.tsx, a separate component that never sees monster identity). */
   onSelectMonster: (monster: BestiaryMonster) => void
+  /** Set by RightPanel when the DM clicks "Load Encounter" on a presented scene (see SessionDeckPanel.tsx) — added to the tracker the same way EncounterBuilder's own "Add to Tracker" does, then cleared via onPendingEncounterConsumed so it doesn't re-add on every re-render. */
+  pendingEncounterMonsters?: BestiaryMonster[] | null
+  onPendingEncounterConsumed?: () => void
 }
-
-const STORAGE_KEY = 'gb-saved-encounters'
 
 const STATUS_EFFECT_PRESETS = [
   'Blinded',
@@ -42,30 +44,6 @@ const STATUS_EFFECT_PRESETS = [
   'Stunned',
   'Unconscious'
 ]
-
-interface SavedEncounter {
-  id: string
-  name: string
-  monsterIndexes: string[]
-  createdAt: string
-}
-
-function loadSavedEncounters(): SavedEncounter[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as SavedEncounter[]) : []
-  } catch {
-    return []
-  }
-}
-
-function saveSavedEncounters(list: SavedEncounter[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
-  } catch {
-    /* best-effort */
-  }
-}
 
 function playerToCombatant(userId: string, character: CharacterSheet): Combatant {
   const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
@@ -109,7 +87,13 @@ function monsterToCombatant(monster: BestiaryMonster): Combatant {
  * sessionHost.ts's broadcastInitiative) — enemies show only as an injury
  * band, never their real name/HP/AC.
  */
-export function InitiativeTracker({ sessionId, playerCharacters, onSelectMonster }: InitiativeTrackerProps): JSX.Element {
+export function InitiativeTracker({
+  sessionId,
+  playerCharacters,
+  onSelectMonster,
+  pendingEncounterMonsters,
+  onPendingEncounterConsumed
+}: InitiativeTrackerProps): JSX.Element {
   const [state, setState] = useState<InitiativeState>(emptyInitiativeState())
   const [view, setView] = useState<'tracker' | 'build'>('tracker')
   const [monsterQuery, setMonsterQuery] = useState('')
@@ -120,6 +104,13 @@ export function InitiativeTracker({ sessionId, playerCharacters, onSelectMonster
   useEffect(() => {
     if (sessionId) void window.goblin.initiative.broadcast(state)
   }, [state, sessionId])
+
+  useEffect(() => {
+    if (!pendingEncounterMonsters || pendingEncounterMonsters.length === 0) return
+    setState((prev) => ({ ...prev, combatants: [...prev.combatants, ...pendingEncounterMonsters.map(monsterToCombatant)] }))
+    setView('tracker')
+    onPendingEncounterConsumed?.()
+  }, [pendingEncounterMonsters, onPendingEncounterConsumed])
 
   // A player rolling/entering their own initiative (see PlayerInitiativeView.tsx) arrives here rather than
   // being editable on their end of the combatant list — this is the one write path into a DM-owned combatant

@@ -36,6 +36,13 @@ export type RequestKind =
   | 'dice.roll'
   | 'messages.list'
   | 'messages.send'
+  | 'sessionDecks.list'
+  | 'sessionDecks.create'
+  | 'sessionDecks.update'
+  | 'sessionDecks.remove'
+  | 'sessionDecks.addScene'
+  | 'sessionDecks.removeScene'
+  | 'sessionDecks.getLive'
 
 export interface RequestFrame {
   reqId: string
@@ -120,4 +127,19 @@ export interface MessageFrame {
 export interface ForceRollFrame {
   type: 'force-roll'
   request: ForceRollRequest
+}
+
+/**
+ * Pushed to every connected player whenever the DM starts presenting a
+ * session deck, advances/rewinds a scene, or stops presenting — `deckId:
+ * null` means "not currently presenting" (stopped, or never started).
+ * Purely a live cursor, not the deck content itself: a player already has
+ * (or fetches on demand via sessionDecks.list) the deck's actual scenes,
+ * this frame just says which one the DM is currently on.
+ */
+export interface SceneChangedFrame {
+  type: 'scene-changed'
+  campaignId: string
+  deckId: string | null
+  sceneIndex: number
 }

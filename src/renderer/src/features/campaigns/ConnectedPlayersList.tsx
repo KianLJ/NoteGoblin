@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import type { CharacterSheet, ForceRollRequest, PresencePlayer } from '@shared/ipc'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 import { ForceRollDialog } from './ForceRollDialog'
@@ -22,6 +22,8 @@ export function ConnectedPlayersList({
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [forceRollTarget, setForceRollTarget] = useState<PresencePlayer | null>(null)
   const [myName, setMyName] = useState('The DM')
+  const [disconnectToast, setDisconnectToast] = useState<string | null>(null)
+  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
     window.goblin.identity.getCurrent().then((identity) => {
@@ -51,10 +53,29 @@ export function ConnectedPlayersList({
     window.goblin.presence.subscribe(sessionId, campaignId)
     return window.goblin.presence.onUpdate((update) => {
       if (update.sessionId === sessionId && update.campaignId === campaignId) {
-        setPlayers(update.players)
+        // Every update is the full current roster, not a join/leave event —
+        // diffing against what we had a moment ago is the only way to tell
+        // someone just dropped, rather than the DM having to notice a name
+        // is quietly missing from the list.
+        setPlayers((prev) => {
+          const stillHere = new Set(update.players.map((p) => p.userId))
+          const left = prev.find((p) => !stillHere.has(p.userId))
+          if (left) {
+            setDisconnectToast(left.displayName)
+            clearTimeout(disconnectTimerRef.current)
+            disconnectTimerRef.current = setTimeout(() => setDisconnectToast(null), 5000)
+          }
+          return update.players
+        })
       }
     })
   }, [sessionId, campaignId])
+
+  const toast = disconnectToast && (
+    <p key={disconnectToast} className="gb-toast-fade" style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
+      {disconnectToast} disconnected.
+    </p>
+  )
 
   if (!campaignId) {
     return <EmptyState>Open or create a campaign to see connected players.</EmptyState>
@@ -69,11 +90,17 @@ export function ConnectedPlayersList({
   }
 
   if (players.length === 0) {
-    return <EmptyState>No one's connected yet.</EmptyState>
+    return (
+      <>
+        {toast}
+        <EmptyState>No one's connected yet.</EmptyState>
+      </>
+    )
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {toast}
       {players.map((player) => {
         const character = playerCharacters.get(player.userId)
         return (

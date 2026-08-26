@@ -13,6 +13,8 @@ export interface NoteRow {
   folder_id: string | null
   /** JSON-encoded array of userIds — see NoteJson.editorUserIds for the parsed shape callers actually use. */
   editor_user_ids: string
+  pinned: 0 | 1
+  scene_deck_id: string | null
   created_at: string
   updated_at: string
 }
@@ -43,11 +45,13 @@ export class NoteRepo {
     bodyMarkdown: string
     visibility: NoteVisibility
     folderId: string | null
+    /** Set only when this note is actually a session-deck scene (see campaignService.createSceneInDeck) — never passed for a normal user-created note. */
+    sceneDeckId?: string | null
   }): NoteRow {
     const id = uuid()
     this.db
       .prepare(
-        'INSERT INTO notes (id, campaign_id, author_user_id, title, body_markdown, visibility, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO notes (id, campaign_id, author_user_id, title, body_markdown, visibility, folder_id, scene_deck_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         id,
@@ -56,7 +60,8 @@ export class NoteRepo {
         input.title,
         input.bodyMarkdown,
         input.visibility,
-        input.folderId
+        input.folderId,
+        input.sceneDeckId ?? null
       )
     return this.findById(id)!
   }
@@ -70,6 +75,7 @@ export class NoteRepo {
       folderId?: string | null
       visibility?: NoteVisibility
       editorUserIds?: string[]
+      pinned?: boolean
     }
   ): NoteRow | undefined {
     const existing = this.findById(id)
@@ -79,11 +85,12 @@ export class NoteRepo {
     const folderId: string | null = 'folderId' in input ? (input.folderId as string | null) : existing.folder_id
     const visibility = input.visibility ?? existing.visibility
     const editorUserIds = input.editorUserIds ? JSON.stringify(input.editorUserIds) : existing.editor_user_ids
+    const pinned = input.pinned !== undefined ? (input.pinned ? 1 : 0) : existing.pinned
     this.db
       .prepare(
-        "UPDATE notes SET title = ?, body_markdown = ?, folder_id = ?, visibility = ?, editor_user_ids = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+        "UPDATE notes SET title = ?, body_markdown = ?, folder_id = ?, visibility = ?, editor_user_ids = ?, pinned = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
       )
-      .run(title, bodyMarkdown, folderId, visibility, editorUserIds, id)
+      .run(title, bodyMarkdown, folderId, visibility, editorUserIds, pinned, id)
     return this.findById(id)
   }
 

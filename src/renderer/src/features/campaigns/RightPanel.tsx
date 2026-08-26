@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { ConnectedPlayersList } from './ConnectedPlayersList'
 import { InitiativeTracker } from './InitiativeTracker'
 import { CalendarPanel } from './CalendarPanel'
+import { SessionDeckPanel } from './SessionDeckPanel'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from './panelIcons'
 import { DiceTray } from '../dice/DiceTray'
@@ -11,6 +12,8 @@ import { loadRightPanelTab, saveRightPanelTab } from './rightPanelTab'
 import type { CharacterSheet, Note } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
 
+
+
 interface RightPanelProps {
   /** The hosted session id — null while not hosting, since there's no one to show presence for. */
   sessionId: string | null
@@ -19,18 +22,38 @@ interface RightPanelProps {
   playerCharacters: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
   onSelectMonster: (monster: BestiaryMonster) => void
-  /** For CalendarPanel's event editor — lets an event pair with an existing note. */
+  /** For CalendarPanel's event editor, and SessionDeckPanel's scene title lookups — lets either pair with/open an existing note. */
   notes: Note[]
+  /** Opens a note (here, always a scene) as a tab in the main pane — same function CampaignWorkspace already passes its own sidebar. */
+  onOpenNote: (noteId: string) => void
+  /** Patches CampaignWorkspace's own `notes` array directly the moment a scene is created/removed — see useNotesWorkspace.ts's addNoteLocally/removeNoteLocally doc comment for why this can't just wait for the campaigns.onChanged broadcast. */
+  onSceneCreated: (note: Note) => void
+  onSceneRemoved: (noteId: string) => void
 }
 
 /** DM-only bar on the right of the workspace — always visible regardless of whether a campaign is open or hosting is active, so Dice/Initiative are there from the moment the app opens, not just once something's connected. Messages moved up into the header's Messages button (see AppShell.tsx/MessagesButton.tsx) rather than living here, so this is just the tab strip now. */
-export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPlayer, onSelectMonster, notes }: RightPanelProps): JSX.Element {
+export function RightPanel({
+  sessionId,
+  campaignId,
+  playerCharacters,
+  onSelectPlayer,
+  onSelectMonster,
+  notes,
+  onOpenNote,
+  onSceneCreated,
+  onSceneRemoved
+}: RightPanelProps): JSX.Element {
   const [tab, setTabState] = useState(loadRightPanelTab)
   function setTab(next: typeof tab): void {
     setTabState(next)
     saveRightPanelTab(next)
   }
   const diceToast = useDiceRollToast(tab === 'dice')
+  // "Load Encounter" on a presented scene (SessionDeckPanel) needs to reach
+  // the Initiative Tracker, a sibling tab's own component with its own local
+  // combat state — lifted just far enough (not into a global store) for the
+  // two to hand off through their shared parent.
+  const [pendingEncounterMonsters, setPendingEncounterMonsters] = useState<BestiaryMonster[] | null>(null)
 
   return (
     <ResizableSidebar
@@ -56,7 +79,7 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
           </div>
           <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
           <TabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
-          <TabButton icon={<SessionIcon />} label="Session" disabled title="Coming soon" />
+          <TabButton icon={<SessionIcon />} label="Sessions" active={tab === 'sessions'} onClick={() => setTab('sessions')} />
         </div>
 
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -67,7 +90,13 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
             <ConnectedPlayersList sessionId={sessionId} campaignId={campaignId} playerCharacters={playerCharacters} onSelectPlayer={onSelectPlayer} />
           </div>
           <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
-            <InitiativeTracker sessionId={sessionId} playerCharacters={playerCharacters} onSelectMonster={onSelectMonster} />
+            <InitiativeTracker
+              sessionId={sessionId}
+              playerCharacters={playerCharacters}
+              onSelectMonster={onSelectMonster}
+              pendingEncounterMonsters={pendingEncounterMonsters}
+              onPendingEncounterConsumed={() => setPendingEncounterMonsters(null)}
+            />
           </div>
           <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
             <DiceTray sessionId={sessionId} />
@@ -81,6 +110,24 @@ export function RightPanel({ sessionId, campaignId, playerCharacters, onSelectPl
                 still broadcast to connected players regardless — see registerIpc.ts's calendar:save
                 handler, which already checks getHostedSession() server-side. */}
             <CalendarPanel sessionId={null} campaignId={campaignId} readOnly={false} notes={notes} />
+          </div>
+          <div style={{ display: tab === 'sessions' ? 'block' : 'none', height: '100%' }}>
+            {/* Same reasoning as Calendar above: always the local/direct path, never the hosted
+                session id — presenting/CRUD broadcast to connected players regardless, via
+                getHostedSession() checks server-side. */}
+            <SessionDeckPanel
+              sessionId={null}
+              campaignId={campaignId}
+              readOnly={false}
+              notes={notes}
+              onOpenScene={onOpenNote}
+              onSceneCreated={onSceneCreated}
+              onSceneRemoved={onSceneRemoved}
+              onLoadEncounter={(monsters) => {
+                setPendingEncounterMonsters(monsters)
+                setTab('initiative')
+              }}
+            />
           </div>
         </div>
       </div>

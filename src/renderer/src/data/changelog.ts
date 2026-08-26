@@ -7,6 +7,20 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.2',
+    title: 'Live session presentations, pinned notes, custom NPCs, and reliability fixes',
+    highlights: [
+      'New Sessions tab: build a scene-by-scene session deck (each scene is a real note with the full editor), present it live so connected players see the same scene the DM is on, and let players browse past sessions afterward',
+      'Scenes support a `::` block syntax for DM-only asides — hidden from players even while presenting — and can link a saved Initiative Tracker encounter for one-click loading mid-scene',
+      'Session decks now cache offline too, so players can browse past sessions even when the DM isn\'t currently hosting',
+      'Pinned notes — right-click any note to pin it to the top of its section',
+      'New NPCs section in the Codex: build reusable NPC statblocks with a portrait, and generate a race-flavored name procedurally instead of picking from a fixed list',
+      'Added a React error boundary — a single component crashing no longer blanks the whole window',
+      'Added a toast when a connected player disconnects mid-session',
+      'Various fixes to note permissions and autosave behavior for read-only viewers'
+    ]
+  },
+  {
     version: '0.5.1',
     title: 'Calendar bug fixes, initiative fairness, exhaustion, and character portraits',
     highlights: [

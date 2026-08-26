@@ -12,6 +12,9 @@ export interface NoteFrontmatter {
   id: string
   authorUserId: string
   editorUserIds: string[]
+  pinned: boolean
+  /** Set only when this note is actually a session-deck scene (see shared/sessionDeck.ts) — null for a normal note. */
+  sceneDeckId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -24,6 +27,8 @@ export function serializeNote(fm: NoteFrontmatter, body: string): string {
     `id: ${fm.id}`,
     `authorUserId: ${fm.authorUserId}`,
     `editorUserIds: [${fm.editorUserIds.join(', ')}]`,
+    `pinned: ${fm.pinned}`,
+    `sceneDeckId: ${fm.sceneDeckId ?? ''}`,
     `createdAt: ${fm.createdAt}`,
     `updatedAt: ${fm.updatedAt}`
   ].join('\n')
@@ -57,6 +62,8 @@ export function parseNote(raw: string): { frontmatter: NoteFrontmatter; body: st
       id: fields.id,
       authorUserId: fields.authorUserId,
       editorUserIds,
+      pinned: fields.pinned === 'true',
+      sceneDeckId: fields.sceneDeckId && fields.sceneDeckId.trim() ? fields.sceneDeckId.trim() : null,
       createdAt: fields.createdAt ?? now,
       updatedAt: fields.updatedAt ?? fields.createdAt ?? now
     },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Campaign, CampaignSnapshot, CharacterSheet, Folder, Note } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
+import type { SessionDeck } from '@shared/sessionDeck'
 
 export type PlayerTabRef = { kind: 'character'; id: string } | { kind: 'note'; id: string }
 
@@ -21,6 +22,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [folders, setFolders] = useState<Folder[] | null>(null)
+  const [sessionDecks, setSessionDecks] = useState<SessionDeck[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tabs, setTabs] = useState<PlayerTabRef[]>([])
   const [activeTab, setActiveTabState] = useState<PlayerTabRef | null>(null)
@@ -64,6 +66,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     if (!activeCampaign) {
       setNotes(null)
       setFolders(null)
+      setSessionDecks(null)
       return
     }
     refreshNotes(activeCampaign)
@@ -121,24 +124,31 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     })
   }
 
-  /** Also writes through to the offline snapshot cache once both lists land — see the `snapshots` IPC surface — so this campaign stays browsable read-only once the DM stops hosting. */
+  /** Also writes through to the offline snapshot cache once all three lists land — see the `snapshots` IPC surface — so this campaign (including its session decks) stays browsable read-only once the DM stops hosting. */
   function refreshNotes(campaign: Campaign): void {
     const campaignId = campaign.id
-    Promise.all([window.goblin.notes.list(campaignId, sessionId), window.goblin.folders.list(campaignId, sessionId)]).then(
-      ([notesResult, foldersResult]) => {
-        if (!notesResult.ok) {
-          setError(notesResult.error)
-          return
-        }
-        setNotes(notesResult.data)
-        if (!foldersResult.ok) {
-          setError(foldersResult.error)
-          return
-        }
-        setFolders(foldersResult.data)
-        window.goblin.snapshots.save(campaign, notesResult.data, foldersResult.data).then(refreshOfflineSnapshots)
+    Promise.all([
+      window.goblin.notes.list(campaignId, sessionId),
+      window.goblin.folders.list(campaignId, sessionId),
+      window.goblin.sessionDecks.list(campaignId, sessionId)
+    ]).then(([notesResult, foldersResult, decksResult]) => {
+      if (!notesResult.ok) {
+        setError(notesResult.error)
+        return
       }
-    )
+      setNotes(notesResult.data)
+      if (!foldersResult.ok) {
+        setError(foldersResult.error)
+        return
+      }
+      setFolders(foldersResult.data)
+      // Session decks are a newer, less essential part of this snapshot —
+      // don't let a failure here (e.g. an older host that hasn't restarted
+      // since this feature shipped) block notes/folders from still caching.
+      const decks = decksResult.ok ? decksResult.data : []
+      setSessionDecks(decks)
+      window.goblin.snapshots.save(campaign, notesResult.data, foldersResult.data, decks).then(refreshOfflineSnapshots)
+    })
   }
 
   /** Every campaign previously cached while connected — shown as an "Offline" fallback for when the DM isn't currently hosting. */
@@ -161,6 +171,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       setActiveCampaign(result.data.campaign)
       setNotes(result.data.notes)
       setFolders(result.data.folders)
+      setSessionDecks(result.data.sessionDecks ?? [])
     })
   }
 
@@ -171,6 +182,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     setActiveCampaign(null)
     setNotes(null)
     setFolders(null)
+    setSessionDecks(null)
     setTabs((prev) => prev.filter((t) => t.kind !== 'note'))
     setActiveTabState((current) => (current?.kind === 'note' ? null : current))
   }
@@ -283,6 +295,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       folderId?: string | null
       visibility?: 'dm' | 'shared' | 'private'
       editorUserIds?: string[]
+      pinned?: boolean
     }
   ): Promise<void> {
     if (!activeCampaign || !guardOnline()) return
@@ -443,6 +456,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     activeCampaign,
     notes,
     folders,
+    sessionDecks,
     error,
     tabItems,
     activeTab,

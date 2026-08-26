@@ -162,6 +162,15 @@ export function getHostDb(userDataDir: string): DatabaseType {
       if (tableIsMissingColumn(database, 'notes', 'editor_user_ids')) {
         database.exec("ALTER TABLE notes ADD COLUMN editor_user_ids TEXT NOT NULL DEFAULT '[]'")
       }
+      if (tableIsMissingColumn(database, 'notes', 'pinned')) {
+        database.exec('ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
+      }
+      if (tableIsMissingColumn(database, 'notes', 'scene_deck_id')) {
+        database.exec('ALTER TABLE notes ADD COLUMN scene_deck_id TEXT')
+      }
+      if (tableIsMissingColumn(database, 'session_decks', 'presented_at')) {
+        database.exec('ALTER TABLE session_decks ADD COLUMN presented_at TEXT')
+      }
       rebuildVisibilityCheck(database, 'notes')
       rebuildVisibilityCheck(database, 'folders')
       rebuildHostStateWithoutForeignKey(database)

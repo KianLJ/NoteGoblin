@@ -152,7 +152,14 @@ export function NoteEditor({
 
   function handleBodyChange(value: string): void {
     setBody(value)
-    scheduleSave({ bodyMarkdown: value })
+    // MarkdownLiveEditor's readOnly prop keeps a human from typing, but the
+    // external-update reconciliation effect above still calls
+    // editorRef.current?.setContent(...) to adopt someone else's edit —
+    // CodeMirror fires the same onChange for a programmatic setContent as it
+    // does for a keystroke, so without this guard a read-only viewer would
+    // schedule (and then fail) a save every time the DM edited the note out
+    // from under them.
+    if (!readOnly) scheduleSave({ bodyMarkdown: value })
   }
 
   function insertText(text: string): void {
@@ -415,6 +422,12 @@ export function NoteEditor({
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
         by {note.authorDisplayName}
+        {note.sceneDeckId && !readOnly && (
+          <>
+            {' '}
+            · wrap a section between two lines that just say <code>::</code> to hide it from players
+          </>
+        )}
       </div>
 
       <div

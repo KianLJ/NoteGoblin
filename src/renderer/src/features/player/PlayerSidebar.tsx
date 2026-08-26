@@ -35,6 +35,7 @@ interface PlayerSidebarProps {
   ) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
   onDeleteNote: (noteId: string) => void
+  onTogglePinNote: (noteId: string, pinned: boolean) => void
   onRenameFolder: (folderId: string, name: string) => void
   onDeleteFolder: (folderId: string) => void
   onMoveNote: (noteId: string, folderId: string | null, visibility: 'dm' | 'shared' | 'private') => void
@@ -71,6 +72,7 @@ export function PlayerSidebar({
   onCreateNote,
   onCreateFolder,
   onRenameNote,
+  onTogglePinNote,
   onDeleteNote,
   onRenameFolder,
   onDeleteFolder,
@@ -216,7 +218,7 @@ export function PlayerSidebar({
                 storageKey={`${activeCampaign.id}:party`}
                 visibility="shared"
                 fill
-                notes={myNotes.filter((n) => n.visibility === 'shared')}
+                notes={myNotes.filter((n) => n.visibility === 'shared' && !n.sceneDeckId)}
                 folders={myFolders.filter((f) => f.visibility === 'shared')}
                 activeId={activeTab?.kind === 'note' ? activeTab.id : null}
                 myUserId={myUserId}
@@ -225,6 +227,7 @@ export function PlayerSidebar({
                 onCreateNote={(folderId) => onCreateNote('shared', folderId)}
                 onCreateFolder={(name, parentFolderId) => onCreateFolder('shared', name, parentFolderId)}
                 onRenameNote={onRenameNote}
+                onTogglePinNote={onTogglePinNote}
                 onDeleteNote={onDeleteNote}
                 onRenameFolder={onRenameFolder}
                 onDeleteFolder={onDeleteFolder}
@@ -266,7 +269,7 @@ export function PlayerSidebar({
                 storageKey={`${activeCampaign.id}:private`}
                 visibility="private"
                 fill
-                notes={myNotes.filter((n) => n.visibility === 'private')}
+                notes={myNotes.filter((n) => n.visibility === 'private' && !n.sceneDeckId)}
                 folders={myFolders.filter((f) => f.visibility === 'private')}
                 activeId={activeTab?.kind === 'note' ? activeTab.id : null}
                 myUserId={myUserId}
@@ -275,6 +278,7 @@ export function PlayerSidebar({
                 onCreateNote={(folderId) => onCreateNote('private', folderId)}
                 onCreateFolder={(name, parentFolderId) => onCreateFolder('private', name, parentFolderId)}
                 onRenameNote={onRenameNote}
+                onTogglePinNote={onTogglePinNote}
                 onDeleteNote={onDeleteNote}
                 onRenameFolder={onRenameFolder}
                 onDeleteFolder={onDeleteFolder}

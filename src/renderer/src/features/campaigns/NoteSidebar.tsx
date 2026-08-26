@@ -19,6 +19,7 @@ interface NoteSidebarProps {
   onCreateFolder: (visibility: 'dm' | 'shared', name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
   onDeleteNote: (noteId: string) => void
+  onTogglePinNote: (noteId: string, pinned: boolean) => void
   onRenameFolder: (folderId: string, name: string) => void
   onDeleteFolder: (folderId: string) => void
   // These four are passed straight through to NoteTreeSection (shared with
@@ -49,6 +50,7 @@ export function NoteSidebar({
   onCreateFolder,
   onRenameNote,
   onDeleteNote,
+  onTogglePinNote,
   onRenameFolder,
   onDeleteFolder,
   onMoveNote,
@@ -161,7 +163,7 @@ export function NoteSidebar({
             visibility="shared"
             isDm={isDm}
             fill
-            notes={notes.filter((n) => n.visibility === 'shared')}
+            notes={notes.filter((n) => n.visibility === 'shared' && !n.sceneDeckId)}
             folders={folders.filter((f) => f.visibility === 'shared')}
             activeId={activeId}
             myUserId={myUserId}
@@ -170,6 +172,7 @@ export function NoteSidebar({
             onCreateNote={(folderId) => onCreateNote('shared', folderId)}
             onCreateFolder={(name, parentFolderId) => onCreateFolder('shared', name, parentFolderId)}
             onRenameNote={onRenameNote}
+            onTogglePinNote={onTogglePinNote}
             onDeleteNote={onDeleteNote}
             onRenameFolder={onRenameFolder}
             onDeleteFolder={onDeleteFolder}
@@ -219,7 +222,7 @@ export function NoteSidebar({
                 visibility="dm"
                 isDm={isDm}
                 fill
-                notes={notes.filter((n) => n.visibility === 'dm')}
+                notes={notes.filter((n) => n.visibility === 'dm' && !n.sceneDeckId)}
                 folders={folders.filter((f) => f.visibility === 'dm')}
                 activeId={activeId}
                 myUserId={myUserId}
@@ -228,6 +231,7 @@ export function NoteSidebar({
                 onCreateNote={(folderId) => onCreateNote('dm', folderId)}
                 onCreateFolder={(name, parentFolderId) => onCreateFolder('dm', name, parentFolderId)}
                 onRenameNote={onRenameNote}
+            onTogglePinNote={onTogglePinNote}
                 onDeleteNote={onDeleteNote}
                 onRenameFolder={onRenameFolder}
                 onDeleteFolder={onDeleteFolder}

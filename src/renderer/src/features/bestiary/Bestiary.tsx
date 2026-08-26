@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { BESTIARY, BESTIARY_TYPES, formatCr, type BestiaryMonster } from '../../data/bestiary'
 import { loadCustomMonsters, removeCustomMonster, isCustomMonster } from '../../data/customBestiary'
+import { loadNpcs, createNpc, updateNpc, removeNpc, type Npc } from '../../data/npcs'
+import { generateNpcName } from '../../data/npcNames'
 import { renderStatblockHtml } from '../../statblock'
 import { CloseIcon } from '../campaigns/icons'
+import { RACES } from '@shared/dnd5e'
 import {
   EQUIPMENT,
   MAGIC_ITEMS,
@@ -22,8 +25,8 @@ interface BestiaryProps {
   hideMonsters?: boolean
 }
 
-type Category = 'Monsters' | 'Equipment' | 'Spells' | 'Magic Items'
-const CATEGORIES: Category[] = ['Monsters', 'Equipment', 'Spells', 'Magic Items']
+type Category = 'Monsters' | 'NPCs' | 'Equipment' | 'Spells' | 'Magic Items'
+const CATEGORIES: Category[] = ['Monsters', 'NPCs', 'Equipment', 'Spells', 'Magic Items']
 const EQUIPMENT_CATEGORIES: EquipmentCategory[] = ['Weapon', 'Armor', 'Adventuring Gear', 'Tools', 'Mounts and Vehicles']
 
 function toTitleCase(s: string): string {
@@ -47,14 +50,24 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [selectedIndex, setSelectedIndex] = useState<string | null>(null)
   const [customMonsters, setCustomMonsters] = useState(() => loadCustomMonsters())
+  const [npcs, setNpcs] = useState(() => loadNpcs())
+  const [editingNpcId, setEditingNpcId] = useState<string | 'new' | null>(null)
+  const [npcDraft, setNpcDraft] = useState<Omit<Npc, 'id' | 'createdAt'>>({
+    name: '',
+    race: RACES[0].name,
+    occupation: '',
+    notes: '',
+    portraitDataUrl: null
+  })
 
-  const visibleCategories = hideMonsters ? CATEGORIES.filter((c) => c !== 'Monsters') : CATEGORIES
+  const visibleCategories = hideMonsters ? CATEGORIES.filter((c) => c !== 'Monsters' && c !== 'NPCs') : CATEGORIES
 
   // Opened as a note's "Import from Bestiary" picker — only a monster can become a ```statblock block, so the
   // other categories would just be dead ends here. hideMonsters wins over a stale 'Monsters' category value
   // (e.g. the DM had it selected before a player joined mid-session, though that specific case can't happen
   // today since this prop is only ever true for a connected player's own view).
-  const effectiveCategory: Category = onPick ? 'Monsters' : hideMonsters && category === 'Monsters' ? 'Equipment' : category
+  const effectiveCategory: Category =
+    onPick ? 'Monsters' : hideMonsters && (category === 'Monsters' || category === 'NPCs') ? 'Equipment' : category
 
   const allMonsters = useMemo(() => [...customMonsters, ...BESTIARY], [customMonsters])
 
@@ -72,7 +85,19 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
     setQuery('')
     setTypeFilter('')
     setSelectedIndex(null)
+    setEditingNpcId(null)
   }, [effectiveCategory])
+
+  const filteredNpcs = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return [...npcs]
+      .filter((n) => {
+        if (typeFilter && n.race !== typeFilter) return false
+        if (q && !n.name.toLowerCase().includes(q)) return false
+        return true
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [npcs, query, typeFilter])
 
   const filteredMonsters = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -121,6 +146,7 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
   // closed. Nothing selected until the user actually picks one avoids
   // triggering it at all.
   const selectedMonster: BestiaryMonster | undefined = allMonsters.find((m) => m.index === selectedIndex)
+  const selectedNpc: Npc | undefined = npcs.find((n) => n.id === selectedIndex)
   const selectedEquipment: CompendiumEquipment | undefined = EQUIPMENT.find((e) => e.id === selectedIndex)
   const selectedSpell: CompendiumSpell | undefined = SPELLS.find((s) => s.id === selectedIndex)
   const selectedMagicItem: CompendiumMagicItem | undefined = MAGIC_ITEMS.find((m) => m.id === selectedIndex)
@@ -129,6 +155,36 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
     removeCustomMonster(index)
     setCustomMonsters(loadCustomMonsters())
     if (selectedIndex === index) setSelectedIndex(null)
+  }
+
+  function startNewNpc(): void {
+    setNpcDraft({ name: '', race: RACES[0].name, occupation: '', notes: '', portraitDataUrl: null })
+    setEditingNpcId('new')
+  }
+
+  function startEditNpc(npc: Npc): void {
+    setNpcDraft({ name: npc.name, race: npc.race, occupation: npc.occupation, notes: npc.notes, portraitDataUrl: npc.portraitDataUrl })
+    setEditingNpcId(npc.id)
+  }
+
+  function saveNpcDraft(): void {
+    if (editingNpcId === 'new') {
+      const created = createNpc(npcDraft)
+      setNpcs(loadNpcs())
+      setSelectedIndex(created.id)
+    } else if (editingNpcId) {
+      updateNpc(editingNpcId, npcDraft)
+      setNpcs(loadNpcs())
+      setSelectedIndex(editingNpcId)
+    }
+    setEditingNpcId(null)
+  }
+
+  function handleDeleteNpc(id: string): void {
+    removeNpc(id)
+    setNpcs(loadNpcs())
+    if (selectedIndex === id) setSelectedIndex(null)
+    if (editingNpcId === id) setEditingNpcId(null)
   }
 
   const rarityOptions = useMemo(() => [...new Set(MAGIC_ITEMS.map((m) => m.rarity))].sort(), [])
@@ -248,6 +304,21 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
                   ))}
                 </select>
               )}
+              {effectiveCategory === 'NPCs' && (
+                <>
+                  <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                    <option value="">All races</option>
+                    {RACES.map((r) => (
+                      <option key={r.id} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="gb-btn gb-btn--secondary" onClick={startNewNpc} style={{ fontSize: 12 }}>
+                    + New NPC
+                  </button>
+                </>
+              )}
               {effectiveCategory === 'Equipment' && (
                 <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
                   <option value="">All categories</option>
@@ -280,6 +351,7 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
               )}
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 {effectiveCategory === 'Monsters' && `${filteredMonsters.length} monster${filteredMonsters.length === 1 ? '' : 's'}`}
+                {effectiveCategory === 'NPCs' && `${filteredNpcs.length} NPC${filteredNpcs.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Equipment' && `${filteredEquipment.length} item${filteredEquipment.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Spells' && `${filteredSpells.length} spell${filteredSpells.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Magic Items' && `${filteredMagicItems.length} item${filteredMagicItems.length === 1 ? '' : 's'}`}
@@ -309,6 +381,19 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
                   )
                 })}
 
+              {effectiveCategory === 'NPCs' &&
+                filteredNpcs.map((n) => (
+                  <div key={n.id} style={{ display: 'flex', alignItems: 'center', background: selectedNpc?.id === n.id ? 'var(--accent-subtle)' : 'transparent' }}>
+                    <button type="button" onClick={() => setSelectedIndex(n.id)} style={listRowStyle(selectedNpc?.id === n.id)}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.name || 'Unnamed NPC'}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{n.race}</span>
+                    </button>
+                    <button type="button" onClick={() => handleDeleteNpc(n.id)} title="Delete this NPC" style={deleteBtnStyle}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+
               {effectiveCategory === 'Equipment' &&
                 filteredEquipment.map((e) => (
                   <button key={e.id} type="button" onClick={() => setSelectedIndex(e.id)} style={listRowStyle(selectedEquipment?.id === e.id)}>
@@ -334,6 +419,7 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
                 ))}
 
               {((effectiveCategory === 'Monsters' && filteredMonsters.length === 0) ||
+                (effectiveCategory === 'NPCs' && filteredNpcs.length === 0) ||
                 (effectiveCategory === 'Equipment' && filteredEquipment.length === 0) ||
                 (effectiveCategory === 'Spells' && filteredSpells.length === 0) ||
                 (effectiveCategory === 'Magic Items' && filteredMagicItems.length === 0)) && (
@@ -349,6 +435,14 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
                   <div dangerouslySetInnerHTML={{ __html: renderStatblockHtml(selectedMonster) }} />
                 ) : (
                   <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No monster selected.</div>
+                ))}
+              {effectiveCategory === 'NPCs' &&
+                (editingNpcId ? (
+                  <NpcEditor draft={npcDraft} onChange={setNpcDraft} onSave={saveNpcDraft} onCancel={() => setEditingNpcId(null)} />
+                ) : selectedNpc ? (
+                  <NpcDetail npc={selectedNpc} onEdit={() => startEditNpc(selectedNpc)} />
+                ) : (
+                  <NoneSelected />
                 ))}
               {effectiveCategory === 'Equipment' && (selectedEquipment ? <EquipmentDetail item={selectedEquipment} /> : <NoneSelected />)}
               {effectiveCategory === 'Spells' && (selectedSpell ? <SpellDetail spell={selectedSpell} /> : <NoneSelected />)}
@@ -386,6 +480,176 @@ function DetailField({ label, value }: { label: string; value: string }): JSX.El
     <div style={{ fontSize: 13, marginBottom: 3 }}>
       <strong>{label}: </strong>
       <span style={{ color: 'var(--text-secondary)' }}>{value}</span>
+    </div>
+  )
+}
+
+function NpcDetail({ npc, onEdit }: { npc: Npc; onEdit: () => void }): JSX.Element {
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            flexShrink: 0,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface-raised)',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          {npc.portraitDataUrl ? (
+            <img src={npc.portraitDataUrl} alt={npc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <span style={{ fontSize: 22, color: 'var(--text-muted)' }}>?</span>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <DetailHeader name={npc.name || 'Unnamed NPC'} subtitle={[npc.race, npc.occupation].filter(Boolean).join(' · ')} />
+        </div>
+        <button type="button" className="gb-btn gb-btn--secondary" onClick={onEdit} style={{ fontSize: 12, flexShrink: 0 }}>
+          Edit
+        </button>
+      </div>
+      {npc.notes && <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 'var(--space-3)', whiteSpace: 'pre-wrap' }}>{npc.notes}</p>}
+    </div>
+  )
+}
+
+const NPC_PORTRAIT_MAX_DIMENSION = 256
+
+function readNpcPortraitFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error)
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('Could not read image.'))
+      img.onload = () => {
+        const scale = Math.min(1, NPC_PORTRAIT_MAX_DIMENSION / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('Canvas unavailable.'))
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function NpcEditor({
+  draft,
+  onChange,
+  onSave,
+  onCancel
+}: {
+  draft: Omit<Npc, 'id' | 'createdAt'>
+  onChange: (draft: Omit<Npc, 'id' | 'createdAt'>) => void
+  onSave: () => void
+  onCancel: () => void
+}): JSX.Element {
+  function patch(fields: Partial<Omit<Npc, 'id' | 'createdAt'>>): void {
+    onChange({ ...draft, ...fields })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', maxWidth: 420 }}>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+        <label
+          title="Click to upload a portrait"
+          style={{
+            width: 64,
+            height: 64,
+            flexShrink: 0,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface-raised)',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          {draft.portraitDataUrl ? (
+            <img src={draft.portraitDataUrl} alt="Portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <span style={{ fontSize: 22, color: 'var(--text-muted)' }}>?</span>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void readNpcPortraitFile(file).then((dataUrl) => patch({ portraitDataUrl: dataUrl }))
+              e.target.value = ''
+            }}
+          />
+        </label>
+
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              autoFocus
+              className="gb-input"
+              placeholder="Name"
+              value={draft.name}
+              onChange={(e) => patch({ name: e.target.value })}
+              style={{ flex: 1, fontSize: 13 }}
+            />
+            <button
+              type="button"
+              className="gb-btn gb-btn--secondary"
+              title="Generate a name for this race"
+              onClick={() => patch({ name: generateNpcName(draft.race) })}
+              style={{ fontSize: 12, flexShrink: 0 }}
+            >
+              Random
+            </button>
+          </div>
+          <select className="gb-input" value={draft.race} onChange={(e) => patch({ race: e.target.value })} style={{ fontSize: 13 }}>
+            {RACES.map((r) => (
+              <option key={r.id} value={r.name}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="gb-input"
+            placeholder="Occupation / role"
+            value={draft.occupation}
+            onChange={(e) => patch({ occupation: e.target.value })}
+            style={{ fontSize: 13 }}
+          />
+        </div>
+      </div>
+
+      <textarea
+        className="gb-input"
+        placeholder="Personality, voice, hooks, anything worth remembering…"
+        value={draft.notes}
+        onChange={(e) => patch({ notes: e.target.value })}
+        rows={8}
+        style={{ fontSize: 13, resize: 'vertical' }}
+      />
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button type="button" className="gb-btn gb-btn--primary" onClick={onSave}>
+          Save
+        </button>
+        <button type="button" className="gb-btn gb-btn--secondary" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     </div>
   )
 }
