@@ -143,3 +143,30 @@ export interface SceneChangedFrame {
   deckId: string | null
   sceneIndex: number
 }
+
+/**
+ * Pushed to every connected player when the DM picks a Goblin Bard mood (or
+ * stops music entirely, `trackId: null`) — carries only a track id from the
+ * bundled music library (see musicLibrary.ts), never audio data itself.
+ * Every client already has the exact same file bundled with the app, so
+ * this is just "which one," not a stream — each client loops/crossfades to
+ * it locally at `fadeMs`, using the same fade duration so everyone's
+ * transition feels the same length even though playback isn't
+ * sample-synced.
+ */
+export interface MusicChangedFrame {
+  type: 'music-changed'
+  trackId: string | null
+  fadeMs: number
+  /**
+   * Present only when `trackId` names a DM-local custom addition (see
+   * main/customMusic.ts) rather than something every client already has
+   * bundled — the actual audio, base64-encoded, so a connected player can
+   * play it too without the file existing on their own disk. Sent inline on
+   * every broadcast of that track (not just the first) since the relay
+   * never stores anything and a player might join or reconnect mid-session
+   * with no earlier copy to fall back on; the receiving end (musicEngine.ts)
+   * caches the decoded blob URL by trackId so it only ever decodes once.
+   */
+  customTrack?: { title: string; mimeType: string; dataBase64: string }
+}

@@ -10,6 +10,10 @@ import { statblockToFencedBlock } from '../../statblock'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { performRoll } from '../dice/diceLogStore'
 import type { DiceGroup } from '@shared/dice'
+import { useSessionDecks } from './useSessionDecks'
+import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
+import { MUSIC_LIBRARY } from '../../data/musicLibrary'
+import { getCustomTracks } from '../audio/customMusicStore'
 
 interface NoteEditorProps {
   note: Note
@@ -94,6 +98,30 @@ export function NoteEditor({
   const knownTitles = useMemo(() => new Set(notes.map((n) => (n.title || 'Untitled').toLowerCase())), [notes])
   knownTitlesRef.current = knownTitles
   notesRef.current = notes
+
+  // A scene note (marked via note.sceneDeckId — see shared/sessionDeck.ts)
+  // gets its Encounter/Mood/Track pickers shown right here under the title,
+  // rather than in SessionDeckPanel's scene list, so authoring a scene's
+  // combat/music cues happens in the same place as writing its content.
+  // Only fetched for an actual scene note — `null` short-circuits
+  // useSessionDecks straight to an empty list, no wasted round trip for a
+  // normal note. `null` for the sessionId arg matches the DM's own
+  // local/direct path everywhere else in this app (see RightPanel.tsx's
+  // doc comment on why that's distinct from the real hosted-session id).
+  const [savedEncounters, setSavedEncounters] = useState<SavedEncounter[]>(() => loadSavedEncounters())
+  const { decks: sceneDecks, reorderScenes: reorderSceneDeckScenes } = useSessionDecks(note.sceneDeckId ? note.campaignId : null, null)
+  useEffect(() => {
+    if (note.sceneDeckId) setSavedEncounters(loadSavedEncounters())
+  }, [note.sceneDeckId])
+  const sceneDeck = note.sceneDeckId ? sceneDecks.find((d) => d.id === note.sceneDeckId) : undefined
+  const sceneIndex = sceneDeck ? sceneDeck.scenes.findIndex((s) => s.noteId === note.id) : -1
+  const scene = sceneIndex >= 0 ? sceneDeck!.scenes[sceneIndex] : undefined
+
+  function updateScene(patch: Partial<{ encounterId: string | null; moodId: string | null; trackId: string | null }>): void {
+    if (!sceneDeck || sceneIndex < 0) return
+    const next = sceneDeck.scenes.map((s, i) => (i === sceneIndex ? { ...s, ...patch } : s))
+    void reorderSceneDeckScenes(sceneDeck.id, next)
+  }
 
   function scheduleSave(patch: { title?: string; bodyMarkdown?: string }): void {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -312,6 +340,61 @@ export function NoteEditor({
           </span>
         </div>
       </div>
+
+      {scene && !readOnly && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)', fontSize: 11, minWidth: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Encounter:</span>
+            <select
+              className="gb-input"
+              value={scene.encounterId ?? ''}
+              onChange={(e) => updateScene({ encounterId: e.target.value || null })}
+              style={{ fontSize: 11, padding: '2px 4px', maxWidth: 120 }}
+            >
+              <option value="">None</option>
+              {savedEncounters.map((enc) => (
+                <option key={enc.id} value={enc.id}>
+                  {enc.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Mood:</span>
+            <select
+              className="gb-input"
+              value={scene.moodId ?? ''}
+              onChange={(e) => updateScene({ moodId: e.target.value || null, trackId: null })}
+              style={{ fontSize: 11, padding: '2px 4px', maxWidth: 120 }}
+            >
+              <option value="">None</option>
+              {MUSIC_LIBRARY.filter((g) => g.tracks.length > 0 || getCustomTracks(g.id).length > 0).map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {scene.moodId && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Track:</span>
+              <select
+                className="gb-input"
+                value={scene.trackId ?? ''}
+                onChange={(e) => updateScene({ trackId: e.target.value || null })}
+                style={{ fontSize: 11, padding: '2px 4px', maxWidth: 140 }}
+              >
+                <option value="">Random from mood</option>
+                {[...(MUSIC_LIBRARY.find((g) => g.id === scene.moodId)?.tracks ?? []), ...getCustomTracks(scene.moodId)].map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {track.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
 
       <div
         style={{

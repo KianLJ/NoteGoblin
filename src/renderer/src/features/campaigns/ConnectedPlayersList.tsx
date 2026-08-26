@@ -3,6 +3,7 @@ import type { CharacterSheet, ForceRollRequest, PresencePlayer } from '@shared/i
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 import { ForceRollDialog } from './ForceRollDialog'
 import { DiceIcon } from '../player/characterSheetTabs/icons'
+import { playSfx } from '../audio/soundEffects'
 
 interface ConnectedPlayersListProps {
   sessionId: string | null
@@ -50,21 +51,30 @@ export function ConnectedPlayersList({
       setPlayers([])
       return
     }
+    // Skips the join sound/toast on the very first update after subscribing
+    // (everyone already at the table when the DM opens this panel) — only
+    // an actual arrival after that counts as "joined."
+    let receivedFirstUpdate = false
     window.goblin.presence.subscribe(sessionId, campaignId)
     return window.goblin.presence.onUpdate((update) => {
       if (update.sessionId === sessionId && update.campaignId === campaignId) {
         // Every update is the full current roster, not a join/leave event —
         // diffing against what we had a moment ago is the only way to tell
-        // someone just dropped, rather than the DM having to notice a name
-        // is quietly missing from the list.
+        // someone just joined or dropped, rather than the DM having to
+        // notice a name quietly appearing/missing from the list.
         setPlayers((prev) => {
+          const wasHere = new Set(prev.map((p) => p.userId))
           const stillHere = new Set(update.players.map((p) => p.userId))
           const left = prev.find((p) => !stillHere.has(p.userId))
+          const joined = receivedFirstUpdate ? update.players.find((p) => !wasHere.has(p.userId)) : undefined
+          receivedFirstUpdate = true
           if (left) {
+            playSfx('playerDisconnected')
             setDisconnectToast(left.displayName)
             clearTimeout(disconnectTimerRef.current)
             disconnectTimerRef.current = setTimeout(() => setDisconnectToast(null), 5000)
           }
+          if (joined) playSfx('playerJoined')
           return update.players
         })
       }

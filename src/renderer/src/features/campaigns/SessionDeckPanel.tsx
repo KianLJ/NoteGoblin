@@ -7,11 +7,15 @@ import { BESTIARY } from '../../data/bestiary'
 import { loadCustomMonsters } from '../../data/customBestiary'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import type { BestiaryMonster } from '../../data/bestiary'
+import { playSfx } from '../audio/soundEffects'
+import { pickMood, playSpecificTrack } from '../audio/musicEngine'
 
 interface SessionDeckPanelProps {
   campaignId: string | null
   /** The joined-session id (player reading over the relay) — null for the DM's own local/direct path, same convention as CalendarPanel. */
   sessionId: string | null
+  /** DM-only — the DM's actual hosted-session id (RightPanel's own `sessionId` prop), used only to gate Goblin Bard broadcasts when a scene's linked mood auto-plays. Distinct from `sessionId` above, which for the DM is always null (their local/direct path) — see RightPanel.tsx's doc comment on why those can't be the same prop. Omitted/null for a player, who never triggers music. */
+  hostedSessionId?: string | null
   /** True for a player's read-only view — hides authoring/presenting/encounter controls and shows the "DM has moved on" banner instead. */
   readOnly: boolean
   /** Every note in this campaign the caller already has loaded — used only to look up a scene's title/content by id, never fetched separately. */
@@ -43,6 +47,7 @@ function resolveEncounterMonsters(enc: SavedEncounter): BestiaryMonster[] {
 export function SessionDeckPanel({
   campaignId,
   sessionId,
+  hostedSessionId = null,
   readOnly,
   notes,
   onOpenScene,
@@ -115,6 +120,10 @@ export function SessionDeckPanel({
     const wasCaughtUp = openDeckIdRef.current === prev.deckId && selectedIndexRef.current === prev.sceneIndex
     prevLiveRef.current = live
     if (isFirstSighting || wasCaughtUp) {
+      // Only an actual live advance dings here — silently catching up to
+      // wherever the DM already is (isFirstSighting) isn't "the scene
+      // changed" from this player's perspective, just opening the panel.
+      if (wasCaughtUp) playSfx('sceneAdvance')
       setOpenDeckId(live.deckId)
       setSelectedIndex(live.sceneIndex)
       onOpenSceneRef.current(noteId)
@@ -201,10 +210,20 @@ export function SessionDeckPanel({
 
   function selectScene(index: number): void {
     const next = Math.min(Math.max(index, 0), Math.max(sceneCount - 1, 0))
+    const changed = next !== clampedIndex
+    if (changed) playSfx('sceneAdvance')
     setSelectedIndex(next)
     if (isPresentingThisDeck) setLiveSceneIndex(next)
-    const noteId = scenes[next]?.noteId
-    if (noteId) onOpenScene(noteId)
+    const nextScene = scenes[next]
+    if (nextScene) onOpenScene(nextScene.noteId)
+    // Only an actual advance while live triggers the linked mood — reopening
+    // the same scene you're already on (changed === false) shouldn't restart
+    // the music, same reasoning as the sceneAdvance sfx above.
+    if (changed && isPresentingThisDeck && nextScene?.trackId) {
+      playSpecificTrack(nextScene.trackId, 2500, hostedSessionId)
+    } else if (changed && isPresentingThisDeck && nextScene?.moodId) {
+      pickMood(nextScene.moodId, 2500, hostedSessionId)
+    }
   }
 
   async function handleAddScene(): Promise<void> {
@@ -229,12 +248,6 @@ export function SessionDeckPanel({
     void reorderScenes(deck.id, next)
     if (clampedIndex === index) setSelectedIndex(target)
     else if (clampedIndex === target) setSelectedIndex(index)
-  }
-
-  function setSceneEncounter(encounterId: string | null): void {
-    if (!currentScene) return
-    const next = scenes.map((s, i) => (i === clampedIndex ? { ...s, encounterId } : s))
-    void reorderScenes(deck.id, next)
   }
 
   return (
@@ -375,32 +388,6 @@ export function SessionDeckPanel({
                   </div>
                 )}
               </div>
-              {!readOnly && isSelected && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '2px var(--space-3) var(--space-2) calc(var(--space-3) + 14px)',
-                    background: 'var(--accent-subtle)'
-                  }}
-                >
-                  <label style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>Encounter:</label>
-                  <select
-                    className="gb-input"
-                    value={scene.encounterId ?? ''}
-                    onChange={(e) => setSceneEncounter(e.target.value || null)}
-                    style={{ fontSize: 11, flex: 1 }}
-                  >
-                    <option value="">None</option>
-                    {savedEncounters.map((enc) => (
-                      <option key={enc.id} value={enc.id}>
-                        {enc.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
           )
         })}

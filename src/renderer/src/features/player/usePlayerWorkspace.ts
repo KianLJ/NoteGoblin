@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Campaign, CampaignSnapshot, CharacterSheet, Folder, Note } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
 import type { SessionDeck } from '@shared/sessionDeck'
+import { playSfx } from '../audio/soundEffects'
 
 export type PlayerTabRef = { kind: 'character'; id: string } | { kind: 'note'; id: string }
 
@@ -43,6 +44,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   // way of the sidebar/editor beneath it once you've read it.
   useEffect(() => {
     if (!error) return
+    playSfx('invalidAction')
     const timer = setTimeout(() => setError(null), 5000)
     return () => clearTimeout(timer)
   }, [error])

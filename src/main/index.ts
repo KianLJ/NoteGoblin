@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises'
 import electronUpdater from 'electron-updater'
 import { registerIpcHandlers } from './registerIpc'
 import { resolveVaultAssetPath } from '@server/files/vaultStore'
+import { resolveCustomMusicPath } from './customMusic'
 
 const { autoUpdater } = electronUpdater
 
@@ -46,8 +47,14 @@ if (isDev && !hasExplicitUserDataDir) {
 // CSP wouldn't allow and which offers no chance to check the path stays
 // inside the right campaign's folder). Must be registered before the app is
 // ready; the actual protocol.handle() call happens once it is, below.
+// A DM's own local Goblin Bard additions (see customMusic.ts) resolve
+// through this scheme the same way vault-asset resolves images — an
+// absolute file path off their own disk, never a raw file:// URL (which the
+// renderer's CSP wouldn't allow anyway). `stream: true` lets Chromium issue
+// Range requests against it, same as any other <audio> source.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'vault-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false } }
+  { scheme: 'vault-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false } },
+  { scheme: 'custom-music', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true } }
 ])
 
 // Chromium's default mouse-wheel scrolling animates each notch over ~150-250ms
@@ -79,6 +86,14 @@ const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.bmp': 'image/bmp'
+}
+
+const AUDIO_MIME_BY_EXT: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.flac': 'audio/flac'
 }
 
 function createWindow(): BrowserWindow {
@@ -182,7 +197,7 @@ app.whenReady().then(() => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: vault-asset:;"
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: vault-asset:; media-src 'self' custom-music:;"
           ]
         }
       })
@@ -198,6 +213,19 @@ app.whenReady().then(() => {
       if (!absPath) return new Response('Not found', { status: 404 })
       const data = await readFile(absPath)
       const mime = IMAGE_MIME_BY_EXT[extname(absPath).toLowerCase()] ?? 'application/octet-stream'
+      return new Response(new Uint8Array(data), { headers: { 'content-type': mime } })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+  })
+
+  protocol.handle('custom-music', async (request) => {
+    try {
+      const trackId = new URL(request.url).hostname
+      const filePath = resolveCustomMusicPath(app.getPath('userData'), trackId)
+      if (!filePath) return new Response('Not found', { status: 404 })
+      const data = await readFile(filePath)
+      const mime = AUDIO_MIME_BY_EXT[extname(filePath).toLowerCase()] ?? 'application/octet-stream'
       return new Response(new Uint8Array(data), { headers: { 'content-type': mime } })
     } catch {
       return new Response('Not found', { status: 404 })

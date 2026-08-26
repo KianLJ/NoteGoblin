@@ -117,6 +117,7 @@ export function RightPanel({
                 getHostedSession() checks server-side. */}
             <SessionDeckPanel
               sessionId={null}
+              hostedSessionId={sessionId}
               campaignId={campaignId}
               readOnly={false}
               notes={notes}

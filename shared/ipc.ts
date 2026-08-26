@@ -414,6 +414,33 @@ export interface AppApi {
     /** Player-only — fires when the DM targets you with a forced roll. */
     onForceRoll: (callback: (request: ForceRollRequest) => void) => () => void
   }
+  // Goblin Bard — the DM picks a mood, every connected client crossfades to
+  // the same track id from its own bundled copy of the music library (see
+  // src/renderer/src/data/musicLibrary.ts); no audio ever crosses the wire,
+  // just which track and how long to fade. DM-only broadcast, no relay path
+  // for a player to initiate (see sessionHost.ts's broadcastMusic).
+  music: {
+    /** `trackId: null` stops music entirely. A no-op unless actually hosting. */
+    broadcast: (trackId: string | null, fadeMs: number) => Promise<void>
+    /** Fires for every connected player (never the DM's own broadcast, which they already applied locally when they picked it) whenever the DM changes or stops the music. `customTrack` is present when `trackId` is one of the DM's own local additions — see MusicChangedFrame's doc comment. */
+    onChange: (
+      callback: (update: { trackId: string | null; fadeMs: number; customTrack?: { title: string; mimeType: string; dataBase64: string } }) => void
+    ) => () => void
+    /**
+     * A DM's own local additions to a mood — a file picked off their own
+     * disk, played the same way a bundled track is (crossfade, loop,
+     * broadcast). Stored in userData, not the vault/campaign, since it's a
+     * per-machine music library, not campaign content. Broadcasting one of
+     * these to players is still just an id: a player's client that doesn't
+     * have this file simply can't resolve it and stays silent on that pick
+     * (see musicEngine.ts's setTrack no-op-on-miss behavior) — there's no
+     * attempt to ship the actual audio to them.
+     */
+    listCustom: () => Promise<Record<string, { id: string; title: string }[]>>
+    /** Opens a native file picker scoped to audio files; returns the added track, or null if cancelled. */
+    addCustomTrack: (groupId: string) => Promise<{ id: string; title: string } | null>
+    removeCustomTrack: (groupId: string, trackId: string) => Promise<void>
+  }
   // Friends/presence, backed by the relay (see relay/) rather than local
   // storage. The relay account itself is transparent — it's the same
   // credentials as identity.*, synced automatically on login/switch — so

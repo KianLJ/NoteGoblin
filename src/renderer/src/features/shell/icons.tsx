@@ -81,6 +81,17 @@ export function CloseWindowIcon(): JSX.Element {
   )
 }
 
+/** A double eighth note — the Goblin Bard header button. */
+export function MusicNoteIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M6 11.2V3.6l7-1.6v7.6" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" strokeLinecap="round" />
+      <ellipse cx="4.2" cy="11.6" rx="2.2" ry="1.8" stroke="currentColor" strokeWidth="1" />
+      <ellipse cx="11.2" cy="9.6" rx="2.2" ry="1.8" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  )
+}
+
 /** An open book — the Bestiary's header button. */
 export function BestiaryIcon(): JSX.Element {
   return (

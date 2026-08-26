@@ -1,4 +1,5 @@
 import { buildCheckRollEntry, buildRollEntry, redactRollForBroadcast, type AdvantageMode, type DiceGroup, type DiceRollLogEntry } from '@shared/dice'
+import { playSfx } from '../audio/soundEffects'
 
 /**
  * The one shared roll log, outside React — a module-level singleton rather
@@ -29,9 +30,21 @@ export function subscribeDiceLog(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+/** A d20 that actually landed on 1 or 20 in `entry.groups` — null for a redacted private-roll broadcast (groups: null), so a bystander never learns another player's private nat 1/20 from the sound alone. */
+function d20Extreme(entry: DiceRollLogEntry): 'natural20' | 'natural1' | null {
+  if (!entry.groups) return null
+  for (const group of entry.groups) {
+    if (group.sides !== 20) continue
+    if (group.results.includes(20)) return 'natural20'
+    if (group.results.includes(1)) return 'natural1'
+  }
+  return null
+}
+
 function appendToLog(entry: DiceRollLogEntry): void {
   if (log.some((e) => e.id === entry.id)) return
   log = [entry, ...log]
+  playSfx(d20Extreme(entry) ?? 'diceRoll')
   notify()
 }
 

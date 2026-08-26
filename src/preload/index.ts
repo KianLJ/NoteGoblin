@@ -173,6 +173,20 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('ws:force-roll', listener)
     }
   },
+  music: {
+    broadcast: (trackId, fadeMs) => ipcRenderer.invoke('music:broadcast', trackId, fadeMs),
+    onChange: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        update: { trackId: string | null; fadeMs: number; customTrack?: { title: string; mimeType: string; dataBase64: string } }
+      ): void => callback(update)
+      ipcRenderer.on('ws:music-changed', listener)
+      return () => ipcRenderer.removeListener('ws:music-changed', listener)
+    },
+    listCustom: () => ipcRenderer.invoke('music:list-custom'),
+    addCustomTrack: (groupId) => ipcRenderer.invoke('music:add-custom-track', groupId),
+    removeCustomTrack: (groupId, trackId) => ipcRenderer.invoke('music:remove-custom-track', groupId, trackId)
+  },
   discord: {
     setActivity: (details) => ipcRenderer.invoke('discord:set-activity', details)
   },

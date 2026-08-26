@@ -1198,10 +1198,15 @@ function parseScenes(raw: string): SessionScene[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed
-      .filter((s): s is { noteId: unknown; encounterId?: unknown } => typeof s === 'object' && s !== null && typeof s.noteId === 'string')
+      .filter(
+        (s): s is { noteId: unknown; encounterId?: unknown; moodId?: unknown; trackId?: unknown } =>
+          typeof s === 'object' && s !== null && typeof s.noteId === 'string'
+      )
       .map((s) => ({
         noteId: s.noteId as string,
-        encounterId: typeof s.encounterId === 'string' ? s.encounterId : null
+        encounterId: typeof s.encounterId === 'string' ? s.encounterId : null,
+        moodId: typeof s.moodId === 'string' ? s.moodId : null,
+        trackId: typeof s.trackId === 'string' ? s.trackId : null
       }))
   } catch {
     return []
@@ -1218,7 +1223,14 @@ function validateSceneReorder(existing: SessionScene[], input: unknown): { scene
     const noteId = (s as { noteId?: unknown }).noteId
     if (typeof noteId !== 'string' || !existingIds.has(noteId)) return { error: 'Invalid scene.' }
     const encounterId = (s as { encounterId?: unknown }).encounterId
-    scenes.push({ noteId, encounterId: typeof encounterId === 'string' ? encounterId : null })
+    const moodId = (s as { moodId?: unknown }).moodId
+    const trackId = (s as { trackId?: unknown }).trackId
+    scenes.push({
+      noteId,
+      encounterId: typeof encounterId === 'string' ? encounterId : null,
+      moodId: typeof moodId === 'string' ? moodId : null,
+      trackId: typeof trackId === 'string' ? trackId : null
+    })
   }
   if (scenes.length !== existing.length || new Set(scenes.map((s) => s.noteId)).size !== existing.length) {
     return { error: 'Scenes must match the deck\'s existing scenes exactly (reorder/relink only).' }
@@ -1263,7 +1275,7 @@ export function listSessionDecks(db: DatabaseType, campaignId: string, userId: s
       .filter((row) => isDm || row.presented_at !== null)
       .map((row) => {
         const deck = toSessionDeckJson(row)
-        return isDm ? deck : { ...deck, scenes: deck.scenes.map((s) => ({ noteId: s.noteId, encounterId: null })) }
+        return isDm ? deck : { ...deck, scenes: deck.scenes.map((s) => ({ noteId: s.noteId, encounterId: null, moodId: null, trackId: null })) }
       })
   }
 }
@@ -1361,7 +1373,7 @@ export function addSceneToDeck(db: DatabaseType, campaignId: string, deckId: str
     sceneDeckId: deckId
   })
 
-  const scenes = [...parseScenes(deck.scenes_json), { noteId: note.id, encounterId: null }]
+  const scenes = [...parseScenes(deck.scenes_json), { noteId: note.id, encounterId: null, moodId: null, trackId: null }]
   deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes) })
 
   return { ok: true, data: toNoteJson(userRepo, note, true) }

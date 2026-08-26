@@ -3,6 +3,7 @@ import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { Modal } from '../../ui/Modal'
 import type { Campaign } from '@shared/ipc'
+import { playSfx } from '../audio/soundEffects'
 
 interface CampaignSwitcherProps {
   canCreate: boolean
@@ -37,6 +38,7 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
       setError(result.error)
       return
     }
+    playSfx('sessionHosted')
     onHostedSessionChange(result.sessionId)
   }
 

@@ -19,6 +19,7 @@ import * as relayClient from '@server/relay/relayClient'
 import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId } from './relayState'
 import { queryOnline } from './relaySocket'
 import { setDiscordActivity } from './discordPresence'
+import { listCustomMusic, addCustomMusicTrack, removeCustomMusicTrack, getCustomMusicTrack, mimeTypeForPath } from './customMusic'
 import {
   startSessionHost,
   stopSessionHost,
@@ -28,6 +29,7 @@ import {
   broadcastActiveCampaignChanged,
   broadcastInitiative,
   broadcastDiceRoll,
+  broadcastMusic,
   broadcastMessage,
   pushForceRoll,
   startPresentingDeck,
@@ -1109,6 +1111,57 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('dice:broadcast', (_event, sessionId: string, roll: DiceRollLogEntry): void => {
     if (getHostedSession()?.sessionId === sessionId) broadcastDiceRoll(roll)
     else void sendSessionRequest('dice.roll', { roll })
+  })
+
+  // DM-only, fire-and-forget — Goblin Bard is purely local playback synced
+  // by a track id (see musicLibrary.ts); no relay path for a player to
+  // initiate, since only the DM ever picks the mood.
+  // A custom track's actual audio never leaves this machine unless there's
+  // someone hosted to send it to and it's small enough to be worth the
+  // relay round trip — a multi-hundred-MB file would otherwise stall the
+  // whole session socket for everyone. Bundled tracks never hit this path:
+  // getCustomMusicTrack only ever resolves the DM's own local additions.
+  const MAX_BROADCAST_CUSTOM_TRACK_BYTES = 30 * 1024 * 1024
+
+  ipcMain.handle('music:broadcast', async (_event, trackId: string | null, fadeMs: number): Promise<void> => {
+    if (!getHostedSession()) return
+    const custom = trackId ? getCustomMusicTrack(userDataDir, trackId) : null
+    if (!custom) {
+      broadcastMusic(trackId, fadeMs)
+      return
+    }
+    try {
+      const buffer = await readFile(custom.path)
+      if (buffer.byteLength > MAX_BROADCAST_CUSTOM_TRACK_BYTES) {
+        broadcastMusic(trackId, fadeMs)
+        return
+      }
+      broadcastMusic(trackId, fadeMs, { title: custom.title, mimeType: mimeTypeForPath(custom.path), dataBase64: buffer.toString('base64') })
+    } catch {
+      broadcastMusic(trackId, fadeMs)
+    }
+  })
+
+  // DM's own local additions to a mood — see customMusic.ts's doc comment.
+  ipcMain.handle('music:list-custom', (): Record<string, { id: string; title: string }[]> => listCustomMusic(userDataDir))
+
+  const CUSTOM_MUSIC_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'flac']
+
+  ipcMain.handle('music:add-custom-track', async (_event, groupId: string): Promise<{ id: string; title: string } | null> => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Add a custom track',
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: CUSTOM_MUSIC_EXTENSIONS }]
+    })
+    mainWindow.focus()
+    if (result.canceled || result.filePaths.length === 0) return null
+    const filePath = result.filePaths[0]
+    const title = basename(filePath, extname(filePath))
+    return addCustomMusicTrack(userDataDir, groupId, filePath, title)
+  })
+
+  ipcMain.handle('music:remove-custom-track', (_event, groupId: string, trackId: string): void => {
+    removeCustomMusicTrack(userDataDir, groupId, trackId)
   })
 
   // DM-only — pushes a "roll this" prompt to one connected player, targeted

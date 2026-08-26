@@ -52,6 +52,7 @@ import { HoverDetailCard } from '../HoverDetailCard'
 import { useSheetRoller } from '../../dice/useSheetRoller'
 import { RollButton } from '../../dice/RollButton'
 import { CombatTab } from './CombatTab'
+import { playSfx } from '../../audio/soundEffects'
 import { AbilityIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
@@ -185,6 +186,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
       const prevMax = computeMaxHp(draft.classes, draft.abilityScores)
       const newMax = computeMaxHp(nextClasses, draft.abilityScores)
       updates.currentHp = draft.currentHp + (newMax - prevMax)
+      playSfx('levelUp')
       onLevelUp?.(prev.className || fields.className || '', prev.level, fields.level)
     }
 
@@ -248,12 +250,14 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
 
   /** Long rest: full HP, all spell slots refresh, death saves clear, all spent hit dice are fully restored (a house-rule simplification of the 5e default, which only recovers half), and every resource that recharges on a short OR long rest clears. Short rest clears death saves, refreshes Warlock Pact Magic and any short-recharge resources (Second Wind, Channel Divinity, etc.), and opens the hit-die picker below so the player can choose which dice to spend. Neither one touches temp HP, which RAW only goes away when it's reduced to 0, not on a rest. */
   function longRest(): void {
+    playSfx('longRest')
     const updates = { currentHp: maxHp, deathSaves: { successes: 0, failures: 0 }, hitDiceUsed: {} }
     patch(updates)
     onSave({ ...updates, spellSlots: resetAllSlots(character.spellSlots), resourceUsed: resetResourcesFor(['short', 'long']) })
   }
 
   function shortRest(): void {
+    playSfx('shortRest')
     patch({ deathSaves: { successes: 0, failures: 0 } })
     const isWarlock = draft.classes.some((c) => c.className.toLowerCase() === 'warlock')
     onSave({

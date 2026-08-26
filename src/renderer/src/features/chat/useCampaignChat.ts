@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Message } from '@shared/ipc'
+import { playSfx } from '../audio/soundEffects'
 
 /**
  * Owns one campaign's chat scrollback — a snapshot fetched on mount/campaign
@@ -36,7 +37,14 @@ export function useCampaignChat(campaignId: string | null, sessionId: string | n
     if (!campaignId) return
     return window.goblin.messages.onMessage((message) => {
       if (message.campaignId !== campaignId) return
-      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev
+        // Only a genuinely new arrival dings — the sender's own message
+        // already landed via send()'s optimistic update below, so it's
+        // deduped away here (no self-ding) by the time this push arrives.
+        playSfx('receiveMessage')
+        return [...prev, message]
+      })
     })
   }, [campaignId])
 
@@ -63,6 +71,7 @@ export function useCampaignChat(campaignId: string | null, sessionId: string | n
       sessionId ?? undefined
     )
     if (result.ok) {
+      playSfx('sendMessage')
       setMessages((prev) => (prev.some((m) => m.id === result.data.id) ? prev : [...prev, result.data]))
     } else {
       setError(result.error)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { RelayMessage, RelayNotification } from '@shared/relay'
+import { playSfx } from '../audio/soundEffects'
 
 /**
  * One relay-persisted thread — either a 'friend' DM (campaign-independent)
@@ -36,7 +37,11 @@ export function useRelayMessages(peerUserId: string | null, kind: 'friend' | 'wh
     return window.goblin.relay.messages.onMessage((message) => {
       if (message.kind !== kind) return
       if (message.senderUserId !== peerUserId && message.recipientUserId !== peerUserId) return
-      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev
+        if (message.senderUserId === peerUserId) playSfx('receiveMessage')
+        return [...prev, message]
+      })
       // Already looking at this thread when the new message arrives — mark it read immediately rather than leaving a badge up for something already visible on screen.
       if (message.senderUserId === peerUserId) void window.goblin.relay.messages.markRead(peerUserId, kind)
     })
@@ -52,6 +57,7 @@ export function useRelayMessages(peerUserId: string | null, kind: 'friend' | 'wh
     if (!peerUserId || !body.trim()) return
     const result = await window.goblin.relay.messages.send({ toUserId: peerUserId, kind, campaignId, campaignName, body: body.trim() })
     if (result.ok) {
+      playSfx('sendMessage')
       setMessages((prev) => (prev.some((m) => m.id === result.data.id) ? prev : [...prev, result.data]))
     } else {
       setError(result.error)

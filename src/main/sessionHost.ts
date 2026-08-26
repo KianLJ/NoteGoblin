@@ -16,7 +16,8 @@ import type {
   DiceRollFrame,
   MessageFrame,
   ForceRollFrame,
-  SceneChangedFrame
+  SceneChangedFrame,
+  MusicChangedFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
@@ -238,6 +239,12 @@ export function broadcastDiceRoll(roll: DiceRollLogEntry, excludeUserId?: string
   for (const p of players.values()) {
     if (p.userId !== excludeUserId) sendToRelay(p.userId, frame)
   }
+}
+
+/** Pushes the DM's Goblin Bard pick to every connected player, table-wide (not scoped to a campaign — music is a "whole session" thing, unlike scene decks). `trackId: null` means "stop." `customTrack` carries the actual audio for a DM-local addition (see MusicChangedFrame's doc comment) — omitted for anything from the bundled library, which every client already has. */
+export function broadcastMusic(trackId: string | null, fadeMs: number, customTrack?: { title: string; mimeType: string; dataBase64: string }): void {
+  const frame: MusicChangedFrame = { type: 'music-changed', trackId, fadeMs, customTrack }
+  for (const p of players.values()) sendToRelay(p.userId, frame)
 }
 
 function broadcastSceneChangedFor(campaignId: string, deckId: string | null, sceneIndex: number): void {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Folder, Note } from '@shared/ipc'
+import { playSfx } from '../audio/soundEffects'
 
 /**
  * Owns notes/tabs state for one open campaign. Called once at the AppShell
@@ -41,6 +42,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   // way of the sidebar/editor beneath it once you've read it.
   useEffect(() => {
     if (!error) return
+    playSfx('invalidAction')
     const timer = setTimeout(() => setError(null), 5000)
     return () => clearTimeout(timer)
   }, [error])

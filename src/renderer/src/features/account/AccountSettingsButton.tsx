@@ -20,6 +20,8 @@ import {
 } from '../../theme'
 import type { Identity } from '@shared/ipc'
 import type { AdminAccountSummary } from '@shared/relay'
+import { getStoredSfxEnabled, getStoredSfxVolume, setSfxEnabled, setSfxVolume } from '../audio/soundSettings'
+import { playSfx } from '../audio/soundEffects'
 
 /** Bottom-left gear button, next to the campaign switcher — lets you view/edit your local identity's display name and password, and manage remembered login. */
 export function AccountSettingsButton(): JSX.Element {
@@ -85,6 +87,9 @@ function AccountSettingsForm(): JSX.Element {
   const [fontScale, setFontScaleState] = useState<number>(() => getStoredFontScale())
   const [systemFonts, setSystemFonts] = useState<string[] | null>(null)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
+  const [soundOpen, setSoundOpen] = useState(false)
+  const [sfxEnabled, setSfxEnabledState] = useState<boolean>(() => getStoredSfxEnabled())
+  const [sfxVolume, setSfxVolumeState] = useState<number>(() => getStoredSfxVolume())
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -117,6 +122,18 @@ function AccountSettingsForm(): JSX.Element {
   function chooseFontScale(scale: number): void {
     setFontScale(scale)
     setFontScaleState(scale)
+  }
+
+  function chooseSfxEnabled(enabled: boolean): void {
+    setSfxEnabled(enabled)
+    setSfxEnabledState(enabled)
+    if (enabled) playSfx('diceRoll')
+  }
+
+
+  function chooseSfxVolume(volume: number): void {
+    setSfxVolume(volume)
+    setSfxVolumeState(volume)
   }
 
   function loadSystemFonts(): void {
@@ -422,6 +439,64 @@ function AccountSettingsForm(): JSX.Element {
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <ColorTokenEditor themeMode={themeMode} />
           </div>
+        </>
+      )}
+
+      <hr className="gb-divider" style={{ margin: 'var(--space-2) 0' }} />
+
+      <button
+        type="button"
+        onClick={() => setSoundOpen((o) => !o)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          margin: '0 0 var(--space-2)',
+          cursor: 'pointer'
+        }}
+      >
+        <span
+          style={{
+            display: 'flex',
+            transform: soundOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 100ms',
+            color: 'var(--text-muted)'
+          }}
+        >
+          <ChevronRightIcon />
+        </span>
+        <h3 style={{ fontSize: 14, margin: 0 }}>Sound</h3>
+      </button>
+      {soundOpen && (
+        <>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 'var(--space-3)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={sfxEnabled} onChange={(e) => chooseSfxEnabled(e.target.checked)} />
+            <span style={{ fontSize: 13 }}>Sound effects</span>
+          </label>
+          <label className="gb-label">Volume</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 'var(--space-3)' }}>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={sfxVolume}
+              disabled={!sfxEnabled}
+              onChange={(e) => chooseSfxVolume(Number(e.target.value))}
+              onMouseUp={() => playSfx('diceRoll')}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', width: 34, textAlign: 'right' }}>
+              {Math.round(sfxVolume * 100)}%
+            </span>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '-4px 0 var(--space-3)' }}>
+            Short cues for things like dice rolls, rests, and players joining or leaving — never anything that reveals a private roll's real result.
+          </p>
         </>
       )}
 

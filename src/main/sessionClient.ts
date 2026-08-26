@@ -12,7 +12,8 @@ import type {
   RequestFrame,
   RequestKind,
   ResponseFrame,
-  SceneChangedFrame
+  SceneChangedFrame,
+  MusicChangedFrame
 } from '@server/relay/sessionProtocol'
 import type { ApiResult } from '@shared/ipc'
 
@@ -228,5 +229,10 @@ function handleFrame(raw: WebSocket.RawData): void {
       deckId: frame.deckId,
       sceneIndex: frame.sceneIndex
     })
+  }
+
+  if (payload.type === 'music-changed' && clientWindow) {
+    const frame = payload as MusicChangedFrame
+    clientWindow.webContents.send('ws:music-changed', { trackId: frame.trackId, fadeMs: frame.fadeMs, customTrack: frame.customTrack })
   }
 }

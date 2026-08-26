@@ -18,6 +18,10 @@ export interface SessionScene {
   noteId: string
   /** A saved encounter's id (see src/renderer/src/data/savedEncounters.ts) the DM can load into the Initiative Tracker with one click while presenting this scene — null if this scene has no combat. Purely a reference; the encounter's actual monster roster stays in the DM's local savedEncounters store, never duplicated here. */
   encounterId: string | null
+  /** A Goblin Bard mood group id (see src/renderer/src/data/musicLibrary.ts) — presenting this scene picks a random track from it, same as clicking the mood in MusicButton.tsx. Null if this scene has no music cue. */
+  moodId: string | null
+  /** A specific track id within `moodId` (bundled or one of the DM's own custom additions) — presenting this scene plays exactly this track instead of a random pick from the mood. Meaningless without `moodId` set; always null when it is null. */
+  trackId: string | null
 }
 
 export interface SessionDeck {

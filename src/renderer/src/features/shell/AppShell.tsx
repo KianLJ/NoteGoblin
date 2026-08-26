@@ -15,6 +15,8 @@ import { PlayerWorkspaceBody } from '../player/PlayerWorkspaceBody'
 import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
 import { Bestiary } from '../bestiary/Bestiary'
+import { MusicButton } from '../audio/MusicButton'
+import { ensureMusicListening } from '../audio/musicEngine'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
 
@@ -54,6 +56,14 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     window.goblin.sessions.status().then((status) => {
       if (status.hosting) setHostedSessionId(status.sessionId)
     })
+  }, [])
+
+  // Goblin Bard needs to react to the DM's music broadcasts regardless of
+  // which mode this window is in (DM's own pick, or a player's client) —
+  // wired once here rather than from MusicButton, which only ever mounts on
+  // the DM's side.
+  useEffect(() => {
+    ensureMusicListening()
   }, [])
 
   // --- Player side: characters (always available) + the joined session's campaigns/notes ---
@@ -372,6 +382,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           >
             <BestiaryIcon />
           </button>
+          {mode === 'dm' && <MusicButton sessionId={hostedSessionId} />}
           <MessagesButton
             campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
             sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}
