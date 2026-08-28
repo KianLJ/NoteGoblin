@@ -6,7 +6,6 @@ import {
   FAVORED_ENEMY_OPTIONS,
   FAVORED_TERRAIN_OPTIONS,
   METAMAGIC_OPTIONS,
-  PACT_BOON_OPTIONS,
   RACES,
   RACE_TRAIT_DESCRIPTIONS,
   SUBCLASS_CHOICE_FEATURE_NAME,
@@ -14,14 +13,14 @@ import {
   asiSlotLevelsUpToLevel,
   curatedFeaturesForLevelUp,
   eldritchInvocationSlotCountAtLevel,
-  favoredEnemySlotLevelsUpToLevel,
-  favoredTerrainSlotLevelsUpToLevel,
   fightingStyleSlotLevelsUpToLevel,
+  lineageOptionsForRace,
   metamagicSlotCountAtLevel,
   metamagicSlotUnlockLevel,
   resourcesForCharacter,
   sneakAttackDice,
   subclassFightingStyleSlotLevelsUpToLevel,
+  totalLevel,
   type AsiSlotChoice,
   type CharacterSheetData,
   type ClassLevel,
@@ -49,7 +48,6 @@ import { HoverDetailCard } from '../HoverDetailCard'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import {
   AsiSlotChooser,
-  FavoredEnemyChooser,
   FightingStyleChooser,
   NamedOptionChooser,
   SubclassChooser,
@@ -191,6 +189,17 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
   const activeFeats = activeFeatIds(character.classes, character.asiSlotChoices)
   const feats = activeFeats.map((id) => FEATS.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f)
   const race = RACES.find((r) => r.name.toLowerCase() === character.race.trim().toLowerCase())
+  const lineageOption = character.raceLineageChoice
+    ? lineageOptionsForRace(character.raceLineageChoice.raceId).find((l) => l.name === character.raceLineageChoice!.lineageName)
+    : undefined
+  const charLevel = totalLevel(character.classes)
+  const knownCompendiumSpellIds = new Set(character.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
+  const unresolvedLineageSpellIds = lineageOption
+    ? [
+        lineageOption.level3SpellId && charLevel >= 3 ? lineageOption.level3SpellId : null,
+        lineageOption.level5SpellId && charLevel >= 5 ? lineageOption.level5SpellId : null
+      ].filter((id): id is string => !!id && !knownCompendiumSpellIds.has(id))
+    : []
 
   function setUsed(id: string, used: number, max: number): void {
     setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
@@ -319,6 +328,31 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
               <InfoChip key={trait} title={trait} subtitle={race.name} description={RACE_TRAIT_DESCRIPTIONS[trait] ?? 'No description available.'} />
             ))}
           </div>
+          {lineageOption && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+              Lineage: {lineageOption.name}
+              {unresolvedLineageSpellIds.length === 0 && lineageOption.level5SpellId && knownCompendiumSpellIds.has(lineageOption.level5SpellId)
+                ? ' (fully unlocked)'
+                : ''}
+            </p>
+          )}
+          {unresolvedLineageSpellIds.map((spellId) => (
+            <LineageSpellGrant
+              key={spellId}
+              spellId={spellId}
+              readOnly={readOnly}
+              onGrant={() => {
+                const spell = getSpellById(spellId)
+                if (!spell) return
+                onSave({
+                  spells: [
+                    ...character.spells,
+                    { id: crypto.randomUUID(), name: spell.name, level: spell.level, description: '', actionType: 'action', compendiumId: spell.id, free: true }
+                  ]
+                })
+              }}
+            />
+          ))}
         </div>
       )}
 
@@ -462,7 +496,7 @@ function ClassFeatureSection({
   const subclassChoiceFeatureName = SUBCLASS_CHOICE_FEATURE_NAME[cls.id]
   const isDivineSmiteClass = cls.id === 'paladin' && classLevel.level >= 2
   const isMetamagicClass = cls.id === 'sorcerer'
-  const isPactBoonClass = cls.id === 'warlock'
+  const isWarlockClass = cls.id === 'warlock'
   const isWizardClass = cls.id === 'wizard'
   const isBardClass = cls.id === 'bard'
   const curated = curatedFeaturesForLevelUp(classLevel.className, 0, classLevel.level).filter(
@@ -470,11 +504,10 @@ function ClassFeatureSection({
       f.name !== 'Ability Score Improvement' &&
       f.name !== 'Fighting Style' &&
       f.name !== subclassChoiceFeatureName &&
-      !(isDivineSmiteClass && f.name === 'Divine Smite') &&
+      !(isDivineSmiteClass && f.name === "Paladin's Smite") &&
       !(isMetamagicClass && f.name === 'Metamagic') &&
-      !(isPactBoonClass && f.name === 'Pact Boon') &&
-      !(isPactBoonClass && f.name === 'Eldritch Invocations') &&
-      !(isPactBoonClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
+      !(isWarlockClass && f.name === 'Eldritch Invocations') &&
+      !(isWarlockClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
       !(isWizardClass && f.name === 'Spell Mastery') &&
       !(isWizardClass && f.name === 'Signature Spells') &&
       !(isBardClass && f.name === 'Magical Secrets')
@@ -483,29 +516,25 @@ function ClassFeatureSection({
     ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Metamagic' && c.className.toLowerCase() === classLevel.className.toLowerCase())
     : []
   const unresolvedMetamagicCount = isMetamagicClass ? Math.max(0, metamagicSlotCountAtLevel(classLevel.level) - resolvedMetamagic.length) : 0
-  const resolvedPactBoon = isPactBoonClass
-    ? character.subclassFeatureChoices.find((c) => c.featureName === 'Pact Boon' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    : undefined
-  const pactBoonUnresolved = isPactBoonClass && classLevel.level >= 3 && !resolvedPactBoon
-  const resolvedInvocations = isPactBoonClass
+  const resolvedInvocations = isWarlockClass
     ? character.subclassFeatureChoices.filter(
         (c) => c.featureName === 'Eldritch Invocation' && c.className.toLowerCase() === classLevel.className.toLowerCase()
       )
     : []
   const knownSpellIds = new Set(character.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
-  const availableInvocations = isPactBoonClass
+  const availableInvocations = isWarlockClass
     ? ELDRITCH_INVOCATIONS.filter(
         (o) =>
           o.level <= classLevel.level &&
-          (!o.prereqPact || o.prereqPact === resolvedPactBoon?.chosenName) &&
+          (!o.prereqInvocation || resolvedInvocations.some((r) => r.chosenName === o.prereqInvocation)) &&
           (!o.prereqSpell || knownSpellIds.has(o.prereqSpell)) &&
           !resolvedInvocations.some((r) => r.chosenName === o.name)
       )
     : []
-  const unresolvedInvocationCount = isPactBoonClass
+  const unresolvedInvocationCount = isWarlockClass
     ? Math.max(0, Math.min(eldritchInvocationSlotCountAtLevel(classLevel.level) - resolvedInvocations.length, availableInvocations.length))
     : 0
-  const unresolvedMysticArcana = isPactBoonClass
+  const unresolvedMysticArcana = isWarlockClass
     ? MYSTIC_ARCANUM_LEVELS.filter(
         (m) =>
           classLevel.level >= m.charLevel &&
@@ -514,7 +543,7 @@ function ClassFeatureSection({
           )
       )
     : []
-  const resolvedMysticArcana = isPactBoonClass
+  const resolvedMysticArcana = isWarlockClass
     ? character.subclassFeatureChoices.filter(
         (c) => MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === c.featureName) && c.className.toLowerCase() === classLevel.className.toLowerCase()
       )
@@ -534,16 +563,16 @@ function ClassFeatureSection({
     : []
   const unresolvedSignatureSpellsCount = isWizardClass && classLevel.level >= 20 ? Math.max(0, 2 - resolvedSignatureSpells.length) : 0
 
-  // Bard Magical Secrets — 2 spells of any level you can cast (any class list) at 14th, 2 more at 18th; they
-  // don't count against your normal spells known (RAW), so granted picks are marked `free`, same treatment
-  // as Magic Initiate's/Circle Spells' grants.
+  // Bard Magical Secrets — under SRD 5.2.1 this is a single grant of 2
+  // spells of any level you can cast (any class list) at 10th level, not
+  // 2014's repeated grant at 14th and 18th; they don't count against your
+  // normal spells known (RAW), so granted picks are marked `free`, same
+  // treatment as Magic Initiate's/Circle Spells' grants.
   const resolvedMagicalSecrets = isBardClass
     ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Magical Secrets' && c.className.toLowerCase() === classLevel.className.toLowerCase())
     : []
-  // Two picks unlock at 14th level, two more at 18th — the level each still-open pick unlocked at, in order.
-  const magicalSecretsSlotLevels = isBardClass
-    ? [...(classLevel.level >= 14 ? [14, 14] : []), ...(classLevel.level >= 18 ? [18, 18] : [])]
-    : []
+  // Both picks unlock at 10th level — the level each still-open pick unlocked at, in order.
+  const magicalSecretsSlotLevels = isBardClass ? (classLevel.level >= 10 ? [10, 10] : []) : []
   const unresolvedMagicalSecretsLevels = magicalSecretsSlotLevels.slice(resolvedMagicalSecrets.length)
   const bardMaxSpellLevel = isBardClass
     ? spellSlotsForClassLevel(cls.id, classLevel.level).reduce((max, count, i) => (count > 0 ? i + 1 : max), 0)
@@ -569,17 +598,16 @@ function ClassFeatureSection({
     (level) => !character.asiSlotChoices.some((s) => s.level === level && s.className.toLowerCase() === classLevel.className.toLowerCase())
   )
 
-  const isRangerClass = cls.id === 'ranger'
-  const resolvedFavoredEnemies = isRangerClass
-    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Favored Enemy' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    : []
-  const favoredEnemySlots = isRangerClass ? favoredEnemySlotLevelsUpToLevel(classLevel.level) : []
-  const unresolvedFavoredEnemySlots = favoredEnemySlots.slice(resolvedFavoredEnemies.length)
-  const resolvedFavoredTerrains = isRangerClass
-    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Favored Terrain' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    : []
-  const favoredTerrainSlots = isRangerClass ? favoredTerrainSlotLevelsUpToLevel(classLevel.level) : []
-  const unresolvedFavoredTerrainSlots = favoredTerrainSlots.slice(resolvedFavoredTerrains.length)
+  // SRD 5.2.1's Ranger no longer has a Favored Enemy creature-type pick or a
+  // Favored Terrain pick at all (see CLASS_LEVEL_FEATURES's ranger entry) —
+  // these are read-only now, kept only so a character who picked one under
+  // the old 2014 rules still sees what they chose instead of it vanishing.
+  const resolvedFavoredEnemies = character.subclassFeatureChoices.filter(
+    (c) => c.featureName === 'Favored Enemy' && c.className.toLowerCase() === classLevel.className.toLowerCase()
+  )
+  const resolvedFavoredTerrains = character.subclassFeatureChoices.filter(
+    (c) => c.featureName === 'Favored Terrain' && c.className.toLowerCase() === classLevel.className.toLowerCase()
+  )
 
   const isDruidClass = cls.id === 'druid'
   const circleTerrainChoice = isDruidClass
@@ -604,8 +632,6 @@ function ClassFeatureSection({
     customFeatures.length === 0 &&
     resolvedMetamagic.length === 0 &&
     unresolvedMetamagicCount === 0 &&
-    !resolvedPactBoon &&
-    !pactBoonUnresolved &&
     resolvedInvocations.length === 0 &&
     unresolvedInvocationCount === 0 &&
     unresolvedMysticArcana.length === 0 &&
@@ -616,9 +642,7 @@ function ClassFeatureSection({
     resolvedSignatureSpells.length === 0 &&
     unresolvedAdditionalFightingStyleLevels.length === 0 &&
     resolvedFavoredEnemies.length === 0 &&
-    unresolvedFavoredEnemySlots.length === 0 &&
     resolvedFavoredTerrains.length === 0 &&
-    unresolvedFavoredTerrainSlots.length === 0 &&
     ungrantedCircleSpellLevels.length === 0 &&
     grantedCircleSpellLevels.length === 0 &&
     resolvedMagicalSecrets.length === 0 &&
@@ -682,15 +706,6 @@ function ClassFeatureSection({
               />
             )
           })}
-          {resolvedPactBoon && (
-            <InfoChip
-              title={resolvedPactBoon.chosenName}
-              subtitle={`Pact Boon — ${classLevel.className} ${resolvedPactBoon.level}`}
-              description={PACT_BOON_OPTIONS.find((o) => o.name === resolvedPactBoon.chosenName)?.description ?? ''}
-              accent
-              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(resolvedPactBoon.id)}
-            />
-          )}
           {resolvedInvocations.map((choice) => {
             const option = ELDRITCH_INVOCATIONS.find((o) => o.name === choice.chosenName)
             return (
@@ -846,31 +861,6 @@ function ClassFeatureSection({
           />
         ))}
 
-        {unresolvedFavoredEnemySlots.map((level) => (
-          <FavoredEnemyChooser
-            key={`favored-enemy:${level}`}
-            classLabel={classLevel.className}
-            level={level}
-            options={FAVORED_ENEMY_OPTIONS}
-            excludeNames={resolvedFavoredEnemies.map((c) => c.chosenName)}
-            readOnly={readOnly}
-            onChoose={(chosenName) => onResolveSubclassFeatureChoice({ className: classLevel.className, level, featureName: 'Favored Enemy', chosenName })}
-          />
-        ))}
-
-        {unresolvedFavoredTerrainSlots.map((level) => (
-          <NamedOptionChooser
-            key={`favored-terrain:${level}`}
-            classLabel={classLevel.className}
-            level={level}
-            featureName="Favored Terrain"
-            options={FAVORED_TERRAIN_OPTIONS}
-            excludeNames={resolvedFavoredTerrains.map((c) => c.chosenName)}
-            readOnly={readOnly}
-            onChoose={(chosenName) => onResolveSubclassFeatureChoice({ className: classLevel.className, level, featureName: 'Favored Terrain', chosenName })}
-          />
-        ))}
-
         {ungrantedCircleSpellLevels.map(({ level, spellIds }) => (
           <CircleSpellsGrant
             key={`circle-spells:${level}`}
@@ -954,20 +944,6 @@ function ClassFeatureSection({
           />
         ))}
 
-        {pactBoonUnresolved && (
-          <NamedOptionChooser
-            classLabel={classLevel.className}
-            level={3}
-            featureName="Pact Boon"
-            options={PACT_BOON_OPTIONS}
-            excludeNames={[]}
-            readOnly={readOnly}
-            onChoose={(chosenName) =>
-              onResolveSubclassFeatureChoice({ className: classLevel.className, level: 3, featureName: 'Pact Boon', chosenName })
-            }
-          />
-        )}
-
         {Array.from({ length: unresolvedInvocationCount }).map((_, i) => (
           <NamedOptionChooser
             key={`invocation:${resolvedInvocations.length + i}`}
@@ -1033,14 +1009,15 @@ function ClassFeatureSection({
 }
 
 const DIVINE_SMITE_DESCRIPTION =
-  "Starting at 2nd level, when you hit a creature with a melee weapon attack, you can expend one spell slot to deal radiant damage to the target, in addition to the weapon's damage. The extra damage is 2d8 for a 1st-level spell slot, plus 1d8 for each spell level higher than 1st, to a maximum of 5d8. The damage increases by 1d8 if the target is an undead or a fiend."
+  "As a Bonus Action immediately after hitting with a melee weapon or Unarmed Strike, expend a spell slot to deal an extra 2d8 Radiant damage, plus 1d8 for each spell level above 1st. The damage increases by 1d8 if the target is a Fiend or an Undead. Granted by Paladin's Smite (level 2), which also lets you cast it once per Long Rest without expending a slot — that free cast isn't tracked separately here, so just remember not to double up."
 
 /**
  * The one class resource that's actually spent from spell slots instead of
  * its own pool — so unlike Rage/Ki/Sorcery Points (see CLASS_RESOURCES in
  * shared/dnd5e.ts), this doesn't track its own "uses"; "casting" it here
  * just marks a spell slot as used, the same as SpellsTab's own slot tracker
- * would, and shows what that slot's damage roll comes out to.
+ * would, and shows what that slot's damage roll comes out to. Doesn't model
+ * Paladin's Smite's once-per-Long-Rest free cast (see DIVINE_SMITE_DESCRIPTION).
  */
 export function DivineSmiteCard({
   character,
@@ -1073,7 +1050,7 @@ export function DivineSmiteCard({
 
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
-      <HoverDetailCard title="Divine Smite" subtitle="Paladin 2" fields={[]} description={DIVINE_SMITE_DESCRIPTION}>
+      <HoverDetailCard title="Divine Smite" subtitle="Paladin's Smite — Paladin 2" fields={[]} description={DIVINE_SMITE_DESCRIPTION}>
         <strong style={{ cursor: 'default' }}>Divine Smite</strong>
       </HoverDetailCard>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
@@ -1138,6 +1115,23 @@ export function CircleSpellsGrant({
       </strong>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
         Your {terrain} circle grants {names.join(' and ')}, always prepared, at no cost against your normal spells known.
+      </div>
+      <Button variant="primary" onClick={onGrant} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
+        + Add to Spells
+      </Button>
+    </div>
+  )
+}
+
+/** Elf's Elven Lineage / Tiefling's Fiendish Legacy grant an always-prepared spell once the character reaches total level 3 or 5 (see FeaturesTab's unresolvedLineageSpellIds) — a one-click grant, same pattern as CircleSpellsGrant, since there's no player choice involved (the lineage already fixed which spell). */
+function LineageSpellGrant({ spellId, readOnly, onGrant }: { spellId: string; readOnly?: boolean; onGrant: () => void }): JSX.Element {
+  const spell = SPELLS.find((s) => s.id === spellId)
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)', marginTop: 6 }}>
+      <strong>Lineage Spell</strong>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
+        Your lineage grants {spell?.name ?? spellId}, always prepared, castable once per Long Rest without a slot — at no cost against your normal
+        spells known.
       </div>
       <Button variant="primary" onClick={onGrant} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
         + Add to Spells

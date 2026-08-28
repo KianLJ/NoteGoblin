@@ -117,125 +117,258 @@ export const ALIGNMENTS = [
 export interface Race {
   id: string
   name: string
+  /**
+   * Always empty under SRD 5.2.1 — species grant no ability score
+   * increases; that choice moved to Background instead (2 points split
+   * however you like, or +1/+1/+1). Kept on the type (rather than removed)
+   * so a homebrew/houseruled species can still use it, and so
+   * CharacterCreationWizard's ability-bonus math doesn't need a separate
+   * code path for "no bonus" vs "some bonus".
+   */
   abilityBonuses: Partial<AbilityScores>
   speed: number
   traits: string[]
 }
 
 /**
- * Full text for every trait name used in RACES below — this app's species
- * list models the 2014-ruleset traits (ability-score-granting species,
- * Half-Elf/Half-Orc included), not the 2024 SRD's species list (which
- * dropped ability bonuses from species entirely, moving them to
- * Background, and replaced Half-Elf/Half-Orc with Goliath/Orc) — so these
- * are standard 5e trait text, not verbatim SRD 5.2.1 quotes. Shown as a
- * hover tooltip in FeaturesTab.tsx.
+ * Full text for every trait name used in RACES below — the SRD 5.2.1
+ * "Species Descriptions" section (Creative Commons Attribution 4.0 — see
+ * the app's About/attribution notice), condensed to fit a hover tooltip
+ * rather than quoted verbatim. Several species traits involve a choice
+ * (Elf's Elven Lineage, Gnome's Gnomish Lineage, Dragonborn's Draconic
+ * Ancestry, Goliath's Giant Ancestry, Tiefling's Fiendish Legacy) — the
+ * options are summarized here rather than modeled as an actual in-wizard
+ * chooser, the same level of detail the old 2014 data had for Draconic
+ * Ancestry. Shown as a hover tooltip in FeaturesTab.tsx.
  */
 export const RACE_TRAIT_DESCRIPTIONS: Record<string, string> = {
-  'Extra Language': 'You can speak, read, and write one extra language of your choice.',
   Darkvision:
-    'You can see in dim light within a fixed range of you as if it were bright light, and in darkness as if it were dim light. You discern color in that darkness only as shades of gray.',
-  'Keen Senses': 'You have proficiency in the Perception skill.',
-  'Fey Ancestry': "You have advantage on saving throws against being charmed, and magic can't put you to sleep.",
-  Trance:
-    "You don't need to sleep. Instead, you meditate deeply for 4 hours a day. After resting this way, you gain the same benefit a human does from 8 hours of sleep.",
-  'Dwarven Resilience': 'You have advantage on saving throws against poison, and resistance against poison damage.',
-  Stonecunning:
-    'Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient in the History skill and add double your proficiency bonus to the check.',
-  Lucky: 'When you roll a 1 on a d20 for an attack roll, ability check, or saving throw, you can reroll the die and must use the new roll.',
-  Brave: 'You have advantage on saving throws against being frightened.',
-  'Halfling Nimbleness': 'You can move through the space of any creature that is of a size larger than yours.',
+    'You can see in dim light within a specified range as if it were bright light, and in darkness within that range as if it were dim light. You can\'t discern color in darkness, only shades of gray.',
   'Draconic Ancestry':
-    'You have draconic ancestry. Choose one type of dragon — your Breath Weapon and Damage Resistance traits are determined by that choice.',
+    'Choose the kind of dragon you descend from (Black, Blue, Brass, Bronze, Copper, Gold, Green, Red, Silver, or White) — this determines the damage type of your Breath Weapon and Damage Resistance traits, and affects your appearance.',
   'Breath Weapon':
-    'You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation.',
-  'Damage Resistance': 'You have resistance to the damage type associated with your Draconic Ancestry.',
-  'Gnome Cunning': 'You have advantage on all Intelligence, Wisdom, and Charisma saving throws against magic.',
-  'Skill Versatility': 'You gain proficiency in two skills of your choice.',
+    'As part of the Attack action, you can replace one attack with an exhalation in a 15-foot Cone or a 30-foot Line (5 feet wide). Each creature in the area makes a Dexterity save (DC 8 + your Constitution modifier + Proficiency Bonus), taking 1d10 damage (of your Draconic Ancestry\'s type) on a failure, half as much on a success. The damage increases to 2d10 at level 5, 3d10 at level 11, and 4d10 at level 17. Usable a number of times equal to your Proficiency Bonus, regained on a Long Rest.',
+  'Damage Resistance': 'You have Resistance to the damage type determined by your Draconic Ancestry trait.',
+  'Draconic Flight':
+    'Starting at level 5, as a Bonus Action you can sprout spectral wings for 10 minutes, granting a Fly Speed equal to your Speed. Usable once per Long Rest.',
+  'Dwarven Resilience':
+    'You have Resistance to Poison damage, and Advantage on saving throws you make to avoid or end the Poisoned condition.',
+  'Dwarven Toughness': 'Your Hit Point maximum increases by 1, and increases by 1 again whenever you gain a level.',
+  Stonecunning:
+    'As a Bonus Action, you gain Tremorsense with a range of 60 feet for 10 minutes, provided you\'re on or touching a stone surface. Usable a number of times equal to your Proficiency Bonus, regained on a Long Rest.',
+  'Elven Lineage':
+    'Choose a lineage — Drow, High Elf, or Wood Elf — granting a cantrip and other benefits at level 1, plus a higher-level spell you always have prepared at levels 3 and 5 (castable once per Long Rest without a slot). Intelligence, Wisdom, or Charisma is your spellcasting ability for these, chosen when you pick the lineage.',
+  'Fey Ancestry': "You have Advantage on saving throws you make to avoid or end the Charmed condition, and magic can't put you to sleep.",
+  'Keen Senses': 'You have proficiency in the Insight, Perception, or Survival skill (your choice).',
+  Trance:
+    "You don't need to sleep, and magic can't put you to sleep. You can finish a Long Rest in 4 hours if you spend those hours in a trancelike meditation, during which you retain consciousness.",
+  'Gnomish Cunning': 'You have Advantage on Intelligence, Wisdom, and Charisma saving throws.',
+  'Gnomish Lineage':
+    'Choose Forest Gnome (Minor Illusion cantrip, plus Speak with Animals castable without a slot a number of times equal to your Proficiency Bonus) or Rock Gnome (Mending and Prestidigitation cantrips, plus the ability to spend 10 minutes crafting a Tiny clockwork device). Intelligence, Wisdom, or Charisma is your spellcasting ability for these, chosen when you pick the lineage.',
+  'Giant Ancestry':
+    'Choose a supernatural boon from your giant ancestry — Cloud\'s Jaunt (teleport as a Bonus Action), Fire\'s Burn, Frost\'s Chill, Hill\'s Tumble, Stone\'s Endurance, or Storm\'s Thunder — usable a number of times equal to your Proficiency Bonus, regained on a Long Rest.',
+  'Large Form':
+    'Starting at level 5, as a Bonus Action you can grow to Large size for 10 minutes (if there\'s room), gaining Advantage on Strength checks and +10 feet of Speed. Usable once per Long Rest.',
+  'Powerful Build': 'You have Advantage on any ability check you make to end the Grappled condition, and you count as one size larger when determining your carrying capacity.',
+  Brave: 'You have Advantage on saving throws you make to avoid or end the Frightened condition.',
+  'Halfling Nimbleness': "You can move through the space of any creature that is a size larger than you, but you can't stop there.",
+  Luck: 'When you roll a 1 on the d20 of a D20 Test, you can reroll the die, and you must use the new roll.',
+  'Naturally Stealthy': 'You can take the Hide action even when you are obscured only by a creature that is at least one size larger than you.',
+  Resourceful: 'You gain Heroic Inspiration whenever you finish a Long Rest.',
+  Skillful: 'You gain proficiency in one skill of your choice.',
+  Versatile: 'You gain an Origin feat of your choice (Skilled is recommended).',
+  'Adrenaline Rush':
+    'You can take the Dash action as a Bonus Action, gaining Temporary Hit Points equal to your Proficiency Bonus when you do. Usable a number of times equal to your Proficiency Bonus, regained on a Short or Long Rest.',
   'Relentless Endurance':
-    "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. You can't use this trait again until you finish a long rest.",
-  'Savage Attacks':
-    "When you score a critical hit with a melee weapon attack, you can roll one of the weapon's damage dice one additional time and add it to the extra damage of the critical hit.",
-  'Hellish Resistance': 'You have resistance to fire damage.',
-  'Infernal Legacy':
-    'You know the thaumaturgy cantrip. At 3rd level you can cast hellish rebuke once per long rest, and at 5th level darkness once per long rest — Charisma is your spellcasting ability for these.'
+    "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. You can't use this trait again until you finish a Long Rest.",
+  'Fiendish Legacy':
+    'Choose a legacy — Abyssal, Chthonic, or Infernal — granting Resistance to a damage type and a cantrip at level 1, plus a higher-level spell you always have prepared at levels 3 and 5 (castable once per Long Rest without a slot). Intelligence, Wisdom, or Charisma is your spellcasting ability for these, chosen when you pick the legacy.',
+  'Otherworldly Presence':
+    'You know the Thaumaturgy cantrip, cast with the same spellcasting ability you use for your Fiendish Legacy trait.'
 }
 
 export const RACES: Race[] = [
   {
     id: 'human',
     name: 'Human',
-    abilityBonuses: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 },
+    abilityBonuses: {},
     speed: 30,
-    traits: ['Extra Language']
+    traits: ['Resourceful', 'Skillful', 'Versatile']
   },
   {
     id: 'elf',
     name: 'Elf',
-    abilityBonuses: { dex: 2 },
+    abilityBonuses: {},
     speed: 30,
-    traits: ['Darkvision', 'Keen Senses', 'Fey Ancestry', 'Trance']
+    traits: ['Darkvision', 'Elven Lineage', 'Fey Ancestry', 'Keen Senses', 'Trance']
   },
   {
     id: 'dwarf',
     name: 'Dwarf',
-    abilityBonuses: { con: 2 },
-    speed: 25,
-    traits: ['Darkvision', 'Dwarven Resilience', 'Stonecunning']
+    abilityBonuses: {},
+    speed: 30,
+    traits: ['Darkvision', 'Dwarven Resilience', 'Dwarven Toughness', 'Stonecunning']
   },
   {
     id: 'halfling',
     name: 'Halfling',
-    abilityBonuses: { dex: 2 },
-    speed: 25,
-    traits: ['Lucky', 'Brave', 'Halfling Nimbleness']
+    abilityBonuses: {},
+    speed: 30,
+    traits: ['Brave', 'Halfling Nimbleness', 'Luck', 'Naturally Stealthy']
   },
   {
     id: 'dragonborn',
     name: 'Dragonborn',
-    abilityBonuses: { str: 2, cha: 1 },
+    abilityBonuses: {},
     speed: 30,
-    traits: ['Draconic Ancestry', 'Breath Weapon', 'Damage Resistance']
+    traits: ['Draconic Ancestry', 'Breath Weapon', 'Damage Resistance', 'Darkvision', 'Draconic Flight']
   },
   {
     id: 'gnome',
     name: 'Gnome',
-    abilityBonuses: { int: 2 },
-    speed: 25,
-    traits: ['Darkvision', 'Gnome Cunning']
+    abilityBonuses: {},
+    speed: 30,
+    traits: ['Darkvision', 'Gnomish Cunning', 'Gnomish Lineage']
   },
   {
-    id: 'half-elf',
-    name: 'Half-Elf',
-    abilityBonuses: { cha: 2, dex: 1, wis: 1 },
-    speed: 30,
-    traits: ['Darkvision', 'Fey Ancestry', 'Skill Versatility']
+    id: 'goliath',
+    name: 'Goliath',
+    abilityBonuses: {},
+    speed: 35,
+    traits: ['Giant Ancestry', 'Large Form', 'Powerful Build']
   },
   {
-    id: 'half-orc',
-    name: 'Half-Orc',
-    abilityBonuses: { str: 2, con: 1 },
+    id: 'orc',
+    name: 'Orc',
+    abilityBonuses: {},
     speed: 30,
-    traits: ['Darkvision', 'Relentless Endurance', 'Savage Attacks']
+    traits: ['Adrenaline Rush', 'Darkvision', 'Relentless Endurance']
   },
   {
     id: 'tiefling',
     name: 'Tiefling',
-    abilityBonuses: { cha: 2, int: 1 },
+    abilityBonuses: {},
     speed: 30,
-    traits: ['Darkvision', 'Hellish Resistance', 'Infernal Legacy']
+    traits: ['Darkvision', 'Fiendish Legacy', 'Otherworldly Presence']
   }
 ]
+
+/**
+ * One option within a species' lineage/legacy trait (Elf's Elven Lineage,
+ * Gnome's Gnomish Lineage, Tiefling's Fiendish Legacy) — chosen once at
+ * character creation, granting a cantrip known from level 1 plus (for Elf
+ * and Tiefling) a spell that becomes always-prepared at character level 3
+ * and another at level 5, each castable once per Long Rest without a slot.
+ * Gated by total character level (see totalLevel), not any one class's
+ * level, since the species itself doesn't belong to a class. Spell ids
+ * reference the compendium (shared/compendium.ts's SPELLS) — resolved
+ * there, not duplicated here, so the actual spell text/level/school comes
+ * from one source. Gnome's two options have no level 3/5 spells at all
+ * (just the cantrip(s)), matching the real SRD text for that trait.
+ */
+export interface LineageOption {
+  name: string
+  cantripId: string
+  /** Rock Gnome is the one case with two fixed cantrips instead of one. */
+  secondCantripId?: string
+  /** Forest Gnome's Speak with Animals — granted immediately at level 1, unlike level3SpellId/level5SpellId which wait for the character to actually reach that level. */
+  alwaysPreparedSpellId?: string
+  level3SpellId?: string
+  level5SpellId?: string
+  /** Short SRD-derived summary for a hover tooltip on the option itself (see CharacterCreationWizard.tsx's lineage picker) — condensed, not verbatim rules text. */
+  description: string
+}
+
+/**
+ * Keyed by species id — only Elf, Gnome, and Tiefling have a lineage/legacy
+ * trait under SRD 5.2.1. Abyssal Tiefling's real level 3 spell (Ray of
+ * Sickness) isn't in the bundled spell compendium, so that slot is omitted
+ * here rather than granting nothing when reached — a small, flagged gap
+ * rather than a silent wrong grant.
+ */
+export const RACE_LINEAGES: Record<string, LineageOption[]> = {
+  elf: [
+    {
+      name: 'Drow',
+      cantripId: 'dancing-lights',
+      level3SpellId: 'faerie-fire',
+      level5SpellId: 'darkness',
+      description: 'Darkvision increases to 120 ft. Know Dancing Lights; always have Faerie Fire prepared at level 3 and Darkness at level 5, each castable once per Long Rest without a slot.'
+    },
+    {
+      name: 'High Elf',
+      cantripId: 'prestidigitation',
+      level3SpellId: 'detect-magic',
+      level5SpellId: 'misty-step',
+      description: 'Know Prestidigitation (swappable for another Wizard cantrip on a Long Rest). Always have Detect Magic prepared at level 3 and Misty Step at level 5, each castable once per Long Rest without a slot.'
+    },
+    {
+      name: 'Wood Elf',
+      cantripId: 'druidcraft',
+      level3SpellId: 'longstrider',
+      level5SpellId: 'pass-without-trace',
+      description: 'Speed increases to 35 ft. Know Druidcraft; always have Longstrider prepared at level 3 and Pass without Trace at level 5, each castable once per Long Rest without a slot.'
+    }
+  ],
+  gnome: [
+    {
+      name: 'Forest Gnome',
+      cantripId: 'minor-illusion',
+      alwaysPreparedSpellId: 'speak-with-animals',
+      description: "Know Minor Illusion. Always have Speak with Animals prepared, castable without a slot a number of times equal to your Proficiency Bonus per Long Rest."
+    },
+    {
+      name: 'Rock Gnome',
+      cantripId: 'mending',
+      secondCantripId: 'prestidigitation',
+      description: 'Know Mending and Prestidigitation. Can spend 10 minutes casting Prestidigitation to create a Tiny clockwork device (up to 3 at a time).'
+    }
+  ],
+  tiefling: [
+    {
+      name: 'Abyssal',
+      cantripId: 'poison-spray',
+      level5SpellId: 'hold-person',
+      description: "Resistance to Poison damage. Know Poison Spray; always have Hold Person prepared at level 5, castable once per Long Rest without a slot. (Its real level 3 spell, Ray of Sickness, isn't in this app's spell compendium.)"
+    },
+    {
+      name: 'Chthonic',
+      cantripId: 'chill-touch',
+      level3SpellId: 'false-life',
+      level5SpellId: 'ray-of-enfeeblement',
+      description: 'Resistance to Necrotic damage. Know Chill Touch; always have False Life prepared at level 3 and Ray of Enfeeblement at level 5, each castable once per Long Rest without a slot.'
+    },
+    {
+      name: 'Infernal',
+      cantripId: 'fire-bolt',
+      level3SpellId: 'hellish-rebuke',
+      level5SpellId: 'darkness',
+      description: 'Resistance to Fire damage. Know Fire Bolt; always have Hellish Rebuke prepared at level 3 and Darkness at level 5, each castable once per Long Rest without a slot.'
+    }
+  ]
+}
+
+/** A resolved lineage/legacy pick — stored once per character (there's only ever one species). `cantripId`/`secondCantripId` are granted immediately at creation; `level3SpellId`/`level5SpellId` are granted later via a one-click prompt once totalLevel(classes) reaches that threshold (see FeaturesTab.tsx's LineageSpellGrant). */
+export interface RaceLineageChoice {
+  raceId: string
+  lineageName: string
+  spellcastingAbility: Ability
+}
+
+export function lineageOptionsForRace(raceId: string): LineageOption[] {
+  return RACE_LINEAGES[raceId] ?? []
+}
 
 export interface Class {
   id: string
   name: string
   hitDie: number
-  primaryAbility: Ability
+  /** More than one entry means the SRD lists it as "X or Y" (Fighter) or "X and Y" (Monk/Paladin/Ranger) rather than a single ability. */
+  primaryAbility: Ability[]
   savingThrowProficiencies: Ability[]
   skillChoice: { choose: number; from: SkillName[] }
   spellcastingAbility: Ability | null
-  /** The level this class picks a subclass at (1 for Cleric/Sorcerer/Warlock, 2 for Druid/Wizard, 3 for everyone else) — drives both the level-up prompt's subclass chooser and when OverviewTab's subclass field unlocks. */
+  /** Every class picks its subclass at level 3 under SRD 5.2.1 — 2014's staggered levels (1 for Cleric/Sorcerer/Warlock, 2 for Druid/Wizard) are gone. This is the sole gate the level-up prompt and OverviewTab's subclass field key off (see LevelUpPopup.tsx/FeaturesTab.tsx) — CLASS_LEVEL_FEATURES' flavor-text row for "choose your subclass" still shows at its old 2014 level for a few classes pending a fuller rewrite of that table, so it can look inconsistent with the actual (correct) level-3 chooser for now. */
   subclassLevel: number
 }
 
@@ -244,7 +377,7 @@ export const CLASSES: Class[] = [
     id: 'barbarian',
     name: 'Barbarian',
     hitDie: 12,
-    primaryAbility: 'str',
+    primaryAbility: ['str'],
     savingThrowProficiencies: ['str', 'con'],
     skillChoice: { choose: 2, from: ['Animal Handling', 'Athletics', 'Intimidation', 'Nature', 'Perception', 'Survival'] },
     spellcastingAbility: null,
@@ -254,7 +387,7 @@ export const CLASSES: Class[] = [
     id: 'bard',
     name: 'Bard',
     hitDie: 8,
-    primaryAbility: 'cha',
+    primaryAbility: ['cha'],
     savingThrowProficiencies: ['dex', 'cha'],
     skillChoice: { choose: 3, from: SKILLS.map((s) => s.id) },
     spellcastingAbility: 'cha',
@@ -264,29 +397,32 @@ export const CLASSES: Class[] = [
     id: 'cleric',
     name: 'Cleric',
     hitDie: 8,
-    primaryAbility: 'wis',
+    primaryAbility: ['wis'],
     savingThrowProficiencies: ['wis', 'cha'],
     skillChoice: { choose: 2, from: ['History', 'Insight', 'Medicine', 'Persuasion', 'Religion'] },
     spellcastingAbility: 'wis',
-    subclassLevel: 1
+    subclassLevel: 3
   },
   {
     id: 'druid',
     name: 'Druid',
     hitDie: 8,
-    primaryAbility: 'wis',
+    primaryAbility: ['wis'],
     savingThrowProficiencies: ['int', 'wis'],
     skillChoice: { choose: 2, from: ['Arcana', 'Animal Handling', 'Insight', 'Medicine', 'Nature', 'Perception', 'Religion', 'Survival'] },
     spellcastingAbility: 'wis',
-    subclassLevel: 2
+    subclassLevel: 3
   },
   {
     id: 'fighter',
     name: 'Fighter',
     hitDie: 10,
-    primaryAbility: 'str',
+    primaryAbility: ['str', 'dex'],
     savingThrowProficiencies: ['str', 'con'],
-    skillChoice: { choose: 2, from: ['Acrobatics', 'Animal Handling', 'Athletics', 'History', 'Insight', 'Intimidation', 'Perception', 'Survival'] },
+    skillChoice: {
+      choose: 2,
+      from: ['Acrobatics', 'Animal Handling', 'Athletics', 'History', 'Insight', 'Intimidation', 'Persuasion', 'Perception', 'Survival']
+    },
     spellcastingAbility: null,
     subclassLevel: 3
   },
@@ -294,7 +430,7 @@ export const CLASSES: Class[] = [
     id: 'monk',
     name: 'Monk',
     hitDie: 8,
-    primaryAbility: 'dex',
+    primaryAbility: ['dex', 'wis'],
     savingThrowProficiencies: ['str', 'dex'],
     skillChoice: { choose: 2, from: ['Acrobatics', 'Athletics', 'History', 'Insight', 'Religion', 'Stealth'] },
     spellcastingAbility: null,
@@ -304,7 +440,7 @@ export const CLASSES: Class[] = [
     id: 'paladin',
     name: 'Paladin',
     hitDie: 10,
-    primaryAbility: 'str',
+    primaryAbility: ['str', 'cha'],
     savingThrowProficiencies: ['wis', 'cha'],
     skillChoice: { choose: 2, from: ['Athletics', 'Insight', 'Intimidation', 'Medicine', 'Persuasion', 'Religion'] },
     spellcastingAbility: 'cha',
@@ -314,7 +450,7 @@ export const CLASSES: Class[] = [
     id: 'ranger',
     name: 'Ranger',
     hitDie: 10,
-    primaryAbility: 'dex',
+    primaryAbility: ['dex', 'wis'],
     savingThrowProficiencies: ['str', 'dex'],
     skillChoice: { choose: 3, from: ['Animal Handling', 'Athletics', 'Insight', 'Investigation', 'Nature', 'Perception', 'Stealth', 'Survival'] },
     spellcastingAbility: 'wis',
@@ -324,9 +460,12 @@ export const CLASSES: Class[] = [
     id: 'rogue',
     name: 'Rogue',
     hitDie: 8,
-    primaryAbility: 'dex',
+    primaryAbility: ['dex'],
     savingThrowProficiencies: ['dex', 'int'],
-    skillChoice: { choose: 4, from: ['Acrobatics', 'Athletics', 'Deception', 'Insight', 'Intimidation', 'Investigation', 'Perception', 'Performance', 'Persuasion', 'Sleight of Hand', 'Stealth'] },
+    skillChoice: {
+      choose: 4,
+      from: ['Acrobatics', 'Athletics', 'Deception', 'Insight', 'Intimidation', 'Investigation', 'Perception', 'Persuasion', 'Sleight of Hand', 'Stealth']
+    },
     spellcastingAbility: null,
     subclassLevel: 3
   },
@@ -334,105 +473,103 @@ export const CLASSES: Class[] = [
     id: 'sorcerer',
     name: 'Sorcerer',
     hitDie: 6,
-    primaryAbility: 'cha',
+    primaryAbility: ['cha'],
     savingThrowProficiencies: ['con', 'cha'],
     skillChoice: { choose: 2, from: ['Arcana', 'Deception', 'Insight', 'Intimidation', 'Persuasion', 'Religion'] },
     spellcastingAbility: 'cha',
-    subclassLevel: 1
+    subclassLevel: 3
   },
   {
     id: 'warlock',
     name: 'Warlock',
     hitDie: 8,
-    primaryAbility: 'cha',
+    primaryAbility: ['cha'],
     savingThrowProficiencies: ['wis', 'cha'],
     skillChoice: { choose: 2, from: ['Arcana', 'Deception', 'History', 'Intimidation', 'Investigation', 'Nature', 'Religion'] },
     spellcastingAbility: 'cha',
-    subclassLevel: 1
+    subclassLevel: 3
   },
   {
     id: 'wizard',
     name: 'Wizard',
     hitDie: 6,
-    primaryAbility: 'int',
+    primaryAbility: ['int'],
     savingThrowProficiencies: ['int', 'wis'],
-    skillChoice: { choose: 2, from: ['Arcana', 'History', 'Insight', 'Investigation', 'Medicine', 'Religion'] },
+    skillChoice: { choose: 2, from: ['Arcana', 'History', 'Insight', 'Investigation', 'Medicine', 'Nature', 'Religion'] },
     spellcastingAbility: 'int',
-    subclassLevel: 2
+    subclassLevel: 3
   }
 ]
 
-/** The exact CLASS_LEVEL_FEATURES entry name that represents "choose your subclass" for each class — FeaturesTab.tsx excludes this row from a class's plain curated-feature list and renders an actual interactive picker (or, once chosen, a resolved card) in its place. */
-export const SUBCLASS_CHOICE_FEATURE_NAME: Record<string, string> = {
-  barbarian: 'Primal Path',
-  bard: 'Bard College',
-  cleric: 'Divine Domain',
-  druid: 'Druid Circle',
-  fighter: 'Martial Archetype',
-  monk: 'Monastic Tradition',
-  paladin: 'Sacred Oath',
-  ranger: 'Ranger Archetype',
-  rogue: 'Roguish Archetype',
-  sorcerer: 'Sorcerous Origin',
-  warlock: 'Otherworldly Patron',
-  wizard: 'Arcane Tradition'
-}
+/**
+ * Under 2014 rules each class named its subclass category ("Primal Path",
+ * "Divine Domain", etc.) and CLASS_LEVEL_FEATURES had a matching named row
+ * FeaturesTab.tsx needed to exclude from the plain curated-feature list.
+ * SRD 5.2.1 dropped the per-class naming — every class just calls it
+ * "Subclass" — and CLASS_LEVEL_FEATURES no longer has a subclass-choice row
+ * at all (the interactive picker is gated purely on Class.subclassLevel).
+ * Kept as an empty map (rather than removed) so FeaturesTab.tsx's existing
+ * `SUBCLASS_CHOICE_FEATURE_NAME[cls.id] ?? 'Subclass'` lookups keep working
+ * unchanged, always falling through to the generic label now.
+ */
+export const SUBCLASS_CHOICE_FEATURE_NAME: Record<string, string> = {}
 
+/**
+ * SRD 5.2.1 dropped the 2014-style unique background feature (Shelter of
+ * the Faithful, Criminal Contact, etc.) — a background instead grants three
+ * named ability scores (increase one by 2 and another by 1, or all three by
+ * 1 — see CharacterCreationWizard.tsx's background-bonus step), a specific
+ * Origin feat (looked up by id from compendium.ts's FEATS, not stored here
+ * to avoid a circular import back into this lower-level module), two skill
+ * proficiencies, and one tool proficiency.
+ */
 export interface Background {
   id: string
   name: string
+  abilityScores: Ability[]
+  featId: string
   skillProficiencies: SkillName[]
-  feature: { name: string; description: string }
+  toolProficiency: string
 }
 
+/**
+ * Only the 4 backgrounds SRD 5.2.1 actually includes (Creative Commons
+ * Attribution 4.0 — see the app's About/attribution notice) — 2014's Folk
+ * Hero, Noble, Charlatan, and Hermit aren't part of this document and were
+ * dropped rather than left as stale 2014 data or guessed at.
+ */
 export const BACKGROUNDS: Background[] = [
   {
     id: 'acolyte',
     name: 'Acolyte',
+    abilityScores: ['int', 'wis', 'cha'],
+    featId: 'magic-initiate',
     skillProficiencies: ['Insight', 'Religion'],
-    feature: { name: 'Shelter of the Faithful', description: 'You command the respect of those who share your faith, and can perform religious ceremonies. You and your companions can expect free healing and care at temples of your faith.' }
+    toolProficiency: "Calligrapher's Supplies"
   },
   {
     id: 'criminal',
     name: 'Criminal',
-    skillProficiencies: ['Deception', 'Stealth'],
-    feature: { name: 'Criminal Contact', description: 'You have a reliable and trustworthy contact who acts as your liaison to a network of other criminals.' }
-  },
-  {
-    id: 'folk-hero',
-    name: 'Folk Hero',
-    skillProficiencies: ['Animal Handling', 'Survival'],
-    feature: { name: 'Rustic Hospitality', description: 'Common folk will shelter and hide you from the law or those searching for you, though they will not risk their lives for you.' }
-  },
-  {
-    id: 'noble',
-    name: 'Noble',
-    skillProficiencies: ['History', 'Persuasion'],
-    feature: { name: 'Position of Privilege', description: 'People are inclined to think the best of you. You are welcome in high society, and people assume you have the right to be wherever you are.' }
+    abilityScores: ['dex', 'con', 'int'],
+    featId: 'alert',
+    skillProficiencies: ['Sleight of Hand', 'Stealth'],
+    toolProficiency: "Thieves' Tools"
   },
   {
     id: 'sage',
     name: 'Sage',
+    abilityScores: ['con', 'int', 'wis'],
+    featId: 'magic-initiate',
     skillProficiencies: ['Arcana', 'History'],
-    feature: { name: 'Researcher', description: 'When you attempt to learn or recall a piece of lore, you often know where and from whom you can obtain it, if you do not already know it.' }
+    toolProficiency: "Calligrapher's Supplies"
   },
   {
     id: 'soldier',
     name: 'Soldier',
+    abilityScores: ['str', 'dex', 'con'],
+    featId: 'savage-attacker',
     skillProficiencies: ['Athletics', 'Intimidation'],
-    feature: { name: 'Military Rank', description: 'You have a military rank from your career as a soldier. Soldiers loyal to your former military organization still recognize your authority and influence.' }
-  },
-  {
-    id: 'charlatan',
-    name: 'Charlatan',
-    skillProficiencies: ['Deception', 'Sleight of Hand'],
-    feature: { name: 'False Identity', description: 'You have created a second identity with documentation, established acquaintances, and disguises that lets you assume that persona.' }
-  },
-  {
-    id: 'hermit',
-    name: 'Hermit',
-    skillProficiencies: ['Medicine', 'Religion'],
-    feature: { name: 'Discovery', description: 'Your seclusion has led to a unique and powerful discovery — a great truth about the cosmos, a forbidden secret, or a lost knowledge.' }
+    toolProficiency: 'One kind of Gaming Set'
   }
 ]
 
@@ -459,268 +596,296 @@ function asi(level: number): ClassLevelFeature {
   return { ...ASI, level }
 }
 
-/** Curated headline progression by class id, levels 1-20. Not exhaustive rules text — enough to tell you what you got, and to drive the level-up prompt. */
+const EPIC_BOON: ClassLevelFeature = {
+  level: 19,
+  name: 'Epic Boon',
+  description: 'Take an Epic Boon feat (see "Feats"), or another feat of your choice for which you qualify.'
+}
+
+/** Every class gains an Epic Boon feat at 19th level under SRD 5.2.1 — a new capstone-adjacent feature category 2014 didn't have (2014 gave most classes a second ASI at 19th instead; see the asi() calls this replaces throughout CLASS_LEVEL_FEATURES below). */
+function epicBoon(): ClassLevelFeature {
+  return { ...EPIC_BOON }
+}
+
+/**
+ * Curated headline progression by class id, levels 1-20 — rewritten for
+ * SRD 5.2.1 (Creative Commons Attribution 4.0, see the app's
+ * About/attribution notice). Not exhaustive rules text — enough to tell you
+ * what you got, and to drive the level-up prompt. Every class now picks its
+ * subclass at level 3 (see Class.subclassLevel's doc comment) — there's no
+ * "choose your subclass" row here at all, since FeaturesTab.tsx's
+ * interactive subclass picker is gated on that field directly, not on a
+ * named row in this table. A few named rows below (Metamagic, Eldritch
+ * Invocations, Paladin's Smite, Spell Mastery, Signature Spells, Magical
+ * Secrets) are load-bearing: FeaturesTab.tsx matches on these exact names
+ * to swap in a dedicated interactive chooser in place of the plain
+ * description — renaming them requires updating that matching logic too.
+ */
 export const CLASS_LEVEL_FEATURES: Record<string, ClassLevelFeature[]> = {
   barbarian: [
-    { level: 1, name: 'Rage', description: 'Fly into a rage for bonus damage and resistance to bludgeoning/piercing/slashing.' },
-    { level: 1, name: 'Unarmored Defense', description: 'AC = 10 + Dex mod + Con mod while not wearing armor.' },
-    { level: 2, name: 'Reckless Attack', description: 'Attack with advantage at the cost of attacks against you also having advantage.' },
-    { level: 2, name: 'Danger Sense', description: 'Advantage on Dex saves against effects you can see.' },
-    { level: 3, name: 'Primal Path', description: 'Choose a barbarian subclass.' },
+    { level: 1, name: 'Rage', description: 'Bonus Action to gain resistance to bludgeoning/piercing/slashing and a damage bonus on Strength attacks, for as long as you keep fighting.' },
+    { level: 1, name: 'Unarmored Defense', description: 'AC = 10 + Dex mod + Con mod while not wearing armor; a shield is still fine.' },
+    { level: 1, name: 'Weapon Mastery', description: 'Use the mastery property of two kinds of Simple or Martial Melee weapons; swap one after a Long Rest.' },
+    { level: 2, name: 'Danger Sense', description: 'Advantage on Dexterity saving throws against effects you can see.' },
+    { level: 2, name: 'Reckless Attack', description: 'Attack with advantage at the cost of attacks against you also having advantage until your next turn.' },
+    { level: 3, name: 'Primal Knowledge', description: 'Gain proficiency in one skill from the barbarian skill list, or expend a Rage use for temporary expertise in a skill using Strength or Constitution.' },
     asi(4),
     { level: 5, name: 'Extra Attack', description: 'Attack twice, instead of once, whenever you take the Attack action.' },
-    { level: 5, name: 'Fast Movement', description: '+10 ft speed while not wearing heavy armor.' },
-    { level: 6, name: 'Path Feature', description: 'Gain a feature from your Primal Path.' },
-    { level: 7, name: 'Feral Instinct', description: 'Advantage on initiative; act normally when surprised if you rage first.' },
+    { level: 5, name: 'Fast Movement', description: '+10 ft speed while not wearing Heavy armor.' },
+    { level: 7, name: 'Feral Instinct', description: 'Advantage on Initiative rolls; act normally on a surprised first turn if you enter Rage first.' },
+    { level: 7, name: 'Instinctive Pounce', description: 'Move up to half your Speed as part of entering Rage.' },
     asi(8),
-    { level: 9, name: 'Brutal Critical (1 die)', description: 'Roll one extra weapon damage die on a critical hit.' },
-    { level: 10, name: 'Path Feature', description: 'Gain a feature from your Primal Path.' },
-    { level: 11, name: 'Relentless Rage', description: 'Drop to 1 HP instead of 0 once per rage, on a Con save.' },
+    { level: 9, name: 'Brutal Strike', description: 'While Reckless Attack is active, replace one Rage-damage hit with a Brutal Strike option (Forceful Blow, Hamstring Blow, or Staggering Blow) for extra effects.' },
+    { level: 11, name: 'Relentless Rage', description: 'Drop to 1 HP instead of 0 once per Rage, on a Constitution save (DC rises each time you succeed since your last rest).' },
     asi(12),
-    { level: 13, name: 'Brutal Critical (2 dice)', description: 'Roll two extra weapon damage dice on a critical hit.' },
-    { level: 14, name: 'Path Feature', description: 'Gain a feature from your Primal Path.' },
-    { level: 15, name: 'Persistent Rage', description: 'Your rage only ends early if you choose to end it or fall unconscious.' },
+    { level: 13, name: 'Improved Brutal Strike', description: 'Your Brutal Strike options grow more powerful.' },
+    { level: 15, name: 'Persistent Rage', description: 'Your Rage only ends early if you choose to end it or fall unconscious.' },
     asi(16),
-    { level: 17, name: 'Brutal Critical (3 dice)', description: 'Roll three extra weapon damage dice on a critical hit.' },
-    { level: 18, name: 'Indomitable Might', description: 'Use your Strength score in place of a lower Strength check total.' },
-    asi(19),
-    { level: 20, name: 'Primal Champion', description: 'Strength and Constitution scores increase by 4, to a max of 24.' }
+    { level: 17, name: 'Improved Brutal Strike', description: 'Your Brutal Strike options grow more powerful still.' },
+    { level: 18, name: 'Indomitable Might', description: 'Use your Strength score in place of a lower total on a Strength check or saving throw.' },
+    epicBoon(),
+    { level: 20, name: 'Primal Champion', description: 'Strength and Constitution scores increase by 4, to a maximum of 24.' }
   ],
   bard: [
-    { level: 1, name: 'Spellcasting', description: 'Cast bard spells using Charisma.' },
-    { level: 1, name: 'Bardic Inspiration (d6)', description: 'Give an ally a bonus die to add to one roll.' },
-    { level: 2, name: 'Jack of All Trades', description: 'Add half your proficiency bonus to ability checks you aren’t proficient in.' },
-    { level: 2, name: 'Song of Rest (d6)', description: 'Allies who rest with you regain extra HP.' },
-    { level: 3, name: 'Bard College', description: 'Choose a bard subclass, and gain Expertise in two skills.' },
+    { level: 1, name: 'Bardic Inspiration', description: 'Bonus Action to give an ally a d6 (growing at higher levels) to add to one D20 Test within the next hour.' },
+    { level: 1, name: 'Spellcasting', description: 'Cast bard spells using Charisma, with a Musical Instrument as your focus.' },
+    { level: 2, name: 'Expertise', description: 'Double your proficiency bonus for two skill proficiencies of your choice.' },
+    { level: 2, name: 'Jack of All Trades', description: 'Add half your proficiency bonus (round down) to any ability check that uses a skill you lack.' },
     asi(4),
-    { level: 5, name: 'Bardic Inspiration (d8)', description: 'Your inspiration die improves; also gain Font of Inspiration (regain uses on a short rest).' },
-    { level: 6, name: 'Countercharm', description: 'You and nearby allies get advantage on saves against being frightened or charmed; gain a College feature.' },
+    { level: 5, name: 'Font of Inspiration', description: 'Regain all expended Bardic Inspiration uses on a Short or Long Rest; your inspiration die improves to a d8.' },
+    { level: 7, name: 'Countercharm', description: 'Bonus Action to give yourself and nearby allies advantage on saves against being Frightened or Charmed for 1 minute.' },
     asi(8),
-    { level: 9, name: 'Song of Rest (d8)', description: 'Your rest-healing die improves.' },
-    { level: 10, name: 'Bardic Inspiration (d10)', description: 'Your inspiration die improves further; gain Expertise and a College feature.' },
+    { level: 9, name: 'Expertise', description: 'Double your proficiency bonus for two more skill proficiencies of your choice.' },
+    { level: 10, name: 'Magical Secrets', description: 'Learn two spells of your choice from any class\'s spell list; your inspiration die improves to a d10.' },
     asi(12),
-    { level: 13, name: 'Song of Rest (d10)', description: 'Your rest-healing die improves.' },
-    { level: 14, name: 'Magical Secrets', description: 'Learn two spells from any class list; gain a College feature.' },
-    { level: 15, name: 'Bardic Inspiration (d12)', description: 'Your inspiration die improves to its maximum.' },
+    { level: 14, name: 'Subclass feature', description: 'Gain a feature from your Bard College.' },
     asi(16),
-    { level: 17, name: 'Song of Rest (d12)', description: 'Your rest-healing die reaches its maximum.' },
-    { level: 18, name: 'Magical Secrets', description: 'Learn two more spells from any class list.' },
-    asi(19),
-    { level: 20, name: 'Superior Inspiration', description: 'Regain one use of Bardic Inspiration when you roll initiative with none left.' }
+    { level: 18, name: 'Superior Inspiration', description: 'Regain one expended use of Bardic Inspiration whenever you roll Initiative with none left; your inspiration die improves to a d12.' },
+    epicBoon(),
+    { level: 20, name: 'Words of Creation', description: 'Cast Power Word Heal and Power Word Kill each once, without a spell slot, regaining the ability on a Long Rest.' }
   ],
   cleric: [
-    { level: 1, name: 'Spellcasting', description: 'Cast cleric spells using Wisdom.' },
-    { level: 1, name: 'Divine Domain', description: 'Choose a divine domain, granting domain spells and features.' },
-    { level: 2, name: 'Channel Divinity (1/rest)', description: 'Fuel a divine effect, including Turn Undead and a domain option.' },
-    { level: 3, name: 'Domain Feature', description: 'Gain a feature from your Divine Domain.' },
+    { level: 1, name: 'Spellcasting', description: 'Cast cleric spells using Wisdom, with a Holy Symbol as your focus.' },
+    { level: 1, name: 'Divine Order', description: 'Choose Protector (Martial weapon and Heavy armor training) or Thaumaturge (an extra cantrip and a bonus to Arcana/Religion checks).' },
+    { level: 2, name: 'Channel Divinity', description: 'Twice per rest, fuel Divine Spark (ranged heal-or-harm) or Turn Undead — more uses at higher levels.' },
     asi(4),
-    { level: 5, name: 'Destroy Undead (CR ½)', description: 'Turned undead of low CR are destroyed instead of fleeing.' },
-    { level: 6, name: 'Channel Divinity (2/rest)', description: 'Use Channel Divinity twice between rests; gain a Domain feature.' },
-    { level: 8, name: 'Destroy Undead (CR 1)', description: 'Turned undead threshold increases; gain a Domain feature.' },
-    { level: 10, name: 'Divine Intervention', description: 'Call on your deity for a miracle, once per long rest.' },
-    { level: 11, name: 'Destroy Undead (CR 2)', description: 'Turned undead threshold increases further.' },
+    { level: 5, name: 'Sear Undead', description: 'Whenever you use Turn Undead, deal Radiant damage (based on your Wisdom modifier) to each Undead that fails its save.' },
+    { level: 7, name: 'Blessed Strikes', description: 'Choose Divine Strike (extra necrotic/radiant damage on a weapon hit) or Potent Spellcasting (add Wisdom to cantrip damage).' },
+    asi(8),
+    { level: 10, name: 'Divine Intervention', description: 'Cast any cleric spell of 5th level or lower without a slot or material components, once per Long Rest.' },
     asi(12),
-    { level: 14, name: 'Destroy Undead (CR 3)', description: 'Turned undead threshold increases further.' },
+    { level: 14, name: 'Improved Blessed Strikes', description: 'Your Blessed Strikes option grows more powerful.' },
     asi(16),
-    { level: 17, name: 'Destroy Undead (CR 4)', description: 'Turned undead threshold increases further; gain a Domain feature.' },
-    { level: 18, name: 'Channel Divinity (3/rest)', description: 'Use Channel Divinity three times between rests.' },
-    asi(19),
-    { level: 20, name: 'Divine Intervention Improvement', description: 'Your Divine Intervention succeeds automatically.' }
+    { level: 17, name: 'Subclass feature', description: 'Gain a feature from your Divine Domain.' },
+    epicBoon(),
+    { level: 20, name: 'Greater Divine Intervention', description: 'Your Divine Intervention can call on Wish, though doing so locks the feature for 2d4 Long Rests.' }
   ],
   druid: [
-    { level: 1, name: 'Druidic', description: 'You know the secret language of druids.' },
-    { level: 1, name: 'Spellcasting', description: 'Cast druid spells using Wisdom.' },
-    { level: 2, name: 'Wild Shape', description: 'Transform into a beast with a challenge rating of 1/4 or lower, no flying or swimming speed, twice per short rest.' },
-    { level: 2, name: 'Druid Circle', description: 'Choose a druid subclass.' },
-    { level: 4, name: 'Wild Shape Improvement', description: 'Wild Shape into a beast with a challenge rating of 1/2 or lower — a swimming speed is now allowed, but not a flying one.' },
+    { level: 1, name: 'Spellcasting', description: 'Cast druid spells using Wisdom, with a Druidic Focus.' },
+    { level: 1, name: 'Druidic', description: 'You know Druidic, the secret language of druids, and always have Speak with Animals prepared.' },
+    { level: 1, name: 'Primal Order', description: 'Choose Magician (an extra cantrip and a bonus to Arcana/Nature checks) or Warden (Martial weapon and Medium armor training).' },
+    { level: 2, name: 'Wild Shape', description: 'Bonus Action to shape-shift into a known Beast form, twice per rest — more known forms and higher CR at higher levels.' },
+    { level: 2, name: 'Wild Companion', description: 'Expend a spell slot or Wild Shape use to cast Find Familiar (Fey, gone after a Long Rest) without material components.' },
     asi(4),
-    { level: 6, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
-    { level: 8, name: 'Wild Shape Improvement', description: 'Wild Shape into a beast with a challenge rating of 1 or lower — a flying speed is now allowed.' },
+    { level: 5, name: 'Wild Resurgence', description: 'Once per turn, spend a spell slot for a Wild Shape use, or vice versa (the spell-slot conversion once per Long Rest).' },
+    { level: 7, name: 'Elemental Fury', description: 'Choose Potent Spellcasting (add Wisdom to cantrip damage) or Primal Strike (extra elemental damage on a hit, including in Wild Shape).' },
     asi(8),
-    { level: 10, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
+    { level: 15, name: 'Improved Elemental Fury', description: 'Your Elemental Fury option grows more powerful.' },
     asi(12),
-    { level: 14, name: 'Circle Feature', description: 'Gain a feature from your Druid Circle.' },
+    { level: 14, name: 'Subclass feature', description: 'Gain a feature from your Druid Circle.' },
     asi(16),
-    { level: 18, name: 'Timeless Body', description: 'Age more slowly; also gain Beast Spells (cast while Wild Shaped).' },
-    asi(19),
-    { level: 20, name: 'Archdruid', description: 'Wild Shape an unlimited number of times.' }
+    { level: 18, name: 'Beast Spells', description: 'Cast spells while Wild Shaped, other than ones with a costly or consumed material component.' },
+    epicBoon(),
+    { level: 20, name: 'Archdruid', description: 'Regain a Wild Shape use on rolling Initiative with none left, convert unused Wild Shapes into a spell slot once per Long Rest, and age more slowly.' }
   ],
   fighter: [
-    { level: 1, name: 'Fighting Style', description: 'Adopt a specialized style of combat.' },
-    { level: 1, name: 'Second Wind', description: 'Regain HP as a bonus action, once per short rest.' },
-    { level: 2, name: 'Action Surge (1 use)', description: 'Take one additional action on your turn, once per short rest.' },
-    { level: 3, name: 'Martial Archetype', description: 'Choose a fighter subclass.' },
+    { level: 1, name: 'Fighting Style', description: 'Gain a Fighting Style feat; swap it for a different one whenever you gain a Fighter level.' },
+    { level: 1, name: 'Second Wind', description: 'Bonus Action to regain 1d10 + Fighter level HP, twice per rest.' },
+    { level: 1, name: 'Weapon Mastery', description: 'Use the mastery property of three kinds of Simple or Martial weapons; swap one after a Long Rest.' },
+    { level: 2, name: 'Action Surge', description: 'Take one additional action on your turn (not the Magic action), once per rest.' },
+    { level: 2, name: 'Tactical Mind', description: 'Expend a Second Wind use to add 1d10 to a failed ability check instead of healing.' },
     asi(4),
-    { level: 5, name: 'Extra Attack (1)', description: 'Attack twice, instead of once, whenever you take the Attack action.' },
+    { level: 5, name: 'Extra Attack', description: 'Attack twice, instead of once, whenever you take the Attack action.' },
+    { level: 5, name: 'Tactical Shift', description: 'Move up to half your Speed without provoking Opportunity Attacks whenever you use Second Wind as a Bonus Action.' },
     asi(6),
-    { level: 7, name: 'Archetype Feature', description: 'Gain a feature from your Martial Archetype.' },
+    { level: 7, name: 'Subclass feature', description: 'Gain a feature from your Fighter subclass.' },
     asi(8),
-    { level: 9, name: 'Indomitable (1 use)', description: 'Reroll a failed saving throw, once per long rest.' },
-    { level: 10, name: 'Archetype Feature', description: 'Gain a feature from your Martial Archetype.' },
-    { level: 11, name: 'Extra Attack (2)', description: 'Attack three times whenever you take the Attack action.' },
+    { level: 9, name: 'Indomitable', description: 'Reroll a failed saving throw (adding your Fighter level), once per Long Rest — more uses at higher levels.' },
+    { level: 9, name: 'Tactical Master', description: 'Replace a weapon\'s mastery property with Push, Sap, or Slow for one attack.' },
+    { level: 10, name: 'Subclass feature', description: 'Gain a feature from your Fighter subclass.' },
+    { level: 11, name: 'Two Extra Attacks', description: 'Attack three times, instead of once, whenever you take the Attack action.' },
     asi(12),
-    { level: 13, name: 'Indomitable (2 uses)', description: 'Use Indomitable twice per long rest.' },
+    { level: 13, name: 'Studied Attacks', description: 'Advantage on your next attack roll against a creature you missed with your last attack.' },
     asi(14),
-    { level: 15, name: 'Archetype Feature', description: 'Gain a feature from your Martial Archetype.' },
+    { level: 15, name: 'Subclass feature', description: 'Gain a feature from your Fighter subclass.' },
     asi(16),
-    { level: 17, name: 'Action Surge (2 uses)', description: 'Use Action Surge twice per short rest; Indomitable improves to three uses.' },
-    { level: 18, name: 'Archetype Feature', description: 'Gain a feature from your Martial Archetype.' },
-    asi(19),
-    { level: 20, name: 'Extra Attack (3)', description: 'Attack four times whenever you take the Attack action.' }
+    { level: 17, name: 'Action Surge (two uses)', description: 'Use Action Surge twice per rest (but only once on a single turn); Indomitable improves to three uses.' },
+    { level: 18, name: 'Subclass feature', description: 'Gain a feature from your Fighter subclass.' },
+    epicBoon(),
+    { level: 20, name: 'Three Extra Attacks', description: 'Attack four times, instead of once, whenever you take the Attack action.' }
   ],
   monk: [
-    { level: 1, name: 'Unarmored Defense', description: 'AC = 10 + Dex mod + Wis mod while unarmored.' },
-    { level: 1, name: 'Martial Arts', description: 'Use Dex for unarmed strikes/monk weapons; bonus unarmed strike.' },
-    { level: 2, name: 'Ki', description: 'Spend ki points to fuel Flurry of Blows, Patient Defense, Step of the Wind.' },
-    { level: 2, name: 'Unarmored Movement', description: '+10 ft speed while unarmored.' },
-    { level: 3, name: 'Monastic Tradition', description: 'Choose a monk subclass.' },
-    { level: 3, name: 'Deflect Missiles', description: 'Reduce and possibly catch and throw back ranged weapon damage.' },
-    { level: 4, name: 'Slow Fall', description: 'Reduce falling damage with a reaction.' },
+    { level: 1, name: 'Martial Arts', description: 'Bonus Action unarmed strike, Dexterity for unarmed/Monk weapon attacks, and a Martial Arts die in place of normal damage.' },
+    { level: 1, name: 'Unarmored Defense', description: 'AC = 10 + Dex mod + Wis mod while unarmored and shieldless.' },
+    { level: 2, name: 'Monk\'s Focus', description: 'Spend Focus Points to fuel Flurry of Blows, Patient Defense, and Step of the Wind.' },
+    { level: 2, name: 'Unarmored Movement', description: '+10 ft speed while unarmored and shieldless — the bonus grows at higher levels.' },
+    { level: 2, name: 'Uncanny Metabolism', description: 'Regain all Focus Points and some HP when you roll Initiative, once per Long Rest.' },
+    { level: 3, name: 'Deflect Attacks', description: 'Reaction to reduce physical damage from a hit, potentially redirecting some of it back at an attacker.' },
     asi(4),
-    { level: 5, name: 'Extra Attack', description: 'Attack twice whenever you take the Attack action.' },
-    { level: 5, name: 'Stunning Strike', description: 'Spend a ki point to attempt to stun a creature you hit.' },
-    { level: 6, name: 'Ki-Empowered Strikes', description: 'Unarmed strikes count as magical; gain a Tradition feature.' },
-    { level: 7, name: 'Evasion', description: 'Take no damage on a successful Dex save against an area effect.' },
-    { level: 7, name: 'Stillness of Mind', description: 'Spend your action to end being charmed or frightened.' },
+    { level: 4, name: 'Slow Fall', description: 'Reaction to reduce falling damage by five times your Monk level.' },
+    { level: 5, name: 'Extra Attack', description: 'Attack twice, instead of once, whenever you take the Attack action.' },
+    { level: 5, name: 'Stunning Strike', description: 'Spend a Focus Point on a hit to force a Constitution save or Stun the target.' },
+    { level: 6, name: 'Empowered Strikes', description: 'Your Unarmed Strikes can deal Force damage instead of their normal type.' },
+    { level: 7, name: 'Evasion', description: 'Take no damage on a successful Dexterity save against a half-damage effect, half on a failure.' },
     asi(8),
-    { level: 9, name: 'Unarmored Movement Improvement', description: 'Move along vertical surfaces and across liquids.' },
-    { level: 10, name: 'Purity of Body', description: 'Immune to disease and poison.' },
-    { level: 11, name: 'Tradition Feature', description: 'Gain a feature from your Monastic Tradition.' },
+    { level: 9, name: 'Acrobatic Movement', description: 'Move along vertical surfaces and across liquids without falling, while unarmored and shieldless.' },
+    { level: 10, name: 'Heightened Focus', description: 'Flurry of Blows, Patient Defense, and Step of the Wind gain stronger effects when fueled with a Focus Point.' },
+    { level: 10, name: 'Self-Restoration', description: 'End Charmed, Frightened, or Poisoned on yourself at the end of your turn; forgoing food/drink no longer causes Exhaustion.' },
+    { level: 11, name: 'Subclass feature', description: 'Gain a feature from your Monk subclass.' },
     asi(12),
-    { level: 13, name: 'Tongue of the Sun and Moon', description: 'Understand and be understood by any spoken language.' },
-    { level: 14, name: 'Diamond Soul', description: 'Proficiency in all saving throws.' },
-    { level: 15, name: 'Timeless Body', description: 'Age more slowly, no longer need food or water.' },
+    { level: 13, name: 'Deflect Energy', description: 'Deflect Attacks now works against any damage type, not just physical.' },
+    { level: 14, name: 'Disciplined Survivor', description: 'Proficiency in all saving throws; spend a Focus Point to reroll a failed one.' },
+    { level: 15, name: 'Perfect Focus', description: 'Regain Focus Points up to 4 whenever you roll Initiative with 3 or fewer and don\'t use Uncanny Metabolism.' },
     asi(16),
-    { level: 17, name: 'Tradition Feature', description: 'Gain a feature from your Monastic Tradition.' },
-    { level: 18, name: 'Empty Body', description: 'Turn invisible and resistant to all but force damage, or cast astral projection.' },
-    asi(19),
-    { level: 20, name: 'Perfect Self', description: 'Regain 4 ki points when you roll initiative with none left.' }
+    { level: 17, name: 'Subclass feature', description: 'Gain a feature from your Monk subclass.' },
+    { level: 18, name: 'Superior Defense', description: 'Spend 3 Focus Points for Resistance to all but Force damage for 1 minute.' },
+    epicBoon(),
+    { level: 20, name: 'Body and Mind', description: 'Dexterity and Wisdom scores increase by 4, to a maximum of 25.' }
   ],
   paladin: [
-    { level: 1, name: 'Divine Sense', description: 'Detect celestials, fiends, and undead nearby.' },
-    { level: 1, name: 'Lay on Hands', description: 'A pool of HP you can distribute by touch to heal.' },
-    { level: 2, name: 'Fighting Style', description: 'Adopt a specialized style of combat.' },
-    { level: 2, name: 'Spellcasting', description: 'Cast paladin spells using Charisma.' },
-    { level: 2, name: 'Divine Smite', description: 'Expend a spell slot to deal extra radiant damage on a melee hit.' },
-    { level: 3, name: 'Divine Health', description: 'Immune to disease.' },
-    { level: 3, name: 'Sacred Oath', description: 'Choose a paladin subclass.' },
+    { level: 1, name: 'Lay on Hands', description: 'A healing pool (5 × Paladin level HP) you can distribute by touch, or spend to cure Poisoned.' },
+    { level: 1, name: 'Spellcasting', description: 'Cast paladin spells using Charisma, with a Holy Symbol as your focus.' },
+    { level: 1, name: 'Weapon Mastery', description: 'Use the mastery property of two kinds of weapons you\'re proficient with; swap them after a Long Rest.' },
+    { level: 2, name: 'Fighting Style', description: 'Gain a Fighting Style feat, or the Blessed Warrior option (two Cleric cantrips castable as Paladin spells).' },
+    { level: 2, name: 'Paladin\'s Smite', description: 'Always have Divine Smite prepared; cast it once per Long Rest without expending a spell slot.' },
+    { level: 3, name: 'Channel Divinity', description: 'Twice per rest, fuel Divine Sense (detect celestials/fiends/undead) or a subclass option.' },
     asi(4),
-    { level: 5, name: 'Extra Attack', description: 'Attack twice whenever you take the Attack action.' },
-    { level: 6, name: 'Aura of Protection', description: 'You and nearby allies add your Charisma modifier to saving throws.' },
-    { level: 7, name: 'Oath Feature', description: 'Gain a feature from your Sacred Oath.' },
+    { level: 5, name: 'Extra Attack', description: 'Attack twice, instead of once, whenever you take the Attack action.' },
+    { level: 5, name: 'Faithful Steed', description: 'Always have Find Steed prepared; cast it once per Long Rest without expending a spell slot.' },
+    { level: 6, name: 'Aura of Protection', description: 'You and allies within 10 feet add your Charisma modifier to saving throws.' },
+    { level: 7, name: 'Subclass feature', description: 'Gain a feature from your Paladin subclass.' },
     asi(8),
-    { level: 10, name: 'Aura of Courage', description: 'You and nearby allies can’t be frightened while you’re conscious.' },
-    { level: 11, name: 'Improved Divine Smite', description: 'Your melee weapon strikes deal extra radiant damage.' },
+    { level: 9, name: 'Abjure Foes', description: 'Expend a Channel Divinity use to Frighten several nearby creatures with a Wisdom save.' },
+    { level: 10, name: 'Aura of Courage', description: 'You and allies in your Aura of Protection are immune to the Frightened condition.' },
+    { level: 11, name: 'Radiant Strikes', description: 'Your melee weapon and Unarmed Strike hits deal extra Radiant damage.' },
     asi(12),
-    { level: 14, name: 'Cleansing Touch', description: 'Expend a spell slot to end one spell affecting you or a willing creature.' },
-    { level: 15, name: 'Oath Feature', description: 'Gain a feature from your Sacred Oath.' },
+    { level: 14, name: 'Restoring Touch', description: 'Lay on Hands can also remove Blinded, Charmed, Deafened, Frightened, Paralyzed, or Stunned.' },
+    { level: 15, name: 'Subclass feature', description: 'Gain a feature from your Paladin subclass.' },
     asi(16),
-    { level: 18, name: 'Aura Improvements', description: 'Your auras’ range increases to 30 feet.' },
-    asi(19),
-    { level: 20, name: 'Oath Feature (Capstone)', description: 'Gain your Sacred Oath’s capstone feature.' }
+    { level: 18, name: 'Aura Expansion', description: 'Your Aura of Protection\'s range increases to 30 feet.' },
+    epicBoon(),
+    { level: 20, name: 'Subclass feature', description: 'Gain your Paladin subclass\'s capstone feature.' }
   ],
   ranger: [
-    { level: 1, name: 'Favored Enemy', description: 'Advantage tracking and recalling lore about a chosen enemy type.' },
-    { level: 1, name: 'Natural Explorer', description: 'Gain benefits while traveling in a favored terrain.' },
-    { level: 2, name: 'Fighting Style', description: 'Adopt a specialized style of combat.' },
-    { level: 2, name: 'Spellcasting', description: 'Cast ranger spells using Wisdom.' },
-    { level: 3, name: 'Ranger Archetype', description: 'Choose a ranger subclass.' },
-    { level: 3, name: 'Primeval Awareness', description: 'Expend a spell slot to sense certain creature types nearby.' },
+    { level: 1, name: 'Spellcasting', description: 'Cast ranger spells using Wisdom, with a Druidic Focus.' },
+    { level: 1, name: 'Favored Enemy', description: 'Always have Hunter\'s Mark prepared; cast it without a spell slot a number of times per Long Rest that grows with level.' },
+    { level: 1, name: 'Weapon Mastery', description: 'Use the mastery property of two kinds of weapons you\'re proficient with; swap them after a Long Rest.' },
+    { level: 2, name: 'Deft Explorer', description: 'Gain Expertise in one skill proficiency, plus two languages of your choice.' },
+    { level: 2, name: 'Fighting Style', description: 'Gain a Fighting Style feat, or the Druidic Warrior option (two Druid cantrips castable as Ranger spells).' },
     asi(4),
-    { level: 5, name: 'Extra Attack', description: 'Attack twice whenever you take the Attack action.' },
-    { level: 6, name: 'Favored Enemy & Explorer Improvement', description: 'Gain an additional favored enemy and favored terrain.' },
-    { level: 7, name: 'Archetype Feature', description: 'Gain a feature from your Ranger Archetype.' },
-    { level: 8, name: 'Land’s Stride', description: 'Move through nonmagical difficult terrain without cost.' },
+    { level: 5, name: 'Extra Attack', description: 'Attack twice, instead of once, whenever you take the Attack action.' },
+    { level: 6, name: 'Roving', description: '+10 ft Speed while not wearing Heavy armor, plus a Climb Speed and Swim Speed equal to your Speed.' },
+    { level: 7, name: 'Subclass feature', description: 'Gain a feature from your Ranger subclass.' },
     asi(8),
-    { level: 10, name: 'Natural Explorer Improvement', description: 'Gain another favored terrain; also Hide in Plain Sight.' },
-    { level: 11, name: 'Archetype Feature', description: 'Gain a feature from your Ranger Archetype.' },
+    { level: 9, name: 'Expertise', description: 'Double your proficiency bonus for two skill proficiencies of your choice.' },
+    { level: 10, name: 'Tireless', description: 'Grant yourself Temporary Hit Points a few times per Long Rest, and shed a level of Exhaustion on a Short Rest.' },
+    { level: 11, name: 'Subclass feature', description: 'Gain a feature from your Ranger subclass.' },
     asi(12),
-    { level: 14, name: 'Vanish', description: 'Hide as a bonus action; can’t be tracked non-magically.' },
-    { level: 15, name: 'Archetype Feature', description: 'Gain a feature from your Ranger Archetype.' },
+    { level: 13, name: 'Relentless Hunter', description: 'Taking damage can\'t break your Concentration on Hunter\'s Mark.' },
+    { level: 14, name: 'Nature\'s Veil', description: 'Bonus Action to turn Invisible until the end of your next turn, a few times per Long Rest.' },
+    { level: 15, name: 'Subclass feature', description: 'Gain a feature from your Ranger subclass.' },
     asi(16),
-    { level: 18, name: 'Feral Senses', description: 'Fight invisible creatures without disadvantage.' },
-    asi(19),
-    { level: 20, name: 'Foe Slayer', description: 'Add your Wisdom modifier to one attack or damage roll per turn against a favored enemy.' }
+    { level: 17, name: 'Precise Hunter', description: 'Advantage on attack rolls against the creature marked by your Hunter\'s Mark.' },
+    { level: 18, name: 'Feral Senses', description: 'Gain Blindsight with a range of 30 feet.' },
+    epicBoon(),
+    { level: 20, name: 'Foe Slayer', description: 'Hunter\'s Mark\'s damage die becomes a d10 instead of a d6.' }
   ],
   rogue: [
-    { level: 1, name: 'Expertise', description: 'Double your proficiency bonus for two chosen skill proficiencies.' },
+    { level: 1, name: 'Expertise', description: 'Double your proficiency bonus for two skill proficiencies of your choice.' },
     {
       level: 1,
       name: 'Sneak Attack',
       description:
-        'Once per turn, deal an extra 1d6 damage (see the Combat tab for your current total, which grows every two Rogue levels) to one creature you hit with an attack using a Finesse or Ranged weapon, if you have advantage on the attack roll. You don’t need advantage if another enemy of the target is within 5 feet of it, that enemy isn’t incapacitated, and you don’t have disadvantage on the attack roll.'
+        'Once per turn, deal extra damage (see the Combat tab for your current total, which grows every two Rogue levels) to a creature you hit with a Finesse or Ranged weapon while you have advantage — or, without advantage, if an ally is adjacent to the target and neither of you has disadvantage.'
     },
-    { level: 1, name: 'Thieves’ Cant', description: 'A secret mix of dialect, jargon, and code.' },
-    { level: 2, name: 'Cunning Action', description: 'Dash, Disengage, or Hide as a bonus action.' },
-    { level: 3, name: 'Roguish Archetype', description: 'Choose a rogue subclass.' },
+    { level: 1, name: 'Thieves\' Cant', description: 'You know Thieves\' Cant and one other language of your choice.' },
+    { level: 1, name: 'Weapon Mastery', description: 'Use the mastery property of two kinds of weapons you\'re proficient with; swap them after a Long Rest.' },
+    { level: 2, name: 'Cunning Action', description: 'Bonus Action to Dash, Disengage, or Hide.' },
+    { level: 3, name: 'Steady Aim', description: 'Bonus Action for advantage on your next attack this turn, if you haven\'t moved (your Speed becomes 0 afterward).' },
     asi(4),
-    { level: 5, name: 'Uncanny Dodge', description: 'Halve the damage of one attack that hits you, as a reaction.' },
-    { level: 6, name: 'Expertise', description: 'Double your proficiency bonus for two more skill proficiencies.' },
-    { level: 7, name: 'Evasion', description: 'Take no damage on a successful Dex save against an area effect.' },
+    { level: 5, name: 'Cunning Strike', description: 'Forgo Sneak Attack dice for an extra effect (Poison, Trip, or Withdraw) when you deal Sneak Attack damage.' },
+    { level: 5, name: 'Uncanny Dodge', description: 'Reaction to halve the damage of an attack that hits you.' },
+    { level: 6, name: 'Expertise', description: 'Double your proficiency bonus for two more skill proficiencies of your choice.' },
+    { level: 7, name: 'Evasion', description: 'Take no damage on a successful Dexterity save against a half-damage effect, half on a failure.' },
+    { level: 7, name: 'Reliable Talent', description: 'Treat a d20 roll of 9 or lower as a 10 for checks using a skill or tool proficiency.' },
     asi(8),
-    { level: 9, name: 'Archetype Feature', description: 'Gain a feature from your Roguish Archetype.' },
+    { level: 9, name: 'Subclass feature', description: 'Gain a feature from your Rogue subclass.' },
     asi(10),
-    { level: 11, name: 'Reliable Talent', description: 'Treat any proficient ability check d20 roll of 9 or lower as a 10.' },
+    { level: 11, name: 'Improved Cunning Strike', description: 'Use up to two Cunning Strike effects on the same Sneak Attack, paying each die cost.' },
     asi(12),
-    { level: 13, name: 'Archetype Feature', description: 'Gain a feature from your Roguish Archetype.' },
-    { level: 14, name: 'Blindsense', description: 'Sense hidden or invisible creatures within 10 feet.' },
-    { level: 15, name: 'Slippery Mind', description: 'Gain proficiency in Wisdom saving throws.' },
+    { level: 13, name: 'Subclass feature', description: 'Gain a feature from your Rogue subclass.' },
+    { level: 14, name: 'Devious Strikes', description: 'Gain the Daze, Knock Out, and Obscure Cunning Strike options.' },
+    { level: 15, name: 'Slippery Mind', description: 'Gain proficiency in Wisdom and Charisma saving throws.' },
     asi(16),
-    { level: 17, name: 'Archetype Feature', description: 'Gain a feature from your Roguish Archetype.' },
-    { level: 18, name: 'Elusive', description: 'No attack roll has advantage against you while you aren’t incapacitated.' },
-    asi(19),
-    { level: 20, name: 'Stroke of Luck', description: 'Turn a miss into a hit, or a failed check into a 20, once per short rest.' }
+    { level: 17, name: 'Subclass feature', description: 'Gain a feature from your Rogue subclass.' },
+    { level: 18, name: 'Elusive', description: 'No attack roll can have advantage against you unless you\'re Incapacitated.' },
+    epicBoon(),
+    { level: 20, name: 'Stroke of Luck', description: 'Turn a failed D20 Test into a 20, once per Short or Long Rest.' }
   ],
   sorcerer: [
-    { level: 1, name: 'Spellcasting', description: 'Cast sorcerer spells using Charisma.' },
-    { level: 1, name: 'Sorcerous Origin', description: 'Choose a sorcerer subclass.' },
-    { level: 2, name: 'Font of Magic', description: 'Gain sorcery points, convertible to and from spell slots.' },
-    { level: 3, name: 'Metamagic', description: 'Learn two ways to twist your spells to suit your needs.' },
+    { level: 1, name: 'Spellcasting', description: 'Cast sorcerer spells using Charisma, with an Arcane Focus.' },
+    { level: 1, name: 'Innate Sorcery', description: 'Bonus Action for advantage on your spell attack rolls and +1 to your spell save DC, for 1 minute, twice per Long Rest.' },
+    { level: 2, name: 'Font of Magic', description: 'Gain Sorcery Points, convertible to and from spell slots.' },
+    { level: 2, name: 'Metamagic', description: 'Learn two ways to twist your spells to suit your needs.' },
     asi(4),
-    { level: 6, name: 'Origin Feature', description: 'Gain a feature from your Sorcerous Origin.' },
+    { level: 5, name: 'Sorcerous Restoration', description: 'Regain some Sorcery Points on a Short Rest, once per Long Rest.' },
+    { level: 6, name: 'Subclass feature', description: 'Gain a feature from your Sorcerer subclass.' },
+    { level: 7, name: 'Sorcery Incarnate', description: 'Reactivate Innate Sorcery for Sorcery Points; use two Metamagic options per spell while it\'s active.' },
     asi(8),
-    { level: 10, name: 'Metamagic', description: 'Learn an additional Metamagic option.' },
+    { level: 10, name: 'Metamagic', description: 'Learn two additional Metamagic options.' },
     asi(12),
-    { level: 14, name: 'Origin Feature', description: 'Gain a feature from your Sorcerous Origin.' },
+    { level: 14, name: 'Subclass feature', description: 'Gain a feature from your Sorcerer subclass.' },
     asi(16),
-    { level: 17, name: 'Metamagic', description: 'Learn an additional Metamagic option.' },
-    { level: 18, name: 'Origin Feature', description: 'Gain a feature from your Sorcerous Origin.' },
-    asi(19),
-    { level: 20, name: 'Sorcerous Restoration', description: 'Regain 4 sorcery points on a short rest.' }
+    { level: 17, name: 'Metamagic', description: 'Learn two additional Metamagic options.' },
+    { level: 18, name: 'Subclass feature', description: 'Gain a feature from your Sorcerer subclass.' },
+    epicBoon(),
+    { level: 20, name: 'Arcane Apotheosis', description: 'Use one Metamagic option per turn for free while Innate Sorcery is active.' }
   ],
   warlock: [
-    { level: 1, name: 'Otherworldly Patron', description: 'Choose the being that granted you power.' },
-    { level: 1, name: 'Pact Magic', description: 'Cast warlock spells using Charisma; slots recharge on a short rest.' },
-    { level: 2, name: 'Eldritch Invocations', description: 'Learn eldritch secrets that grant magical benefits.' },
-    { level: 3, name: 'Pact Boon', description: 'Choose a boon from your patron: Blade, Chain, or Tome.' },
+    { level: 1, name: 'Eldritch Invocations', description: 'Learn eldritch secrets that grant magical benefits — more at higher levels.' },
+    { level: 1, name: 'Pact Magic', description: 'Cast warlock spells using Charisma, all at the same (highest available) slot level; slots recharge on a Short or Long Rest.' },
+    { level: 2, name: 'Magical Cunning', description: 'Spend 1 minute to regain some Pact Magic slots, once per Long Rest.' },
     asi(4),
-    { level: 6, name: 'Patron Feature', description: 'Gain a feature from your Otherworldly Patron.' },
+    { level: 6, name: 'Subclass feature', description: 'Gain a feature from your Otherworldly Patron.' },
     asi(8),
-    { level: 10, name: 'Patron Feature', description: 'Gain a feature from your Otherworldly Patron.' },
+    { level: 9, name: 'Contact Patron', description: 'Always have Contact Other Plane prepared; cast it without a slot (auto-succeeding its save) once per Long Rest.' },
+    { level: 10, name: 'Subclass feature', description: 'Gain a feature from your Otherworldly Patron.' },
     { level: 11, name: 'Mystic Arcanum (6th level)', description: 'Learn a 6th-level spell you can cast once per long rest without a slot.' },
     asi(12),
     { level: 13, name: 'Mystic Arcanum (7th level)', description: 'Learn a 7th-level spell you can cast once per long rest without a slot.' },
-    { level: 14, name: 'Patron Feature', description: 'Gain a feature from your Otherworldly Patron.' },
+    { level: 14, name: 'Subclass feature', description: 'Gain a feature from your Otherworldly Patron.' },
     { level: 15, name: 'Mystic Arcanum (8th level)', description: 'Learn an 8th-level spell you can cast once per long rest without a slot.' },
     asi(16),
     { level: 17, name: 'Mystic Arcanum (9th level)', description: 'Learn a 9th-level spell you can cast once per long rest without a slot.' },
-    asi(19),
-    { level: 20, name: 'Eldritch Master', description: 'Regain all expended Pact Magic slots once per long rest, outside of it.' }
+    epicBoon(),
+    { level: 20, name: 'Eldritch Master', description: 'Regain all expended Pact Magic slots whenever you use Magical Cunning.' }
   ],
   wizard: [
-    { level: 1, name: 'Spellcasting', description: 'Cast wizard spells using Intelligence, prepared from your spellbook.' },
-    { level: 1, name: 'Arcane Recovery', description: 'Recover expended spell slots once per day on a short rest.' },
-    { level: 2, name: 'Arcane Tradition', description: 'Choose a wizard subclass.' },
+    { level: 1, name: 'Spellcasting', description: 'Cast wizard spells using Intelligence, prepared from your spellbook, with an Arcane Focus or the spellbook itself.' },
+    { level: 1, name: 'Ritual Adept', description: 'Cast any Ritual-tagged spell in your spellbook as a Ritual, even if it isn\'t prepared, by reading from the book.' },
+    { level: 1, name: 'Arcane Recovery', description: 'Recover spell slots (combined level up to half your Wizard level, none 6th or higher) on a Short Rest, once per Long Rest.' },
+    { level: 2, name: 'Scholar', description: 'Gain Expertise in one of Arcana, History, Investigation, Medicine, Nature, or Religion.' },
     asi(4),
-    { level: 6, name: 'Tradition Feature', description: 'Gain a feature from your Arcane Tradition.' },
+    { level: 5, name: 'Memorize Spell', description: 'Swap one prepared spell for another from your spellbook on a Short Rest.' },
+    { level: 6, name: 'Subclass feature', description: 'Gain a feature from your Arcane Tradition.' },
     asi(8),
-    { level: 10, name: 'Tradition Feature', description: 'Gain a feature from your Arcane Tradition.' },
+    { level: 10, name: 'Subclass feature', description: 'Gain a feature from your Arcane Tradition.' },
     asi(12),
-    { level: 14, name: 'Tradition Feature', description: 'Gain a feature from your Arcane Tradition.' },
+    { level: 14, name: 'Subclass feature', description: 'Gain a feature from your Arcane Tradition.' },
     asi(16),
     { level: 18, name: 'Spell Mastery', description: 'Cast a chosen 1st- and 2nd-level spell at will without a slot.' },
-    asi(19),
-    { level: 20, name: 'Signature Spells', description: 'Always have two 3rd-level spells prepared, castable once each without a slot.' }
+    epicBoon(),
+    { level: 20, name: 'Signature Spells', description: 'Always have two 3rd-level spells prepared, castable once each without a slot per rest.' }
   ]
 }
 
@@ -768,9 +933,9 @@ export function fightingStyleSlotLevelsUpToLevel(className: string, level: numbe
     .map((f) => f.level)
 }
 
-/** Subclass-granted extra Fighting Style picks, on top of the base-class one above — SRD 2014's only case is the Fighter's Champion archetype, which gets a second pick (Additional Fighting Style) at 10th level. Keyed off the class's chosen subclass id (see shared/compendium.ts's CompendiumSubclass), not the class table, since this is archetype-specific rather than universal to the class. */
+/** Subclass-granted extra Fighting Style picks, on top of the base-class one above — the only case under SRD 5.2.1 is the Fighter's Champion subclass, which gets a second pick (Additional Fighting Style) at 7th level (2014's version of this was also a Champion feature, but at 10th). Keyed off the class's chosen subclass id (see shared/compendium.ts's CompendiumSubclass), not the class table, since this is subclass-specific rather than universal to the class. */
 export function subclassFightingStyleSlotLevelsUpToLevel(classId: string, subclassId: string | undefined, level: number): number[] {
-  if (classId === 'fighter' && subclassId === 'champion' && level >= 10) return [10]
+  if (classId === 'fighter' && subclassId === 'champion' && level >= 7) return [7]
   return []
 }
 
@@ -836,135 +1001,121 @@ export const METAMAGIC_OPTIONS: NamedOption[] = [
   { name: 'Twinned Spell', description: 'When you cast a spell that targets only one creature and doesn’t have a range of Self, target a second creature in range with the same spell (spell slot level twice, minus one, sorcery points if it doesn’t already target multiple). Costs a number of sorcery points equal to the spell’s level (1 for a cantrip).' }
 ]
 
-/** Metamagic options known grows at 3rd, 10th, and 17th level — 2 → 3 → 4 total, never fewer, never a re-pick of ones already known. */
+/** Metamagic options known grows at 2nd, 10th, and 17th level under SRD 5.2.1 — 2 → 4 → 6 total (two more each time), never fewer, never a re-pick of ones already known. */
 export function metamagicSlotCountAtLevel(level: number): number {
-  if (level >= 17) return 4
-  if (level >= 10) return 3
-  if (level >= 3) return 2
+  if (level >= 17) return 6
+  if (level >= 10) return 4
+  if (level >= 2) return 2
   return 0
 }
 
-/** Which class level unlocked the Nth Metamagic pick (0-indexed) — the first two both unlock at 3rd level, so this is purely for display ("Metamagic — Sorcerer 3"), not a dedup key the way an ASI slot's level is. */
+/** Which class level unlocked the Nth Metamagic pick (0-indexed) — the first two both unlock at 2nd level, so this is purely for display ("Metamagic — Sorcerer 2"), not a dedup key the way an ASI slot's level is. */
 export function metamagicSlotUnlockLevel(pickIndex: number): number {
-  return pickIndex < 2 ? 3 : pickIndex === 2 ? 10 : 17
+  return pickIndex < 2 ? 2 : pickIndex < 4 ? 10 : 17
 }
 
-/** SRD 2014 warlock Pact Boon — one of three, chosen once at 3rd level and never changed again by the class table itself. */
-export const PACT_BOON_OPTIONS: NamedOption[] = [
-  { name: 'Pact of the Chain', description: 'Learn the find familiar spell and can cast it as a ritual; when you cast it, you can choose one of three normally-unavailable forms (imp, pseudodragon, quasit, or sprite) for your familiar, which also gains the ability to attack.' },
-  { name: 'Pact of the Blade', description: 'Conjure a pact weapon in your hand as an action — any melee weapon you’re proficient with, which counts as magical for overcoming resistance. Dismiss it as a free action; conjuring it again while it’s not on your person returns it to your hand instead of creating a new one.' },
-  { name: 'Pact of the Tome', description: 'Your patron gives you a Book of Shadows. Choose three cantrips from any class’s spell list — they count as warlock spells for you and don’t count against your number of cantrips known.' }
-]
-
 export interface EldritchInvocationOption extends NamedOption {
-  /** Minimum warlock level required — 2, 5, 7, 9, 12, or 15 in the SRD. */
+  /** Minimum warlock level required — 1, 2, 5, 7, 9, 12, or 15 under SRD 5.2.1. */
   level: number
-  /** Requires having taken this exact Pact Boon (see PACT_BOON_OPTIONS) — undefined if the invocation has no pact requirement. */
-  prereqPact?: string
+  /** Requires already having taken the named invocation (Pact of the Blade/Chain/Tome are themselves ordinary invocations now, not a separate Pact Boon choice — see this file's dnd5e.ts doc history) — undefined if this invocation has no such prerequisite. */
+  prereqInvocation?: string
   /** Requires knowing this spell (compendium id) — every case in the SRD is eldritch-blast. */
   prereqSpell?: string
 }
 
-/** SRD 2014 warlock Eldritch Invocations — the full list, each gated by warlock level and (for some) a Pact Boon or known spell. */
+/**
+ * SRD 5.2.1 warlock Eldritch Invocations. 2024 folded the 2014 "Pact Boon"
+ * choice (Blade/Chain/Tome) directly into this list as three more
+ * invocations with no level prerequisite — there's no separate Pact Boon
+ * feature or chooser anymore, and several other invocations below require
+ * one of those three by name via `prereqInvocation` instead of a distinct
+ * pact-tracking field.
+ */
 export const ELDRITCH_INVOCATIONS: EldritchInvocationOption[] = [
-  { name: 'Agonizing Blast', level: 2, prereqSpell: 'eldritch-blast', description: 'When you cast eldritch blast, add your Charisma modifier to the damage it deals on a hit.' },
-  { name: 'Armor of Shadows', level: 2, description: 'You can cast mage armor on yourself at will, without expending a spell slot or material components.' },
-  { name: 'Beast Speech', level: 2, description: 'You can cast speak with animals at will, without expending a spell slot.' },
-  { name: 'Beguiling Influence', level: 2, description: 'You gain proficiency in the Deception and Persuasion skills.' },
+  { name: 'Agonizing Blast', level: 2, prereqSpell: 'eldritch-blast', description: 'Choose a known damage-dealing cantrip; add your Charisma modifier to its damage rolls. Repeatable for a different eligible cantrip.' },
+  { name: 'Armor of Shadows', level: 1, description: 'Cast Mage Armor on yourself without expending a spell slot.' },
+  { name: 'Ascendant Step', level: 5, description: 'Cast Levitate on yourself without expending a spell slot.' },
+  { name: "Devil's Sight", level: 2, description: 'See normally in Dim Light and Darkness — both magical and nonmagical — within 120 feet of yourself.' },
+  { name: 'Devouring Blade', level: 12, prereqInvocation: 'Thirsting Blade', description: "Thirsting Blade's Extra Attack now confers two extra attacks instead of one." },
+  { name: 'Eldritch Mind', level: 1, description: 'Advantage on Constitution saving throws to maintain Concentration.' },
   {
-    name: 'Book of Ancient Secrets',
-    level: 2,
-    prereqPact: 'Pact of the Tome',
+    name: 'Eldritch Smite',
+    level: 5,
+    prereqInvocation: 'Pact of the Blade',
     description:
-      "You can now inscribe magical rituals in your Book of Shadows. Choose two 1st-level spells that have the ritual tag from any class's spell list (the two needn't be from the same list). The spells appear in the book and don't count against the number of spells you know. With your Book of Shadows in hand, you can cast the chosen spells as rituals. You can't cast the spells except as rituals, unless you've learned them by some other means. You can also cast a warlock spell you know as a ritual if it has the ritual tag. On your adventures, you can add other ritual spells to your Book of Shadows. When you find such a spell, you can add it to the book if the spell's level is equal to or less than half your warlock level (rounded up) and if you can spare the time to transcribe the spell. For each level of the spell, the transcription process takes 2 hours and costs 50 gp for the rare inks needed to inscribe it."
+      'Once per turn on a hit with your pact weapon, expend a Pact Magic spell slot to deal an extra 1d8 Force damage (plus another 1d8 per slot level) and potentially knock the target Prone.'
   },
-  { name: "Devil's Sight", level: 2, description: 'You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet.' },
-  { name: 'Eldritch Sight', level: 2, description: 'You can cast detect magic at will, without expending a spell slot.' },
-  { name: 'Eldritch Spear', level: 2, prereqSpell: 'eldritch-blast', description: 'When you cast eldritch blast, its range is 300 feet.' },
-  { name: 'Eyes of the Rune Keeper', level: 2, description: 'You can read all writing.' },
+  { name: 'Eldritch Spear', level: 2, prereqSpell: 'eldritch-blast', description: "Choose a known damage-dealing cantrip with a range of 10+ feet; its range increases by 30 feet per Warlock level. Repeatable for a different eligible cantrip." },
   {
     name: 'Fiendish Vigor',
     level: 2,
-    description: 'You can cast false life on yourself at will as a 1st-level spell, without expending a spell slot or material components.'
+    description: 'Cast False Life on yourself without expending a spell slot, always getting the maximum Temporary Hit Points.'
   },
   {
     name: 'Gaze of Two Minds',
-    level: 2,
-    description:
-      "You can use your action to touch a willing humanoid and perceive through its senses until the end of your next turn. As long as the creature is on the same plane of existence as you, you can use your action on subsequent turns to maintain this connection, extending the duration until the end of your next turn. While perceiving through the other creature's senses, you benefit from any special senses possessed by that creature, and you are blinded and deafened to your own surroundings."
-  },
-  { name: 'Mask of Many Faces', level: 2, description: 'You can cast disguise self at will, without expending a spell slot.' },
-  { name: 'Misty Visions', level: 2, description: 'You can cast silent image at will, without expending a spell slot or material components.' },
-  {
-    name: 'Repelling Blast',
-    level: 2,
-    prereqSpell: 'eldritch-blast',
-    description: 'When you hit a creature with eldritch blast, you can push the creature up to 10 feet away from you in a straight line.'
-  },
-  { name: 'Thief of Five Fates', level: 2, description: "You can cast bane once using a warlock spell slot. You can't do so again until you finish a long rest." },
-  {
-    name: 'Voice of the Chain Master',
-    level: 2,
-    prereqPact: 'Pact of the Chain',
-    description:
-      "You can communicate telepathically with your familiar and perceive through your familiar's senses as long as you are on the same plane of existence. Additionally, while perceiving through your familiar's senses, you can also speak through your familiar in your own voice, even if your familiar is normally incapable of speech."
-  },
-  { name: 'Mire the Mind', level: 5, description: "You can cast slow once using a warlock spell slot. You can't do so again until you finish a long rest." },
-  {
-    name: 'One with Shadows',
     level: 5,
-    description: 'When you are in an area of dim light or darkness, you can use your action to become invisible until you move or take an action or a reaction.'
+    description:
+      "Bonus Action to touch a willing creature and perceive through its senses until the end of your next turn, extendable each turn with another Bonus Action; you can cast spells as if in either your space or theirs while within 60 feet of each other."
   },
-  { name: 'Sign of Ill Omen', level: 5, description: "You can cast bestow curse once using a warlock spell slot. You can't do so again until you finish a long rest." },
+  { name: 'Gift of the Depths', level: 5, description: 'Breathe underwater and gain a Swim Speed equal to your Speed; also cast Water Breathing once per Long Rest without a spell slot.' },
   {
-    name: 'Thirsting Blade',
-    level: 5,
-    prereqPact: 'Pact of the Blade',
-    description: 'You can attack with your pact weapon twice, instead of once, whenever you take the Attack action on your turn.'
-  },
-  { name: 'Bewitching Whispers', level: 7, description: "You can cast compulsion once using a warlock spell slot. You can't do so again until you finish a long rest." },
-  { name: 'Dreadful Word', level: 7, description: "You can cast confusion once using a warlock spell slot. You can't do so again until you finish a long rest." },
-  { name: 'Sculptor of Flesh', level: 7, description: "You can cast polymorph once using a warlock spell slot. You can't do so again until you finish a long rest." },
-  { name: 'Ascendant Step', level: 9, description: 'You can cast levitate on yourself at will, without expending a spell slot or material components.' },
-  {
-    name: 'Minions of Chaos',
+    name: 'Gift of the Protectors',
     level: 9,
-    description: "You can cast conjure elemental once using a warlock spell slot. You can't do so again until you finish a long rest."
+    prereqInvocation: 'Pact of the Tome',
+    description:
+      "Your Book of Shadows gains a page that can hold a few creatures' names; a named creature reduced to 0 HP drops to 1 HP instead, once per Long Rest across all named creatures."
   },
-  { name: 'Otherworldly Leap', level: 9, description: 'You can cast jump on yourself at will, without expending a spell slot or material components.' },
-  { name: 'Whispers of the Grave', level: 9, description: 'You can cast speak with dead at will, without expending a spell slot.' },
+  {
+    name: 'Investment of the Chain Master',
+    level: 5,
+    prereqInvocation: 'Pact of the Chain',
+    description: 'Your Find Familiar summon gains a Fly or Swim Speed, a Bonus Action attack, a damage-type swap, your spell save DC, and Resistance you can grant it as a Reaction.'
+  },
+  { name: 'Lessons of the First Ones', level: 2, description: 'Gain an Origin feat of your choice. Repeatable for a different Origin feat.' },
   {
     name: 'Lifedrinker',
-    level: 12,
-    prereqPact: 'Pact of the Blade',
-    description: 'When you hit a creature with your pact weapon, the creature takes extra necrotic damage equal to your Charisma modifier (minimum 1).'
+    level: 9,
+    prereqInvocation: 'Pact of the Blade',
+    description: 'Once per turn on a hit with your pact weapon, deal extra Necrotic, Psychic, or Radiant damage and can expend a Hit Point Die to heal.'
   },
+  { name: 'Mask of Many Faces', level: 2, description: 'Cast Disguise Self without expending a spell slot.' },
+  { name: 'Master of Myriad Forms', level: 5, description: 'Cast Alter Self without expending a spell slot.' },
+  { name: 'Misty Visions', level: 2, description: 'Cast Silent Image without expending a spell slot.' },
+  { name: 'One with Shadows', level: 5, description: 'While in Dim Light or Darkness, cast Invisibility on yourself without expending a spell slot.' },
+  { name: 'Otherworldly Leap', level: 2, description: 'Cast Jump on yourself without expending a spell slot.' },
   {
-    name: 'Chains of Carceri',
-    level: 15,
-    prereqPact: 'Pact of the Chain',
+    name: 'Pact of the Blade',
+    level: 1,
     description:
-      'You can cast hold monster at will--targeting a celestial, fiend, or elemental--without expending a spell slot or material components. You must finish a long rest before you can use this invocation on the same creature again.'
+      'Bonus Action to conjure (or bond with) a melee weapon, gaining proficiency with it, using it as a Spellcasting Focus, and using Charisma for its attack/damage rolls; it can deal Necrotic, Psychic, or Radiant damage instead of its normal type.'
   },
-  { name: 'Master of Myriad Forms', level: 15, description: 'You can cast alter self at will, without expending a spell slot.' },
-  { name: 'Visions of Distant Realms', level: 15, description: 'You can cast arcane eye at will, without expending a spell slot.' },
   {
-    name: 'Witch Sight',
-    level: 15,
-    description: 'You can see the true form of any shapechanger or creature concealed by illusion or transmutation magic while the creature is within 30 feet of you and within line of sight.'
-  }
+    name: 'Pact of the Chain',
+    level: 1,
+    description: 'Learn Find Familiar, castable as a Magic action without a spell slot, with access to several extra familiar forms; forgo an attack to let your familiar attack with its Reaction.'
+  },
+  {
+    name: 'Pact of the Tome',
+    level: 1,
+    description: 'Conjure a Book of Shadows granting three cantrips and two Ritual-tagged level 1 spells from any class list, always prepared as warlock spells while the book is on your person.'
+  },
+  { name: 'Repelling Blast', level: 2, prereqSpell: 'eldritch-blast', description: "Choose a known damage-dealing attack-roll cantrip; on a hit against a Large or smaller creature, push it up to 10 feet away. Repeatable for a different eligible cantrip." },
+  { name: 'Thirsting Blade', level: 5, prereqInvocation: 'Pact of the Blade', description: 'Attack twice with your pact weapon, instead of once, whenever you take the Attack action.' },
+  { name: 'Visions of Distant Realms', level: 9, description: 'Cast Arcane Eye without expending a spell slot.' },
+  { name: 'Whispers of the Grave', level: 7, description: 'Cast Speak with Dead without expending a spell slot.' },
+  { name: 'Witch Sight', level: 15, description: 'Gain Truesight with a range of 30 feet.' }
 ]
 
-/** Invocations known grows at 2nd, 5th, 7th, 9th, 11th, 14th, and 17th level — the standard SRD warlock progression (2 → 3 → 4 → 5 → 6 → 7 → 8), maxing out at 17th and never shrinking. */
+/** Invocations known grows steadily from 2nd through 20th level under SRD 5.2.1 — a much finer-grained table than 2014's, reflecting Pact of the Blade/Chain/Tome now costing an invocation slot each instead of being a separate free choice. */
 export function eldritchInvocationSlotCountAtLevel(level: number): number {
-  if (level >= 17) return 8
-  if (level >= 14) return 7
-  if (level >= 11) return 6
-  if (level >= 9) return 5
-  if (level >= 7) return 4
-  if (level >= 5) return 3
-  if (level >= 2) return 2
-  return 0
+  if (level >= 18) return 10
+  if (level >= 15) return 9
+  if (level >= 12) return 8
+  if (level >= 9) return 7
+  if (level >= 7) return 6
+  if (level >= 5) return 5
+  if (level >= 2) return 3
+  return 1
 }
 
 /** An AsiSlotChoice is "active" only while the class it belongs to is still at or above the level it resolves — lowering a class's level (not deleting the record) is enough to make it (and whatever it granted) disappear everywhere, and raising it back restores the exact same choice instead of forcing a re-pick. */
@@ -1481,6 +1632,8 @@ export interface CharacterSheetData {
   alignment: string
   experiencePoints: number
   appearance: Appearance
+  /** The chosen lineage/legacy for a species whose trait grants one (Elf's Elven Lineage, Gnome's Gnomish Lineage, Tiefling's Fiendish Legacy) — null for every other species, or before the player has picked. See RACE_LINEAGES/raceLineageOptions. */
+  raceLineageChoice: RaceLineageChoice | null
 
   abilityScores: AbilityScores
   savingThrowProficiencies: Ability[]
@@ -1540,6 +1693,7 @@ export function emptyCharacterSheet(): CharacterSheetData {
     alignment: '',
     experiencePoints: 0,
     appearance: { age: '', height: '', weight: '', eyes: '', skin: '', hair: '' },
+    raceLineageChoice: null,
     abilityScores: { ...DEFAULT_ABILITY_SCORES },
     savingThrowProficiencies: [],
     skillProficiencies: {},

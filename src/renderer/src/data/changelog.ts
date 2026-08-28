@@ -7,6 +7,18 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.5',
+    title: 'Character creation overhaul — SRD 5.2.1 species, classes, and backgrounds',
+    highlights: [
+      'Species, classes, and backgrounds now match the 2024 SRD 5.2.1 rules instead of 2014 — new species list (Goliath and Orc replace Half-Elf/Half-Orc), every class picks its subclass at level 3, and backgrounds grant an ability score increase plus a real Origin feat instead of a flavor-text feature',
+      'Elf, Gnome, and Tiefling species grant a lineage/legacy choice with real cantrips and (for Elf/Tiefling) spells that unlock at character level 3 and 5',
+      'Origin feats (Magic Initiate, Alert, Savage Attacker, etc.) and a background\'s ability score increase are now real, visible entries on the character sheet — previously they silently did nothing or showed as a stray note instead of an actual bonus/feat',
+      'The character sheet\'s Race field is now a dropdown that actually drives Speed and Racial Traits, and prompts you to finish Human\'s or a lineage species\' choices if you switch to one',
+      'Character creation wizard reorganized: name, alignment, and appearance now live together on the first step (each with a random-fill button), the final step is a full character summary instead of a couple of lines, and every extra choice (lineage, Origin feat, ability increase) has its own clearly separated section',
+      'Warlock\'s Eldritch Invocations, Sorcerer\'s Metamagic, and per-level class features rewritten to match the 2024 rules (Pact Boon folded into Invocations, Paladin\'s Smite, etc.)'
+    ]
+  },
+  {
     version: '0.5.4',
     title: 'Goblin Bard sync fixes',
     highlights: [

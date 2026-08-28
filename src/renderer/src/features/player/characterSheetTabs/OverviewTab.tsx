@@ -4,6 +4,7 @@ import {
   ABILITIES,
   ABILITY_DESCRIPTIONS,
   CLASSES,
+  RACES,
   SKILLS,
   abilityModifier,
   activeAsiSlotChoices,
@@ -15,6 +16,7 @@ import {
   EXHAUSTION_EFFECTS,
   formatModifier,
   hitDicePools,
+  lineageOptionsForRace,
   passivePerception,
   proficiencyBonus,
   resourcesForCharacter,
@@ -22,6 +24,7 @@ import {
   skillBonus,
   type Ability,
   type AbilityScores,
+  type AsiSlotChoice,
   type CharacterSheetData,
   type ClassLevel,
   type DeathSaves,
@@ -30,6 +33,7 @@ import {
 } from '@shared/dnd5e'
 import {
   FEATS,
+  SPELLS,
   activeBuffResistances,
   armorSpeedPenalty,
   classFeatureSpeedBonus,
@@ -53,6 +57,7 @@ import { useSheetRoller } from '../../dice/useSheetRoller'
 import { RollButton } from '../../dice/RollButton'
 import { CombatTab } from './CombatTab'
 import { playSfx } from '../../audio/soundEffects'
+import { OriginFeatChooser } from '../AsiChoosers'
 import { AbilityIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
@@ -110,6 +115,7 @@ interface OverviewTabProps {
 
 const CLASS_NAMES = CLASSES.map((c) => c.name)
 const CUSTOM_CLASS = '__custom__'
+const CUSTOM_RACE = '__custom__'
 
 function resetAllSlots(slots: Record<number, { total: number; used: number }>): Record<number, { total: number; used: number }> {
   return Object.fromEntries(Object.entries(slots).map(([lvl, s]) => [lvl, { ...s, used: 0 }]))
@@ -120,6 +126,14 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   const [customRows, setCustomRows] = useState<Set<number>>(new Set())
   const [shortRestOpen, setShortRestOpen] = useState(false)
   const [abilityEditMode, setAbilityEditMode] = useState(false)
+  // Set right after picking a species with its own trait-level choices
+  // (Human's Skillful/Versatile, or Elf/Gnome/Tiefling's lineage) via the
+  // Race dropdown below — cleared once completed. Deliberately not derived
+  // from persisted state (there's no reliable way to tell "a Versatile feat
+  // from Human" apart from "an Origin feat from Background" once saved), so
+  // this only ever prompts right after a race change in this same session,
+  // not on every future reopen of the sheet.
+  const [pendingRaceExtras, setPendingRaceExtras] = useState<string | null>(null)
   const [draft, setDraft] = useAutosaveDraft<OverviewDraft>(
     {
       race: character.race,
@@ -143,6 +157,25 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
 
   function patch(fields: Partial<OverviewDraft>): void {
     setDraft((prev) => ({ ...prev, ...fields }))
+  }
+
+  /** Changing species via the dropdown actually changes derived stats (Speed, Racial Traits — see computeSpeed/FeaturesTab.tsx) since it's now a real match against RACES instead of a freeform string prone to typos. If the new species has its own trait-level choices, this also opens the inline prompt below the header instead of leaving them unset. */
+  function handleRaceChange(newRace: { id: string; name: string } | null): void {
+    patch({ race: newRace?.name ?? '' })
+    if (newRace && (newRace.id === 'human' || lineageOptionsForRace(newRace.id).length > 0)) {
+      setPendingRaceExtras(newRace.id)
+    } else {
+      setPendingRaceExtras(null)
+    }
+    // Leaving a lineage species behind means whatever it granted no longer
+    // applies — clears the stored choice so FeaturesTab.tsx's lineage-spell
+    // prompt stops appearing for a species the character no longer has.
+    // Already-granted cantrips/spells stay on the sheet rather than being
+    // stripped back out, same as removing a class doesn't claw back what it
+    // granted either.
+    if (character.raceLineageChoice && character.raceLineageChoice.raceId !== newRace?.id) {
+      onSave({ raceLineageChoice: null })
+    }
   }
 
   async function handlePortraitFile(file: File): Promise<void> {
@@ -287,6 +320,8 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   const primary = draft.classes[0]
   const additionalClasses = draft.classes.slice(1)
   const primaryIsCustom = customRows.has(0) || (!!primary && primary.className.trim() !== '' && !CLASS_NAMES.includes(primary.className))
+  const currentRace = RACES.find((r) => r.name.toLowerCase() === draft.race.trim().toLowerCase())
+  const raceIsCustom = draft.race.trim() !== '' && !currentRace
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
@@ -378,8 +413,52 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           }}
         >
         <HeaderField label="Race">
-          <input className="gb-input" style={boxedInputStyle} value={draft.race} onChange={(e) => patch({ race: e.target.value })} />
+          <select
+            className="gb-input"
+            style={boxedInputStyle}
+            value={raceIsCustom ? CUSTOM_RACE : (currentRace?.name ?? '')}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v === CUSTOM_RACE) {
+                patch({ race: draft.race || 'Custom' })
+                setPendingRaceExtras(null)
+              } else {
+                handleRaceChange(RACES.find((r) => r.name === v) ?? null)
+              }
+            }}
+          >
+            <option value="">Select…</option>
+            {RACES.map((r) => (
+              <option key={r.id} value={r.name}>
+                {r.name}
+              </option>
+            ))}
+            <option value={CUSTOM_RACE}>Custom…</option>
+          </select>
         </HeaderField>
+        {raceIsCustom && (
+          <HeaderField label="Race Name">
+            <input
+              className="gb-input"
+              style={boxedInputStyle}
+              value={draft.race}
+              onChange={(e) => patch({ race: e.target.value })}
+              placeholder="Species name"
+              autoFocus
+            />
+          </HeaderField>
+        )}
+        {pendingRaceExtras && !readOnly && (
+          <div style={{ flexBasis: '100%' }}>
+            <RaceExtrasPrompt
+              raceId={pendingRaceExtras}
+              className={primary?.className ?? ''}
+              character={character}
+              onSave={onSave}
+              onDone={() => setPendingRaceExtras(null)}
+            />
+          </div>
+        )}
 
         <HeaderField label="Class">
           <select
@@ -1094,6 +1173,129 @@ function SubclassField({
         </option>
       ))}
     </select>
+  )
+}
+
+/**
+ * Shown right after picking a species with its own trait-level choices via
+ * the Race dropdown above (Human's Skillful/Versatile, or Elf/Gnome/
+ * Tiefling's lineage) — same mechanics as CharacterCreationWizard.tsx's
+ * equivalent step, just writing straight to the sheet via onSave instead of
+ * building up a not-yet-created CharacterSheetData. Self-contained: reads
+ * nothing from the wizard, owns its own picks until "Done" commits them.
+ */
+function RaceExtrasPrompt({
+  raceId,
+  className,
+  character,
+  onSave,
+  onDone
+}: {
+  raceId: string
+  className: string
+  character: CharacterSheet
+  onSave: (patch: Partial<CharacterSheetData>) => void
+  onDone: () => void
+}): JSX.Element {
+  const isHuman = raceId === 'human'
+  const lineageOptions = lineageOptionsForRace(raceId)
+  const [skill, setSkill] = useState<SkillName | null>(null)
+  const [featChoice, setFeatChoice] = useState<Omit<AsiSlotChoice, 'id'> | null>(null)
+  const [lineageName, setLineageName] = useState<string | null>(null)
+  const [lineageAbility, setLineageAbility] = useState<Ability>('wis')
+  const lineage = lineageOptions.find((l) => l.name === lineageName) ?? null
+
+  const ready = isHuman ? !!skill && !!featChoice : lineageOptions.length > 0 ? !!lineage : true
+
+  function commit(): void {
+    const spellIds = [
+      ...(featChoice?.chosenSpellIds ?? []),
+      ...(lineage ? [lineage.cantripId, lineage.secondCantripId, lineage.alwaysPreparedSpellId].filter((id): id is string => !!id) : [])
+    ]
+    const grantedSpells = spellIds
+      .map((id) => SPELLS.find((s) => s.id === id))
+      .filter((s): s is NonNullable<typeof s> => !!s)
+      .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action' as const, compendiumId: s.id, free: true }))
+    const skillProficiencies = skill ? { ...character.skillProficiencies, [skill]: 'proficient' as const } : character.skillProficiencies
+    const asiSlotChoices = featChoice
+      ? [...character.asiSlotChoices, { id: crypto.randomUUID(), ...featChoice, className }]
+      : character.asiSlotChoices
+    onSave({
+      skillProficiencies,
+      asiSlotChoices,
+      spells: [...character.spells, ...grantedSpells],
+      spellcastingAbility: character.spellcastingAbility ?? (featChoice?.chosenAbility ?? (lineage ? lineageAbility : null)),
+      raceLineageChoice: lineage ? { raceId, lineageName: lineage.name, spellcastingAbility: lineageAbility } : character.raceLineageChoice
+    })
+    onDone()
+  }
+
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+        {isHuman ? 'Human grants a skill and an Origin feat — pick them below.' : 'This species has a lineage trait — pick one below.'}
+      </div>
+      {isHuman && (
+        <>
+          <select className="gb-input" value={skill ?? ''} onChange={(e) => setSkill((e.target.value || null) as SkillName | null)} style={{ fontSize: 12 }}>
+            <option value="">Choose a skill (Skillful)…</option>
+            {SKILLS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.id}
+              </option>
+            ))}
+          </select>
+          <OriginFeatChooser label="Versatile" level={0} onResolve={setFeatChoice} />
+          {featChoice && (
+            <p style={{ fontSize: 12, color: 'var(--accent)', margin: 0 }}>Chosen: {FEATS.find((f) => f.id === featChoice.featId)?.name}</p>
+          )}
+        </>
+      )}
+      {lineageOptions.length > 0 && (
+        <>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {lineageOptions.map((l) => (
+              <ChoiceChip key={l.name} label={l.name} selected={lineageName === l.name} onClick={() => setLineageName(l.name)} title={l.description} />
+            ))}
+          </div>
+          {lineage && (
+            <select className="gb-input" value={lineageAbility} onChange={(e) => setLineageAbility(e.target.value as Ability)} style={{ fontSize: 12 }}>
+              {(['int', 'wis', 'cha'] as Ability[]).map((a) => (
+                <option key={a} value={a}>
+                  {a.toUpperCase()} spellcasting
+                </option>
+              ))}
+            </select>
+          )}
+        </>
+      )}
+      <div>
+        <Button variant="primary" onClick={commit} disabled={!ready} style={{ fontSize: 12, padding: '4px 10px' }}>
+          Done
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ChoiceChip({ label, selected, onClick, title }: { label: string; selected: boolean; onClick: () => void; title?: string }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border-subtle)'}`,
+        background: selected ? 'var(--accent-subtle)' : 'transparent',
+        color: selected ? 'var(--accent-hover)' : 'var(--text-secondary)',
+        fontSize: 12,
+        cursor: 'pointer'
+      }}
+    >
+      {label}
+    </button>
   )
 }
 

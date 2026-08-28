@@ -4,17 +4,12 @@ import {
   CLASSES,
   CLASS_RESOURCES,
   ELDRITCH_INVOCATIONS,
-  FAVORED_ENEMY_OPTIONS,
-  FAVORED_TERRAIN_OPTIONS,
   METAMAGIC_OPTIONS,
-  PACT_BOON_OPTIONS,
   SUBCLASS_CHOICE_FEATURE_NAME,
   abilityModifier,
   asiSlotLevelsUpToLevel,
   curatedFeaturesForLevelUp,
   eldritchInvocationSlotCountAtLevel,
-  favoredEnemySlotLevelsUpToLevel,
-  favoredTerrainSlotLevelsUpToLevel,
   fightingStyleSlotLevelsUpToLevel,
   metamagicSlotCountAtLevel,
   metamagicSlotUnlockLevel,
@@ -38,7 +33,6 @@ import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import {
   AsiSlotChooser,
-  FavoredEnemyChooser,
   FightingStyleChooser,
   NamedOptionChooser,
   SubclassChooser,
@@ -98,10 +92,9 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
   const subclassChoiceFeatureName = SUBCLASS_CHOICE_FEATURE_NAME[cls.id]
   const isDivineSmiteClass = cls.id === 'paladin' && level >= 2
   const isMetamagicClass = cls.id === 'sorcerer'
-  const isPactBoonClass = cls.id === 'warlock'
+  const isWarlockClass = cls.id === 'warlock'
   const isWizardClass = cls.id === 'wizard'
   const isBardClass = cls.id === 'bard'
-  const isRangerClass = cls.id === 'ranger'
   const isDruidClass = cls.id === 'druid'
 
   function resolveAsiSlot(entry: Omit<AsiSlotChoice, 'id'>): void {
@@ -124,11 +117,10 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
       f.name !== 'Ability Score Improvement' &&
       f.name !== 'Fighting Style' &&
       f.name !== subclassChoiceFeatureName &&
-      !(isDivineSmiteClass && f.name === 'Divine Smite') &&
+      !(isDivineSmiteClass && f.name === "Paladin's Smite") &&
       !(isMetamagicClass && f.name === 'Metamagic') &&
-      !(isPactBoonClass && f.name === 'Pact Boon') &&
-      !(isPactBoonClass && f.name === 'Eldritch Invocations') &&
-      !(isPactBoonClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
+      !(isWarlockClass && f.name === 'Eldritch Invocations') &&
+      !(isWarlockClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
       !(isWizardClass && f.name === 'Spell Mastery') &&
       !(isWizardClass && f.name === 'Signature Spells') &&
       !(isBardClass && f.name === 'Magical Secrets')
@@ -267,47 +259,6 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
     })
   }
 
-  // Favored Enemy / Natural Explorer (Ranger only)
-  if (isRangerClass) {
-    const resolvedFavoredEnemies = character.subclassFeatureChoices.filter(
-      (c) => c.featureName === 'Favored Enemy' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    const unresolvedFavoredEnemySlots = favoredEnemySlotLevelsUpToLevel(level).slice(resolvedFavoredEnemies.length)
-    for (const lvl of unresolvedFavoredEnemySlots) {
-      slides.push({
-        key: `favored-enemy:${lvl}`,
-        render: () => (
-          <FavoredEnemyChooser
-            classLabel={className}
-            level={lvl}
-            options={FAVORED_ENEMY_OPTIONS}
-            excludeNames={resolvedFavoredEnemies.map((c) => c.chosenName)}
-            onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: lvl, featureName: 'Favored Enemy', chosenName })}
-          />
-        )
-      })
-    }
-    const resolvedFavoredTerrains = character.subclassFeatureChoices.filter(
-      (c) => c.featureName === 'Favored Terrain' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    const unresolvedFavoredTerrainSlots = favoredTerrainSlotLevelsUpToLevel(level).slice(resolvedFavoredTerrains.length)
-    for (const lvl of unresolvedFavoredTerrainSlots) {
-      slides.push({
-        key: `favored-terrain:${lvl}`,
-        render: () => (
-          <NamedOptionChooser
-            classLabel={className}
-            level={lvl}
-            featureName="Favored Terrain"
-            options={FAVORED_TERRAIN_OPTIONS}
-            excludeNames={resolvedFavoredTerrains.map((c) => c.chosenName)}
-            onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: lvl, featureName: 'Favored Terrain', chosenName })}
-          />
-        )
-      })
-    }
-  }
-
   // Generic subclass-feature choice groups (Dragon Ancestor, Circle of the Land's terrain, a Ranger archetype's sub-features, ...)
   const unresolvedSubclassChoiceGroups = chosenSubclass
     ? groupedSubclassFeaturesForLevelUp(cls.id, chosenSubclass.id, 0, level).filter(
@@ -422,26 +373,10 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
     }
   }
 
-  // Warlock Pact Boon / Eldritch Invocations / Mystic Arcanum
-  if (isPactBoonClass) {
-    const resolvedPactBoon = character.subclassFeatureChoices.find(
-      (c) => c.featureName === 'Pact Boon' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    if (level >= 3 && !resolvedPactBoon) {
-      slides.push({
-        key: 'pact-boon',
-        render: () => (
-          <NamedOptionChooser
-            classLabel={className}
-            level={3}
-            featureName="Pact Boon"
-            options={PACT_BOON_OPTIONS}
-            excludeNames={[]}
-            onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: 3, featureName: 'Pact Boon', chosenName })}
-          />
-        )
-      })
-    }
+  // Warlock Eldritch Invocations (which, under SRD 5.2.1, include Pact of
+  // the Blade/Chain/Tome as ordinary invocation choices — there's no
+  // separate Pact Boon feature/chooser anymore) / Mystic Arcanum
+  if (isWarlockClass) {
     const resolvedInvocations = character.subclassFeatureChoices.filter(
       (c) => c.featureName === 'Eldritch Invocation' && c.className.toLowerCase() === className.toLowerCase()
     )
@@ -449,7 +384,7 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
     const availableInvocations = ELDRITCH_INVOCATIONS.filter(
       (o) =>
         o.level <= level &&
-        (!o.prereqPact || o.prereqPact === resolvedPactBoon?.chosenName) &&
+        (!o.prereqInvocation || resolvedInvocations.some((r) => r.chosenName === o.prereqInvocation)) &&
         (!o.prereqSpell || knownSpellIds.has(o.prereqSpell)) &&
         !resolvedInvocations.some((r) => r.chosenName === o.name)
     )
@@ -547,7 +482,7 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
     const resolvedMagicalSecrets = character.subclassFeatureChoices.filter(
       (c) => c.featureName === 'Magical Secrets' && c.className.toLowerCase() === className.toLowerCase()
     )
-    const magicalSecretsSlotLevels = [...(level >= 14 ? [14, 14] : []), ...(level >= 18 ? [18, 18] : [])]
+    const magicalSecretsSlotLevels = level >= 10 ? [10, 10] : []
     const unresolvedMagicalSecretsLevels = magicalSecretsSlotLevels.slice(resolvedMagicalSecrets.length)
     const bardMaxSpellLevel = spellSlotsForClassLevel(cls.id, level).reduce((max, count, i) => (count > 0 ? i + 1 : max), 0)
     unresolvedMagicalSecretsLevels.forEach((lvl, i) => {

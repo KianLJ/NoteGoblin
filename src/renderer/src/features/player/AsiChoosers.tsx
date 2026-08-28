@@ -285,14 +285,126 @@ export function FightingStyleChooser({
   )
 }
 
+const ORIGIN_FEATS = FEATS.filter((f) => f.category === 'Origin')
+
+/**
+ * A free pick from just the Origin category — SRD 5.2.1's Human "Versatile"
+ * trait ("gain an Origin feat of your choice") is the only case right now.
+ * Handles a spellChoice-effect feat (Magic Initiate) the same inline way
+ * AsiSlotChooser's feat mode does, since it's the same feat/effect, just
+ * reached from a species trait instead of an ASI slot — writes the same
+ * asiSlotChoices shape so it shows up in Features' Feats section and (for
+ * Magic Initiate) actually grants real, castable spells.
+ */
+export function OriginFeatChooser({
+  label,
+  level,
+  readOnly,
+  onResolve
+}: {
+  label: string
+  level: number
+  readOnly?: boolean
+  onResolve: (entry: Omit<AsiSlotChoice, 'id'>) => void
+}): JSX.Element {
+  const [featId, setFeatId] = useState<string>(ORIGIN_FEATS[0]?.id ?? '')
+  const [spellCasterAbility, setSpellCasterAbility] = useState<Ability>('wis')
+  const [cantripAId, setCantripAId] = useState('')
+  const [cantripBId, setCantripBId] = useState('')
+  const [leveledSpellId, setLeveledSpellId] = useState('')
+
+  const selectedFeat = FEATS.find((f) => f.id === featId)
+  const spellChoiceEffect = selectedFeat?.effects?.find((e): e is Extract<FeatEffect, { kind: 'spellChoice' }> => e.kind === 'spellChoice')
+  const grantableCantrips: CompendiumSpell[] = spellChoiceEffect
+    ? SPELLS.filter((s) => s.level === 0 && s.classes.some((c) => spellChoiceEffect.classes.includes(c)))
+    : []
+  const grantableLeveledSpells: CompendiumSpell[] = spellChoiceEffect
+    ? SPELLS.filter((s) => s.level === spellChoiceEffect.spellLevel && s.classes.some((c) => spellChoiceEffect.classes.includes(c)))
+    : []
+  const spellChoiceReady = !spellChoiceEffect || (!!cantripAId && !!cantripBId && cantripAId !== cantripBId && !!leveledSpellId)
+
+  function apply(): void {
+    if (readOnly || !featId || !spellChoiceReady) return
+    onResolve({
+      className: '',
+      level,
+      kind: 'feat',
+      featId,
+      chosenAbility: spellChoiceEffect ? spellCasterAbility : undefined,
+      chosenSpellIds: spellChoiceEffect ? [cantripAId, cantripBId, leveledSpellId] : undefined
+    })
+  }
+
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
+      <strong>{label}</strong>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>Gain an Origin feat of your choice.</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <select className="gb-input" value={featId} onChange={(e) => setFeatId(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
+          {ORIGIN_FEATS.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+        <Button variant="primary" onClick={apply} disabled={readOnly || !featId || !spellChoiceReady} style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}>
+          Choose
+        </Button>
+      </div>
+      {selectedFeat?.desc && !spellChoiceEffect && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selectedFeat.desc}</p>}
+      {spellChoiceEffect && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            Choose your spellcasting ability for this feat's spells, plus {spellChoiceEffect.cantripCount} cantrips and{' '}
+            {spellChoiceEffect.spellCount} level-{spellChoiceEffect.spellLevel} spell from the {spellChoiceEffect.classes.join('/')} list — always
+            prepared, and they don't count against your normal spells known.
+          </div>
+          <select className="gb-input" value={spellCasterAbility} onChange={(e) => setSpellCasterAbility(e.target.value as Ability)} style={{ fontSize: 12 }}>
+            {(['int', 'wis', 'cha'] as Ability[]).map((a) => (
+              <option key={a} value={a}>
+                {a.toUpperCase()}
+              </option>
+            ))}
+          </select>
+          <select className="gb-input" value={cantripAId} onChange={(e) => setCantripAId(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">Choose a cantrip…</option>
+            {grantableCantrips.map((s) => (
+              <option key={s.id} value={s.id} disabled={s.id === cantripBId}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <select className="gb-input" value={cantripBId} onChange={(e) => setCantripBId(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">Choose a second cantrip…</option>
+            {grantableCantrips.map((s) => (
+              <option key={s.id} value={s.id} disabled={s.id === cantripAId}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <select className="gb-input" value={leveledSpellId} onChange={(e) => setLeveledSpellId(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">Choose a level-{spellChoiceEffect.spellLevel} spell…</option>
+            {grantableLeveledSpells.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * A generic "pick one from a fixed named list" chooser — used for Sorcerer
- * Metamagic (rendered once per still-open pick, since the count grows with
- * level — see metamagicSlotCountAtLevel) and Warlock Pact Boon (a single
- * pick). Writes through the same subclassFeatureChoices mechanism a real
- * subclass feature choice does; despite the name, that field is just "a
- * resolved named choice for a named feature at a level," which fits any of
- * these class-table choices equally well.
+ * Metamagic and Warlock Eldritch Invocations (each rendered once per still-
+ * open pick, since the count grows with level — see
+ * metamagicSlotCountAtLevel/eldritchInvocationSlotCountAtLevel). Writes
+ * through the same subclassFeatureChoices mechanism a real subclass feature
+ * choice does; despite the name, that field is just "a resolved named
+ * choice for a named feature at a level," which fits any of these
+ * class-table choices equally well.
  */
 export function NamedOptionChooser({
   classLabel,

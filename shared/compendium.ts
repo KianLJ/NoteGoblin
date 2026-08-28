@@ -935,24 +935,25 @@ export function spellDealsDamage(spell: CompendiumSpell): boolean {
 }
 
 /**
- * SRD 2014 Circle of the Land spells — one of the "always have these
- * prepared" spell lists granted at 3rd/5th/7th/9th level once a terrain is
- * chosen (see the "Circle of the Land: <Terrain>" choice in
- * srd-subclass-features.json, resolved the same way Draconic Bloodline's
- * dragon ancestor is). Every spell named here already exists in
- * srd-spells.json. Not itself consumed automatically anywhere — see
+ * SRD 5.2.1 Circle of the Land spells — one of the "always have these
+ * prepared" spell lists granted at 3rd/5th/7th/9th level, for whichever of
+ * the four 2024 land types (Arid/Polar/Temperate/Tropical — 2014's eight
+ * terrains, like Arctic/Coast/Forest, are gone) is chosen (see the "Circle
+ * of the Land: <Land>" choice in srd-subclass-features.json, resolved the
+ * same way any other subclass sub-choice is). Every spell named here
+ * already exists in srd-spells.json, except Tropical's level 3 Ray of
+ * Sickness, which isn't in the compendium — that land's level 3 grant is
+ * one spell short of the real SRD table (Acid Splash, Web) until it's
+ * added. Not itself consumed automatically anywhere — see
  * FeaturesTab.tsx's CircleSpellsGrant, which surfaces an explicit "+ Add"
- * once a threshold level is reached and the terrain is known, writing the
+ * once a threshold level is reached and the land is known, writing the
  * matching Spell rows (marked `free: true`) into character.spells.
  */
 export const CIRCLE_OF_THE_LAND_SPELLS: Record<string, Record<number, string[]>> = {
-  Arctic: { 3: ['hold-person', 'spike-growth'], 5: ['sleet-storm', 'slow'], 7: ['freedom-of-movement', 'ice-storm'], 9: ['commune-with-nature', 'cone-of-cold'] },
-  Coast: { 3: ['mirror-image', 'misty-step'], 5: ['water-breathing', 'water-walk'], 7: ['control-water', 'freedom-of-movement'], 9: ['conjure-elemental', 'scrying'] },
-  Desert: { 3: ['blur', 'silence'], 5: ['create-food-and-water', 'protection-from-energy'], 7: ['blight', 'hallucinatory-terrain'], 9: ['insect-plague', 'wall-of-stone'] },
-  Forest: { 3: ['barkskin', 'spider-climb'], 5: ['call-lightning', 'plant-growth'], 7: ['divination', 'freedom-of-movement'], 9: ['commune-with-nature', 'tree-stride'] },
-  Grassland: { 3: ['invisibility', 'pass-without-trace'], 5: ['daylight', 'haste'], 7: ['divination', 'freedom-of-movement'], 9: ['dream', 'insect-plague'] },
-  Mountain: { 3: ['spider-climb', 'spike-growth'], 5: ['lightning-bolt', 'meld-into-stone'], 7: ['stone-shape', 'stoneskin'], 9: ['passwall', 'wall-of-stone'] },
-  Swamp: { 3: ['acid-arrow', 'web'], 5: ['stinking-cloud', 'water-walk'], 7: ['freedom-of-movement', 'locate-creature'], 9: ['insect-plague', 'scrying'] }
+  Arid: { 3: ['blur', 'burning-hands', 'fire-bolt'], 5: ['fireball'], 7: ['blight'], 9: ['wall-of-stone'] },
+  Polar: { 3: ['fog-cloud', 'hold-person', 'ray-of-frost'], 5: ['sleet-storm'], 7: ['ice-storm'], 9: ['cone-of-cold'] },
+  Temperate: { 3: ['misty-step', 'shocking-grasp', 'sleep'], 5: ['lightning-bolt'], 7: ['freedom-of-movement'], 9: ['tree-stride'] },
+  Tropical: { 3: ['acid-splash', 'web'], 5: ['stinking-cloud'], 7: ['polymorph'], 9: ['insect-plague'] }
 }
 
 /** Every circle-spell level threshold (3/5/7/9) reached at `level` for the given terrain, each with its two granted spell ids — used by FeaturesTab.tsx to know which "+ Add Circle Spells" prompts (or resolved chips) to show. */
