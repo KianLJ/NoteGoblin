@@ -2,13 +2,13 @@ import { useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
   ABILITIES,
+  actionTypeFromCastingTime,
   formatModifier,
   preparedSpellLimit,
   spellAttackBonus,
   spellSaveDC,
   spellcasterClassNames,
   type Ability,
-  type ActionType,
   type CharacterSheetData,
   type Spell
 } from '@shared/dnd5e'
@@ -43,11 +43,11 @@ interface SpellsTabProps {
   readOnly?: boolean
 }
 
-const ACTION_TYPES: { id: ActionType; label: string }[] = [
-  { id: 'action', label: 'Action' },
-  { id: 'bonus', label: 'Bonus Action' },
-  { id: 'reaction', label: 'Reaction' }
-]
+const ACTION_TYPE_LABEL: Record<'action' | 'bonus' | 'reaction', string> = {
+  action: 'Action',
+  bonus: 'Bonus Action',
+  reaction: 'Reaction'
+}
 
 const SPELL_LEVEL_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
@@ -142,8 +142,13 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
   }
 
   // The highest spell level the character's classes/level actually reach —
-  // 0 (cantrips only) if they have no slots at all yet.
-  const maxCastableLevel = slotLevels.length > 0 ? Math.max(...slotLevels) : 0
+  // 0 (cantrips only) if they have no slots at all yet. Only enforced for
+  // an actual caster class, though: a non-caster whose only spellcasting
+  // comes from a feat (Magic Initiate) has no slot structure to cap
+  // against at all, and used to have every leveled spell — including ones
+  // that same feat already granted through its own chooser — invisible in
+  // this picker as a result, capped at 0 (cantrips only) forever.
+  const maxCastableLevel = casterClasses.length === 0 ? 9 : slotLevels.length > 0 ? Math.max(...slotLevels) : 0
 
   function addFromCompendium(spell: CompendiumSpell): void {
     if (spell.level > maxCastableLevel) return
@@ -178,11 +183,20 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
   const dc = spellSaveDC(draft.spellcastingAbility, effScores, character.classes)
   const casterAttackBonus = spellAttackBonus(draft.spellcastingAbility, effScores, character.classes)
 
-  const visibleSpells = draft.spells.filter(
-    (s) =>
-      (listSearch.trim() === '' || s.name.toLowerCase().includes(listSearch.trim().toLowerCase())) &&
-      (listLevelFilter === 'all' || s.level === listLevelFilter)
-  )
+  const visibleSpells = draft.spells
+    .filter(
+      (s) =>
+        (listSearch.trim() === '' || s.name.toLowerCase().includes(listSearch.trim().toLowerCase())) &&
+        (listLevelFilter === 'all' || s.level === listLevelFilter)
+    )
+    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+
+  const spellsByLevel = new Map<number, typeof visibleSpells>()
+  for (const spell of visibleSpells) {
+    const bucket = spellsByLevel.get(spell.level)
+    if (bucket) bucket.push(spell)
+    else spellsByLevel.set(spell.level, [spell])
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
@@ -284,9 +298,25 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
             </select>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
-          {visibleSpells.map((spell) => {
-            const total = slotTotals[spell.level] ?? 0
+        {[...spellsByLevel.entries()].map(([level, spellsAtLevel]) => (
+          <div key={level} style={{ marginBottom: 12 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: 0.4,
+                color: 'var(--text-muted)',
+                borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                paddingBottom: 4,
+                marginBottom: 8
+              }}
+            >
+              {spellLevelLabel(level)}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+              {spellsAtLevel.map((spell) => {
+                const total = slotTotals[spell.level] ?? 0
             const used = draft.spellSlots[spell.level]?.used ?? 0
             const canCast = spell.level > 0 && used < total
             const compendium = spell.compendiumId ? getSpellById(spell.compendiumId) : undefined
@@ -321,18 +351,9 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
                   onRemove={() => patch({ spells: draft.spells.filter((s) => s.id !== spell.id) })}
                 >
                   {compendium?.attackType && casterAttackBonus !== null && <MiniStat label="Atk" value={formatModifier(casterAttackBonus)} />}
-                  <select
-                    className="gb-input"
-                    style={{ width: 100, fontSize: 12 }}
-                    value={spell.actionType ?? 'action'}
-                    onChange={(e) => updateSpell(spell.id, { actionType: e.target.value as ActionType })}
-                  >
-                    {ACTION_TYPES.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="gb-badge" style={{ fontSize: 11 }}>
+                    {ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium?.castingTime ?? spell.castingTime)]}
+                  </span>
                   {spell.level > 0 && (
                     <Button
                       variant="secondary"
@@ -346,9 +367,11 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
                   )}
                 </EntryCard>
               </HoverDetailCard>
-            )
-          })}
-        </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
         {atSpellCap && (
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>
             Spell limit reached ({leveledSpellCount}/{spellCap}).

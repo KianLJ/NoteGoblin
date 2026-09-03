@@ -380,6 +380,15 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
               const fields = badges.map((e) => ({ label: 'Effect', value: effectLabel(e) }))
               if (feat.prerequisite) fields.unshift({ label: 'Prerequisite', value: feat.prerequisite })
               const slot = character.asiSlotChoices.find((s) => s.kind === 'feat' && s.featId === feat.id)
+              // Level-0 feat slots are granted once at character creation (the
+              // background's Origin feat, or Human's bonus feat) and never
+              // reappear as an "unresolved" chooser the way a real ASI-level
+              // feat pick does — those only re-offer their chooser for slots
+              // tied to an actual class level (see unresolvedAsiLevels below,
+              // driven by asiSlotLevelsUpToLevel). Removing one of these would
+              // be permanent with no way to get it back, so they aren't
+              // removable at all; only an actual leveled ASI/feat pick is.
+              const removable = slot && slot.level > 0
               return (
                 <InfoChip
                   key={feat.id}
@@ -388,7 +397,7 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
                   fields={fields}
                   description={feat.desc}
                   accent
-                  onRemove={!readOnly && slot ? () => removeAsiSlot(slot.id) : undefined}
+                  onRemove={!readOnly && removable ? () => removeAsiSlot(slot.id) : undefined}
                 />
               )
             })}

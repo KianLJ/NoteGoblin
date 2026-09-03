@@ -140,6 +140,33 @@ button {
   animation: gb-die-tumble 1.3s cubic-bezier(0.32, 0.1, 0.2, 1) forwards;
 }
 
+/* Same shape as gb-die-tumble, scaled to match CLICK_FLICKER_TICK_MS *
+   CLICK_FLICKER_TICKS in RollAnimationOverlay.tsx — for the little flicker a
+   single advantage/disadvantage die plays right after its own click. Ends
+   on a multiple of 360deg for the same reason gb-die-tumble does: swapping
+   this class off exactly when the animation completes (not mid-turn) is
+   what keeps the die from visibly snapping back to its resting angle. */
+@keyframes gb-die-tumble-quick {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(240deg) scale(1.1);
+  }
+  50% {
+    transform: rotate(480deg) scale(0.92);
+  }
+  75% {
+    transform: rotate(680deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(1080deg) scale(1);
+  }
+}
+.gb-die-tumble-quick {
+  animation: gb-die-tumble-quick 1.32s cubic-bezier(0.32, 0.1, 0.2, 1) forwards;
+}
+
 /* The die winding down instead of stopping dead or snapping — plays across
    both tip stages (duration must match TIP_OUT_MS + TIP_IN_MS combined; the
    className doesn't change between those two phases, so this one animation
@@ -173,6 +200,47 @@ button {
      "linear" here interpolates between them as written instead of a bezier
      re-shaping it on top and cancelling that out into a stall partway through. */
   animation: gb-die-settle 1.5s linear forwards;
+}
+
+/* A much shorter landing wobble for the kept die right as it settles into
+   center after the discard (RollAnimationOverlay.tsx's 'settled' phase) —
+   duration must match SETTLE_PAUSE_MS there. Same "end on a multiple of
+   360deg" trick as the other die animations so swapping this class off
+   doesn't snap the rotation back. */
+@keyframes gb-die-land {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  40% {
+    transform: rotate(200deg) scale(1.1);
+  }
+  75% {
+    transform: rotate(330deg) scale(1);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+.gb-die-land {
+  animation: gb-die-land 450ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* The modifier chip's entrance (RollAnimationOverlay.tsx's renderModifierChip)
+   — a plain CSS animation rather than a React-state-driven transition,
+   deliberately: it needs to always run reliably right on mount regardless of
+   render timing, and it targets opacity on the *outer* wrapper while the
+   chip's later flight/fade-out (driven by state) targets the *inner* one, so
+   the two never fight over the same element's opacity mid-animation. */
+@keyframes gb-modifier-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.gb-modifier-fade-in {
+  animation: gb-modifier-fade-in 150ms ease-out forwards;
 }
 
 /* Each random number flickering past while the die spins — quick and

@@ -3,6 +3,7 @@ import type { CharacterSheet } from '@shared/ipc'
 import {
   CLASSES,
   abilityModifier,
+  actionTypeFromCastingTime,
   activeFeatIds,
   curatedFeaturesForLevelUp,
   formatModifier,
@@ -256,7 +257,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
 
   const activeFeats = activeFeatIds(character.classes, character.asiSlotChoices)
   const toggleFeatures = toggleFeaturesForCharacter(character.classes)
-  const attackAdvantage = effectiveAttackAdvantage(activeFeats, character.activeBuffs)
+  const attackAdvantage = effectiveAttackAdvantage(activeFeats, character.activeBuffs, character.exhaustionLevel)
   const resources = resourcesForCharacter(character.classes, effScores)
   const bonusActionResources = resources.filter((r) => r.actionType === 'bonus')
   const otherResources = resources.filter((r) => r.actionType !== 'bonus')
@@ -383,7 +384,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                       value={diceMatch ? diceMatch[0] : 'See spell'}
                       onRoll={diceMatch ? rollWeaponDamage(`${compendium.name} Damage`, diceMatch[0], 0) : undefined}
                     />
-                    <LockedValue value={ACTION_TYPE_LABEL[spell.actionType ?? 'action']} />
+                    <LockedValue value={ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium.castingTime)]} />
                   </EntryCard>
                 </HoverDetailCard>
               )

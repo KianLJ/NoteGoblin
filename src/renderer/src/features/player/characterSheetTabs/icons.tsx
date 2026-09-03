@@ -33,6 +33,21 @@ export function HeartIcon({ size = 20, style }: IconProps): JSX.Element {
   )
 }
 
+/** A wilting/drooping flame — used for Exhaustion, whose hover tooltip explains what the character's current level does (see OverviewTab.tsx). */
+export function ExhaustionIcon({ size = 18, style }: IconProps): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" style={style}>
+      <path
+        d="M8 1.6c1 1.8 2.6 3.1 2.6 5.2A2.6 2.6 0 0 1 8 9.4a2.6 2.6 0 0 1-2.6-2.6c0-.9.4-1.6.9-2.3-.1.9.2 1.5.7 1.8-.3-1.7.4-3 1-4.7Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M5.5 13.4h5M6.3 11.6h3.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function StarIcon({ size = 20, style, filled }: IconProps & { filled?: boolean }): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill={filled ? 'currentColor' : 'none'} aria-hidden="true" style={style}>

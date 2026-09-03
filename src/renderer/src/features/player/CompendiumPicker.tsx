@@ -29,6 +29,7 @@ export function CompendiumPicker<T>({
   filters
 }: CompendiumPickerProps<T>): JSX.Element {
   const [open, setOpen] = useState(false)
+  const [openUpward, setOpenUpward] = useState(false)
   const [query, setQuery] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -42,6 +43,20 @@ export function CompendiumPicker<T>({
 
   const results = open ? search(query) : []
 
+  // The popover has a rough max height (search box + filters + results list + custom
+  // button); if there isn't room below the trigger button to fit it before the bottom
+  // of the viewport, flip it to open upward instead of letting it run off-screen.
+  const POPOVER_APPROX_HEIGHT = 360
+
+  function handleToggle(): void {
+    if (!open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      setOpenUpward(spaceBelow < POPOVER_APPROX_HEIGHT && rect.top > spaceBelow)
+    }
+    setOpen((o) => !o)
+  }
+
   return (
     <div ref={containerRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
@@ -49,7 +64,7 @@ export function CompendiumPicker<T>({
         className="gb-btn gb-btn--secondary"
         disabled={disabled}
         title={disabled ? disabledReason : undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleToggle}
       >
         {buttonLabel}
       </button>
@@ -57,7 +72,16 @@ export function CompendiumPicker<T>({
       {open && (
         <div
           className="gb-card"
-          style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, width: 300, zIndex: 30, padding: 'var(--space-3)' }}
+          style={{
+            position: 'absolute',
+            ...(openUpward ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+            left: 0,
+            width: 300,
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            zIndex: 30,
+            padding: 'var(--space-3)'
+          }}
         >
           <input
             className="gb-input"

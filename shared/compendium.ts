@@ -372,8 +372,12 @@ export function effectiveSkillAdvantage(
   return result
 }
 
-/** Same idea as effectiveSkillAdvantage, but for the six ability checks (e.g. a feat granting advantage on Strength checks, or Rage's Strength-check advantage while active) rather than the eighteen skills. */
-export function effectiveAbilityCheckAdvantage(featIds: string[], activeBuffs: string[] = []): Partial<Record<Ability, 'advantage' | 'disadvantage'>> {
+/** Same idea as effectiveSkillAdvantage, but for the six ability checks (e.g. a feat granting advantage on Strength checks, or Rage's Strength-check advantage while active) rather than the eighteen skills. `exhaustionLevel` 1+ imposes disadvantage on every ability check (SRD exhaustion level 1), same cancel-with-advantage rule as everything else here. */
+export function effectiveAbilityCheckAdvantage(
+  featIds: string[],
+  activeBuffs: string[] = [],
+  exhaustionLevel = 0
+): Partial<Record<Ability, 'advantage' | 'disadvantage'>> {
   const result: Partial<Record<Ability, 'advantage' | 'disadvantage'>> = {}
   const advantaged = new Set<Ability>()
   const disadvantaged = new Set<Ability>()
@@ -382,13 +386,18 @@ export function effectiveAbilityCheckAdvantage(featIds: string[], activeBuffs: s
     else if (effect.kind === 'abilityCheckDisadvantage') disadvantaged.add(effect.ability)
   }
   for (const id of activeBuffs) for (const a of BUFF_EFFECTS[id]?.abilityCheckAdvantage ?? []) advantaged.add(a)
+  if (exhaustionLevel >= 1) for (const { id } of ABILITIES) disadvantaged.add(id)
   for (const a of advantaged) if (!disadvantaged.has(a)) result[a] = 'advantage'
   for (const a of disadvantaged) if (!advantaged.has(a)) result[a] = 'disadvantage'
   return result
 }
 
-/** Same idea as effectiveSkillAdvantage, but for the six saving throws (including Rage's Strength-save advantage while active). */
-export function effectiveSavingThrowAdvantage(featIds: string[], activeBuffs: string[] = []): Partial<Record<Ability, 'advantage' | 'disadvantage'>> {
+/** Same idea as effectiveSkillAdvantage, but for the six saving throws (including Rage's Strength-save advantage while active). `exhaustionLevel` 3+ imposes disadvantage on every saving throw (SRD exhaustion level 3). */
+export function effectiveSavingThrowAdvantage(
+  featIds: string[],
+  activeBuffs: string[] = [],
+  exhaustionLevel = 0
+): Partial<Record<Ability, 'advantage' | 'disadvantage'>> {
   const result: Partial<Record<Ability, 'advantage' | 'disadvantage'>> = {}
   const advantaged = new Set<Ability>()
   const disadvantaged = new Set<Ability>()
@@ -397,13 +406,14 @@ export function effectiveSavingThrowAdvantage(featIds: string[], activeBuffs: st
     else if (effect.kind === 'savingThrowDisadvantage') disadvantaged.add(effect.ability)
   }
   for (const id of activeBuffs) for (const a of BUFF_EFFECTS[id]?.savingThrowAdvantage ?? []) advantaged.add(a)
+  if (exhaustionLevel >= 3) for (const { id } of ABILITIES) disadvantaged.add(id)
   for (const a of advantaged) if (!disadvantaged.has(a)) result[a] = 'advantage'
   for (const a of disadvantaged) if (!advantaged.has(a)) result[a] = 'disadvantage'
   return result
 }
 
-/** A blanket advantage/disadvantage on every attack roll (not tied to a specific weapon/ability) — from a feat, or a currently-active toggle feature/buff (Reckless Attack, Rage doesn't grant this one). Cancels out the same way as the other advantage aggregators if something somehow granted both. */
-export function effectiveAttackAdvantage(featIds: string[], activeBuffs: string[] = []): 'advantage' | 'disadvantage' | undefined {
+/** A blanket advantage/disadvantage on every attack roll (not tied to a specific weapon/ability) — from a feat, a currently-active toggle feature/buff (Reckless Attack, Rage doesn't grant this one), or exhaustion level 3+ (SRD). Cancels out the same way as the other advantage aggregators if something somehow granted both. */
+export function effectiveAttackAdvantage(featIds: string[], activeBuffs: string[] = [], exhaustionLevel = 0): 'advantage' | 'disadvantage' | undefined {
   let advantaged = false
   let disadvantaged = false
   for (const effect of resolveFeatEffects(featIds)) {
@@ -411,6 +421,7 @@ export function effectiveAttackAdvantage(featIds: string[], activeBuffs: string[
     else if (effect.kind === 'attackDisadvantage') disadvantaged = true
   }
   for (const id of activeBuffs) if (BUFF_EFFECTS[id]?.attackAdvantage) advantaged = true
+  if (exhaustionLevel >= 3) disadvantaged = true
   if (advantaged === disadvantaged) return undefined
   return advantaged ? 'advantage' : 'disadvantage'
 }

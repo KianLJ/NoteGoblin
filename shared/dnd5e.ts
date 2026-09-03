@@ -1356,6 +1356,14 @@ export function resourcesForCharacter(
 
 export type ActionType = 'action' | 'bonus' | 'reaction'
 
+/** Derives a spell's action-economy bucket from its SRD casting time string ("1 bonus action", "1 reaction", "1 action", "1 minute", …) so the character sheet doesn't need the player to set it by hand — it's a fixed rules fact, not a choice. Anything that isn't cast as a bonus action or reaction (including longer casting times like "10 minutes") falls back to 'action', matching how those spells are already grouped everywhere they're compared against actions/turn economy. */
+export function actionTypeFromCastingTime(castingTime: string | undefined): ActionType {
+  const t = (castingTime ?? '').toLowerCase()
+  if (t.includes('bonus')) return 'bonus'
+  if (t.includes('reaction')) return 'reaction'
+  return 'action'
+}
+
 /**
  * A class feature that's a free, unlimited-use toggle rather than a
  * chargeable resource (see CLASS_RESOURCES) or a passive number — you turn
@@ -1739,6 +1747,26 @@ export const EXHAUSTION_EFFECTS: string[] = [
   'Speed reduced to 0.',
   'Death.'
 ]
+
+/** The full, cumulative rundown of everything active at a given exhaustion level — every level's own effect stacks with the ones below it (per EXHAUSTION_EFFECTS' doc comment), so level 3 is disadvantage on ability checks AND speed halved AND disadvantage on attacks/saves, not just the level-3 line alone. Shown in OverviewTab.tsx's Exhaustion hover card. */
+export function exhaustionEffectsDescription(level: number): string {
+  if (level <= 0) return EXHAUSTION_EFFECTS[0]
+  return EXHAUSTION_EFFECTS.slice(1, level + 1)
+    .map((effect, i) => `Level ${i + 1}: ${effect}`)
+    .join('\n')
+}
+
+/** Exhaustion level 2 halves Speed, level 5 drops it to 0 — applied on top of whatever computeSpeed/speed bonuses already produced. Rounds down to the nearest 5 feet, matching how every other Speed value in 5e is always a multiple of 5. */
+export function applyExhaustionToSpeed(speed: number, exhaustionLevel: number): number {
+  if (exhaustionLevel >= 5) return 0
+  if (exhaustionLevel >= 2) return Math.floor(speed / 2 / 5) * 5
+  return speed
+}
+
+/** Exhaustion level 4 halves Hit Point maximum (round down) — applied on top of computeMaxHp's result. */
+export function applyExhaustionToMaxHp(maxHp: number, exhaustionLevel: number): number {
+  return exhaustionLevel >= 4 ? Math.floor(maxHp / 2) : maxHp
+}
 
 // --- Derived-stat helpers (pure, computed at render time — nothing here is stored) ---
 

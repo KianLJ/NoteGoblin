@@ -111,7 +111,7 @@ interface NoteTreeSectionProps {
   onSelectNote: (id: string) => void
   /** Right-click "Open in new tab" — the explicit escape hatch, since a plain click now reuses the current tab (preview-tab pattern). */
   onOpenNoteInNewTab: (id: string) => void
-  onCreateNote: (folderId: string | null) => void
+  onCreateNote: (folderId: string | null) => Promise<string | undefined>
   onCreateFolder: (name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
   onDeleteNote: (noteId: string) => void
@@ -372,6 +372,20 @@ export function NoteTreeSection({
     }
   }
 
+  async function handleCreateNote(parentFolderId: string | null): Promise<void> {
+    const id = await onCreateNote(parentFolderId)
+    if (!id) return
+    setRenamingNoteId(id)
+    setRenameValue('Untitled')
+    if (parentFolderId) {
+      setCollapsed((prev) => {
+        const next = new Set(prev)
+        next.delete(parentFolderId)
+        return next
+      })
+    }
+  }
+
   function handleDragStart(e: ReactDragEvent, payload: ClipboardItem): void {
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload))
     e.dataTransfer.effectAllowed = 'move'
@@ -418,6 +432,34 @@ export function NoteTreeSection({
     }
   }
 
+  function handleNoteDragOver(e: ReactDragEvent, note: Note): void {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverKey(`note:${note.id}`)
+  }
+
+  function handleNoteDragLeave(note: Note): void {
+    setDragOverKey((k) => (k === `note:${note.id}` ? null : k))
+  }
+
+  function handleNoteDrop(e: ReactDragEvent, note: Note): void {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverKey(null)
+    setDraggingKey(null)
+    const payload = readDragPayload(e)
+    if (!payload) return
+    // Dropping directly on a note should behave like dropping into that
+    // note's own folder, not eject the dragged item to root.
+    if (payload.kind === 'note') {
+      if (payload.id === note.id) return
+      onMoveNote(payload.id, note.folderId ?? null, visibility)
+    } else if (note.folderId && !isSelfOrDescendantFolder(folders, payload.id, note.folderId)) {
+      onMoveFolder(payload.id, note.folderId, visibility)
+    }
+  }
+
   function handleRootDragOver(e: ReactDragEvent): void {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
@@ -438,7 +480,7 @@ export function NoteTreeSection({
     e.preventDefault()
     e.stopPropagation()
     const items: ContextMenuItem[] = [
-      { label: 'New Note', icon: <NewNoteIcon />, onSelect: () => onCreateNote(null) },
+      { label: 'New Note', icon: <NewNoteIcon />, onSelect: () => void handleCreateNote(null) },
       { label: 'New Folder', icon: <NewFolderIcon />, onSelect: () => void handleCreateFolder(null) }
     ]
     if (clipboard && clipboard.items.length > 0) {
@@ -460,7 +502,7 @@ export function NoteTreeSection({
     const multi = wasAlreadySelected && selected.size > 1
 
     const items: ContextMenuItem[] = [
-      { label: 'New Note', icon: <NewNoteIcon />, onSelect: () => onCreateNote(folder.id) },
+      { label: 'New Note', icon: <NewNoteIcon />, onSelect: () => void handleCreateNote(folder.id) },
       { label: 'New Folder', icon: <NewFolderIcon />, onSelect: () => void handleCreateFolder(folder.id) }
     ]
     if (clipboard && clipboard.items.length > 0) {
@@ -660,6 +702,7 @@ export function NoteTreeSection({
               value={renameValue}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => setRenameValue(e.target.value)}
+              onFocus={(e) => e.target.select()}
               onBlur={commitFolderRename}
               onKeyDown={(e) => {
                 e.stopPropagation()
@@ -722,6 +765,9 @@ export function NoteTreeSection({
         draggable={!isRenaming && canManage}
         onDragStart={(e) => handleDragStart(e, { kind: 'note', id: note.id })}
         onDragEnd={handleDragEnd}
+        onDragOver={(e) => handleNoteDragOver(e, note)}
+        onDragLeave={() => handleNoteDragLeave(note)}
+        onDrop={(e) => handleNoteDrop(e, note)}
         onContextMenu={(e) => openNoteMenu(e, note)}
         style={{ opacity: isDragging || isCutPending ? 0.5 : 1 }}
       >
@@ -758,6 +804,7 @@ export function NoteTreeSection({
               value={renameValue}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => setRenameValue(e.target.value)}
+              onFocus={(e) => e.target.select()}
               onBlur={commitNoteRename}
               onKeyDown={(e) => {
                 e.stopPropagation()
@@ -834,7 +881,7 @@ export function NoteTreeSection({
           {title}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ToolbarButton title="New note" onClick={() => onCreateNote(null)}>
+          <ToolbarButton title="New note" onClick={() => void handleCreateNote(null)}>
             <NewNoteIcon />
           </ToolbarButton>
           <ToolbarButton title="New folder" onClick={() => void handleCreateFolder(null)}>

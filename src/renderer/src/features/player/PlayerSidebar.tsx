@@ -27,7 +27,7 @@ interface PlayerSidebarProps {
   myUserId: string | null
   onSelectNote: (id: string) => void
   onOpenNoteInNewTab: (id: string) => void
-  onCreateNote: (visibility: 'shared' | 'private', folderId: string | null) => void
+  onCreateNote: (visibility: 'shared' | 'private', folderId: string | null) => Promise<string | undefined>
   onCreateFolder: (
     visibility: 'shared' | 'private',
     name: string,

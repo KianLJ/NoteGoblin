@@ -11,9 +11,11 @@ import {
   activeFeatIds,
   computeInitiative,
   DAMAGE_TYPES,
+  applyExhaustionToMaxHp,
+  applyExhaustionToSpeed,
   computeMaxHp,
   computeSpeed,
-  EXHAUSTION_EFFECTS,
+  exhaustionEffectsDescription,
   formatModifier,
   hitDicePools,
   lineageOptionsForRace,
@@ -58,7 +60,7 @@ import { RollButton } from '../../dice/RollButton'
 import { CombatTab } from './CombatTab'
 import { playSfx } from '../../audio/soundEffects'
 import { OriginFeatChooser } from '../AsiChoosers'
-import { AbilityIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
+import { AbilityIcon, ExhaustionIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
   race: string
@@ -199,11 +201,11 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     featSpeedBonus(activeFeats) + armorSpeedPenalty(character.equipment, effScores) + classFeatureSpeedBonus(draft.classes, character.equipment)
   const notes = featNotes(activeFeats)
   const skillAdvantage = effectiveSkillAdvantage(activeFeats, character.equipment)
-  const abilityCheckAdvantage = effectiveAbilityCheckAdvantage(activeFeats, character.activeBuffs)
-  const savingThrowAdvantage = effectiveSavingThrowAdvantage(activeFeats, character.activeBuffs)
+  const abilityCheckAdvantage = effectiveAbilityCheckAdvantage(activeFeats, character.activeBuffs, draft.exhaustionLevel)
+  const savingThrowAdvantage = effectiveSavingThrowAdvantage(activeFeats, character.activeBuffs, draft.exhaustionLevel)
   const initiativeAdvantage = effectiveInitiativeAdvantage(activeFeats)
 
-  const maxHp = computeMaxHp(draft.classes, effScores)
+  const maxHp = applyExhaustionToMaxHp(computeMaxHp(draft.classes, effScores), draft.exhaustionLevel)
 
   /** Raising a class's level bumps current HP by however much the (fully derived) max just went up, matching the 5e rule that HP gained on level-up is immediate, not just a higher ceiling. Whatever else the new level grants (class features, an ASI/feat slot, a subclass-choice slot) just appears on its own in Combat's Features tab — see FeaturesTab.tsx, which derives all of that live from class/level instead of requiring it to be accepted here. */
   function updateClass(index: number, fields: Partial<ClassLevel>): void {
@@ -325,6 +327,21 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      {draft.exhaustionLevel >= 6 && (
+        <div
+          className="gb-card"
+          style={{
+            padding: 'var(--space-3)',
+            borderColor: 'var(--danger)',
+            background: 'color-mix(in srgb, var(--danger) 12%, var(--bg-surface))',
+            color: 'var(--danger)',
+            fontWeight: 600,
+            textAlign: 'center'
+          }}
+        >
+          Exhaustion 6 — {character.name || 'This character'} has died.
+        </div>
+      )}
       {shortRestOpen && (
         <Modal onClose={() => setShortRestOpen(false)} width={380}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -558,10 +575,15 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         </button>
 
         <HeaderField label="Exhaustion">
-          <div
-            title={EXHAUSTION_EFFECTS[draft.exhaustionLevel]}
-            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <HoverDetailCard
+              title={`Exhaustion ${draft.exhaustionLevel}`}
+              subtitle={draft.exhaustionLevel >= 6 ? 'Death' : draft.exhaustionLevel <= 0 ? 'No exhaustion' : undefined}
+              fields={[]}
+              description={exhaustionEffectsDescription(draft.exhaustionLevel)}
+            >
+              <ExhaustionIcon style={{ color: draft.exhaustionLevel > 0 ? 'var(--danger)' : 'var(--text-muted)', cursor: 'default' }} />
+            </HoverDetailCard>
             <button
               type="button"
               disabled={readOnly || draft.exhaustionLevel <= 0}
@@ -608,7 +630,12 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           large
           badge={initiativeAdvantage && <AdvantageTag kind={initiativeAdvantage} label="Initiative" />}
         />
-        <VitalStat label="Speed" value={`${computeSpeed(draft.race) + speedBonus} ft`} icon={<SpeedIcon />} large />
+        <VitalStat
+          label="Speed"
+          value={`${applyExhaustionToSpeed(computeSpeed(draft.race) + speedBonus, draft.exhaustionLevel)} ft`}
+          icon={<SpeedIcon />}
+          large
+        />
 
         <Divider />
 

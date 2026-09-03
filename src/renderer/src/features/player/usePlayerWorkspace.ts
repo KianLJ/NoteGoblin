@@ -273,8 +273,8 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     visibility: 'dm' | 'shared' | 'private',
     folderId: string | null = null,
     title: string = 'Untitled'
-  ): Promise<void> {
-    if (!activeCampaign || !guardOnline()) return
+  ): Promise<string | undefined> {
+    if (!activeCampaign || !guardOnline()) return undefined
     setError(null)
     const result = await window.goblin.notes.create(
       activeCampaign.id,
@@ -283,10 +283,11 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     )
     if (!result.ok) {
       setError(result.error)
-      return
+      return undefined
     }
     setNotes((prev) => (prev ? [result.data, ...prev] : [result.data]))
     openTab({ kind: 'note', id: result.data.id })
+    return result.data.id
   }
 
   async function saveNote(

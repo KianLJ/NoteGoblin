@@ -15,7 +15,7 @@ interface NoteSidebarProps {
   campaignId: string | null
   onSelect: (id: string) => void
   onOpenInNewTab: (id: string) => void
-  onCreateNote: (visibility: 'dm' | 'shared', folderId: string | null) => void
+  onCreateNote: (visibility: 'dm' | 'shared', folderId: string | null) => Promise<string | undefined>
   onCreateFolder: (visibility: 'dm' | 'shared', name: string, parentFolderId: string | null) => Promise<string | undefined>
   onRenameNote: (noteId: string, title: string) => void
   onDeleteNote: (noteId: string) => void

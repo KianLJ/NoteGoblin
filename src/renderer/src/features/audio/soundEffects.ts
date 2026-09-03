@@ -8,10 +8,12 @@ import newMessageUrl from '../../assets/sfx/NewMessage.mp3'
 import playerDisconnectedUrl from '../../assets/sfx/PlayerDisconnected.mp3'
 import playerJoinedUrl from '../../assets/sfx/PlayerJoined.mp3'
 import receiveMessageUrl from '../../assets/sfx/ReceiveMessage.mp3'
+import resultUrl from '../../assets/sfx/Result.mp3'
 import sceneAdvanceUrl from '../../assets/sfx/SceneAdvance.mp3'
 import sendMessageUrl from '../../assets/sfx/SendMessage.mp3'
 import sessionHostedUrl from '../../assets/sfx/SessionHosted.mp3'
 import shortRestUrl from '../../assets/sfx/ShortRest.mp3'
+import whooshUrl from '../../assets/sfx/Whoosh.mp3'
 import { getStoredSfxEnabled, getStoredSfxVolume } from './soundSettings'
 
 export type SfxId =
@@ -27,11 +29,15 @@ export type SfxId =
   | 'playerJoined'
   /** A message arriving in a chat log you already have open (party chat or a whisper thread) — see useCampaignChat.ts/useRelayMessages.ts. */
   | 'receiveMessage'
+  /** A roll's reveal (RollAnimationOverlay.tsx) for anything that isn't a natural 1 or 20 — those keep their own dedicated chimes. Played with `rate` set from how good the roll was, low-pitched for a bad roll and high-pitched for a good one, so an ordinary result still has some texture instead of every non-crit roll sounding identical. */
+  | 'result'
   | 'sceneAdvance'
   /** You sent a message from an open chat log. */
   | 'sendMessage'
   | 'sessionHosted'
   | 'shortRest'
+  /** The modifier chip flying in to a settled die (RollAnimationOverlay.tsx) — started the instant the chip begins its flight so its ~2.6s length lines up with the impact landing exactly when the chip actually reaches the die, see MODIFIER_FLY_MS there. */
+  | 'whoosh'
 
 const SFX_URLS: Record<SfxId, string> = {
   diceRoll: diceRollUrl,
@@ -44,10 +50,12 @@ const SFX_URLS: Record<SfxId, string> = {
   playerDisconnected: playerDisconnectedUrl,
   playerJoined: playerJoinedUrl,
   receiveMessage: receiveMessageUrl,
+  result: resultUrl,
   sceneAdvance: sceneAdvanceUrl,
   sendMessage: sendMessageUrl,
   sessionHosted: sessionHostedUrl,
-  shortRest: shortRestUrl
+  shortRest: shortRestUrl,
+  whoosh: whooshUrl
 }
 
 // One HTMLAudioElement per cue, reused across plays (cloned when a cue might
@@ -64,8 +72,8 @@ function elementFor(id: SfxId): HTMLAudioElement {
   return el
 }
 
-/** Fires a short one-shot UI cue — a no-op if the user has muted sound effects. Safe to call from anywhere; failures (e.g. autoplay policy before any user gesture) are swallowed rather than surfaced, since a missing sound is never worth an error toast. */
-export function playSfx(id: SfxId): void {
+/** Fires a short one-shot UI cue — a no-op if the user has muted sound effects. Safe to call from anywhere; failures (e.g. autoplay policy before any user gesture) are swallowed rather than surfaced, since a missing sound is never worth an error toast. `rate` shifts the clip's pitch via playbackRate — 1 is unchanged, e.g. 0.8 is lower and 1.2 is higher; see 'result' above for the one cue that actually varies this. */
+export function playSfx(id: SfxId, rate = 1): void {
   if (!getStoredSfxEnabled()) return
   const base = elementFor(id)
   // Cloning lets an already-playing cue (e.g. rapid-fire dice rolls) overlap
@@ -73,6 +81,13 @@ export function playSfx(id: SfxId): void {
   // ever a template, never actually played from directly.
   const instance = base.cloneNode(true) as HTMLAudioElement
   instance.volume = getStoredSfxVolume()
+  // Chromium (and so Electron) defaults preservesPitch to true, which uses
+  // a time-stretch algorithm to deliberately keep pitch constant while
+  // playbackRate changes speed — the exact opposite of what a pitch cue
+  // needs. Without turning this off, changing `rate` just sped the clip up
+  // or slowed it down with barely any perceptible pitch shift.
+  instance.preservesPitch = false
+  instance.playbackRate = rate
   void instance.play().catch(() => {
     /* autoplay blocked or similar — not worth surfacing */
   })

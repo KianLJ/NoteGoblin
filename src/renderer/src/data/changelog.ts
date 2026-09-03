@@ -7,6 +7,18 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.6',
+    title: 'Interactive advantage/disadvantage rolls and dice reveal overhaul',
+    highlights: [
+      'Rolling with advantage/disadvantage now shows two dice you click independently, in either order, instead of both being rolled for you at once — the dropped die visibly flies away once both have landed',
+      'A roll now reveals its raw die result first, then a "+5"/"−2" modifier chip flies in and the number updates to the real total, instead of the modifier being silently baked into the very first number shown; a natural 20 or 1 skips this and stays on the dramatic raw roll',
+      'The die now colors itself by how good the raw roll was — red near a 1, grey around 10, green climbing to a natural 20, with a distinct purple for a "dirty 20" (hit 20 only via the modifier, not an actual natural 20)',
+      'Dice-roll and crit/fumble sounds now play exactly when the result actually appears on screen instead of the instant a roll resolves internally, sometimes well before the animation caught up; added new whoosh (modifier impact) and result (ordinary reveal, pitched to the roll\'s quality) sound effects',
+      'Fixed several stuck-forever bugs in the roll popup, a note-onto-note drag ejecting it to the wrong folder, spells not showing in the character sheet\'s spell picker despite being grantable via Magic Initiate, and a background-granted feat being unrecoverable once removed',
+      'A spell\'s Action/Bonus Action/Reaction badge is now derived automatically from its casting time instead of a manual dropdown, and known spells are grouped by level in the Spells tab'
+    ]
+  },
+  {
     version: '0.5.5',
     title: 'Character creation overhaul — SRD 5.2.1 species, classes, and backgrounds',
     highlights: [

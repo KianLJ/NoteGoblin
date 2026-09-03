@@ -65,10 +65,12 @@ export function buildCheckRollEntry(
   advantage: AdvantageMode,
   isPrivate: boolean,
   label?: string,
-  dc?: number | null
+  dc?: number | null,
+  /** Already-rolled d20 face(s) to use instead of rolling fresh ones — for an advantage/disadvantage roll where the player clicked each die themselves in RollAnimationOverlay.tsx and already saw both real faces before this entry is even built, so the entry has to carry forward the exact numbers shown, not a second independently-rolled pair. */
+  presetResults?: number[]
 ): DiceRollLogEntry {
   const rollCount = advantage === 'normal' ? 1 : 2
-  const results = Array.from({ length: rollCount }, () => rollDie(20))
+  const results = presetResults ?? Array.from({ length: rollCount }, () => rollDie(20))
   const picked = advantage === 'disadvantage' ? Math.min(...results) : Math.max(...results)
   // Plain English ("d20 (Advantage)") rather than dice-notation shorthand
   // ("2d20kh1") — that shorthand is standard among players who already know
@@ -113,7 +115,7 @@ export function formatFormula(groups: DiceGroup[], modifier: number): string {
   return `${dicePart} ${formatModifierTerm(modifier)}`
 }
 
-function formatModifierTerm(modifier: number): string {
+export function formatModifierTerm(modifier: number): string {
   return modifier >= 0 ? `+ ${modifier}` : `- ${Math.abs(modifier)}`
 }
 

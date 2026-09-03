@@ -30,21 +30,31 @@ export function subscribeDiceLog(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-/** A d20 that actually landed on 1 or 20 in `entry.groups` — null for a redacted private-roll broadcast (groups: null), so a bystander never learns another player's private nat 1/20 from the sound alone. */
+/** The d20 that actually counted toward the total in `entry.groups` landing on 1 or 20 — null for a redacted private-roll broadcast (groups: null), so a bystander never learns another player's private nat 1/20 from the sound alone. On an advantage/disadvantage roll (two results in one group) this only looks at whichever of the two was kept, not either die — otherwise a disadvantage roll that dropped a natural 20 in favor of a low kept result still played the crit chime for a roll that, mechanically, wasn't one. */
 function d20Extreme(entry: DiceRollLogEntry): 'natural20' | 'natural1' | null {
   if (!entry.groups) return null
   for (const group of entry.groups) {
     if (group.sides !== 20) continue
+    const kept = entry.advantage && entry.advantage !== 'normal' && group.results.length === 2
+      ? entry.advantage === 'disadvantage'
+        ? Math.min(...group.results)
+        : Math.max(...group.results)
+      : null
+    if (kept !== null) {
+      if (kept === 20) return 'natural20'
+      if (kept === 1) return 'natural1'
+      continue
+    }
     if (group.results.includes(20)) return 'natural20'
     if (group.results.includes(1)) return 'natural1'
   }
   return null
 }
 
-function appendToLog(entry: DiceRollLogEntry): void {
+function appendToLog(entry: DiceRollLogEntry, silent = false): void {
   if (log.some((e) => e.id === entry.id)) return
   log = [entry, ...log]
-  playSfx(d20Extreme(entry) ?? 'diceRoll')
+  if (!silent) playSfx(d20Extreme(entry) ?? 'diceRoll')
   notify()
 }
 
@@ -67,10 +77,12 @@ export function performRoll(
   rollerName: string,
   groups: DiceGroup[],
   modifier: number,
-  isPrivate: boolean
+  isPrivate: boolean,
+  /** Skips the log's own roll sound — for RollAnimationOverlay.tsx's pending-damage flow, which plays its own confirmation sound timed to the reveal animation instead of the instant the roll actually resolves. */
+  silent?: boolean
 ): DiceRollLogEntry {
   const entry = buildRollEntry(rollerId, rollerName, groups, modifier, isPrivate)
-  appendToLog(entry)
+  appendToLog(entry, silent)
   if (sessionId) void window.goblin.dice.broadcast(sessionId, redactRollForBroadcast(entry))
   return entry
 }
@@ -90,10 +102,13 @@ export function performCheckRoll(
   advantage: AdvantageMode,
   isPrivate: boolean,
   label?: string,
-  dc?: number | null
+  dc?: number | null,
+  presetResults?: number[],
+  /** Skips the log's own roll sound — for RollAnimationOverlay.tsx's manual advantage/disadvantage flow, which already played a cue for each individual die click and would otherwise double up with a third sound the instant both are in. */
+  silent?: boolean
 ): DiceRollLogEntry {
-  const entry = buildCheckRollEntry(rollerId, rollerName, modifier, advantage, isPrivate, label, dc)
-  appendToLog(entry)
+  const entry = buildCheckRollEntry(rollerId, rollerName, modifier, advantage, isPrivate, label, dc, presetResults)
+  appendToLog(entry, silent)
   if (sessionId) void window.goblin.dice.broadcast(sessionId, redactRollForBroadcast(entry))
   return entry
 }

@@ -146,8 +146,8 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     visibility: 'dm' | 'shared' | 'private',
     folderId: string | null = null,
     title: string = 'Untitled'
-  ): Promise<void> {
-    if (!campaignId) return
+  ): Promise<string | undefined> {
+    if (!campaignId) return undefined
     setError(null)
     const result = await window.goblin.notes.create(
       campaignId,
@@ -156,10 +156,11 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     )
     if (!result.ok) {
       setError(result.error)
-      return
+      return undefined
     }
     setNotes((prev) => (prev ? [result.data, ...prev] : [result.data]))
     openNote(result.data.id)
+    return result.data.id
   }
 
   /**

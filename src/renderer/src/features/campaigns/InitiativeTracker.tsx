@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import { activeFeatIds, computeMaxHp } from '@shared/dnd5e'
+import { activeFeatIds, applyExhaustionToMaxHp, computeMaxHp, exhaustionEffectsDescription } from '@shared/dnd5e'
+import { ExhaustionIcon } from '../player/characterSheetTabs/icons'
 import { effectiveAbilityScores, computeArmorClassFromEquipment } from '@shared/compendium'
 import {
   emptyInitiativeState,
@@ -53,7 +54,12 @@ function playerToCombatant(userId: string, character: CharacterSheet): Combatant
     name: character.name,
     kind: 'player',
     initiative: null,
-    maxHp: computeMaxHp(character.classes, character.abilityScores),
+    // effScores (not the raw base scores) so a Constitution bonus from a
+    // feat/ASI actually raises Max HP here too — same source OverviewTab's
+    // own Max HP already uses, and exhaustion level 4's halving on top,
+    // matching what the character's own sheet shows instead of a stale/
+    // higher number the DM never sees corrected.
+    maxHp: applyExhaustionToMaxHp(computeMaxHp(character.classes, effScores), character.exhaustionLevel),
     currentHp: character.currentHp,
     ac: computeArmorClassFromEquipment(character.equipment, effScores, featIds, character.classes),
     userId,
@@ -125,13 +131,15 @@ export function InitiativeTracker({
   }, [])
 
   // Max HP and AC are derived from the character sheet (level/HP die,
-  // equipped armor), not something the DM tracks by hand — once a player
-  // combatant was added, those two used to freeze at whatever they were at
-  // add-time and silently drift out of sync with the actual sheet (a level
-  // up, new armor, etc). Re-derives them from the live playerCharacters map
-  // on every change. Deliberately leaves currentHp alone — that's real
-  // combat state the DM is actively tracking (damage taken this fight), not
-  // something a sheet edit should ever overwrite mid-encounter.
+  // equipped armor, active feat/ASI ability bonuses, exhaustion), not
+  // something the DM tracks by hand — once a player combatant was added,
+  // those two used to freeze at whatever they were at add-time and
+  // silently drift out of sync with the actual sheet (a level up, new
+  // armor, a feat, exhaustion changing, etc). Re-derives them from the live
+  // playerCharacters map on every change. Deliberately leaves currentHp
+  // alone — that's real combat state the DM is actively tracking (damage
+  // taken this fight), not something a sheet edit should ever overwrite
+  // mid-encounter.
   useEffect(() => {
     setState((prev) => {
       let changed = false
@@ -141,7 +149,7 @@ export function InitiativeTracker({
         if (!character) return c
         const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
         const featIds = activeFeatIds(character.classes, character.asiSlotChoices)
-        const maxHp = computeMaxHp(character.classes, character.abilityScores)
+        const maxHp = applyExhaustionToMaxHp(computeMaxHp(character.classes, effScores), character.exhaustionLevel)
         const ac = computeArmorClassFromEquipment(character.equipment, effScores, featIds, character.classes)
         if (maxHp === c.maxHp && ac === c.ac) return c
         changed = true
@@ -401,6 +409,21 @@ export function InitiativeTracker({
                     style={{ width: 48, fontSize: 11, padding: '2px 4px' }}
                   />
                 </label>
+                {c.kind === 'player' &&
+                  c.userId &&
+                  (() => {
+                    const exhaustionLevel = playerCharacters.get(c.userId)?.exhaustionLevel ?? 0
+                    if (exhaustionLevel <= 0) return null
+                    return (
+                      <span
+                        title={`Exhaustion ${exhaustionLevel}\n${exhaustionEffectsDescription(exhaustionLevel)}`}
+                        style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--danger)' }}
+                      >
+                        <ExhaustionIcon size={13} style={{ color: 'var(--danger)' }} />
+                        {exhaustionLevel}
+                      </span>
+                    )
+                  })()}
               </div>
 
               {c.deathSaves && (
