@@ -4,9 +4,10 @@
  * src/renderer/src/assets/soundboard/** the same way musicLibrary.ts and
  * ambientLibrary.ts discover their own bundled files. Drop an MP3 into one
  * of the category folders below and it shows up in its menu section
- * automatically — no code change needed. Category ids/labels/order mirror
- * the "Pocket Foley" curation checklist's eight sides, so whatever gets
- * sourced against that list slots straight into the matching section here.
+ * automatically — no code change needed. Category ids/labels/order started
+ * as the "Pocket Foley" curation checklist's eight sides; its Spell Schools
+ * side was dropped as redundant with Spellcasting once actually curating,
+ * so this only has seven now.
  */
 export interface SfxCue {
   /** Unique across the whole library — "<categoryId>-<n>". */
@@ -74,7 +75,6 @@ const CATEGORIES: { id: string; label: string }[] = [
   { id: 'WeaponImpacts', label: 'Weapon Impacts' },
   { id: 'Elemental', label: 'Elemental & Damage' },
   { id: 'Spellcasting', label: 'Spellcasting' },
-  { id: 'SpellSchools', label: 'Spell Schools' },
   { id: 'ClassFeatures', label: 'Class Features' },
   { id: 'Creatures', label: 'Creatures & Combat' },
   { id: 'Movement', label: 'Footsteps & Movement' },
@@ -104,9 +104,47 @@ export function findSfxCue(cueId: string): SfxCue | undefined {
   return undefined
 }
 
+/** Looks up one cue by its exact display label within a specific category — used where the trigger (a natural 20/1 on an attack roll, see RollAnimationOverlay.tsx) knows a cue by name rather than by id, the same way findClassFeatureSfxCue does for ability names. Undefined if that category has no cue with this label (including one not curated yet). */
+export function findSfxCueByLabel(categoryId: string, label: string): SfxCue | undefined {
+  return SFX_LIBRARY.find((c) => c.id === categoryId)?.cues.find((c) => c.label === label)
+}
+
 /** Picks which of a cue's alternate takes to actually play — called independently by every client on every trigger (never broadcast as part of the cue id), so a synced table still hears a different take from each other by chance, same as it would if the DM triggered the same cue twice in a row locally. */
 export function pickSfxVariant(cue: SfxCue): string {
   return cue.urls[Math.floor(Math.random() * cue.urls.length)]
+}
+
+/**
+ * Maps a character sheet ability's own display name (Rage, Divine Smite,
+ * Channel Divinity: Turn Undead, ...) to the Class Features cue that plays
+ * when a player activates/uses it — see CombatTab.tsx's Toggle Actions,
+ * Special Actions, and Bonus/Other Class Resources sections, and
+ * FeaturesTab.tsx's DivineSmiteCard. Matched by keyword rather than an exact
+ * name since the same ability can render under a few different labels
+ * (Channel Divinity's sub-options, a subclass's own Ki-fueled feature) —
+ * first pattern to match wins. A pattern with no corresponding cue actually
+ * curated yet (see the ClassFeatures folder) just never matches anything,
+ * so this degrades to silently doing nothing rather than erroring.
+ */
+const CLASS_FEATURE_SFX_PATTERNS: { match: RegExp; cueLabel: string }[] = [
+  { match: /\brage\b/i, cueLabel: 'Barbarian Rage' },
+  { match: /bardic inspiration/i, cueLabel: 'Bardic Inspiration' },
+  { match: /channel divinity/i, cueLabel: 'Cleric Burst' },
+  { match: /flurry of blows|patient defense|step of the wind|\bki\b/i, cueLabel: 'Monk Ki Strike' },
+  { match: /divine smite/i, cueLabel: 'Paladin Smite' },
+  { match: /hunter'?s mark/i, cueLabel: "Ranger Hunter's Mark Ping" },
+  { match: /sneak attack/i, cueLabel: 'Rogue Sneak Attack' },
+  { match: /metamagic/i, cueLabel: 'Sorcerer Metamagic Surge' },
+  { match: /eldritch blast/i, cueLabel: 'Warlock Eldritch Blast' },
+  { match: /arcane recovery/i, cueLabel: 'Wizard Arcane Recovery' }
+]
+
+/** Looks up a Class Features cue by an ability's own display name — see CLASS_FEATURE_SFX_PATTERNS above. Returns undefined for an ability with no mapped pattern, or one whose mapped cue hasn't been curated (added to assets/soundboard/ClassFeatures) yet. */
+export function findClassFeatureSfxCue(abilityName: string): SfxCue | undefined {
+  const pattern = CLASS_FEATURE_SFX_PATTERNS.find((p) => p.match.test(abilityName))
+  if (!pattern) return undefined
+  const category = SFX_LIBRARY.find((c) => c.id === 'ClassFeatures')
+  return category?.cues.find((c) => c.label === pattern.cueLabel)
 }
 
 export function totalSfxCount(): number {

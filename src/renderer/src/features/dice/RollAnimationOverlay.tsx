@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatBreakdown, formatModifierTerm, rollDie, sumGroupResults, type DiceRollLogEntry } from '@shared/dice'
 import { playSfx } from '../audio/soundEffects'
+import { playSfxCue } from '../audio/sfxBoardEngine'
+import { findSfxCueByLabel } from '../../data/sfxLibrary'
 import { performCheckRoll, performRoll } from './diceLogStore'
 import { dequeueRollAnimation, getRollAnimationQueue, resolvePendingRoll, subscribeRollAnimation } from './rollAnimationStore'
 
@@ -91,27 +93,62 @@ const ROLL_GREEN: [number, number, number] = [86, 176, 104]
 const ROLL_PURPLE = '#a855f7'
 
 /**
- * How "good" a raw d20 face was, at a glance — deep red near 1, fading to a
- * boring grey around 10, brightening toward green as it climbs to 20. A
- * true natural 20 (crit) and natural 1 (fumble) still get their own
- * saturated colors via naturalRoll/dieColor; this fills in everything in
- * between with a continuous gradient instead of only the two extremes ever
- * standing out. Only meaningful when there's no DC to fail against (see
- * dieColor's own gating) — a raw face colored on its own merits would read
- * as a contradiction next to a plain pass/fail result.
+ * How "good" a roll's final total was, at a glance — deep red near the
+ * bottom of `[min, max]`, fading to a boring grey at its midpoint,
+ * brightening toward green toward its top. Deliberately reads the *total*
+ * (modifier included), not the bare die face(s) — a bad raw roll saved by a
+ * big enough bonus should still look like the decent-or-better result it
+ * actually was, not stay red just because the dice themselves came up low.
+ * `min`/`max` scale this to whatever's actually being rolled — a d20 check
+ * uses a fixed 1-20 (see dieColor: a big modifier pushing a check's total
+ * past 20 still reads as green, not "off the top of the scale," since a
+ * check's own scale is fixed to what the d20 itself can show regardless of
+ * bonuses), while a damage roll uses that pool's own dice-only range (see
+ * poolRange) — a 1d6 damage roll grades against 1-6, not 1-20, so a 3 reads
+ * as the middling roll it actually was rather than looking artificially bad
+ * next to a scale it was never rolled on. A true natural 20 (crit) and
+ * natural 1 (fumble) still get their own saturated colors via
+ * naturalRoll/dieColor, and a "dirty 20" (see isDirtyTwenty) still gets its
+ * own purple rather than this gradient's green — both checked before this
+ * ever runs. Only meaningful when there's no DC to fail against (see
+ * dieColor's own gating) — a total colored on its own merits would read as
+ * a contradiction next to a plain pass/fail result. A total outside
+ * `[min, max]` (a big modifier can easily push it past the top, or a
+ * penalty below the bottom) just clamps to that gradient's nearest end
+ * rather than extending it further, since "great" and "terrible" don't get
+ * any more extreme past those points.
  */
-function rawRollColor(raw: number): string {
-  const t = (Math.min(20, Math.max(1, raw)) - 1) / 19
+function rollQualityColor(total: number, min: number, max: number): string {
+  if (max <= min) return `rgb(${ROLL_GREY.join(', ')})`
+  const t = (Math.min(max, Math.max(min, total)) - min) / (max - min)
   const [from, to, localT] = t <= 0.5 ? [ROLL_RED, ROLL_GREY, t / 0.5] : [ROLL_GREY, ROLL_GREEN, (t - 0.5) / 0.5]
   const mix = (i: number) => Math.round(from[i] + (to[i] - from[i]) * localT)
   return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`
 }
 
-/** The 'result' cue's pitch for a given raw d20 face — deep/low for a bad roll, climbing to a brighter/higher pitch for a good one, same 1-20 scale rawRollColor uses. A roll with no such face (pooled damage dice, etc.) just plays at the natural pitch. */
-function resultPitch(raw: number | null): number {
-  if (raw === null) return 1
-  const t = (Math.min(20, Math.max(1, raw)) - 1) / 19
+/** The 'result' cue's pitch for a roll's final total — deep/low for a bad result, climbing to a brighter/higher pitch for a good one, same `[min, max]`-scaled total rollQualityColor uses (see its own doc comment for why this reads the total against that roll's own range, not a fixed scale or the bare die face). A roll with no total to read (a redacted private roll on someone else's screen) just plays at the natural pitch. */
+function resultPitch(total: number | null, min: number, max: number): number {
+  if (total === null || max <= min) return 1
+  const t = (Math.min(max, Math.max(min, total)) - min) / (max - min)
   return 0.82 + t * 0.5
+}
+
+/**
+ * The total this dice pool alone (no modifier) could produce at its worst
+ * and best — every rolled die is assumed to count toward the sum, which is
+ * true for a plain pooled roll (2d6 sums both) and a damage roll, but NOT
+ * for a d20 check rolled with advantage/disadvantage (two d20s rolled, only
+ * one kept) — that case is handled separately via the fixed 1-20 range (see
+ * rollQualityColor's own doc comment), never through here. Null for an
+ * entry with no dice data to read at all (a redacted private roll on
+ * someone else's screen).
+ */
+function poolRange(entry: DiceRollLogEntry): { min: number; max: number } | null {
+  if (!entry.groups || entry.groups.length === 0) return null
+  return entry.groups.reduce(
+    (acc, g) => ({ min: acc.min + g.results.length * 1, max: acc.max + g.results.length * g.sides }),
+    { min: 0, max: 0 }
+  )
 }
 
 /** True for a check roll where two d20s were actually rolled and one was dropped — the only case that gets the two-dice discard choreography instead of the plain single-die tip. */
@@ -327,6 +364,12 @@ export function RollAnimationOverlay(): JSX.Element | null {
   // Guards the "both dice landed" effect against firing twice for the same
   // pending item (e.g. an extra render between the two setState calls).
   const resolvedIdRef = useRef<string | null>(null)
+  // The session this roll belongs to, captured at the moment triggerPendingRoll
+  // fires (while `current` is still the pending item and so still carries it)
+  // — needed later at reveal time for the crit/fumble Sound Board cue below,
+  // by which point `current` has already been swapped for the rolled entry
+  // (see resolvePendingRoll), which has no sessionId field of its own.
+  const pendingSessionIdRef = useRef<string | null>(null)
   // Guards the dual-roll sequence effect (below) against starting twice for
   // the same resolved entry.
   const dualEntrySequenceRef = useRef<string | null>(null)
@@ -686,18 +729,37 @@ export function RollAnimationOverlay(): JSX.Element | null {
   // there's no DC in play, matching the "no crit/fumble banner against a
   // DC" rule the `natural` display value below follows for the exact same
   // reason. Every other roll gets 'result' instead, pitched to how good the
-  // raw d20 face actually was — low and deep for a bad roll, high for a
-  // good one — rather than every non-crit result sounding identical;
-  // anything that isn't a d20 check (pooled damage dice, etc.) has no such
-  // "how good was it" scale, so it just plays at the natural pitch.
+  // total actually was against that roll's own range — a d20 check's fixed
+  // 1-20, or a damage roll's own dice-only min/max (see rollQualityColor's
+  // doc comment) — low and deep for a bad roll, high for a good one, rather
+  // than every non-crit result sounding identical.
   useEffect(() => {
     if (phase !== 'revealed') return
     const e = localEntry ?? rolledEntry
     if (!e) return
     const nat = e.dc == null ? naturalRoll(e) : null
-    if (nat === 'crit') playSfx('natural20')
-    else if (nat === 'fumble') playSfx('natural1')
-    else playSfx('result', resultPitch(rawD20Face(e)))
+    // A natural 20/1 specifically on an attack roll (every rollAttack label
+    // in CombatTab.tsx ends with " Attack" — ability checks/saves never do)
+    // also fires the matching Creatures cue, broadcasting the same way any
+    // other Sound Board cue does — see pendingSessionIdRef's own doc comment
+    // for why the session has to be captured earlier, at trigger time.
+    const isAttackRoll = /\battack$/i.test((e.label ?? '').trim())
+    if (nat === 'crit') {
+      playSfx('natural20')
+      if (isAttackRoll) {
+        const cue = findSfxCueByLabel('Creatures', 'Critical Hit')
+        if (cue) playSfxCue(cue.id, pendingSessionIdRef.current)
+      }
+    } else if (nat === 'fumble') {
+      playSfx('natural1')
+      if (isAttackRoll) {
+        const cue = findSfxCueByLabel('Creatures', 'Miss Whiff')
+        if (cue) playSfxCue(cue.id, pendingSessionIdRef.current)
+      }
+    } else {
+      const range = rawD20Face(e) !== null ? { min: 1, max: 20 } : poolRange(e)
+      playSfx('result', range ? resultPitch(e.total, range.min, range.max) : 1)
+    }
   }, [phase, localEntry, rolledEntry])
 
   if (!current) return null
@@ -711,9 +773,11 @@ export function RollAnimationOverlay(): JSX.Element | null {
     // per-die click sound for the dual-roll case.
     playSfx('diceRoll')
     if (current.kind === 'pending-check') {
+      pendingSessionIdRef.current = current.sessionId
       const entry = performCheckRoll(current.sessionId, current.rollerId, current.rollerName, current.modifier, current.advantage, false, current.label, current.dc, undefined, true)
       resolvePendingRoll(entry)
     } else if (current.kind === 'pending-damage') {
+      pendingSessionIdRef.current = current.sessionId
       const entry = performRoll(current.sessionId, current.rollerId, current.rollerName, current.groups, current.modifier, false, true)
       resolvePendingRoll({ ...entry, label: current.label })
     }
@@ -753,6 +817,13 @@ export function RollAnimationOverlay(): JSX.Element | null {
   // the true crit's green, so the two don't look identical at a glance.
   const rawFace = entry && revealed && entry.dc == null ? rawD20Face(entry) : null
   const isDirtyTwenty = rawFace !== null && rawFace !== 20 && entry?.total === 20
+  const totalForColor = entry && revealed && entry.dc == null ? entry.total : null
+  // A d20 check (rawFace non-null) always grades against the fixed 1-20 a
+  // d20 itself can show; anything else (a damage roll's own die size —
+  // 1d6, 2d8, whatever's actually on the sheet) grades against that pool's
+  // own range instead — see rollQualityColor's and poolRange's own doc
+  // comments for why these can't share one scale.
+  const colorRange = rawFace !== null ? { min: 1, max: 20 } : entry ? poolRange(entry) : null
   const dieColor =
     passFail === 'failure'
       ? 'var(--danger)'
@@ -764,8 +835,8 @@ export function RollAnimationOverlay(): JSX.Element | null {
             ? 'var(--danger)'
             : isDirtyTwenty
               ? ROLL_PURPLE
-              : rawFace !== null
-                ? rawRollColor(rawFace)
+              : totalForColor !== null && colorRange
+                ? rollQualityColor(totalForColor, colorRange.min, colorRange.max)
                 : 'var(--accent)'
   const numberColor = revealed ? dieColor : phase === 'rolling' ? flickerColor(flickerT) : '#f3e9dc'
 

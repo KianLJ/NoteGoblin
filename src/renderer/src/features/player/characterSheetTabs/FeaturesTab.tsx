@@ -46,6 +46,7 @@ import {
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { useAutosaveDraft } from '../useAutosaveDraft'
+import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import {
   AsiSlotChooser,
   FightingStyleChooser,
@@ -74,6 +75,8 @@ interface FeaturesTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
+  /** Threaded down from CombatTab, same as elsewhere — lets an "Activate X" click here play (and, at the table, broadcast) that resource's Class Features cue, same as CombatTab's own duplicate of this section. */
+  sessionId?: string | null
 }
 
 function effectLabel(effect: FeatEffect): string {
@@ -176,7 +179,7 @@ function InfoChip({
  * shared/dnd5e.ts. Only a small "Custom Notes" section at the bottom stays
  * fully freeform/manual, for anything outside this automatic system.
  */
-export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): JSX.Element {
+export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: FeaturesTabProps): JSX.Element {
   const [resourceDraft, setResourceDraft] = useAutosaveDraft<ResourcesDraft>(
     { resourceUsed: character.resourceUsed },
     onSave,
@@ -205,8 +208,8 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
     setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
   }
 
-  /** Activating spends a use, same as any other use of this resource (so Rage's uses tracker and its "active" state never drift apart) — deactivating never refunds it, matching how raging doesn't give the use back when it ends. */
-  function toggleBuff(resourceId: string, kind: 'uses' | 'pool', currentUsed: number, max: number): void {
+  /** Activating spends a use, same as any other use of this resource (so Rage's uses tracker and its "active" state never drift apart) — deactivating never refunds it, matching how raging doesn't give the use back when it ends. Plays (and, at the table, broadcasts) this resource's own Class Features cue on activation only — see playAbilitySfx. */
+  function toggleBuff(resourceId: string, name: string, kind: 'uses' | 'pool', currentUsed: number, max: number): void {
     if (readOnly) return
     const active = character.activeBuffs.includes(resourceId)
     if (active) {
@@ -215,6 +218,7 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
     }
     if (kind === 'uses' && currentUsed >= max) return
     if (kind === 'uses') setUsed(resourceId, currentUsed + 1, max)
+    playAbilitySfx(name, sessionId)
     onSave({ activeBuffs: [...character.activeBuffs, resourceId] })
   }
 
@@ -304,7 +308,7 @@ export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): 
                     {activatable && (
                       <Button
                         variant={active ? 'secondary' : 'primary'}
-                        onClick={() => toggleBuff(r.id, r.kind, used, r.currentMax)}
+                        onClick={() => toggleBuff(r.id, r.name, r.kind, used, r.currentMax)}
                         disabled={readOnly || (!active && r.kind === 'uses' && remaining <= 0)}
                         style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 10px' }}
                         title={active ? `End ${r.name} — its bonuses stop applying immediately` : `Activate ${r.name} — applies its bonuses across the sheet until you end it`}
@@ -1031,11 +1035,14 @@ const DIVINE_SMITE_DESCRIPTION =
 export function DivineSmiteCard({
   character,
   onSave,
-  readOnly
+  readOnly,
+  sessionId = null
 }: {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
+  /** Threaded down from CombatTab, same as elsewhere — plays (and, at the table, broadcasts) the Paladin Smite cue on cast. */
+  sessionId?: string | null
 }): JSX.Element {
   const slotTotals = spellSlotsForClasses(character.classes)
   const availableLevels = Object.keys(slotTotals)
@@ -1055,6 +1062,7 @@ export function DivineSmiteCard({
     const used = (character.spellSlots[effectiveLevel]?.used ?? 0) + 1
     onSave({ spellSlots: { ...character.spellSlots, [effectiveLevel]: { total: slotTotals[effectiveLevel], used } } })
     setLastCast(`${dice}d8 radiant damage (spent a level ${effectiveLevel} slot).`)
+    playAbilitySfx('Divine Smite', sessionId)
   }
 
   return (

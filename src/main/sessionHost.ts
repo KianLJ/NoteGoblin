@@ -278,10 +278,12 @@ export function broadcastAmbientLevel(groupId: string, layerId: string, level: n
   for (const p of players.values()) sendToRelay(p.userId, frame)
 }
 
-/** Pushes a Sound Board one-shot cue to every connected player, table-wide — fire-and-forget, no state to track since a one-shot has nothing to "resume" for a late joiner the way music/ambient do. */
-export function broadcastSfxPlayed(sfxId: string): void {
+/** Pushes a Sound Board one-shot cue to every connected player, table-wide — fire-and-forget, no state to track since a one-shot has nothing to "resume" for a late joiner the way music/ambient do. `excludeUserId` skips the player who triggered it via the 'sfxBoard.play' request below (see its doc comment) — they already played it locally and don't need it echoed back. */
+export function broadcastSfxPlayed(sfxId: string, excludeUserId?: string): void {
   const frame: SfxPlayedFrame = { type: 'sfx-played', sfxId }
-  for (const p of players.values()) sendToRelay(p.userId, frame)
+  for (const p of players.values()) {
+    if (p.userId !== excludeUserId) sendToRelay(p.userId, frame)
+  }
 }
 
 function broadcastSceneChangedFor(campaignId: string, deckId: string | null, sceneIndex: number): void {
@@ -552,6 +554,23 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (roll && typeof roll.id === 'string') {
         if (dmWindow) dmWindow.webContents.send('ws:dice-roll', roll)
         broadcastDiceRoll(roll, userId)
+      }
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
+    // A player triggering a Sound Board cue (the toolbar itself is DM-only,
+    // but a note's inline `` `oneshot: ...` `` button, or a character sheet
+    // ability that plays one — see CombatTab.tsx — isn't) has no direct
+    // relay connection of its own, unlike the DM triggering one straight
+    // through sessionHost.ts's own broadcastSfxPlayed — so it comes in as a
+    // request instead, same shape as 'dice.roll' above: sent to the DM's own
+    // window (which never sees its own local plays otherwise) and fanned out
+    // to every OTHER connected player, excluding whoever triggered it (they
+    // already played it locally).
+    case 'sfxBoard.play': {
+      const sfxId = p.sfxId as string | undefined
+      if (typeof sfxId === 'string') {
+        if (dmWindow) dmWindow.webContents.send('ws:sfx-played', sfxId)
+        broadcastSfxPlayed(sfxId, userId)
       }
       return { reqId: frame.reqId, ok: true, data: undefined }
     }

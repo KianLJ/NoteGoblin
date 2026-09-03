@@ -1187,11 +1187,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (getHostedSession()) broadcastAmbientLevel(groupId, layerId, level, fadeMs)
   })
 
-  // DM-only, fire-and-forget — a Sound Board cue is always a bundled file
-  // (see sfxLibrary.ts), so this only ever carries an id. A no-op unless
-  // actually hosting.
+  // Fire-and-forget, but unlike Ambient/music this isn't DM-only — a note's
+  // inline `` `oneshot: ...` `` button and a character sheet ability (see
+  // sfxBoardEngine.ts's playSfxCue) can be triggered by a player too. While
+  // hosting, this device IS the relay hub, so it broadcasts directly; while
+  // joined as a player, there's no direct relay connection to broadcast
+  // over, so it goes out as a request the DM's own process relays to the
+  // rest of the table instead (see sessionHost.ts's 'sfxBoard.play' case). A
+  // Sound Board cue is always a bundled file (see sfxLibrary.ts), so this
+  // only ever carries an id, never audio data, either way.
   ipcMain.handle('sfx-board:broadcast', (_event, sfxId: string): void => {
     if (getHostedSession()) broadcastSfxPlayed(sfxId)
+    else void sendSessionRequest('sfxBoard.play', { sfxId })
   })
 
   // DM-only — pushes a "roll this" prompt to one connected player, targeted

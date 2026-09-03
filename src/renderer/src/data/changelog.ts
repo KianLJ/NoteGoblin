@@ -7,6 +7,16 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.8',
+    title: 'Sound Board curation, ability cues, and roll color fixes',
+    highlights: [
+      'Curated five Sound Board categories with real audio — Weapon Impacts, Elemental & Damage, Spellcasting, Class Features, and Creatures & Combat — each cue randomly picking from several takes so a repeated sound never plays identically twice, plus a small random pitch variation on every play',
+      'Activating a class feature on the character sheet (Rage, Divine Smite, Channel Divinity, Flurry of Blows, Metamagic, Arcane Recovery, and more) now plays and broadcasts that ability\'s Sound Board cue to the whole table — including from a joined player\'s own client, not just the DM\'s',
+      'A natural 20 on an attack roll now plays a Critical Hit cue, and a natural 1 plays a random Miss/Whiff cue, both broadcast table-wide',
+      'Fixed the roll popup\'s color (and its result sound\'s pitch) being based on the raw die face instead of the final total — a bad roll saved by a big modifier now reads as the decent-or-better result it actually was, and a damage roll now grades against its own die\'s range (a d6 grades 1-6, not against a d20\'s 1-20) instead of looking artificially bad next to a scale it was never rolled on'
+    ]
+  },
+  {
     version: '0.5.7',
     title: 'Sound Board, synced ambiance, and note-embedded audio',
     highlights: [

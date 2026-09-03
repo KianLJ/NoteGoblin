@@ -34,6 +34,7 @@ export type RequestKind =
   | 'characters.getPlayerCharacter'
   | 'initiative.setMine'
   | 'dice.roll'
+  | 'sfxBoard.play'
   | 'messages.list'
   | 'messages.send'
   | 'sessionDecks.list'

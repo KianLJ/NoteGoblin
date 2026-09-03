@@ -34,6 +34,7 @@ import {
   type CompendiumEquipment
 } from '@shared/compendium'
 import { useAutosaveDraft } from '../useAutosaveDraft'
+import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import { SpellsTab } from './SpellsTab'
 import { DivineSmiteCard, FeaturesTab, PoolTracker, UsesTracker } from './FeaturesTab'
 import type { DetailField } from '../CompendiumDetailModal'
@@ -150,8 +151,8 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
     setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
   }
 
-  /** Same activate/end semantics as FeaturesTab.tsx's toggleBuff (spends a use on activation, never refunds on end) — duplicated here rather than shared since this tab keeps its own resourceUsed/attacks autosave draft, separate from FeaturesTab's. */
-  function toggleResourceBuff(resourceId: string, kind: 'uses' | 'pool', currentUsed: number, max: number): void {
+  /** Same activate/end semantics as FeaturesTab.tsx's toggleBuff (spends a use on activation, never refunds on end) — duplicated here rather than shared since this tab keeps its own resourceUsed/attacks autosave draft, separate from FeaturesTab's. Plays (and, at the table, broadcasts) this resource's own Class Features cue — see playAbilitySfx — only on activation, never when turning it back off. */
+  function toggleResourceBuff(resourceId: string, name: string, kind: 'uses' | 'pool', currentUsed: number, max: number): void {
     if (readOnly) return
     const active = character.activeBuffs.includes(resourceId)
     if (active) {
@@ -160,12 +161,15 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
     }
     if (kind === 'uses' && currentUsed >= max) return
     if (kind === 'uses') setResourceUsed(resourceId, currentUsed + 1, max)
+    playAbilitySfx(name, sessionId)
     onSave({ activeBuffs: [...character.activeBuffs, resourceId] })
   }
 
-  function toggleFeature(id: string): void {
+  /** Same activate-only-plays-a-sound rule as toggleResourceBuff above — ending a Toggle Action (Rage wearing off, etc.) stays silent. */
+  function toggleFeature(id: string, name: string): void {
     if (readOnly) return
     const active = character.activeBuffs.includes(id)
+    if (!active) playAbilitySfx(name, sessionId)
     onSave({ activeBuffs: active ? character.activeBuffs.filter((b) => b !== id) : [...character.activeBuffs, id] })
   }
 
@@ -517,7 +521,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                     </HoverDetailCard>
                     <Button
                       variant={active ? 'secondary' : 'primary'}
-                      onClick={() => toggleFeature(f.id)}
+                      onClick={() => toggleFeature(f.id, f.name)}
                       disabled={readOnly}
                       style={{ width: '100%', fontSize: 12, padding: '4px 10px' }}
                     >
@@ -536,7 +540,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
               Special Actions
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
-              {isDivineSmiteClass && <DivineSmiteCard character={character} onSave={onSave} readOnly={readOnly} />}
+              {isDivineSmiteClass && <DivineSmiteCard character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />}
               {resourceActions.map((action) => {
                 const resource = resources.find((r) => r.id === action.resourceId)
                 if (!resource) return null
@@ -548,7 +552,10 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                     action={action}
                     remaining={remaining}
                     readOnly={readOnly}
-                    onUse={() => setResourceUsed(resource.id, used + action.cost, resource.currentMax)}
+                    onUse={() => {
+                      playAbilitySfx(action.name, sessionId)
+                      setResourceUsed(resource.id, used + action.cost, resource.currentMax)
+                    }}
                   />
                 )
               })}
@@ -570,7 +577,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                   active={character.activeBuffs.includes(r.id)}
                   readOnly={readOnly}
                   onSetUsed={(n) => setResourceUsed(r.id, n, r.currentMax)}
-                  onToggle={() => toggleResourceBuff(r.id, r.kind, resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
+                  onToggle={() => toggleResourceBuff(r.id, r.name, r.kind, resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
                 />
               ))}
             </div>
@@ -591,7 +598,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                   active={character.activeBuffs.includes(r.id)}
                   readOnly={readOnly}
                   onSetUsed={(n) => setResourceUsed(r.id, n, r.currentMax)}
-                  onToggle={() => toggleResourceBuff(r.id, r.kind, resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
+                  onToggle={() => toggleResourceBuff(r.id, r.name, r.kind, resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
                 />
               ))}
             </div>
@@ -606,7 +613,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
       )}
 
       <div style={{ display: innerTab === 'Features' ? 'block' : 'none' }}>
-        <FeaturesTab character={character} onSave={onSave} readOnly={readOnly} />
+        <FeaturesTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
       </div>
 
       <div style={{ display: innerTab === 'Reactions' ? 'block' : 'none' }}>
