@@ -32,6 +32,8 @@ import {
   broadcastMusic,
   broadcastMusicTrackData,
   broadcastMusicVolume,
+  broadcastAmbientLevel,
+  broadcastSfxPlayed,
   broadcastMessage,
   pushForceRoll,
   startPresentingDeck,
@@ -1176,6 +1178,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('music:remove-custom-track', (_event, groupId: string, trackId: string): void => {
     removeCustomMusicTrack(userDataDir, groupId, trackId)
+  })
+
+  // DM-only, fire-and-forget — Ambient layers are bundled files just like
+  // music (see ambientLibrary.ts), so this only ever carries which layer and
+  // how loud, never audio data. A no-op unless actually hosting.
+  ipcMain.handle('ambient:broadcast', (_event, groupId: string, layerId: string, level: number, fadeMs: number): void => {
+    if (getHostedSession()) broadcastAmbientLevel(groupId, layerId, level, fadeMs)
+  })
+
+  // DM-only, fire-and-forget — a Sound Board cue is always a bundled file
+  // (see sfxLibrary.ts), so this only ever carries an id. A no-op unless
+  // actually hosting.
+  ipcMain.handle('sfx-board:broadcast', (_event, sfxId: string): void => {
+    if (getHostedSession()) broadcastSfxPlayed(sfxId)
   })
 
   // DM-only — pushes a "roll this" prompt to one connected player, targeted

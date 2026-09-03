@@ -81,3 +81,77 @@ export function setMusicBroadcastEnabled(enabled: boolean): void {
     /* best-effort */
   }
 }
+
+/**
+ * Per-mood ambient-SFX slider levels (see ambientLibrary.ts) — placeholder
+ * sliders only, not wired to any actual audio yet (see MusicButton.tsx), but
+ * still persisted so they don't reset every time the panel closes. Keyed by
+ * both the mood group and the ambient option, since e.g. "wind" means
+ * something different (and should keep its own level) under Desert vs.
+ * under Dungeon & Dread.
+ */
+const AMBIENT_LEVEL_PREFIX = 'gb-ambient-level:'
+
+export function getStoredAmbientLevel(groupId: string, ambientId: string): number {
+  try {
+    const raw = localStorage.getItem(`${AMBIENT_LEVEL_PREFIX}${groupId}:${ambientId}`)
+    const parsed = raw ? Number(raw) : 0
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0
+  } catch {
+    return 0
+  }
+}
+
+export function setStoredAmbientLevel(groupId: string, ambientId: string, level: number): void {
+  try {
+    localStorage.setItem(`${AMBIENT_LEVEL_PREFIX}${groupId}:${ambientId}`, String(Math.min(1, Math.max(0, level))))
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * Sound Board's own volume — separate from both the general UI-cue volume
+ * (gb-sfx-volume, for things like the dice-roll chime) and music's, since a
+ * one-shot combat/magic stinger wants its own level rather than sharing a
+ * slider with either of those.
+ */
+const SFX_BOARD_VOLUME_KEY = 'gb-sfx-board-volume'
+const DEFAULT_SFX_BOARD_VOLUME = 0.7
+
+export function getStoredSfxBoardVolume(): number {
+  try {
+    const raw = localStorage.getItem(SFX_BOARD_VOLUME_KEY)
+    const parsed = raw ? Number(raw) : DEFAULT_SFX_BOARD_VOLUME
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : DEFAULT_SFX_BOARD_VOLUME
+  } catch {
+    return DEFAULT_SFX_BOARD_VOLUME
+  }
+}
+
+export function setSfxBoardVolume(volume: number): void {
+  try {
+    localStorage.setItem(SFX_BOARD_VOLUME_KEY, String(Math.min(1, Math.max(0, volume))))
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Same idea as getStoredMusicBroadcastEnabled, but its own switch — a DM might want players to hear synced music/ambiance but trigger combat stingers only for themselves (or vice versa). */
+const SFX_BOARD_BROADCAST_KEY = 'gb-sfx-board-broadcast-enabled'
+
+export function getStoredSfxBoardBroadcastEnabled(): boolean {
+  try {
+    return localStorage.getItem(SFX_BOARD_BROADCAST_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+export function setSfxBoardBroadcastEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(SFX_BOARD_BROADCAST_KEY, String(enabled))
+  } catch {
+    /* best-effort */
+  }
+}

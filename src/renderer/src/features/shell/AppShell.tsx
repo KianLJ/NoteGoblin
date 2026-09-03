@@ -16,7 +16,10 @@ import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
 import { Bestiary } from '../bestiary/Bestiary'
 import { MusicButton } from '../audio/MusicButton'
+import { SoundBoardButton } from '../audio/SoundBoardButton'
 import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
+import { ensureAmbientListening } from '../audio/ambientEngine'
+import { ensureSfxBoardListening } from '../audio/sfxBoardEngine'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
 
@@ -58,12 +61,14 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     })
   }, [])
 
-  // Goblin Bard needs to react to the DM's music broadcasts regardless of
-  // which mode this window is in (DM's own pick, or a player's client) —
-  // wired once here rather than from MusicButton, which only ever mounts on
-  // the DM's side.
+  // Goblin Bard (music, ambiance, and the Sound Board) needs to react to the
+  // DM's broadcasts regardless of which mode this window is in (DM's own
+  // pick, or a player's client) — wired once here rather than from
+  // MusicButton/SoundBoardButton, which only ever mount on the DM's side.
   useEffect(() => {
     ensureMusicListening()
+    ensureAmbientListening()
+    ensureSfxBoardListening()
   }, [])
 
   // --- Player side: characters (always available) + the joined session's campaigns/notes ---
@@ -390,6 +395,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             <BestiaryIcon />
           </button>
           {mode === 'dm' && <MusicButton sessionId={hostedSessionId} />}
+          {mode === 'dm' && <SoundBoardButton sessionId={hostedSessionId} />}
           <MessagesButton
             campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
             sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}

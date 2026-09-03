@@ -19,7 +19,9 @@ import type {
   SceneChangedFrame,
   MusicChangedFrame,
   MusicTrackChunkFrame,
-  MusicVolumeChangedFrame
+  MusicVolumeChangedFrame,
+  AmbientLevelChangedFrame,
+  SfxPlayedFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
@@ -267,6 +269,18 @@ export function broadcastMusicTrackData(trackId: string, title: string, mimeType
 /** Pushes a Goblin Bard volume change to every connected player, table-wide — same "whole session" scope as broadcastMusic. */
 export function broadcastMusicVolume(volume: number): void {
   const frame: MusicVolumeChangedFrame = { type: 'music-volume-changed', volume }
+  for (const p of players.values()) sendToRelay(p.userId, frame)
+}
+
+/** Pushes one Ambient layer's level change to every connected player, table-wide — same "whole session" scope as broadcastMusic. */
+export function broadcastAmbientLevel(groupId: string, layerId: string, level: number, fadeMs: number): void {
+  const frame: AmbientLevelChangedFrame = { type: 'ambient-level-changed', groupId, layerId, level, fadeMs }
+  for (const p of players.values()) sendToRelay(p.userId, frame)
+}
+
+/** Pushes a Sound Board one-shot cue to every connected player, table-wide — fire-and-forget, no state to track since a one-shot has nothing to "resume" for a late joiner the way music/ambient do. */
+export function broadcastSfxPlayed(sfxId: string): void {
+  const frame: SfxPlayedFrame = { type: 'sfx-played', sfxId }
   for (const p of players.values()) sendToRelay(p.userId, frame)
 }
 

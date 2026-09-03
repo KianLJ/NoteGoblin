@@ -17,7 +17,10 @@ import {
 import { WIKILINK_PATTERN, wikilinkIsDouble, wikilinkTarget } from '../../wikilink'
 import { resolveImageSrc } from '../../imageSrc'
 import { renderNoteMarkdown } from '../../markdown'
-import { saveCustomMonster } from '../../data/customBestiary'
+import { saveCustomMonster, loadCustomMonsters } from '../../data/customBestiary'
+import { BESTIARY, formatCr } from '../../data/bestiary'
+import { statblockToFencedBlock } from '../../statblock'
+import { SFX_LIBRARY, findSfxCue, parseOneShotCodeSpan } from '../../data/sfxLibrary'
 import { parseDiceCodeSpan, type DieSides } from '@shared/dice'
 import type { Note } from '@shared/ipc'
 
@@ -43,6 +46,8 @@ interface MarkdownLiveEditorProps {
   onWikilinkContextMenu?: (target: string, x: number, y: number) => void
   /** Clicked an inline `` `dice: 2d6 + 3` `` roll widget (see DiceRollWidget below) — same shape Preview mode's click handler parses out of the button's data attribute, just already-parsed here since the widget is built from the same data. */
   onDiceRoll?: (dice: { sides: DieSides; count: number; modifier: number }) => void
+  /** Clicked an inline `` `oneshot: <cueId>` `` Sound Board widget (see OneShotWidget below) — same shape Preview mode's click handler reads off the button's data attribute. */
+  onOneShotPlay?: (cueId: string) => void
   /** Blocks actual document edits at the CodeMirror level (no cursor, no typing, paste rejected) — not a CSS overlay, which only stops mouse-driven interaction and leaves keyboard input (e.g. Tab-focusing in) still able to "type" locally even though nothing would ever save. Reconfigurable live via a Compartment since editorUserIds can change while a note's already open. */
   readOnly?: boolean
 }
@@ -84,6 +89,80 @@ function noteLinkCompletionSource(notesRef: { current: Note[] }): CompletionSour
       }))
     if (options.length === 0) return null
     return { from: match.from + 1, options, filter: false }
+  }
+}
+
+const MAX_ONESHOT_SUGGESTIONS = 20
+const MAX_STATBLOCK_SUGGESTIONS = 20
+
+/**
+ * Fires the instant you type `OneShot: ` anywhere on the current line —
+ * unlike noteLinkCompletionSource's `[` trigger (which auto-closes), this is
+ * a plain literal phrase, so it matches the whole "OneShot: query" span
+ * (case-insensitively) rather than just what's inside a delimiter. Picking a
+ * cue replaces that whole span with the inline `` `oneshot: <cueId>` `` code
+ * span markdown.ts's `codespan` renderer and OneShotWidget below both know
+ * how to render as a play button.
+ */
+function oneShotCompletionSource(): CompletionSource {
+  return (context: CompletionContext): CompletionResult | null => {
+    const match = context.matchBefore(/oneshot:\s*[^\n]*/i)
+    if (!match) return null
+    const query = match.text.slice(match.text.indexOf(':') + 1).trim().toLowerCase()
+    const options: { label: string; cueId: string; categoryLabel: string }[] = []
+    for (const category of SFX_LIBRARY) {
+      for (const cue of category.cues) {
+        if (cue.label.toLowerCase().includes(query)) options.push({ label: cue.label, cueId: cue.id, categoryLabel: category.label })
+      }
+    }
+    if (options.length === 0) return null
+    return {
+      from: match.from,
+      filter: false,
+      options: options.slice(0, MAX_ONESHOT_SUGGESTIONS).map(({ label, cueId, categoryLabel }) => ({
+        label,
+        detail: categoryLabel,
+        apply(view: EditorView, _completion: unknown, from: number, to: number) {
+          const insert = `\`oneshot: ${cueId}\``
+          view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length } })
+        }
+      }))
+    }
+  }
+}
+
+/**
+ * Fires the instant you type `Statblock: ` anywhere on the current line —
+ * same "plain literal phrase" trigger as oneShotCompletionSource above,
+ * searching the full SRD roster plus this device's own custom monsters (see
+ * customBestiary.ts). Picking one inserts the same fenced ```statblock```
+ * block "Import from Codex" does (see NoteEditor.tsx's handleBestiaryPick),
+ * just without leaving the keyboard to open that picker.
+ */
+function statblockCompletionSource(): CompletionSource {
+  return (context: CompletionContext): CompletionResult | null => {
+    const match = context.matchBefore(/statblock:\s*[^\n]*/i)
+    if (!match) return null
+    const query = match.text.slice(match.text.indexOf(':') + 1).trim().toLowerCase()
+    const seen = new Set<string>()
+    const monsters = [...BESTIARY, ...loadCustomMonsters()].filter((m) => {
+      if (seen.has(m.index)) return false
+      seen.add(m.index)
+      return m.name.toLowerCase().includes(query)
+    })
+    if (monsters.length === 0) return null
+    return {
+      from: match.from,
+      filter: false,
+      options: monsters.slice(0, MAX_STATBLOCK_SUGGESTIONS).map((monster) => ({
+        label: monster.name,
+        detail: `CR ${formatCr(monster.crNumeric)}`,
+        apply(view: EditorView, _completion: unknown, from: number, to: number) {
+          const insert = `\n${statblockToFencedBlock(monster)}\n`
+          view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length } })
+        }
+      }))
+    }
   }
 }
 
@@ -174,6 +253,34 @@ class DiceRollWidget extends WidgetType {
     btn.dataset.diceRoll = JSON.stringify(this.dice)
     btn.title = 'Click to roll'
     btn.textContent = `🎲 ${this.label}`
+    return btn
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+
+/** Renders an inline `` `oneshot: <cueId>` `` code span as a clickable Sound Board play button, matching markdown.ts's Preview-mode `codespan` renderer exactly (same label, same icon) so Write and Preview never look different for this. Clicking is handled by the `mousedown` handler below via `onOneShotPlay` — the widget itself just displays. */
+class OneShotWidget extends WidgetType {
+  constructor(
+    readonly cueId: string,
+    readonly label: string
+  ) {
+    super()
+  }
+
+  eq(other: OneShotWidget): boolean {
+    return other.cueId === this.cueId && other.label === this.label
+  }
+
+  toDOM(): HTMLElement {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'gb-oneshot-play'
+    btn.dataset.oneshotCue = this.cueId
+    btn.title = 'Click to play'
+    btn.textContent = `🔊 ${this.label}`
     return btn
   }
 
@@ -290,6 +397,11 @@ function buildDecorations(state: EditorState, knownTitles: Set<string>, campaign
           if (dice && !selectionOverlaps(state, node.from, node.to)) {
             const label = text.trim().replace(/^dice:\s*/i, '')
             ranges.push(Decoration.replace({ widget: new DiceRollWidget(dice, label) }).range(node.from, node.to))
+          } else {
+            const cueId = parseOneShotCodeSpan(text)
+            if (cueId && !selectionOverlaps(state, node.from, node.to)) {
+              ranges.push(Decoration.replace({ widget: new OneShotWidget(cueId, findSfxCue(cueId)!.label) }).range(node.from, node.to))
+            }
           }
         }
         return false
@@ -390,7 +502,8 @@ function livePreviewExtension(
   campaignId: string,
   onWikilinkClick: (target: string) => void,
   onWikilinkContextMenu?: (target: string, x: number, y: number) => void,
-  onDiceRoll?: (dice: { sides: DieSides; count: number; modifier: number }) => void
+  onDiceRoll?: (dice: { sides: DieSides; count: number; modifier: number }) => void,
+  onOneShotPlay?: (cueId: string) => void
 ): Extension[] {
   // A StateField, not a ViewPlugin — CodeMirror only allows block-level
   // decorations (the Table/statblock widgets from replaceBlockWithWidget)
@@ -417,6 +530,12 @@ function livePreviewExtension(
         } catch {
           /* malformed dice-roll JSON — nothing sensible to roll */
         }
+        return true
+      }
+      const oneShotBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-oneshot-cue]')
+      if (oneShotBtn) {
+        event.preventDefault()
+        onOneShotPlay?.(oneShotBtn.dataset.oneshotCue as string)
         return true
       }
       const saveBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-save-statblock]')
@@ -540,7 +659,7 @@ const imageDropHandler = EditorView.domEventHandlers({
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
   function MarkdownLiveEditor(
-    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, readOnly },
+    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay, readOnly },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
@@ -556,11 +675,11 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             readOnlyCompartment.of(EditorView.editable.of(!readOnly)),
             history(),
             closeBrackets(),
-            autocompletion({ override: [noteLinkCompletionSource(notesRef)] }),
+            autocompletion({ override: [noteLinkCompletionSource(notesRef), oneShotCompletionSource(), statblockCompletionSource()] }),
             keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
             markdown({ extensions: [GFM] }),
             EditorView.lineWrapping,
-            livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu, onDiceRoll),
+            livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay),
             EditorView.updateListener.of((update) => {
               if (update.docChanged) onChange(update.state.doc.toString())
             }),

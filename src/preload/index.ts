@@ -193,6 +193,25 @@ const api: AppApi = {
     addCustomTrack: (groupId) => ipcRenderer.invoke('music:add-custom-track', groupId),
     removeCustomTrack: (groupId, trackId) => ipcRenderer.invoke('music:remove-custom-track', groupId, trackId)
   },
+  ambient: {
+    broadcast: (groupId, layerId, level, fadeMs) => ipcRenderer.invoke('ambient:broadcast', groupId, layerId, level, fadeMs),
+    onChange: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        update: { groupId: string; layerId: string; level: number; fadeMs: number }
+      ): void => callback(update)
+      ipcRenderer.on('ws:ambient-level-changed', listener)
+      return () => ipcRenderer.removeListener('ws:ambient-level-changed', listener)
+    }
+  },
+  sfxBoard: {
+    broadcast: (sfxId) => ipcRenderer.invoke('sfx-board:broadcast', sfxId),
+    onPlay: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, sfxId: string): void => callback(sfxId)
+      ipcRenderer.on('ws:sfx-played', listener)
+      return () => ipcRenderer.removeListener('ws:sfx-played', listener)
+    }
+  },
   discord: {
     setActivity: (details) => ipcRenderer.invoke('discord:set-activity', details)
   },

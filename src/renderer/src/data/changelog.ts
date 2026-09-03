@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.7',
+    title: 'Sound Board, synced ambiance, and note-embedded audio',
+    highlights: [
+      'New Sound Board toolbar button — a searchable, categorized menu of one-shot combat/magic/creature cues (weapon impacts, elemental damage, spellcasting, spell schools, class features, creatures, footsteps, turn flow), each triggering to every connected player when broadcasting is on',
+      'A cue with multiple curated takes (e.g. several different sword-clang recordings) now picks one at random each time it plays, so a repeated cue never sounds identical twice in a row',
+      'Goblin Bard\'s Ambient layers (wind, rain, crowd, etc.) now actually reach connected players instead of only ever playing on the DM\'s own device — they sync the same way music does',
+      'Notes now support typing `OneShot: ` or `Statblock: ` inline for an autocomplete popup — picking a Sound Board cue inserts a clickable play button right in the note, picking a monster inserts its full stat block, both without leaving the keyboard',
+      'Bundled audio (music, ambiance, dice/UI sounds) moved out of the app\'s compressed archive so future updates only re-download what actually changed instead of the whole audio library every time'
+    ]
+  },
+  {
     version: '0.5.6',
     title: 'Interactive advantage/disadvantage rolls and dice reveal overhaul',
     highlights: [

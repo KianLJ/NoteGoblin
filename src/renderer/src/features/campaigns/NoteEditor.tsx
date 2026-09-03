@@ -9,6 +9,7 @@ import { Bestiary } from '../bestiary/Bestiary'
 import { statblockToFencedBlock } from '../../statblock'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { performRoll } from '../dice/diceLogStore'
+import { playSfxCue } from '../audio/sfxBoardEngine'
 import type { DiceGroup } from '@shared/dice'
 import { useSessionDecks } from './useSessionDecks'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
@@ -229,6 +230,11 @@ export function NoteEditor({
     })
   }
 
+  /** An inline `` `oneshot: <cueId>` `` Sound Board cue — clicked either as a rendered button in Preview mode (its id read off `data-oneshot-cue`) or in Write mode's live-preview widget (see MarkdownLiveEditor.tsx's onOneShotPlay prop). Goes through the same engine (and the same DM-only broadcast rules) the Sound Board toolbar button itself uses. */
+  function playOneShot(cueId: string): void {
+    playSfxCue(cueId, sessionId)
+  }
+
   function handlePreviewClick(e: ReactMouseEvent<HTMLDivElement>): void {
     const diceBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-dice-roll]')
     if (diceBtn) {
@@ -238,6 +244,12 @@ export function NoteEditor({
       } catch {
         /* malformed dice-roll JSON — nothing sensible to roll */
       }
+      return
+    }
+    const oneShotBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-oneshot-cue]')
+    if (oneShotBtn) {
+      e.preventDefault()
+      playOneShot(oneShotBtn.dataset.oneshotCue as string)
       return
     }
     const saveBtn = (e.target as HTMLElement).closest<HTMLElement>('[data-save-statblock]')
@@ -490,6 +502,7 @@ export function NoteEditor({
           onWikilinkClick={resolveWikilink}
           onWikilinkContextMenu={handleWikilinkContextMenu}
           onDiceRoll={rollFromDice}
+          onOneShotPlay={playOneShot}
           readOnly={readOnly}
         />
       </div>

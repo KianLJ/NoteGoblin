@@ -193,3 +193,33 @@ export interface MusicVolumeChangedFrame {
   type: 'music-volume-changed'
   volume: number
 }
+
+/**
+ * Pushed to every connected player whenever the DM raises/lowers one Ambient
+ * layer's level (see MusicButton.tsx's level buttons) — same "just an id"
+ * shape as MusicChangedFrame: every client already has the exact same file
+ * bundled (see ambientLibrary.ts), so this carries which layer and how loud,
+ * never audio data. `groupId` is included (rather than relying on whatever
+ * mood a player's own client last saw) since a player's client has no other
+ * way to know which mood is even active if they joined after the DM last
+ * picked one.
+ */
+export interface AmbientLevelChangedFrame {
+  type: 'ambient-level-changed'
+  groupId: string
+  layerId: string
+  level: number
+  fadeMs: number
+}
+
+/**
+ * Pushed to every connected player when the DM triggers a one-shot Sound
+ * Board cue (see sfxLibrary.ts/SoundBoardButton.tsx) — carries only the cue's
+ * id, the same "every client already has the file bundled" shape as
+ * MusicChangedFrame, since a Sound Board cue is never a DM-local custom
+ * addition the way a music track can be.
+ */
+export interface SfxPlayedFrame {
+  type: 'sfx-played'
+  sfxId: string
+}

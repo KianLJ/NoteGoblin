@@ -8,6 +8,12 @@ files:
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
 asarUnpack:
+  # All bundled audio (music, ambient loops, dice/UI SFX — Vite emits these
+  # flat into out/renderer/assets alongside the JS/CSS bundle) lives outside
+  # app.asar so a future update's blockmap diff only touches files that
+  # actually changed, instead of re-shipping ~540MB of unchanged MP3s on
+  # every release just because the JS bundle's hash moved.
+  - out/renderer/assets/*.mp3
   - resources/**
 win:
   target: nsis

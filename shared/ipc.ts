@@ -445,6 +445,27 @@ export interface AppApi {
     addCustomTrack: (groupId: string) => Promise<{ id: string; title: string } | null>
     removeCustomTrack: (groupId: string, trackId: string) => Promise<void>
   }
+  // Ambient layers (see ambientLibrary.ts/ambientEngine.ts) — bundled loops
+  // synced the same "just an id" way music is, except keyed by both a mood
+  // and a specific layer within it, and carrying a level instead of a
+  // play/pause boolean. DM-only broadcast, no relay path for a player to
+  // initiate (see sessionHost.ts's broadcastAmbientLevel).
+  ambient: {
+    /** A no-op unless actually hosting. */
+    broadcast: (groupId: string, layerId: string, level: number, fadeMs: number) => Promise<void>
+    /** Fires for every connected player whenever the DM raises/lowers one Ambient layer. */
+    onChange: (callback: (update: { groupId: string; layerId: string; level: number; fadeMs: number }) => void) => () => void
+  }
+  // Sound Board — the DM triggers a one-shot cue, every connected client
+  // plays the same bundled file from its own copy (see sfxLibrary.ts); no
+  // audio ever crosses the wire, just which cue. DM-only broadcast, no relay
+  // path for a player to initiate.
+  sfxBoard: {
+    /** A no-op unless actually hosting. */
+    broadcast: (sfxId: string) => Promise<void>
+    /** Fires for every connected player (never the DM's own trigger, which they already played locally) whenever the DM fires a cue. */
+    onPlay: (callback: (sfxId: string) => void) => () => void
+  }
   // Friends/presence, backed by the relay (see relay/) rather than local
   // storage. The relay account itself is transparent — it's the same
   // credentials as identity.*, synced automatically on login/switch — so

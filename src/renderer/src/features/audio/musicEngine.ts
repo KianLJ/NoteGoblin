@@ -1,6 +1,7 @@
 import { MUSIC_LIBRARY, findTrack, type MusicTrack } from '../../data/musicLibrary'
 import { getStoredMusicVolume, setMusicVolume, getStoredMusicBroadcastEnabled } from './soundSettings'
 import { getCustomTracks, findCustomTrack, findCustomTrackGroupId } from './customMusicStore'
+import { switchAmbientMood } from './ambientEngine'
 
 /**
  * Goblin Bard's playback engine — a module-level singleton (same shape as
@@ -149,6 +150,10 @@ export function stopMusic(): void {
   currentGroupId = null
   currentTrackIndex = 0
   playing = false
+  // Whatever ambiance was looping (this DM's own solo tinkering, an earlier
+  // session) belongs to that context too — same reasoning as the music
+  // itself, see this function's own doc comment.
+  switchAmbientMood(null)
   notify()
 }
 
@@ -175,6 +180,14 @@ function setTrack(trackId: string, fadeMs: number): void {
   currentTrackIndex = currentGroupId ? tracksForGroup(currentGroupId).findIndex((t) => t.id === trackId) : 0
   playing = true
   crossfadeTo(track.url, fadeMs)
+  // Also switches Ambient to whatever this track's mood offers — the one
+  // hook point both the DM's own pick (pickMood/playSpecificTrack/skipTrack,
+  // all funneled through here) and a connected player's incoming broadcast
+  // (ensureMusicListening's onChange, below) pass through, so a player's
+  // client keeps its ambiance in step with the DM's mood even though
+  // MusicButton (which does the same thing for the DM's own window) never
+  // mounts on the player side.
+  switchAmbientMood(currentGroupId)
   notify()
 }
 

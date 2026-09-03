@@ -143,6 +143,13 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+// A session left open for a long stretch used to only ever check for
+// updates once, at launch — a release that went out after that point sat
+// undetected until the app was fully quit and reopened, which is easy to
+// mistake for auto-update just being slow/broken. This re-checks on top of
+// that every few hours for as long as the app stays running.
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+
 /**
  * Checks GitHub Releases (see electron-builder.yml's `publish` block) for a
  * newer version, downloads it silently in the background if found, and asks
@@ -152,6 +159,13 @@ function createWindow(): BrowserWindow {
  * update metadata file anyway).
  */
 function checkForUpdates(): void {
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('Update check failed:', err)
+  })
+}
+
+/** Wires up the update-downloaded/error handlers once, then checks immediately and every UPDATE_CHECK_INTERVAL_MS after — call once at startup, not per-check (checkForUpdates itself is what's meant to be called repeatedly). */
+function initAutoUpdater(): void {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
 
@@ -171,14 +185,13 @@ function checkForUpdates(): void {
   })
 
   // Silent by design — a missed check (offline, no release yet, etc.) isn't
-  // worth interrupting anyone over; it just quietly tries again next launch.
+  // worth interrupting anyone over; it just quietly tries again next check.
   autoUpdater.on('error', (err) => {
     console.error('Update check failed:', err)
   })
 
-  autoUpdater.checkForUpdates().catch((err) => {
-    console.error('Update check failed:', err)
-  })
+  checkForUpdates()
+  setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS)
 }
 
 app.whenReady().then(() => {
@@ -236,7 +249,7 @@ app.whenReady().then(() => {
   mainWindow = win
   registerIpcHandlers(win)
 
-  if (!isDev) checkForUpdates()
+  if (!isDev) initAutoUpdater()
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()

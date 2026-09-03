@@ -376,3 +376,82 @@ button {
 .gb-die-idle-pulse {
   animation: gb-die-idle-pulse 1.6s ease-in-out infinite;
 }
+
+/* A themed range slider — thin ember-colored track, a round thumb that
+   grows slightly on hover — for anywhere a plain browser-default slider
+   would otherwise clash with the rest of the goblin/parchment theme (the
+   Goblin Bard panel's crossfade/volume/ambient sliders, currently). Webkit
+   and Firefox each need their own pseudo-elements; there's no shared
+   standard one yet. */
+.gb-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  outline: none;
+  cursor: pointer;
+}
+.gb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-sunken);
+  box-shadow: 0 0 0 1px var(--accent);
+  transition: transform 0.12s ease;
+}
+.gb-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  background: var(--accent-hover);
+}
+.gb-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+}
+.gb-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-sunken);
+  box-shadow: 0 0 0 1px var(--accent);
+  transition: transform 0.12s ease;
+}
+.gb-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  background: var(--accent-hover);
+}
+.gb-slider:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* A slimmer variant for a dense stack of sliders (the ambient list) where
+   the standard 4px track/14px thumb reads a touch heavy repeated many
+   times in a row. */
+.gb-slider--sm {
+  height: 3px;
+}
+.gb-slider--sm::-webkit-slider-thumb {
+  width: 11px;
+  height: 11px;
+}
+.gb-slider--sm::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+}
+/* A compact vertical variant, for a slider tucked inside an icon button's
+   popover (Volume/Crossfade in the Goblin Bard panel) rather than taking a
+   full-width row of its own. `writing-mode` is the modern, non-vendor-
+   specific way to flip a range input's axis — the thumb/track pseudo-
+   elements above still apply unchanged, only the layout direction changes. */
+.gb-slider--vertical {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 4px;
+  height: 84px;
+}

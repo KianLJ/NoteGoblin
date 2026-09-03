@@ -15,7 +15,9 @@ import type {
   SceneChangedFrame,
   MusicChangedFrame,
   MusicTrackChunkFrame,
-  MusicVolumeChangedFrame
+  MusicVolumeChangedFrame,
+  AmbientLevelChangedFrame,
+  SfxPlayedFrame
 } from '@server/relay/sessionProtocol'
 import type { ApiResult } from '@shared/ipc'
 
@@ -266,5 +268,20 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'music-volume-changed' && clientWindow) {
     const frame = payload as MusicVolumeChangedFrame
     clientWindow.webContents.send('ws:music-volume-changed', frame.volume)
+  }
+
+  if (payload.type === 'ambient-level-changed' && clientWindow) {
+    const frame = payload as AmbientLevelChangedFrame
+    clientWindow.webContents.send('ws:ambient-level-changed', {
+      groupId: frame.groupId,
+      layerId: frame.layerId,
+      level: frame.level,
+      fadeMs: frame.fadeMs
+    })
+  }
+
+  if (payload.type === 'sfx-played' && clientWindow) {
+    const frame = payload as SfxPlayedFrame
+    clientWindow.webContents.send('ws:sfx-played', frame.sfxId)
   }
 }

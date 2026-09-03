@@ -4,6 +4,7 @@ import { WIKILINK_PATTERN, wikilinkAlias, wikilinkTarget } from './wikilink'
 import { resolveImageSrc } from './imageSrc'
 import { parseStatblock, renderStatblockHtml } from './statblock'
 import { parseDiceCodeSpan } from '@shared/dice'
+import { findSfxCue, parseOneShotCodeSpan } from './data/sfxLibrary'
 
 /** A minimal Obsidian-style wikilink token — `[[Target]]`/`[[Target|Alias]]` or `[Target]`/`[Target|Alias]`. */
 interface WikilinkToken extends Tokens.Generic {
@@ -81,9 +82,23 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
         // too. Anything else falls back to marked's own plain <code>.
         codespan({ text }: Tokens.Codespan): string {
           const dice = parseDiceCodeSpan(text)
-          if (!dice) return `<code>${escapeHtml(text)}</code>`
-          const payload = escapeHtml(JSON.stringify(dice))
-          return `<button type="button" class="gb-dice-roll" data-dice-roll="${payload}" title="Click to roll">🎲 ${escapeHtml(text.replace(/^dice:\s*/i, ''))}</button>`
+          if (dice) {
+            const payload = escapeHtml(JSON.stringify(dice))
+            return `<button type="button" class="gb-dice-roll" data-dice-roll="${payload}" title="Click to roll">🎲 ${escapeHtml(text.replace(/^dice:\s*/i, ''))}</button>`
+          }
+          // Inline `` `oneshot: <cueId>` `` code spans render as a clickable
+          // Sound Board button instead of plain code — same "a note-authored
+          // trigger, not literal code" idea as the dice roll above, see
+          // sfxLibrary.ts's parseOneShotCodeSpan. The click handler (see
+          // NoteEditor.tsx's handlePreviewClick) plays it through the exact
+          // same Sound Board engine the toolbar button uses, broadcasting to
+          // the table under the same rules.
+          const cueId = parseOneShotCodeSpan(text)
+          if (cueId) {
+            const cue = findSfxCue(cueId)!
+            return `<button type="button" class="gb-oneshot-play" data-oneshot-cue="${escapeHtml(cueId)}" title="Click to play">🔊 ${escapeHtml(cue.label)}</button>`
+          }
+          return `<code>${escapeHtml(text)}</code>`
         }
       },
       extensions: [

@@ -262,6 +262,30 @@
   color: var(--bg-surface);
 }
 
+/* Inline `` `oneshot: <cueId>` `` Sound Board button — see markdown.ts's
+   `codespan` renderer (Preview) and MarkdownLiveEditor.tsx's OneShotWidget
+   (Write). Same shape as .gb-dice-roll above but its own color so a page
+   full of both cue types stays visually distinct at a glance. */
+.gb-oneshot-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-body);
+  font-size: 0.9em;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--success);
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.gb-oneshot-play:hover {
+  background: var(--success);
+  color: var(--bg-surface);
+}
+
 /* Rendered ```statblock fenced block — see statblock.ts. A bordered card
    with an accent top edge, styled to read as a distinct "reference card"
    sitting inside the surrounding note rather than more prose. */
