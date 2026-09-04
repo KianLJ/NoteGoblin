@@ -5,6 +5,15 @@ import { loadNpcs, createNpc, updateNpc, removeNpc, type Npc } from '../../data/
 import { generateNpcName } from '../../data/npcNames'
 import { renderStatblockHtml } from '../../statblock'
 import { CloseIcon } from '../campaigns/icons'
+import { playSpellCastSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
+import { PLAYING_THE_GAME_TOPICS, type RuleTopic } from '../../data/playingTheGame'
+import {
+  ensureCustomEntitySfxLoaded,
+  subscribeCustomEntitySfx,
+  getCustomEntitySfxTitle,
+  setCustomEntitySfx,
+  removeCustomEntitySfx
+} from '../audio/customEntitySfxStore'
 import { RACES } from '@shared/dnd5e'
 import {
   EQUIPMENT,
@@ -23,10 +32,12 @@ interface BestiaryProps {
   onPick?: (monster: BestiaryMonster) => void
   /** True only while a player is connected to a live campaign — monster stats are the DM's to reveal, not something to browse freely mid-game. Equipment/Spells/Magic Items stay open since none of that is secret. Never true for the DM's own view, or for a player who isn't currently connected to anyone. */
   hideMonsters?: boolean
+  /** The hosted (DM) or joined (player) session id, if any — passed through to a Monsters/Spells row's click-to-play (see playMonsterSfx/playSpellCastSfx) so it reaches the rest of the table, not just whoever's browsing the Codex. */
+  sessionId?: string | null
 }
 
-type Category = 'Monsters' | 'NPCs' | 'Equipment' | 'Spells' | 'Magic Items'
-const CATEGORIES: Category[] = ['Monsters', 'NPCs', 'Equipment', 'Spells', 'Magic Items']
+type Category = 'Monsters' | 'NPCs' | 'Equipment' | 'Spells' | 'Magic Items' | 'Playing the Game'
+const CATEGORIES: Category[] = ['Monsters', 'NPCs', 'Equipment', 'Spells', 'Magic Items', 'Playing the Game']
 const EQUIPMENT_CATEGORIES: EquipmentCategory[] = ['Weapon', 'Armor', 'Adventuring Gear', 'Tools', 'Mounts and Vehicles']
 
 function toTitleCase(s: string): string {
@@ -44,7 +55,10 @@ function toTitleCase(s: string): string {
  * own instead of only while building a character. Entirely local, no
  * network needed for any of it.
  */
-export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.Element {
+export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: BestiaryProps): JSX.Element {
+  useEffect(() => {
+    void ensureCustomEntitySfxLoaded()
+  }, [])
   const [category, setCategory] = useState<Category>(hideMonsters ? 'Equipment' : 'Monsters')
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('')
@@ -137,6 +151,14 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
     }).sort((a, b) => a.name.localeCompare(b.name))
   }, [query, typeFilter])
 
+  // No type filter for this one — ten topics is short enough that a search
+  // box alone (matching title or dek) covers it without another dropdown.
+  const filteredTopics = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return PLAYING_THE_GAME_TOPICS
+    return PLAYING_THE_GAME_TOPICS.filter((t) => t.title.toLowerCase().includes(q) || t.dek.toLowerCase().includes(q))
+  }, [query])
+
   // Deliberately no "?? filteredX[0]" fallback — auto-rendering an entry's
   // full detail (a monster's stat block especially, the heaviest one) the
   // instant the Codex opens, before any click, turned out to be the actual
@@ -150,6 +172,7 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
   const selectedEquipment: CompendiumEquipment | undefined = EQUIPMENT.find((e) => e.id === selectedIndex)
   const selectedSpell: CompendiumSpell | undefined = SPELLS.find((s) => s.id === selectedIndex)
   const selectedMagicItem: CompendiumMagicItem | undefined = MAGIC_ITEMS.find((m) => m.id === selectedIndex)
+  const selectedTopic: RuleTopic | undefined = PLAYING_THE_GAME_TOPICS.find((t) => t.id === selectedIndex)
 
   function handleDeleteCustom(index: string): void {
     removeCustomMonster(index)
@@ -355,6 +378,7 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
                 {effectiveCategory === 'Equipment' && `${filteredEquipment.length} item${filteredEquipment.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Spells' && `${filteredSpells.length} spell${filteredSpells.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Magic Items' && `${filteredMagicItems.length} item${filteredMagicItems.length === 1 ? '' : 's'}`}
+                {effectiveCategory === 'Playing the Game' && `${filteredTopics.length} topic${filteredTopics.length === 1 ? '' : 's'}`}
               </div>
             </div>
 
@@ -365,7 +389,14 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
                   const custom = isCustomMonster(m.index)
                   return (
                     <div key={m.index} style={{ display: 'flex', alignItems: 'center', background: active ? 'var(--accent-subtle)' : 'transparent' }}>
-                      <button type="button" onClick={() => setSelectedIndex(m.index)} style={listRowStyle(active)}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedIndex(m.index)
+                          playMonsterSfx(`monster:${m.index}`, m, sessionId)
+                        }}
+                        style={listRowStyle(active)}
+                      >
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {m.name}
                           {custom && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 5 }}>· custom</span>}
@@ -404,7 +435,15 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
 
               {effectiveCategory === 'Spells' &&
                 filteredSpells.map((s) => (
-                  <button key={s.id} type="button" onClick={() => setSelectedIndex(s.id)} style={listRowStyle(selectedSpell?.id === s.id)}>
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedIndex(s.id)
+                      playSpellCastSfx(`spell:${s.id}`, s.id, s.school, sessionId)
+                    }}
+                    style={listRowStyle(selectedSpell?.id === s.id)}
+                  >
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{spellLevelLabel(s.level)}</span>
                   </button>
@@ -418,17 +457,36 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
                   </button>
                 ))}
 
+              {effectiveCategory === 'Playing the Game' &&
+                filteredTopics.map((t) => (
+                  <button key={t.id} type="button" onClick={() => setSelectedIndex(t.id)} style={{ ...listRowStyle(selectedTopic?.id === t.id), display: 'block' }}>
+                    <div>{t.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.dek}</div>
+                  </button>
+                ))}
+
               {((effectiveCategory === 'Monsters' && filteredMonsters.length === 0) ||
                 (effectiveCategory === 'NPCs' && filteredNpcs.length === 0) ||
                 (effectiveCategory === 'Equipment' && filteredEquipment.length === 0) ||
                 (effectiveCategory === 'Spells' && filteredSpells.length === 0) ||
+                (effectiveCategory === 'Playing the Game' && filteredTopics.length === 0) ||
                 (effectiveCategory === 'Magic Items' && filteredMagicItems.length === 0)) && (
                 <div style={{ padding: 'var(--space-3)', fontSize: 12, color: 'var(--text-muted)' }}>No matches.</div>
               )}
             </div>
           </div>
 
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            {effectiveCategory === 'Monsters' && selectedMonster && (
+              <div style={{ position: 'absolute', top: 'var(--space-2)', right: 'var(--space-2)', zIndex: 5 }}>
+                <CustomSfxControl entityKey={`monster:${selectedMonster.index}`} floating />
+              </div>
+            )}
+            {effectiveCategory === 'Spells' && selectedSpell && (
+              <div style={{ position: 'absolute', top: 'var(--space-2)', right: 'var(--space-2)', zIndex: 5 }}>
+                <CustomSfxControl entityKey={`spell:${selectedSpell.id}`} floating />
+              </div>
+            )}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-4)' }}>
               {effectiveCategory === 'Monsters' &&
                 (selectedMonster ? (
@@ -447,6 +505,7 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
               {effectiveCategory === 'Equipment' && (selectedEquipment ? <EquipmentDetail item={selectedEquipment} /> : <NoneSelected />)}
               {effectiveCategory === 'Spells' && (selectedSpell ? <SpellDetail spell={selectedSpell} /> : <NoneSelected />)}
               {effectiveCategory === 'Magic Items' && (selectedMagicItem ? <MagicItemDetail item={selectedMagicItem} /> : <NoneSelected />)}
+              {effectiveCategory === 'Playing the Game' && (selectedTopic ? <RuleTopicDetail topic={selectedTopic} /> : <NoneSelected />)}
             </div>
             {onPick && selectedMonster && (
               <div style={{ padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
@@ -464,6 +523,83 @@ export function Bestiary({ onClose, onPick, hideMonsters }: BestiaryProps): JSX.
 
 function NoneSelected(): JSX.Element {
   return <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Nothing selected.</div>
+}
+
+/**
+ * "+ Add custom SFX" / the current override's name plus Change/Remove —
+ * shown on both a Spell's and a Monster's detail pane. `entityKey` is
+ * `spell:<compendiumId>` or `monster:<bestiary index>` (see the row click
+ * handlers above and sfxBoardEngine.ts's playSpellCastSfx/playMonsterSfx,
+ * which check this same key before falling back to the auto-picked cue).
+ * Local-only — see main/customEntitySfx.ts's own doc comment for why this
+ * never broadcasts, unlike everything else in the Sound Board system.
+ * `floating` renders it as its own small card (used pinned to the top-right
+ * corner of the detail pane, above the scrolling content, so it stays
+ * reachable no matter how far down a long stat block or spell description
+ * is scrolled) instead of the plain inline row a non-floating placement
+ * would use.
+ */
+function CustomSfxControl({ entityKey, floating }: { entityKey: string; floating?: boolean }): JSX.Element {
+  const [, setTick] = useState(0)
+  useEffect(() => subscribeCustomEntitySfx(() => setTick((t) => t + 1)), [])
+  const title = getCustomEntitySfxTitle(entityKey)
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        fontSize: 12,
+        ...(floating
+          ? {
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              boxShadow: 'var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.15))',
+              padding: '5px 8px',
+              maxWidth: 220
+            }
+          : {
+              marginTop: 'var(--space-3)',
+              paddingTop: 'var(--space-2)',
+              borderTop: '1px solid var(--border-subtle)'
+            })
+      }}
+    >
+      <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{floating ? 'SFX:' : 'Custom SFX:'}</span>
+      {title ? (
+        <>
+          <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+          <button
+            type="button"
+            className="gb-btn gb-btn--secondary"
+            style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
+            onClick={() => void setCustomEntitySfx(entityKey)}
+          >
+            Change
+          </button>
+          <button
+            type="button"
+            className="gb-btn gb-btn--secondary"
+            style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}
+            onClick={() => void removeCustomEntitySfx(entityKey)}
+          >
+            Remove
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="gb-btn gb-btn--secondary"
+          style={{ fontSize: 11, padding: '2px 8px' }}
+          onClick={() => void setCustomEntitySfx(entityKey)}
+        >
+          + Add custom SFX
+        </button>
+      )}
+    </div>
+  )
 }
 
 function DetailHeader({ name, subtitle }: { name: string; subtitle: string }): JSX.Element {
@@ -711,6 +847,40 @@ function MagicItemDetail({ item }: { item: CompendiumMagicItem }): JSX.Element {
     <div>
       <DetailHeader name={item.name} subtitle={`${item.category} · ${item.rarity}`} />
       <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 'var(--space-3)', whiteSpace: 'pre-wrap' }}>{item.description}</p>
+    </div>
+  )
+}
+
+/** A "Playing the Game" topic's full rules text — sections with a heading render it as a subheading, a section with none (a topic's opening paragraphs) just runs straight into the body. A body line starting with "- " renders as its own bullet instead of a paragraph, so a topic can mix prose and a quick-reference list (see e.g. Ability Checks' DC table). */
+function RuleTopicDetail({ topic }: { topic: RuleTopic }): JSX.Element {
+  return (
+    <div>
+      <DetailHeader name={topic.title} subtitle={topic.dek} />
+      {topic.sections.map((section, i) => {
+        const bullets = section.body.filter((line) => line.startsWith('- '))
+        const paragraphs = section.body.filter((line) => !line.startsWith('- '))
+        return (
+          <div key={i} style={{ marginTop: i === 0 ? 0 : 'var(--space-3)' }}>
+            {section.heading && (
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+                {section.heading}
+              </div>
+            )}
+            {paragraphs.map((p, j) => (
+              <p key={j} style={{ fontSize: 13, lineHeight: 1.6, margin: j === 0 ? 0 : '6px 0 0' }}>
+                {p}
+              </p>
+            ))}
+            {bullets.length > 0 && (
+              <ul style={{ fontSize: 13, lineHeight: 1.6, margin: paragraphs.length ? '6px 0 0' : 0, paddingLeft: 20 }}>
+                {bullets.map((b, j) => (
+                  <li key={j}>{b.slice(2)}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

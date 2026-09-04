@@ -106,3 +106,18 @@ export function findAmbientLayer(layerId: string): AmbientLayer | undefined {
   }
   return undefined
 }
+
+/** A layer's own category id, recovered from its "<categoryId>-<n>" id — used by isRainLayer/isWindLayer below to tell what a layer actually is without needing its own separate "kind" field. */
+function categoryIdOf(layer: AmbientLayer): string {
+  return layer.id.replace(/-\d+$/, '')
+}
+
+/** Whether a layer belongs to one of the rain-flavored categories — used by MusicButton.tsx's calendar-driven auto-ambience (see its own doc comment) to find which of a mood's own layers to raise when the campaign calendar says today's weather calls for it. */
+export function isRainLayer(layer: AmbientLayer): boolean {
+  return categoryIdOf(layer).includes('Rain')
+}
+
+/** Same idea as isRainLayer, for the wind-flavored categories (DesertWind, ForestWind, MountainWind). */
+export function isWindLayer(layer: AmbientLayer): boolean {
+  return categoryIdOf(layer).includes('Wind')
+}

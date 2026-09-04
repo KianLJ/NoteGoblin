@@ -30,6 +30,7 @@ import { HoverDetailCard } from '../HoverDetailCard'
 import { EntryCard, EntryCardTitle } from '../EntryCard'
 import { CustomSpellForm } from '../CustomSpellForm'
 import { Button } from '../../../ui/Button'
+import { playSpellCastSfx } from '../../audio/sfxBoardEngine'
 
 interface SpellsDraft {
   spellcastingAbility: Ability | null
@@ -41,6 +42,8 @@ interface SpellsTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
+  /** Threaded down from CombatTab, same as elsewhere — lets the Cast button play (and, at the table, broadcast) that spell's own cast cue. */
+  sessionId?: string | null
 }
 
 const ACTION_TYPE_LABEL: Record<'action' | 'bonus' | 'reaction', string> = {
@@ -74,7 +77,7 @@ function customSpellFields(spell: Spell): DetailField[] {
   return fields
 }
 
-export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.Element {
+export function SpellsTab({ character, onSave, readOnly, sessionId = null }: SpellsTabProps): JSX.Element {
   const [draft, setDraft] = useAutosaveDraft<SpellsDraft>(
     {
       spellcastingAbility: character.spellcastingAbility,
@@ -133,7 +136,15 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
     patch({ spells: draft.spells.map((s) => (s.id === id ? { ...s, ...fields } : s)) })
   }
 
+  /** Plays (and, at the table, broadcasts) the spell's own cast cue regardless of level — a cantrip has no slot to spend, so it's otherwise a no-op beyond the sound; a leveled spell also spends a slot, same as before. */
   function castSpell(spell: Spell): void {
+    const compendium = spell.compendiumId ? getSpellById(spell.compendiumId) : undefined
+    // A compendium spell's override key is its shared compendium id (so
+    // Fireball sounds the same everywhere it's cast, and matches the same
+    // key the Codex's own Spells row plays/overrides — see Bestiary.tsx);
+    // a custom/homebrew spell has no such shared id, so it's keyed to this
+    // one character's own local spell entry instead.
+    playSpellCastSfx(`spell:${spell.compendiumId ?? spell.id}`, spell.compendiumId, compendium?.school ?? spell.school, sessionId)
     if (spell.level === 0) return
     const used = draft.spellSlots[spell.level]?.used ?? 0
     const total = slotTotals[spell.level] ?? 0
@@ -318,7 +329,9 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
               {spellsAtLevel.map((spell) => {
                 const total = slotTotals[spell.level] ?? 0
             const used = draft.spellSlots[spell.level]?.used ?? 0
-            const canCast = spell.level > 0 && used < total
+            // A cantrip has no slot to run out of — always castable (for the
+            // sound, if nothing else); a leveled spell needs one left.
+            const canCast = spell.level === 0 || used < total
             const compendium = spell.compendiumId ? getSpellById(spell.compendiumId) : undefined
             return (
               <HoverDetailCard
@@ -354,17 +367,15 @@ export function SpellsTab({ character, onSave, readOnly }: SpellsTabProps): JSX.
                   <span className="gb-badge" style={{ fontSize: 11 }}>
                     {ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium?.castingTime ?? spell.castingTime)]}
                   </span>
-                  {spell.level > 0 && (
-                    <Button
-                      variant="secondary"
-                      disabled={!canCast}
-                      onClick={() => castSpell(spell)}
-                      style={{ fontSize: 11, padding: '3px 8px', flexShrink: 0 }}
-                      title={canCast ? `Use a level ${spell.level} slot` : 'No slots remaining'}
-                    >
-                      Cast
-                    </Button>
-                  )}
+                  <Button
+                    variant="secondary"
+                    disabled={!canCast}
+                    onClick={() => castSpell(spell)}
+                    style={{ fontSize: 11, padding: '3px 8px', flexShrink: 0 }}
+                    title={spell.level === 0 ? 'Cast' : canCast ? `Use a level ${spell.level} slot` : 'No slots remaining'}
+                  >
+                    Cast
+                  </Button>
                 </EntryCard>
               </HoverDetailCard>
                 )

@@ -1,5 +1,6 @@
-import { findSfxCue, pickSfxVariant, findClassFeatureSfxCue } from '../../data/sfxLibrary'
+import { findSfxCue, pickSfxVariant, findClassFeatureSfxCue, findTurnFlowCue, findSpellCastSfxCue, findMonsterSfxCue } from '../../data/sfxLibrary'
 import { getStoredSfxBoardVolume, getStoredSfxBoardBroadcastEnabled } from './soundSettings'
+import { getCustomEntitySfxUrl } from './customEntitySfxStore'
 
 /**
  * Sound Board's playback — deliberately much simpler than musicEngine.ts or
@@ -58,6 +59,41 @@ export function playSfxCue(cueId: string, sessionId: string | null): void {
 /** Plays and broadcasts the Class Features cue matching a character sheet ability's display name (see findClassFeatureSfxCue) — a silent no-op if that ability has no cue mapped, or its mapped cue hasn't been curated yet, so it's safe to call from every activate/use button regardless of what's actually in assets/soundboard/ClassFeatures right now. */
 export function playAbilitySfx(abilityName: string, sessionId: string | null): void {
   const cue = findClassFeatureSfxCue(abilityName)
+  if (cue) playSfxCue(cue.id, sessionId)
+}
+
+/**
+ * A DM's own per-entity override (see customEntitySfxStore.ts) takes
+ * priority over whatever the entity's own category would otherwise pick —
+ * played locally only, never broadcast, since it's a file that only exists
+ * on this device (see main/customEntitySfx.ts's doc comment). Returns
+ * whether an override actually existed and was played, so the caller knows
+ * whether to fall back to its own default cue.
+ */
+function tryPlayCustomEntitySfx(entityKey: string): boolean {
+  const url = getCustomEntitySfxUrl(entityKey)
+  if (!url) return false
+  playLocal(url)
+  return true
+}
+
+/** Plays and broadcasts the cue matching a cast spell (see findSpellCastSfxCue and spellSfxCategories.ts) — called from SpellsTab.tsx's Cast button for every spell, cantrips included, regardless of whether that cast also spent a slot, and from Bestiary.tsx's Spells row in the Codex. `entityKey` (`spell:<compendiumId or local id>`) is checked against a DM's own custom override first; a silent no-op if there's neither an override nor a mapped/curated default cue. */
+export function playSpellCastSfx(entityKey: string, compendiumId: string | undefined, school: string | undefined, sessionId: string | null): void {
+  if (tryPlayCustomEntitySfx(entityKey)) return
+  const cue = findSpellCastSfxCue(compendiumId, school)
+  if (cue) playSfxCue(cue.id, sessionId)
+}
+
+/** Plays and broadcasts the Creatures cue matching a monster's own name/type (see findMonsterSfxCue) — called from Bestiary.tsx's Monsters row in the Codex, and from InitiativeTracker.tsx whenever a monster's turn comes up. `entityKey` (`monster:<bestiary index>`) is checked against a DM's own custom override first, same as playSpellCastSfx. */
+export function playMonsterSfx(entityKey: string, monster: { name: string; type: string; index?: string }, sessionId: string | null): void {
+  if (tryPlayCustomEntitySfx(entityKey)) return
+  const cue = findMonsterSfxCue(monster)
+  if (cue) playSfxCue(cue.id, sessionId)
+}
+
+/** Plays and broadcasts one of the Turn Flow cues (Initiative Start, Turn Change, Death Save Tick/Success/Fail) by its exact label — called straight from InitiativeTracker.tsx's own combat actions rather than any button of its own (see sfxLibrary.ts's TURN_FLOW_CUES doc comment for why these never show up in the Sound Board menu). A silent no-op if that cue hasn't been curated yet. */
+export function playTurnFlowSfx(label: string, sessionId: string | null): void {
+  const cue = findTurnFlowCue(label)
   if (cue) playSfxCue(cue.id, sessionId)
 }
 

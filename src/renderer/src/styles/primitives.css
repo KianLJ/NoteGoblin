@@ -301,6 +301,30 @@
   font-size: 13px;
   line-height: 1.5;
 }
+/* The mouse-following statblock tooltip (HoverDetailCard.tsx's bodyHtml
+   mode, see InitiativeTracker.tsx's monster search dropdown) needs exactly
+   one visible box with the scrollbar living on its own inner edge — the
+   injected statblock markup already draws its own bordered/backgrounded
+   .gb-statblock box, so nesting that inside this component's own would-be
+   card chrome doubled up (a bordered box with a visible gap floating
+   outside it, where the scrollbar ended up). This shell takes over as the
+   ONE visual box instead, and strips the nested .gb-statblock's own
+   decoration down to nothing so it stops competing with it. */
+.gb-hover-statblock {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.25));
+  padding: var(--space-3);
+}
+.gb-hover-statblock .gb-statblock {
+  border: none;
+  border-radius: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
 .gb-statblock-save {
   position: absolute;
   top: var(--space-2);

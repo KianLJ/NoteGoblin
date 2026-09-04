@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MUSIC_LIBRARY, findTrack } from '../../data/musicLibrary'
-import { ambientLayersFor } from '../../data/ambientLibrary'
+import { ambientLayersFor, isRainLayer, isWindLayer } from '../../data/ambientLibrary'
 import { getMusicState, subscribeMusic, pickMood, playSpecificTrack, togglePlayPause, skipTrack, changeVolume, stopPlayersOnly } from './musicEngine'
 import { fadeAmbientLayerLevel, switchAmbientMood, broadcastAmbientLayerLevel } from './ambientEngine'
 import {
@@ -14,10 +14,34 @@ import {
 import { MusicNoteIcon } from '../shell/icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 import { ensureCustomMusicLoaded, subscribeCustomMusic, getCustomTracks, findCustomTrack, addCustomTrack, removeCustomTrack } from './customMusicStore'
+import { useCalendar } from '../campaigns/useCalendar'
+import { weatherForDate, type RainLevel } from '@shared/calendar'
 
 interface MusicButtonProps {
   /** The DM's hosted session id — null while not hosting, in which case picking a mood always plays locally-only regardless of the broadcast toggle below (nobody's connected to receive it anyway). */
   sessionId: string | null
+  /** The DM's active campaign, if any — read only to check that campaign's calendar for today's weather (see the calendar-driven ambience effect below). Null skips that entirely, same as a campaign with no calendar configured. */
+  campaignId?: string | null
+}
+
+// Rain's level scales with how hard it's actually coming down — mirrors the
+// same 0/25/50/75/100 steps the level buttons use, just picked by weather
+// instead of a click. Any rain at all counts (rain is already gated by the
+// climate's own rainChance, so a rolled rain day is worth reflecting), heavy
+// rain gets the full mix.
+const AUTO_RAIN_LEVEL: Record<RainLevel, number> = { none: 0, light: 0.25, moderate: 0.5, heavy: 1 }
+
+// Wind has no built-in gate the way rain's rainChance provides — it's a
+// continuous mph value, so it needs its own real floor before it's worth
+// reflecting at all, then scales up from there: 25% at the floor, +25% for
+// every 5 mph above it, capping at 100%.
+const AUTO_WIND_MPH_FLOOR = 10
+const AUTO_WIND_MPH_STEP = 5
+
+function autoWindLevel(windMph: number): number {
+  if (windMph < AUTO_WIND_MPH_FLOOR) return 0
+  const tier = Math.floor((windMph - AUTO_WIND_MPH_FLOOR) / AUTO_WIND_MPH_STEP)
+  return Math.min(1, 0.25 + tier * 0.25)
 }
 
 const MAX_FADE_MS = 10000
@@ -45,7 +69,7 @@ function closestAmbientLevelIndex(level: number): number {
 }
 
 /** DM-only header button — Goblin Bard's mood picker. Picking a mood plays a random track from it on loop and (while hosting) broadcasts that exact track to every connected player; picking a different mood, or skipping within one, crossfades. */
-export function MusicButton({ sessionId }: MusicButtonProps): JSX.Element {
+export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [musicState, setMusicState] = useState(() => getMusicState())
   const [fadeMs, setFadeMs] = useState(DEFAULT_FADE_MS)
@@ -60,6 +84,13 @@ export function MusicButton({ sessionId }: MusicButtonProps): JSX.Element {
   // than eagerly for every mood in the library up front.
   const [ambientLevels, setAmbientLevels] = useState<Record<string, number>>({})
   const containerRef = useRef<HTMLDivElement>(null)
+  // Every ambient layer key ("groupId:layerId") this session's weather
+  // effect has itself raised and hasn't been manually overridden since —
+  // see that effect's own doc comment for why tracking this (rather than
+  // just "is the layer currently above 0") is what lets it raise and lower
+  // a layer symmetrically without ever fighting the DM's own manual choice.
+  const autoAppliedLayersRef = useRef<Set<string>>(new Set())
+  const { calendar } = useCalendar(sessionId ?? undefined, campaignId)
 
   function chooseBroadcastEnabled(enabled: boolean): void {
     // Turning it off is the only signal a connected player's client ever
@@ -104,12 +135,74 @@ export function MusicButton({ sessionId }: MusicButtonProps): JSX.Element {
     })
   }, [musicState.groupId])
 
-  function handleAmbientChange(groupId: string, layerId: string, url: string, level: number): void {
+  function applyAmbientLevel(groupId: string, layerId: string, url: string, level: number): void {
     setAmbientLevels((prev) => ({ ...prev, [`${groupId}:${layerId}`]: level }))
     setStoredAmbientLevel(groupId, layerId, level)
     fadeAmbientLayerLevel(groupId, layerId, url, level)
     broadcastAmbientLayerLevel(groupId, layerId, level, fadeMs, sessionId)
   }
+
+  /** The player-driven path (the level-button row below) — unlike the weather effect's own applyAmbientLevel calls, a manual change always forgets this layer was ever auto-set (see autoAppliedLayersRef), so it's treated as the DM's own deliberate pick from now on and the weather effect never touches it again, in either direction, until a mood switch clears the slate. */
+  function handleAmbientChange(groupId: string, layerId: string, url: string, level: number): void {
+    autoAppliedLayersRef.current.delete(`${groupId}:${layerId}`)
+    applyAmbientLevel(groupId, layerId, url, level)
+  }
+
+  // Matches the active campaign's own weather for today against whatever
+  // mood is currently selected — if that mood happens to offer a Rain/Wind
+  // layer, sets its level to match the weather's own intensity (see
+  // AUTO_RAIN_LEVEL/autoWindLevel above), raising it, adjusting it as the
+  // weather changes day to day, and lowering it back to 0 once the weather
+  // no longer calls for it at all. Deliberately does nothing unless a mood
+  // is already selected AND playing (per the feature request this was built
+  // for) — this never picks a mood on its own or turns anything on while
+  // Goblin Bard is silent, it only nudges an already-running ambience mix.
+  //
+  // autoAppliedLayersRef (not just "is this layer currently at 0") is what
+  // makes raising, adjusting, and lowering all safe without ever fighting a
+  // manual choice: it's the set of layer keys this effect itself is
+  // currently responsible for. A layer only starts being auto-managed if it
+  // isn't already in that set and isn't already above 0 (so it never
+  // overwrites a level the DM picked by hand); once it IS in the set, this
+  // effect freely adjusts or clears it as the weather changes, since it
+  // knows that level is its own doing — until handleAmbientChange removes
+  // it from the set (any manual touch), after which this effect leaves it
+  // alone in both directions.
+  useEffect(() => {
+    if (!musicState.groupId) return
+    const groupId = musicState.groupId
+    const layers = ambientLayersFor(groupId)
+
+    const weather = musicState.playing && calendar ? weatherForDate(calendar.config, calendar.config.currentDate, calendar.config.selectedLocationId) : null
+    const rainLevel = weather ? AUTO_RAIN_LEVEL[weather.rain] : 0
+    const windLevel = weather ? autoWindLevel(weather.windMph) : 0
+
+    for (const layer of layers) {
+      const key = `${groupId}:${layer.id}`
+      const targetLevel = isRainLayer(layer) ? rainLevel : isWindLayer(layer) ? windLevel : null
+      if (targetLevel === null) continue // not a layer this effect has any opinion about
+      const isAutoApplied = autoAppliedLayersRef.current.has(key)
+
+      if (targetLevel > 0) {
+        if (!isAutoApplied) {
+          const currentLevel = ambientLevels[key] ?? getStoredAmbientLevel(groupId, layer.id)
+          if (currentLevel > 0) continue // already something else's choice — don't take it over
+          autoAppliedLayersRef.current.add(key)
+          applyAmbientLevel(groupId, layer.id, layer.url, targetLevel)
+        } else if ((ambientLevels[key] ?? getStoredAmbientLevel(groupId, layer.id)) !== targetLevel) {
+          applyAmbientLevel(groupId, layer.id, layer.url, targetLevel)
+        }
+      } else if (isAutoApplied) {
+        autoAppliedLayersRef.current.delete(key)
+        applyAmbientLevel(groupId, layer.id, layer.url, 0)
+      }
+    }
+    // ambientLevels/applyAmbientLevel deliberately excluded — this should
+    // only ever re-evaluate when the mood, playback state, or the
+    // calendar's weather actually changes, not on every ambientLevels
+    // update this same effect's own applyAmbientLevel calls trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [musicState.playing, musicState.groupId, calendar])
 
   useEffect(() => {
     if (!open) return
@@ -338,26 +431,46 @@ export function MusicButton({ sessionId }: MusicButtonProps): JSX.Element {
                           >
                             {layer.label}
                           </span>
-                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', flexShrink: 0 }}>
                             {AMBIENT_LEVELS.map((stepLevel, i) => {
                               const filled = i <= activeIndex
                               return (
+                                // The visible bar was also the whole click target — easy to miss,
+                                // especially for the shorter early bars. The button itself is now
+                                // a much bigger, uniform hit box (18x22, no gap between them so they
+                                // tile edge-to-edge with no dead space), and the bar itself is now
+                                // wide enough to fill most of that box too (just a hairline gap
+                                // between bars, via the button's own side padding) instead of
+                                // floating as a thin sliver in the middle of empty space.
                                 <button
                                   key={i}
                                   type="button"
                                   title={`${Math.round(stepLevel * 100)}%`}
                                   onClick={() => handleAmbientChange(groupId, layer.id, layer.url, stepLevel)}
                                   style={{
-                                    width: 8,
-                                    height: 6 + i * 3,
-                                    padding: 0,
-                                    borderRadius: 2,
-                                    border: `1px solid ${filled ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                                    background: filled ? 'var(--accent)' : 'transparent',
-                                    cursor: 'pointer',
-                                    transition: 'background 0.15s ease, border-color 0.15s ease'
+                                    width: 18,
+                                    height: 22,
+                                    padding: '0 1px',
+                                    display: 'flex',
+                                    alignItems: 'flex-end',
+                                    justifyContent: 'center',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer'
                                   }}
-                                />
+                                >
+                                  <span
+                                    style={{
+                                      display: 'block',
+                                      width: '100%',
+                                      height: 6 + i * 3,
+                                      borderRadius: 2,
+                                      border: `1px solid ${filled ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                                      background: filled ? 'var(--accent)' : 'transparent',
+                                      transition: 'background 0.15s ease, border-color 0.15s ease'
+                                    }}
+                                  />
+                                </button>
                               )
                             })}
                           </div>

@@ -20,6 +20,7 @@ import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessio
 import { queryOnline } from './relaySocket'
 import { setDiscordActivity } from './discordPresence'
 import { listCustomMusic, addCustomMusicTrack, removeCustomMusicTrack, getCustomMusicTrack, mimeTypeForPath } from './customMusic'
+import { listCustomEntitySfx, setCustomEntitySfx, removeCustomEntitySfx } from './customEntitySfx'
 import {
   startSessionHost,
   stopSessionHost,
@@ -663,7 +664,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.saveCalendar(me.db, campaignId, me.userId, config)
-          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          if (result.ok) {
+            // Notify this same window regardless of hosting — otherwise a
+            // save only ever updates the one hook instance that made the
+            // call (CalendarPanel's own, via its return value); any other
+            // component independently watching this campaign's calendar in
+            // the same window (Goblin Bard's weather-driven ambience, see
+            // MusicButton.tsx) never found out the current date/weather had
+            // changed unless a live session happened to also be hosted.
+            // Same "always notify locally, additionally broadcast if
+            // hosting" convention the vault file watcher already uses.
+            mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+            if (getHostedSession()) broadcastCampaignChanged(campaignId)
+          }
           return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
@@ -1199,6 +1212,30 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('sfx-board:broadcast', (_event, sfxId: string): void => {
     if (getHostedSession()) broadcastSfxPlayed(sfxId)
     else void sendSessionRequest('sfxBoard.play', { sfxId })
+  })
+
+  // A DM's own per-Codex-entity sound override — see customEntitySfx.ts's
+  // doc comment for why this is local-only (no broadcast path at all).
+  const CUSTOM_ENTITY_SFX_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'flac']
+
+  ipcMain.handle('sfx-entity:list-custom', (): Record<string, { title: string }> => listCustomEntitySfx(userDataDir))
+
+  ipcMain.handle('sfx-entity:set-custom', async (_event, entityKey: string): Promise<{ title: string } | null> => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Add a custom sound effect',
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: CUSTOM_ENTITY_SFX_EXTENSIONS }]
+    })
+    mainWindow.focus()
+    if (result.canceled || result.filePaths.length === 0) return null
+    const filePath = result.filePaths[0]
+    const title = basename(filePath, extname(filePath))
+    setCustomEntitySfx(userDataDir, entityKey, filePath, title)
+    return { title }
+  })
+
+  ipcMain.handle('sfx-entity:remove-custom', (_event, entityKey: string): void => {
+    removeCustomEntitySfx(userDataDir, entityKey)
   })
 
   // DM-only — pushes a "roll this" prompt to one connected player, targeted

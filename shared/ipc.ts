@@ -466,6 +466,15 @@ export interface AppApi {
     /** Fires for every connected player (never the DM's own trigger, which they already played locally) whenever the DM fires a cue. */
     onPlay: (callback: (sfxId: string) => void) => () => void
   }
+  // A DM's own per-Codex-entity sound override (see main/customEntitySfx.ts's
+  // doc comment) — local-only, no broadcast path, unlike the rest of the
+  // Sound Board surface above.
+  sfxEntity: {
+    listCustom: () => Promise<Record<string, { title: string }>>
+    /** Opens a native file picker scoped to audio files; returns the added override, or null if cancelled. */
+    setCustom: (entityKey: string) => Promise<{ title: string } | null>
+    removeCustom: (entityKey: string) => Promise<void>
+  }
   // Friends/presence, backed by the relay (see relay/) rather than local
   // storage. The relay account itself is transparent — it's the same
   // credentials as identity.*, synced automatically on login/switch — so

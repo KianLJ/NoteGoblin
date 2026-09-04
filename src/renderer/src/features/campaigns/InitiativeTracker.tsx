@@ -1,22 +1,27 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { activeFeatIds, applyExhaustionToMaxHp, computeMaxHp, exhaustionEffectsDescription } from '@shared/dnd5e'
 import { ExhaustionIcon } from '../player/characterSheetTabs/icons'
 import { effectiveAbilityScores, computeArmorClassFromEquipment } from '@shared/compendium'
+import { HoverDetailCard } from '../player/HoverDetailCard'
+import { renderStatblockHtml } from '../../statblock'
 import {
   emptyInitiativeState,
   emptyCombatant,
   sortedByInitiative,
   computeEncounterDifficulty,
+  encounterMultiplier,
   DIFFICULTY_LABELS,
   type Combatant,
-  type InitiativeState
+  type InitiativeState,
+  type Difficulty
 } from '@shared/encounter'
 import { BESTIARY, formatCr } from '../../data/bestiary'
 import { loadCustomMonsters, isCustomMonster } from '../../data/customBestiary'
 import { loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { Button } from '../../ui/Button'
+import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
 
 interface InitiativeTrackerProps {
   sessionId: string | null
@@ -188,14 +193,19 @@ export function InitiativeTracker({
     })
   }
 
+  /** Only an actual forward roll (delta > 0 — clicking a pip past the current count, not undoing one) plays a cue: the tension-tick for the first two, then a distinct success/fail stinger the moment a third one lands — see playTurnFlowSfx's own doc comment for why these never show up as a manual Sound Board button. */
   function bumpDeathSave(id: string, kind: 'successes' | 'failures', delta: number): void {
+    let resultingCount: number | null = null
     patch({
       combatants: state.combatants.map((c) => {
         if (c.id !== id || !c.deathSaves) return c
         const next = Math.min(3, Math.max(0, c.deathSaves[kind] + delta))
+        if (delta > 0) resultingCount = next
         return { ...c, deathSaves: { ...c.deathSaves, [kind]: next } }
       })
     })
+    if (resultingCount === 3) playTurnFlowSfx(kind === 'successes' ? 'Death Save Success' : 'Death Save Fail', sessionId)
+    else if (resultingCount !== null) playTurnFlowSfx('Death Save Tick', sessionId)
   }
 
   function addStatusEffect(id: string, effect: string): void {
@@ -223,15 +233,28 @@ export function InitiativeTracker({
     if (toAdd.length) patch({ combatants: [...state.combatants, ...toAdd] })
   }
 
+  /** Plays (and, at the table, broadcasts to every connected player) the Creatures cue matching whichever combatant's turn is coming up, if it's a monster — a player's own turn has no such cue, so this is a no-op for one. */
+  function announceTurnSfx(index: number): void {
+    const combatant = ordered[index]
+    if (!combatant || combatant.kind !== 'monster' || !combatant.monsterIndex) return
+    const monster = allMonstersForQuickAdd.find((m) => m.index === combatant.monsterIndex)
+    if (monster) playMonsterSfx(`monster:${monster.index}`, monster, sessionId)
+  }
+
   function startCombat(): void {
     patch({ turnIndex: 0, round: 1 })
+    playTurnFlowSfx('Initiative Start', sessionId)
+    announceTurnSfx(0)
   }
 
   function nextTurn(): void {
     if (ordered.length === 0) return
     const next = state.turnIndex + 1
-    if (next >= ordered.length) patch({ turnIndex: 0, round: state.round + 1 })
+    const wrapped = next >= ordered.length
+    if (wrapped) patch({ turnIndex: 0, round: state.round + 1 })
     else patch({ turnIndex: next })
+    playTurnFlowSfx('Turn Change', sessionId)
+    announceTurnSfx(wrapped ? 0 : next)
   }
 
   function prevTurn(): void {
@@ -243,6 +266,7 @@ export function InitiativeTracker({
 
   function endCombat(): void {
     patch({ turnIndex: -1, round: 1 })
+    playTurnFlowSfx('End Combat', sessionId)
   }
 
   function clearAll(): void {
@@ -509,16 +533,46 @@ function EncounterBuilder({
   onAddEncounterToTracker
 }: EncounterBuilderProps): JSX.Element {
   const allMonsters = useMemo(() => [...loadCustomMonsters(), ...BESTIARY], [])
+  // Empty query still shows a default alphabetical page rather than nothing
+  // — clicking into the search bar opens a browsable dropdown even before
+  // typing, not just a search-results list once you have.
   const filtered = useMemo(() => {
     const q = monsterQuery.trim().toLowerCase()
-    if (!q) return []
-    return allMonsters.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 20)
+    const source = q ? allMonsters.filter((m) => m.name.toLowerCase().includes(q)) : allMonsters
+    return [...source].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 20)
   }, [allMonsters, monsterQuery])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchWrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!searchOpen) return
+    function handleClickOutside(e: MouseEvent): void {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) setSearchOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [searchOpen])
 
   const partyLevels = useMemo(
     () => [...playerCharacters.values()].map((c) => c.classes.reduce((sum, cl) => sum + cl.level, 0) || 1),
     [playerCharacters]
   )
+
+  // A manual stand-in for the party — for planning an encounter before
+  // anyone's actually connected, or against a hypothetical party size/level
+  // rather than whoever happens to be online right now. Only takes effect
+  // once BOTH fields hold a valid number; otherwise every calculation below
+  // (the live difficulty readout, and the generator) falls back to the
+  // actually-connected party's real levels, same as before this existed.
+  const [partySizeInput, setPartySizeInput] = useState('')
+  const [partyLevelInput, setPartyLevelInput] = useState('')
+  const partyOverride = useMemo(() => {
+    const size = parseInt(partySizeInput, 10)
+    const level = parseInt(partyLevelInput, 10)
+    if (!Number.isFinite(size) || size < 1 || !Number.isFinite(level) || level < 1) return null
+    return Array(Math.min(20, size)).fill(Math.min(20, level))
+  }, [partySizeInput, partyLevelInput])
+  const effectivePartyLevels = partyOverride ?? (partyLevels.length ? partyLevels : [1])
 
   const draftMonsters = useMemo(() => {
     const result: BestiaryMonster[] = []
@@ -530,9 +584,99 @@ function EncounterBuilder({
   }, [encounterDraft, allMonsters])
 
   const difficulty = useMemo(
-    () => computeEncounterDifficulty(partyLevels.length ? partyLevels : [1], draftMonsters.map((m) => m.xp)),
-    [partyLevels, draftMonsters]
+    () => computeEncounterDifficulty(effectivePartyLevels, draftMonsters.map((m) => m.xp)),
+    [effectivePartyLevels, draftMonsters]
   )
+
+  // Harder tiers throw more bodies at the party, not just tougher ones —
+  // scales the target headcount alongside the XP budget itself so a Deadly
+  // encounter reads as a swarm bearing down, not just one bigger monster.
+  const TIER_COUNT_MULTIPLIER: Record<Exclude<Difficulty, 'trivial'>, number> = { easy: 0.8, medium: 1, hard: 1.3, deadly: 1.6 }
+
+  /** A `total` split into `parts` positive integers, each at least 1, randomly sized — used to divide a generated encounter's headcount across however many species were picked, so one species isn't always the same fixed share. */
+  function splitRandomly(total: number, parts: number): number[] {
+    if (parts <= 1) return [total]
+    const counts: number[] = []
+    let remaining = total
+    for (let i = 0; i < parts - 1; i++) {
+      const roomForRest = parts - 1 - i
+      const maxHere = remaining - roomForRest
+      const n = 1 + Math.floor(Math.random() * Math.max(1, maxHere))
+      counts.push(n)
+      remaining -= n
+    }
+    counts.push(remaining)
+    return counts
+  }
+
+  /** `count` distinct random entries from `pool` (fewer if the pool itself is smaller than that). */
+  function pickDistinct<T>(pool: T[], count: number): T[] {
+    const shuffled = [...pool].sort(() => Math.random() - 0.5)
+    return shuffled.slice(0, count)
+  }
+
+  /**
+   * One-click "give me an encounter" — replaces the current draft with a
+   * mix of one to three monster species (more species once there's enough
+   * total headcount to actually split around) whose combined, group-size-
+   * adjusted XP lands as close as possible to the chosen difficulty's own
+   * threshold for the effective party (see effectivePartyLevels above). The
+   * target headcount itself scales with both party size and the difficulty
+   * tier (see TIER_COUNT_MULTIPLIER) — a party of six generates noticeably
+   * more enemies than a party of three at the same difficulty, and Deadly
+   * generates more than Easy for the same party.
+   *
+   * Tries several random (species combination, headcount split) pairs and
+   * keeps whichever lands closest to the target — the DMG's group-size
+   * multiplier means "how many" shifts the actual adjusted XP nonlinearly,
+   * so this can't just solve for it directly. Not guaranteed to land
+   * exactly on the requested tier for an unusual party (a very high-level
+   * party with a thin monster pool, for instance), just the closest the
+   * bestiary can actually offer.
+   */
+  function generateEncounter(tier: Exclude<Difficulty, 'trivial'>): void {
+    const target = computeEncounterDifficulty(effectivePartyLevels, []).partyThresholds[tier]
+    if (!target) return
+    const pool = allMonsters.filter((m) => m.xp > 0)
+    if (pool.length === 0) return
+
+    const partySize = effectivePartyLevels.length
+    const desiredCount = Math.min(12, Math.max(1, Math.round(partySize * TIER_COUNT_MULTIPLIER[tier])))
+
+    // Bias toward species whose own XP is actually plausible for this
+    // headcount/budget combination — picking from the *whole* bestiary
+    // unfiltered meant a low-level party's Easy encounter could randomly
+    // land on ancient dragons every attempt (all equally implausible, so
+    // "closest of 60 bad options" was still bad); falls back to the
+    // unfiltered pool if this leaves too few candidates to pick from at all.
+    const perMonsterBudget = target / (desiredCount * encounterMultiplier(desiredCount))
+    const filteredPool = pool.filter((m) => m.xp >= perMonsterBudget * 0.15 && m.xp <= perMonsterBudget * 4)
+    const workingPool = filteredPool.length >= 3 ? filteredPool : pool
+
+    let best: { draft: Record<string, number>; diff: number } | null = null
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const numSpecies = desiredCount <= 1 ? 1 : Math.min(3, desiredCount, 1 + Math.floor(Math.random() * 3))
+      const species = pickDistinct(workingPool, numSpecies)
+      if (species.length === 0) continue
+      const counts = splitRandomly(desiredCount, species.length)
+
+      const totalCount = counts.reduce((sum, n) => sum + n, 0)
+      const rawXp = species.reduce((sum, m, i) => sum + m.xp * counts[i], 0)
+      const adjustedXp = Math.round(rawXp * encounterMultiplier(totalCount))
+      const diff = Math.abs(adjustedXp - target)
+
+      if (!best || diff < best.diff) {
+        const draft: Record<string, number> = {}
+        species.forEach((m, i) => {
+          draft[m.index] = (draft[m.index] ?? 0) + counts[i]
+        })
+        best = { draft, diff }
+      }
+    }
+    if (!best) return
+    setEncounterDraft(best.draft)
+    setEncounterName('')
+  }
 
   function addToDraft(index: string): void {
     setEncounterDraft((prev) => ({ ...prev, [index]: (prev[index] ?? 0) + 1 }))
@@ -581,46 +725,96 @@ function EncounterBuilder({
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <input
-        className="gb-input"
-        placeholder="Search monsters to add…"
-        value={monsterQuery}
-        onChange={(e) => setMonsterQuery(e.target.value)}
-        style={{ fontSize: 12 }}
-      />
-      {filtered.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 140, overflowY: 'auto' }}>
-          {filtered.map((m) => (
-            <button
-              key={m.index}
-              type="button"
-              onClick={() => {
-                addToDraft(m.index)
-                setMonsterQuery('')
-              }}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 6,
-                padding: '4px 6px',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-sunken)',
-                color: 'var(--text-primary)',
-                fontSize: 12,
-                cursor: 'pointer',
-                textAlign: 'left'
-              }}
-            >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {m.name}
-                {isCustomMonster(m.index) && <span style={{ color: 'var(--text-muted)' }}> · custom</span>}
-              </span>
-              <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>CR {formatCr(m.crNumeric)}</span>
-            </button>
+      <div className="gb-card" style={{ padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="gb-label" style={{ margin: 0 }}>
+          Generate Encounter
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <input
+            className="gb-input"
+            type="number"
+            min={1}
+            placeholder={`Party size${partyLevels.length ? ` (${partyLevels.length})` : ''}`}
+            value={partySizeInput}
+            onChange={(e) => setPartySizeInput(e.target.value)}
+            style={{ fontSize: 12, flex: 1 }}
+          />
+          <input
+            className="gb-input"
+            type="number"
+            min={1}
+            max={20}
+            placeholder={`Avg level${partyLevels.length ? ` (${Math.round(partyLevels.reduce((a, b) => a + b, 0) / partyLevels.length)})` : ''}`}
+            value={partyLevelInput}
+            onChange={(e) => setPartyLevelInput(e.target.value)}
+            style={{ fontSize: 12, flex: 1 }}
+          />
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+          {partyOverride
+            ? `Generating for a hypothetical party of ${partyOverride.length} at level ${partyOverride[0]}.`
+            : partyLevels.length
+              ? `Generating for the ${partyLevels.length} connected player${partyLevels.length === 1 ? '' : 's'} — fill in both fields above to plan for a different party instead.`
+              : 'No players connected yet — fill in both fields above to generate against a hypothetical party.'}
+        </p>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['easy', 'medium', 'hard', 'deadly'] as const).map((tier) => (
+            <Button key={tier} variant="secondary" onClick={() => generateEncounter(tier)} style={{ fontSize: 11, padding: '4px 6px', flex: 1 }}>
+              {DIFFICULTY_LABELS[tier]}
+            </Button>
           ))}
         </div>
-      )}
+      </div>
+
+      <div ref={searchWrapperRef} style={{ position: 'relative' }}>
+        <input
+          className="gb-input"
+          placeholder="Search monsters to add…"
+          value={monsterQuery}
+          onFocus={() => setSearchOpen(true)}
+          onChange={(e) => {
+            setMonsterQuery(e.target.value)
+            setSearchOpen(true)
+          }}
+          style={{ fontSize: 12, width: '100%' }}
+        />
+        {searchOpen && filtered.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
+            {filtered.map((m) => (
+              <HoverDetailCard key={m.index} bodyHtml={renderStatblockHtml(m)} width={460} interceptWheel={false}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToDraft(m.index)
+                    setMonsterQuery('')
+                    setSearchOpen(false)
+                  }}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 6,
+                    width: '100%',
+                    padding: '4px 6px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--bg-sunken)',
+                    color: 'var(--text-primary)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {m.name}
+                    {isCustomMonster(m.index) && <span style={{ color: 'var(--text-muted)' }}> · custom</span>}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>CR {formatCr(m.crNumeric)}</span>
+                </button>
+              </HoverDetailCard>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="gb-label">Encounter</div>
       {draftMonsters.length === 0 ? (
@@ -631,18 +825,20 @@ function EncounterBuilder({
             const monster = allMonsters.find((m) => m.index === index)
             if (!monster) return null
             return (
-              <div key={index} className="gb-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px' }}>
-                <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{monster.name}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                  <button type="button" onClick={() => removeFromDraft(index)} style={roundBtnStyle}>
-                    −
-                  </button>
-                  <span style={{ fontSize: 12, minWidth: 14, textAlign: 'center' }}>{count}</span>
-                  <button type="button" onClick={() => addToDraft(index)} style={roundBtnStyle}>
-                    +
-                  </button>
+              <HoverDetailCard key={index} bodyHtml={renderStatblockHtml(monster)} width={460} interceptWheel={false}>
+                <div className="gb-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px' }}>
+                  <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{monster.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <button type="button" onClick={() => removeFromDraft(index)} style={roundBtnStyle}>
+                      −
+                    </button>
+                    <span style={{ fontSize: 12, minWidth: 14, textAlign: 'center' }}>{count}</span>
+                    <button type="button" onClick={() => addToDraft(index)} style={roundBtnStyle}>
+                      +
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </HoverDetailCard>
             )
           })}
         </div>

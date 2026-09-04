@@ -370,6 +370,18 @@ export function RollAnimationOverlay(): JSX.Element | null {
   // by which point `current` has already been swapped for the rolled entry
   // (see resolvePendingRoll), which has no sessionId field of its own.
   const pendingSessionIdRef = useRef<string | null>(null)
+  // Guards the reveal-sound effect below against firing twice for the same
+  // resolved entry — closing the popup after a dual (advantage/disadvantage)
+  // roll calls dequeueRollAnimation(), which changes `current` to whatever's
+  // next (or nothing). `rolledEntry` is derived fresh from `current` every
+  // render, so it flips from the just-revealed entry to null at that point —
+  // a change in the reveal-sound effect's own dependency array — while
+  // `localEntry` (a dual roll's own separate state) and `phase` both stay
+  // exactly as they were (still 'revealed'), so the effect re-ran and
+  // replayed the same reveal sound purely because of that dequeue, not a
+  // new roll. Tracking which entry id has already had its sound keeps a
+  // second render of the same already-revealed entry from playing it again.
+  const revealedSoundIdRef = useRef<string | null>(null)
   // Guards the dual-roll sequence effect (below) against starting twice for
   // the same resolved entry.
   const dualEntrySequenceRef = useRef<string | null>(null)
@@ -428,6 +440,7 @@ export function RollAnimationOverlay(): JSX.Element | null {
     clearSpinTimers()
     resolvedIdRef.current = null
     dualEntrySequenceRef.current = null
+    revealedSoundIdRef.current = null
     setDisplayValue(null)
     setSecondDisplayValue(null)
     setLocalEntry(null)
@@ -737,6 +750,10 @@ export function RollAnimationOverlay(): JSX.Element | null {
     if (phase !== 'revealed') return
     const e = localEntry ?? rolledEntry
     if (!e) return
+    // See revealedSoundIdRef's own doc comment — without this, dismissing a
+    // dual roll's popup replayed this same reveal sound a second time.
+    if (revealedSoundIdRef.current === e.id) return
+    revealedSoundIdRef.current = e.id
     const nat = e.dc == null ? naturalRoll(e) : null
     // A natural 20/1 specifically on an attack roll (every rollAttack label
     // in CombatTab.tsx ends with " Attack" — ability checks/saves never do)

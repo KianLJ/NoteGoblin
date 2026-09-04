@@ -394,7 +394,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           >
             <BestiaryIcon />
           </button>
-          {mode === 'dm' && <MusicButton sessionId={hostedSessionId} />}
+          {mode === 'dm' && <MusicButton sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} />}
           {mode === 'dm' && <SoundBoardButton sessionId={hostedSessionId} />}
           <MessagesButton
             campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
@@ -461,7 +461,13 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
       <RollAnimationOverlay />
-      {bestiaryOpen && <Bestiary onClose={() => setBestiaryOpen(false)} hideMonsters={mode === 'player' && !!joinedSession} />}
+      {bestiaryOpen && (
+        <Bestiary
+          onClose={() => setBestiaryOpen(false)}
+          hideMonsters={mode === 'player' && !!joinedSession}
+          sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}
+        />
+      )}
     </div>
   )
 }

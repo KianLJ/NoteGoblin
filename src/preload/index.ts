@@ -212,6 +212,11 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('ws:sfx-played', listener)
     }
   },
+  sfxEntity: {
+    listCustom: () => ipcRenderer.invoke('sfx-entity:list-custom'),
+    setCustom: (entityKey) => ipcRenderer.invoke('sfx-entity:set-custom', entityKey),
+    removeCustom: (entityKey) => ipcRenderer.invoke('sfx-entity:remove-custom', entityKey)
+  },
   discord: {
     setActivity: (details) => ipcRenderer.invoke('discord:set-activity', details)
   },

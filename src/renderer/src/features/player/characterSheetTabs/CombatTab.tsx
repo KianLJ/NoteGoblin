@@ -608,7 +608,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
 
       {isCaster && (
         <div style={{ display: innerTab === 'Spells' ? 'block' : 'none' }}>
-          <SpellsTab character={character} onSave={onSave} readOnly={readOnly} />
+          <SpellsTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
         </div>
       )}
 

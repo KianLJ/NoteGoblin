@@ -9,6 +9,9 @@
  * side was dropped as redundant with Spellcasting once actually curating,
  * so this only has seven now.
  */
+import { SPELL_SFX_CATEGORY, SCHOOL_FALLBACK_SFX, SPELL_SFX_CUE_FOLDER } from './spellSfxCategories'
+import { MONSTER_SFX_CATEGORY } from './monsterSfxCategories'
+
 export interface SfxCue {
   /** Unique across the whole library — "<categoryId>-<n>". */
   id: string
@@ -70,38 +73,61 @@ function labelFromFilename(fileName: string): string {
   return match ? match[1] : base
 }
 
-/** Order here is the menu's display order — see this file's own doc comment for why it mirrors Pocket Foley's eight sides. */
+/**
+ * Order here is the menu's display order — see this file's own doc comment
+ * for why it mirrors Pocket Foley's eight sides. Turn Flow (that side's
+ * eighth) is deliberately NOT one of these — those cues are tied to the
+ * Initiative Tracker's own actions (starting combat, changing turns, death
+ * saves — see InitiativeTracker.tsx) rather than a manual DM button press,
+ * so they're kept out of the Sound Board's menu entirely; see
+ * TURN_FLOW_CUES below for where they actually live.
+ */
 const CATEGORIES: { id: string; label: string }[] = [
   { id: 'WeaponImpacts', label: 'Weapon Impacts' },
   { id: 'Elemental', label: 'Elemental & Damage' },
   { id: 'Spellcasting', label: 'Spellcasting' },
   { id: 'ClassFeatures', label: 'Class Features' },
   { id: 'Creatures', label: 'Creatures & Combat' },
-  { id: 'Movement', label: 'Footsteps & Movement' },
-  { id: 'CombatFlow', label: 'Turn Flow' }
+  { id: 'Movement', label: 'Footsteps & Movement' }
 ]
 
-/** Every category, in menu order — empty ones are kept (rather than filtered out) so the Sound Board's shape stays stable as cues get added over time; SoundBoardButton.tsx decides whether to hide an empty section. */
-export const SFX_LIBRARY: SfxCategory[] = CATEGORIES.map(({ id, label }) => {
+function cuesForCategory(categoryId: string): SfxCue[] {
   const byCueName = new Map<string, string[]>()
   for (const entry of raw) {
-    if (entry.category !== id) continue
+    if (entry.category !== categoryId) continue
     const urls = byCueName.get(entry.cueName)
     if (urls) urls.push(entry.url)
     else byCueName.set(entry.cueName, [entry.url])
   }
-  const cues = [...byCueName.entries()]
+  return [...byCueName.entries()]
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-    .map(([cueName, urls], i) => ({ id: `${id}-${i + 1}`, label: cueName, urls }))
-  return { id, label, cues }
-})
+    .map(([cueName, urls], i) => ({ id: `${categoryId}-${i + 1}`, label: cueName, urls }))
+}
+
+/** Every Sound Board menu category, in menu order — empty ones are kept (rather than filtered out) so the Sound Board's shape stays stable as cues get added over time; SoundBoardButton.tsx decides whether to hide an empty section. */
+export const SFX_LIBRARY: SfxCategory[] = CATEGORIES.map(({ id, label }) => ({ id, label, cues: cuesForCategory(id) }))
+
+/**
+ * The Combat & Turn Flow cues (Initiative Start, Turn Change, Death Save
+ * Tick/Success/Fail) — curated the exact same way as a Sound Board category
+ * (assets/soundboard/CombatFlow/<cue name>/*.mp3, several takes per cue),
+ * just never surfaced in the Sound Board menu itself (see CATEGORIES' doc
+ * comment above). Looked up by label from InitiativeTracker.tsx via
+ * findTurnFlowCue rather than by id, the same way findClassFeatureSfxCue
+ * works for ability names.
+ */
+export const TURN_FLOW_CUES: SfxCue[] = cuesForCategory('CombatFlow')
+
+export function findTurnFlowCue(label: string): SfxCue | undefined {
+  return TURN_FLOW_CUES.find((c) => c.label === label)
+}
 
 export function findSfxCue(cueId: string): SfxCue | undefined {
   for (const category of SFX_LIBRARY) {
     const cue = category.cues.find((c) => c.id === cueId)
     if (cue) return cue
   }
-  return undefined
+  return TURN_FLOW_CUES.find((c) => c.id === cueId)
 }
 
 /** Looks up one cue by its exact display label within a specific category — used where the trigger (a natural 20/1 on an attack roll, see RollAnimationOverlay.tsx) knows a cue by name rather than by id, the same way findClassFeatureSfxCue does for ability names. Undefined if that category has no cue with this label (including one not curated yet). */
@@ -152,6 +178,22 @@ export function totalSfxCount(): number {
 }
 
 /**
+ * Every SRD spell's own cast cue — see spellSfxCategories.ts's own doc
+ * comment for how each one was picked (damage type first, then school),
+ * and SpellsTab.tsx's Cast button for where this is actually triggered.
+ * `compendiumId`/`school` mirror a spell's own fields: a compendium spell
+ * (has a real id) resolves through SPELL_SFX_CATEGORY; a custom/homebrew
+ * spell (no id) falls back to SCHOOL_FALLBACK_SFX by its own freeform
+ * school text, or undefined if it has none set either.
+ */
+export function findSpellCastSfxCue(compendiumId: string | undefined, school: string | undefined): SfxCue | undefined {
+  const label = (compendiumId ? SPELL_SFX_CATEGORY[compendiumId] : undefined) ?? (school ? SCHOOL_FALLBACK_SFX[school] : undefined)
+  if (!label) return undefined
+  const folder = SPELL_SFX_CUE_FOLDER[label]
+  return folder ? findSfxCueByLabel(folder, label) : undefined
+}
+
+/**
  * Recognizes an inline `` `oneshot: WeaponImpacts-3` `` code span (see
  * markdown.ts's `codespan` renderer override and MarkdownLiveEditor.tsx's
  * matching Write-mode widget) — the note-authoring counterpart to a
@@ -166,4 +208,50 @@ export function parseOneShotCodeSpan(text: string): string | null {
   if (!match) return null
   const cueId = match[1].trim()
   return findSfxCue(cueId) ? cueId : null
+}
+
+/**
+ * Which Creatures cue a monster's name/type sounds most like — see
+ * Bestiary.tsx's Monsters row (clicking one in the Codex plays this) and
+ * InitiativeTracker.tsx's turn-change handling (a monster's turn coming up
+ * plays this too, broadcast to the table). An SRD monster resolves through
+ * MONSTER_SFX_CATEGORY (generated once from the same name-keyword-then-type
+ * logic below, see monsterSfxCategories.ts's own doc comment); a custom
+ * monster has no index in that map and falls back to running the same logic
+ * live here instead. Name keyword is checked first (a name like "Skeleton"
+ * is a stronger signal than its SRD type string), then the SRD `type`
+ * field's own family, and finally Beast Growl as the generic "some kind of
+ * creature" catch-all for anything else (most beasts, and any type with no
+ * more specific cue of its own).
+ */
+export function findMonsterSfxCue(monster: { name: string; type: string; index?: string }): SfxCue | undefined {
+  const mapped = monster.index ? MONSTER_SFX_CATEGORY[monster.index] : undefined
+  const label = mapped ?? categorizeMonster(monster.name, monster.type)
+  return findSfxCueByLabel('Creatures', label)
+}
+
+function categorizeMonster(name: string, type: string): string {
+  const n = name.toLowerCase()
+  const t = type.toLowerCase()
+  if (t.includes('dragon')) return 'Dragon Roar'
+  if (/\bspider\b/.test(n)) return 'Spider Hiss'
+  if (/\bwolf\b|\bworg\b/.test(n)) return 'Wolf Snarl'
+  if (/\bgoblin\b/.test(n) || t.includes('goblinoid')) return 'Goblin Battle Cry'
+  if (/\bogre\b/.test(n)) return 'Ogre Grunt'
+  if (/ghost|specter|spectre|wraith|banshee|phantom|shadow/.test(n)) return 'Ghost Wail'
+  if (/skeleton/.test(n)) return 'Skeleton Rattle'
+  if (t.includes('undead')) return 'Undead Groan'
+  if (t.includes('humanoid')) return 'Humanoid Shout'
+  if (t.includes('aberration')) return 'Aberration Shriek'
+  if (t.includes('celestial')) return 'Celestial Chime'
+  if (t.includes('construct')) return 'Construct Grind'
+  if (t.includes('elemental')) return 'Elemental Roar'
+  if (t.includes('fey')) return 'Fey Whisper'
+  if (t.includes('fiend')) return 'Fiend Snarl'
+  if (t.includes('giant')) return 'Giant Bellow'
+  if (t.includes('monstrosity')) return 'Monstrosity Roar'
+  if (t.includes('ooze')) return 'Ooze Squelch'
+  if (t.includes('plant')) return 'Plant Rustle'
+  if (t.includes('swarm')) return 'Swarm Buzz'
+  return 'Beast Growl'
 }

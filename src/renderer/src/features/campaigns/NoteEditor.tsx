@@ -548,7 +548,7 @@ export function NoteEditor({
       </div>
 
       <ContextMenu state={linkMenu} onClose={() => setLinkMenu(null)} />
-      {bestiaryPickerOpen && <Bestiary onClose={() => setBestiaryPickerOpen(false)} onPick={handleBestiaryPick} />}
+      {bestiaryPickerOpen && <Bestiary onClose={() => setBestiaryPickerOpen(false)} onPick={handleBestiaryPick} sessionId={sessionId} />}
     </div>
   )
 }

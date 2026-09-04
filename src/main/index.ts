@@ -10,6 +10,7 @@ import electronUpdater from 'electron-updater'
 import { registerIpcHandlers } from './registerIpc'
 import { resolveVaultAssetPath } from '@server/files/vaultStore'
 import { resolveCustomMusicPath } from './customMusic'
+import { resolveCustomEntitySfxPath } from './customEntitySfx'
 
 const { autoUpdater } = electronUpdater
 
@@ -54,7 +55,8 @@ if (isDev && !hasExplicitUserDataDir) {
 // Range requests against it, same as any other <audio> source.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'vault-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false } },
-  { scheme: 'custom-music', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true } }
+  { scheme: 'custom-music', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true } },
+  { scheme: 'custom-entity-sfx', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true } }
 ])
 
 // Chromium's default mouse-wheel scrolling animates each notch over ~150-250ms
@@ -210,7 +212,7 @@ app.whenReady().then(() => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: vault-asset:; media-src 'self' custom-music:;"
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: vault-asset:; media-src 'self' custom-music: custom-entity-sfx:;"
           ]
         }
       })
@@ -236,6 +238,24 @@ app.whenReady().then(() => {
     try {
       const trackId = new URL(request.url).hostname
       const filePath = resolveCustomMusicPath(app.getPath('userData'), trackId)
+      if (!filePath) return new Response('Not found', { status: 404 })
+      const data = await readFile(filePath)
+      const mime = AUDIO_MIME_BY_EXT[extname(filePath).toLowerCase()] ?? 'application/octet-stream'
+      return new Response(new Uint8Array(data), { headers: { 'content-type': mime } })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+  })
+
+  // A DM's own custom Codex sound override — see customEntitySfx.ts's own
+  // doc comment for why this is local-only. The entity key (e.g.
+  // "spell:acid-arrow") lives in the pathname rather than the hostname —
+  // unlike custom-music's plain uuid trackId, it contains a ":" that isn't
+  // valid in a URL host.
+  protocol.handle('custom-entity-sfx', async (request) => {
+    try {
+      const entityKey = decodeURIComponent(new URL(request.url).pathname.replace(/^\//, ''))
+      const filePath = resolveCustomEntitySfxPath(app.getPath('userData'), entityKey)
       if (!filePath) return new Response('Not found', { status: 404 })
       const data = await readFile(filePath)
       const mime = AUDIO_MIME_BY_EXT[extname(filePath).toLowerCase()] ?? 'application/octet-stream'

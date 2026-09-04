@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.9',
+    title: 'Every spell and monster makes noise, plus a smarter encounter builder',
+    highlights: [
+      'Every spell now has a Cast button — cantrips included — that plays a one-shot cue picked automatically by what the spell actually does; all 321 SRD spells are covered',
+      'Clicking a monster or spell in the Codex now plays its sound too, and a monster\'s own cue plays automatically (broadcast to the table) the moment its turn comes up in the Initiative Tracker; the Creatures cue set was expanded from 9 to 21 so aberrations, fiends, celestials, constructs, and more each get their own voice instead of one generic growl',
+      'New "+ Add custom SFX" option on a Spell or Monster\'s Codex page — pick your own audio file to override its auto-picked cue (local to your own device)',
+      'Combat & Turn Flow cues (Initiative Start, Turn Change, Death Saves, End Combat) are no longer a manual Sound Board menu — they now play automatically off the Initiative Tracker\'s own actions',
+      'New "Playing the Game" tab in the Codex — the full SRD ability check/combat/movement/resting rules, plus a Conditions & Status Effects reference (Stunned, Blinded, Prone, Cover, and the rest), browsable by DM and players at any time',
+      'Goblin Bard\'s Ambient layers now react to the active campaign\'s own calendar — rain and wind levels rise and fall automatically (scaling with intensity, not just on/off) to match today\'s weather, only while a mood is already selected and playing',
+      'The Initiative Tracker\'s Build Encounter panel now has one-click Easy/Medium/Hard/Deadly buttons that generate a mixed-species encounter sized to the actual party (or a manually entered hypothetical one), plus a monster search dropdown with mouse-following statblock previews',
+      'Sound Board cues now get a small random pitch variation on every play, and are capped at 10 seconds with a fade-out instead of running long uncut',
+      'Fixed a dis/adv roll\'s result sound sometimes playing a second time when dismissing the popup, and ambient wind/rain levels not updating when the campaign\'s current day changed'
+    ]
+  },
+  {
     version: '0.5.8',
     title: 'Sound Board curation, ability cues, and roll color fixes',
     highlights: [
