@@ -342,6 +342,30 @@ export function collectThemePrefs(): ThemePrefs {
   return { mode: getStoredMode(), overrides, groupColors, fontId: getStoredFontId(), fontScale: getStoredFontScale() }
 }
 
+/**
+ * Whether this device actually has any explicit theme/font customization —
+ * as opposed to simply resolving every setting to its built-in default,
+ * which every getter above happily does even on a device that's never been
+ * touched. This distinction matters for seeding a relay account that has no
+ * prefs saved yet (see App.tsx's onPrefsChecked): a never-customized device
+ * must never push its resolved defaults up as if they were a real answer —
+ * doing so would let a fresh/throwaway device silently overwrite a
+ * genuinely customized account with nothing, the moment it happens to log
+ * in first. Checks raw localStorage presence, not the resolved values.
+ */
+export function hasCustomThemePrefs(): boolean {
+  if (localStorage.getItem(MODE_KEY) !== null) return true
+  if (localStorage.getItem(FONT_KEY) !== null) return true
+  if (localStorage.getItem(FONT_SCALE_KEY) !== null) return true
+  for (const theme of ['light', 'dark'] as ResolvedTheme[]) {
+    if (localStorage.getItem(overridesKey(theme)) !== null) return true
+    for (const group of TINTABLE_GROUPS) {
+      if (localStorage.getItem(groupColorKey(theme, group)) !== null) return true
+    }
+  }
+  return false
+}
+
 /** Writes a bundle from collectThemePrefs (typically fetched from another device via the relay) into local storage and re-applies it immediately. */
 export function applyThemePrefs(prefs: ThemePrefs): void {
   localStorage.setItem(MODE_KEY, prefs.mode)

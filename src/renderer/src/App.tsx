@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { LoginScreen } from './features/auth/LoginScreen'
 import { onIdentitySwitched } from './features/auth/identityEvents'
 import { AppShell } from './features/shell/AppShell'
-import { applyThemePrefs, collectThemePrefs, type ThemePrefs } from './theme'
+import { applyThemePrefs, collectThemePrefs, hasCustomThemePrefs, type ThemePrefs } from './theme'
 import type { Identity } from '@shared/ipc'
 
 function App(): JSX.Element {
@@ -13,15 +13,18 @@ function App(): JSX.Element {
   // Shortly after any login/create/switch that reached the relay, the main
   // process checks whether this account already has saved appearance
   // settings — see relaySync.ts's pullAndSendPrefs. If it does (saved from
-  // another device), apply them here. If not — a brand new account, or an
-  // existing one no device has pushed to yet — push this device's current
-  // settings up instead, so the account gets seeded by whichever device
-  // happens to log in first rather than staying empty forever.
+  // another device), apply them here. If not, and THIS device actually has
+  // some explicit customization of its own, push it up to seed the account.
+  // Critically, a device with no customization at all (a fresh install, a
+  // throwaway test profile) must never push its resolved defaults just
+  // because the relay came back empty — that would silently overwrite a
+  // genuinely customized account with nothing the moment such a device
+  // happens to log in first (see hasCustomThemePrefs's doc comment).
   useEffect(
     () =>
       window.goblin.identity.onPrefsChecked((prefs) => {
         if (prefs) applyThemePrefs(prefs as ThemePrefs)
-        else void window.goblin.identity.pushPrefs(collectThemePrefs())
+        else if (hasCustomThemePrefs()) void window.goblin.identity.pushPrefs(collectThemePrefs())
       }),
     []
   )
