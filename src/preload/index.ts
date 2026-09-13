@@ -29,7 +29,14 @@ const api: AppApi = {
     list: () => ipcRenderer.invoke('identity:list'),
     switch: (id, password, remember) => ipcRenderer.invoke('identity:switch', id, password, remember),
     forgetSaved: (id) => ipcRenderer.invoke('identity:forget-saved', id),
-    signOut: () => ipcRenderer.invoke('identity:sign-out')
+    signOut: () => ipcRenderer.invoke('identity:sign-out'),
+    pullPrefs: () => ipcRenderer.invoke('identity:pull-prefs'),
+    pushPrefs: (prefs) => ipcRenderer.invoke('identity:push-prefs', prefs),
+    onPrefsChecked: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, prefs: unknown): void => callback(prefs)
+      ipcRenderer.on('relay:prefs-checked', listener)
+      return () => ipcRenderer.removeListener('relay:prefs-checked', listener)
+    }
   },
   sessions: {
     start: () => ipcRenderer.invoke('sessions:start'),

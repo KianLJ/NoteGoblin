@@ -4,6 +4,23 @@ import { setRelaySession, setRelayStatus } from './relayState'
 import { connectPresence, disconnectPresence } from './relaySocket'
 
 /**
+ * Fetches this account's saved appearance prefs once a relay session is
+ * live, and tells the renderer either way: apply them (an existing account
+ * with prefs already saved from another device), or — if the relay has none
+ * yet (a brand new account, or an existing one no device has ever pushed
+ * to) — push this device's current local settings up, so the account gets
+ * seeded on whichever device happens to log in first rather than staying
+ * empty until someone happens to tweak a setting. A relay fetch failure is
+ * treated the same as "no prefs yet" — never overwrites local settings with
+ * nothing, and still lets the account get seeded once reachable.
+ */
+export async function pullAndSendPrefs(token: string, window: BrowserWindow): Promise<void> {
+  const result = await relayClient.getPrefs(token)
+  const prefs = result.ok ? result.data.prefs : null
+  window.webContents.send('relay:prefs-checked', prefs)
+}
+
+/**
  * Transparently keeps the relay account in sync with whichever local device
  * identity is current — same "single combined login" pattern
  * authenticateWithHost.ts uses for joining other hosts: try login, register
@@ -26,6 +43,7 @@ export async function syncRelayAccount(displayName: string, password: string, wi
   if (login.ok) {
     setRelaySession({ userId: login.data.userId, username: login.data.username, token: login.data.token })
     connectPresence(login.data.token, window)
+    void pullAndSendPrefs(login.data.token, window)
     return
   }
 
@@ -33,6 +51,7 @@ export async function syncRelayAccount(displayName: string, password: string, wi
   if (register.ok) {
     setRelaySession({ userId: register.data.userId, username: register.data.username, token: register.data.token })
     connectPresence(register.data.token, window)
+    void pullAndSendPrefs(register.data.token, window)
     return
   }
 

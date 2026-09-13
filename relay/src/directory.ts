@@ -143,6 +143,8 @@ export class Directory extends Server<Env> {
     if (req.method === 'POST' && action === 'login') return this.handleLogin(req)
     if (req.method === 'GET' && action === 'me') return this.handleMe(req)
     if (req.method === 'POST' && action === 'change-password') return this.handleChangePassword(req)
+    if (req.method === 'GET' && action === 'prefs') return this.handleGetPrefs(req)
+    if (req.method === 'POST' && action === 'prefs') return this.handleSetPrefs(req)
     if (req.method === 'GET' && action === 'friends') return this.handleListFriends(req)
     if (req.method === 'POST' && action === 'request') return this.handleSendRequest(req)
     if (req.method === 'POST' && action === 'accept') return this.handleRespondRequest(req, true)
@@ -229,6 +231,23 @@ export class Directory extends Server<Env> {
     }
     const passwordHash = await hashPassword(body.newPassword)
     await this.ctx.storage.put(`user:${account.id}`, { ...account, passwordHash })
+    return json({ ok: true })
+  }
+
+  /** Opaque blob (theme/font choices etc.) the relay stores but never reads into — just a place for the account's chosen look to live so a new device can pick it up on login. */
+  private async handleGetPrefs(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const prefs = (await this.ctx.storage.get<unknown>(`prefs:${account.id}`)) ?? null
+    return json({ prefs })
+  }
+
+  private async handleSetPrefs(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const body = (await req.json().catch(() => null)) as { prefs?: unknown } | null
+    if (body?.prefs === undefined) return badRequest('prefs is required')
+    await this.ctx.storage.put(`prefs:${account.id}`, body.prefs)
     return json({ ok: true })
   }
 
@@ -453,7 +472,8 @@ export class Directory extends Server<Env> {
       `friends:${account.id}`,
       `friendReq:${account.id}`,
       `notifications:${account.id}`,
-      `whisperPeers:${account.id}`
+      `whisperPeers:${account.id}`,
+      `prefs:${account.id}`
     ])
 
     return json({ ok: true })

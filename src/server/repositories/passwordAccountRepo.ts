@@ -62,6 +62,24 @@ export class PasswordAccountRepo {
     return { id, displayName }
   }
 
+  /**
+   * Creates an account at a caller-supplied id instead of a fresh `uuid()` —
+   * used when a login is recognized by the relay but has no local row yet
+   * (a new device), so the local row can share the relay's userId instead of
+   * getting its own disconnected one. Still argon2id-hashes the plaintext
+   * password so this device can verify future logins offline.
+   */
+  async createWithId(id: string, displayName: string, password: string): Promise<Account> {
+    if (this.findByDisplayName(displayName)) {
+      throw new Error('That display name is already in use.')
+    }
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id })
+    this.db
+      .prepare(`INSERT INTO ${this.table} (id, display_name, password_hash) VALUES (?, ?, ?)`)
+      .run(id, displayName, passwordHash)
+    return { id, displayName }
+  }
+
   /** Finds or creates an account using an already-hashed password — used to seed a host's own account from the local identity that's hosting it, without ever needing the plaintext password. */
   ensureWithHash(displayName: string, passwordHash: string): Account {
     const existing = this.findByDisplayName(displayName)

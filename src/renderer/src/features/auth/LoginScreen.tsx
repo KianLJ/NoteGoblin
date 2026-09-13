@@ -13,10 +13,6 @@ type Stage = 'checking' | 'returning' | 'create'
 
 export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element {
   const [stage, setStage] = useState<Stage>('checking')
-  // Whether ANY local identity exists on this device — independent of
-  // `stage`, since stage can be manually toggled to 'create' even when
-  // accounts already exist, but there's no "back to login" to offer if none do.
-  const [hasAnyAccounts, setHasAnyAccounts] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -34,7 +30,6 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
         }
       }
       const hasAny = await window.goblin.identity.hasAny()
-      setHasAnyAccounts(hasAny)
       setStage(hasAny ? 'returning' : 'create')
       // eslint-disable-next-line react-hooks/exhaustive-deps
     })()
@@ -221,15 +216,13 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps): JSX.Element 
               Create a new identity instead
             </button>
           ) : (
-            hasAnyAccounts && (
-              <button
-                type="button"
-                onClick={() => switchStage('returning')}
-                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}
-              >
-                Log in instead
-              </button>
-            )
+            <button
+              type="button"
+              onClick={() => switchStage('returning')}
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}
+            >
+              Log in instead
+            </button>
           )}
         </p>
       </form>

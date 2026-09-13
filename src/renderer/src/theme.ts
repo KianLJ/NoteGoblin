@@ -1,5 +1,14 @@
 import { hexToHsl, hslToHex } from './color'
 
+/** Debounced push of the current theme/font choices up to the relay account, so they follow the user to another device. Every local mutator below calls this; fire-and-forget and silently a no-op without a relay connection (see identity:push-prefs), so this never needs its own error handling here. */
+let pushPrefsTimer: ReturnType<typeof setTimeout> | undefined
+function schedulePrefsPush(): void {
+  if (pushPrefsTimer) clearTimeout(pushPrefsTimer)
+  pushPrefsTimer = setTimeout(() => {
+    void window.goblin.identity.pushPrefs(collectThemePrefs())
+  }, 1000)
+}
+
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
 
@@ -135,6 +144,7 @@ export function applyTheme(mode: ThemeMode): void {
 export function setThemeMode(mode: ThemeMode): void {
   localStorage.setItem(MODE_KEY, mode)
   applyTheme(mode)
+  schedulePrefsPush()
 }
 
 /** Recolors every token in `group` to `pickedHex`'s hue/saturation, each keeping its own default lightness — the "greyscale with this color laid on top" effect, so light/dark relationships within the group stay intact. */
@@ -149,6 +159,7 @@ export function tintGroup(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[
   saveOverrides(theme, overrides)
   localStorage.setItem(groupColorKey(theme, group), pickedHex)
   if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
+  schedulePrefsPush()
 }
 
 export function resetGroup(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[number]): void {
@@ -159,6 +170,7 @@ export function resetGroup(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)
   saveOverrides(theme, overrides)
   localStorage.removeItem(groupColorKey(theme, group))
   if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
+  schedulePrefsPush()
 }
 
 /** The last color picked for a group, or its representative token's current default if it hasn't been tinted — what the group's swatch should show. */
@@ -177,6 +189,7 @@ export function setColorOverride(theme: ResolvedTheme, key: string, hex: string)
   overrides[key] = hex
   saveOverrides(theme, overrides)
   if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
+  schedulePrefsPush()
 }
 
 export function resetColorOverride(theme: ResolvedTheme, key: string): void {
@@ -184,12 +197,14 @@ export function resetColorOverride(theme: ResolvedTheme, key: string): void {
   delete overrides[key]
   saveOverrides(theme, overrides)
   if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
+  schedulePrefsPush()
 }
 
 export function resetAllColorOverrides(theme: ResolvedTheme): void {
   localStorage.removeItem(overridesKey(theme))
   for (const group of TINTABLE_GROUPS) localStorage.removeItem(groupColorKey(theme, group))
   if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
+  schedulePrefsPush()
 }
 
 /** Applies the stored (or default) theme immediately, and keeps 'system' mode in sync with OS changes while the app is open. Call once at startup. */
@@ -244,6 +259,7 @@ export function applyFont(id: string): void {
 export function setFont(id: string): void {
   localStorage.setItem(FONT_KEY, id)
   applyFont(id)
+  schedulePrefsPush()
 }
 
 const FONT_SCALE_KEY = 'gb-font-scale'
@@ -297,6 +313,50 @@ export function setFontScale(scale: number): void {
   const clamped = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, scale))
   localStorage.setItem(FONT_SCALE_KEY, String(clamped))
   applyFontScale(clamped)
+  schedulePrefsPush()
+}
+
+/** Every theme/font choice bundled into one plain object, for syncing an account's look to another device via the relay (see identity.pushPrefs/pullPrefs). Opaque to the relay — it just stores and returns this blob. */
+export interface ThemePrefs {
+  mode: ThemeMode
+  overrides: Partial<Record<ResolvedTheme, Record<string, string>>>
+  groupColors: Partial<Record<ResolvedTheme, Record<string, string>>>
+  fontId: string
+  fontScale: number
+}
+
+export function collectThemePrefs(): ThemePrefs {
+  const overrides: Partial<Record<ResolvedTheme, Record<string, string>>> = {}
+  const groupColors: Partial<Record<ResolvedTheme, Record<string, string>>> = {}
+  for (const theme of ['light', 'dark'] as ResolvedTheme[]) {
+    const o = getOverrides(theme)
+    if (Object.keys(o).length > 0) overrides[theme] = o
+
+    const g: Record<string, string> = {}
+    for (const group of TINTABLE_GROUPS) {
+      const stored = localStorage.getItem(groupColorKey(theme, group))
+      if (stored) g[group] = stored
+    }
+    if (Object.keys(g).length > 0) groupColors[theme] = g
+  }
+  return { mode: getStoredMode(), overrides, groupColors, fontId: getStoredFontId(), fontScale: getStoredFontScale() }
+}
+
+/** Writes a bundle from collectThemePrefs (typically fetched from another device via the relay) into local storage and re-applies it immediately. */
+export function applyThemePrefs(prefs: ThemePrefs): void {
+  localStorage.setItem(MODE_KEY, prefs.mode)
+  for (const theme of ['light', 'dark'] as ResolvedTheme[]) {
+    const o = prefs.overrides[theme]
+    if (o) saveOverrides(theme, o)
+    const g = prefs.groupColors[theme]
+    if (g) for (const [group, hex] of Object.entries(g)) localStorage.setItem(groupColorKey(theme, group), hex)
+  }
+  localStorage.setItem(FONT_KEY, prefs.fontId)
+  localStorage.setItem(FONT_SCALE_KEY, String(prefs.fontScale))
+
+  applyTheme(prefs.mode)
+  applyFont(prefs.fontId)
+  applyFontScale(prefs.fontScale)
 }
 
 /** Every installed system font family, alphabetized — via Chromium's Local Font Access API. Resolves to [] if the API isn't available (older Chromium) or the user denies the permission, so callers should treat an empty list as "fall back to the curated presets," not an error. */

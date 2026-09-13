@@ -47,6 +47,15 @@ export function changePassword(token: string, newPassword: string): Promise<Clie
   return call('/change-password', 'POST', token, { newPassword })
 }
 
+/** Opaque JSON blob (theme/font choices) the relay stores but never interprets, keyed to the account so it follows the user to a new device. */
+export function getPrefs(token: string): Promise<ClientResult<{ prefs: unknown }>> {
+  return call('/prefs', 'GET', token)
+}
+
+export function setPrefs(token: string, prefs: unknown): Promise<ClientResult<{ ok: true }>> {
+  return call('/prefs', 'POST', token, { prefs })
+}
+
 export function getFriends(
   token: string
 ): Promise<ClientResult<{ friends: DirectoryFriend[]; incomingRequests: FriendRequest[] }>> {

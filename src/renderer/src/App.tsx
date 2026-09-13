@@ -2,12 +2,29 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { LoginScreen } from './features/auth/LoginScreen'
 import { onIdentitySwitched } from './features/auth/identityEvents'
 import { AppShell } from './features/shell/AppShell'
+import { applyThemePrefs, collectThemePrefs, type ThemePrefs } from './theme'
 import type { Identity } from '@shared/ipc'
 
 function App(): JSX.Element {
   const [identity, setIdentity] = useState<Identity | null>(null)
 
   useEffect(() => onIdentitySwitched(setIdentity), [])
+
+  // Shortly after any login/create/switch that reached the relay, the main
+  // process checks whether this account already has saved appearance
+  // settings — see relaySync.ts's pullAndSendPrefs. If it does (saved from
+  // another device), apply them here. If not — a brand new account, or an
+  // existing one no device has pushed to yet — push this device's current
+  // settings up instead, so the account gets seeded by whichever device
+  // happens to log in first rather than staying empty forever.
+  useEffect(
+    () =>
+      window.goblin.identity.onPrefsChecked((prefs) => {
+        if (prefs) applyThemePrefs(prefs as ThemePrefs)
+        else void window.goblin.identity.pushPrefs(collectThemePrefs())
+      }),
+    []
+  )
 
   return (
     <ScaledApp>

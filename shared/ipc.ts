@@ -206,6 +206,12 @@ export interface AppApi {
     forgetSaved: (id: string) => Promise<void>
     /** Ends the current session (stops hosting/leaves a joined session, disconnects the relay, forgets any remembered password for this identity) and returns to the login screen. */
     signOut: () => Promise<void>
+    /** Fetches this account's saved appearance settings (theme colors, font) from the relay, if any — `null` if this is the first device to ever use the account, or the relay is unreachable. */
+    pullPrefs: () => Promise<unknown>
+    /** Pushes this device's current appearance settings up to the relay account, so a login on another device can pick them up. Fire-and-forget; silently no-ops without a relay connection. */
+    pushPrefs: (prefs: unknown) => Promise<void>
+    /** Fires once, shortly after a login/create/switch that reached the relay — `prefs` is whatever the account had saved (apply it), or `null` if nothing was saved yet (this device should push its own current settings to seed the account). Never fires at all if the relay was unreachable for this session. */
+    onPrefsChecked: (callback: (prefs: unknown) => void) => () => void
   }
   // Sessions replace the old LAN/Tailscale hosting+invite-code flow entirely
   // — connecting is now: start hosting, invite a friend (from the friends

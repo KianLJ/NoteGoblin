@@ -26,3 +26,6 @@ relay/.wrangler/
 
 # electron-builder auto-loads this for GH_TOKEN (release publishing) — never commit it
 electron-builder.env
+
+# local cross-machine handoff notes for Claude — never commit, overwritten each session
+.claude-notes/

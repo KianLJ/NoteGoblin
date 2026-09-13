@@ -14,10 +14,10 @@ import type { ServiceResult } from '@server/services/campaignService'
 import { CharacterRepo, type CharacterRow } from '@server/repositories/characterRepo'
 import { SnapshotRepo, type CampaignSnapshot } from '@server/repositories/snapshotRepo'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
-import { syncRelayAccount, changeRelayPassword, clearRelaySession } from './relaySync'
+import { syncRelayAccount, changeRelayPassword, clearRelaySession, pullAndSendPrefs } from './relaySync'
 import * as relayClient from '@server/relay/relayClient'
-import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId } from './relayState'
-import { queryOnline } from './relaySocket'
+import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId, setRelaySession } from './relayState'
+import { queryOnline, connectPresence } from './relaySocket'
 import { setDiscordActivity } from './discordPresence'
 import { listCustomMusic, addCustomMusicTrack, removeCustomMusicTrack, getCustomMusicTrack, mimeTypeForPath } from './customMusic'
 import { listCustomEntitySfx, setCustomEntitySfx, removeCustomEntitySfx } from './customEntitySfx'
@@ -161,15 +161,39 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     'identity:login',
     async (_event, displayName: string, password: string): Promise<LoginResult> => {
-      const identity = await identityRepo.verify(displayName.trim(), password)
-      if (!identity) return { ok: false, error: 'That display name and password don’t match.' }
-      setCurrentIdentity({
-        ...identity,
-        passwordHash: identityRepo.findByDisplayName(identity.displayName)!.password_hash,
-        password
-      })
-      void syncRelayAccount(identity.displayName, password, mainWindow)
-      return { ok: true, identity }
+      const trimmed = displayName.trim()
+      const identity = await identityRepo.verify(trimmed, password)
+      if (identity) {
+        setCurrentIdentity({
+          ...identity,
+          passwordHash: identityRepo.findByDisplayName(identity.displayName)!.password_hash,
+          password
+        })
+        void syncRelayAccount(identity.displayName, password, mainWindow)
+        return { ok: true, identity }
+      }
+
+      // No matching local row — this device may just have never seen this
+      // account before (e.g. it was created on another device). The relay
+      // already has its own account store for friends/presence; ask it
+      // directly before giving up, so the same credentials work anywhere.
+      const relayLogin = await relayClient.login(trimmed, password)
+      if (!relayLogin.ok) return { ok: false, error: 'That display name and password don’t match.' }
+
+      try {
+        const provisioned = await identityRepo.createWithId(relayLogin.data.userId, trimmed, password)
+        setCurrentIdentity({
+          ...provisioned,
+          passwordHash: identityRepo.findByDisplayName(provisioned.displayName)!.password_hash,
+          password
+        })
+        setRelaySession({ userId: relayLogin.data.userId, username: relayLogin.data.username, token: relayLogin.data.token })
+        connectPresence(relayLogin.data.token, mainWindow)
+        void pullAndSendPrefs(relayLogin.data.token, mainWindow)
+        return { ok: true, identity: provisioned }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Could not set up this account on this device.' }
+      }
     }
   )
 
@@ -325,6 +349,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       forgetRememberedIdentity(userDataDir, id)
     }
   )
+
+  // Appearance settings (theme colors, font) travel via the relay account,
+  // piggybacking its already-existing per-account storage — same soft-fail
+  // pattern as every other relay call here, since offline/no-account use
+  // must keep working with purely local settings.
+  ipcMain.handle('identity:pull-prefs', async (): Promise<unknown> => {
+    const session = getRelaySession()
+    if (!session) return null
+    const result = await relayClient.getPrefs(session.token)
+    return result.ok ? result.data.prefs : null
+  })
+
+  ipcMain.handle('identity:push-prefs', async (_event, prefs: unknown): Promise<void> => {
+    const session = getRelaySession()
+    if (!session) return
+    void relayClient.setPrefs(session.token, prefs)
+  })
 
   // --- Sessions -----------------------------------------------------------
   // Replaces LAN/Tailscale hosting entirely: starting a session opens one WS
