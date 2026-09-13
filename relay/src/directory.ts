@@ -18,6 +18,15 @@ interface StoredAccount {
   passwordHash: string
 }
 
+/** Opaque to the relay — see handleSetCampaignSnapshot's doc comment. */
+interface StoredCampaignSnapshot {
+  name: string
+  updatedAt: string
+  campaignJson: unknown
+  notes: unknown[]
+  folders: unknown[]
+}
+
 interface FriendRequests {
   incoming: string[] // userIds who sent *this* user a request
   outgoing: string[] // userIds *this* user has requested
@@ -145,6 +154,9 @@ export class Directory extends Server<Env> {
     if (req.method === 'POST' && action === 'change-password') return this.handleChangePassword(req)
     if (req.method === 'GET' && action === 'prefs') return this.handleGetPrefs(req)
     if (req.method === 'POST' && action === 'prefs') return this.handleSetPrefs(req)
+    if (req.method === 'GET' && action === 'campaigns') return this.handleListCampaignSnapshots(req)
+    if (req.method === 'GET' && segments[segments.length - 2] === 'campaigns') return this.handleGetCampaignSnapshot(req, action)
+    if (req.method === 'POST' && segments[segments.length - 2] === 'campaigns') return this.handleSetCampaignSnapshot(req, action)
     if (req.method === 'GET' && action === 'friends') return this.handleListFriends(req)
     if (req.method === 'POST' && action === 'request') return this.handleSendRequest(req)
     if (req.method === 'POST' && action === 'accept') return this.handleRespondRequest(req, true)
@@ -248,6 +260,52 @@ export class Directory extends Server<Env> {
     const body = (await req.json().catch(() => null)) as { prefs?: unknown } | null
     if (body?.prefs === undefined) return badRequest('prefs is required')
     await this.ctx.storage.put(`prefs:${account.id}`, body.prefs)
+    return json({ ok: true })
+  }
+
+  /**
+   * Text-only campaign content sync (notes/folders/campaign metadata) — one
+   * opaque JSON blob per campaign, same "relay stores it, never reads into
+   * it" philosophy as prefs, just keyed per campaign instead of one blob per
+   * account. Version comparison (is the cloud copy newer than mine?) is
+   * entirely the client's job via `updatedAt`; the relay just stores and
+   * returns whatever it's given.
+   */
+  private async handleListCampaignSnapshots(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const stored = await this.ctx.storage.list<StoredCampaignSnapshot>({ prefix: `campaign:${account.id}:` })
+    const list = [...stored.entries()].map(([key, value]) => ({
+      campaignId: key.slice(`campaign:${account.id}:`.length),
+      name: value.name,
+      updatedAt: value.updatedAt
+    }))
+    return json(list)
+  }
+
+  private async handleGetCampaignSnapshot(req: Request, campaignId: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const snapshot = await this.ctx.storage.get<StoredCampaignSnapshot>(`campaign:${account.id}:${campaignId}`)
+    if (!snapshot) return json({ error: 'Not found' }, 404)
+    return json(snapshot)
+  }
+
+  private async handleSetCampaignSnapshot(req: Request, campaignId: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const body = (await req.json().catch(() => null)) as Partial<StoredCampaignSnapshot> | null
+    if (!body?.updatedAt || typeof body.name !== 'string' || !Array.isArray(body.notes) || !Array.isArray(body.folders)) {
+      return badRequest('name, updatedAt, notes, and folders are required')
+    }
+    const snapshot: StoredCampaignSnapshot = {
+      name: body.name,
+      updatedAt: body.updatedAt,
+      campaignJson: body.campaignJson ?? null,
+      notes: body.notes,
+      folders: body.folders
+    }
+    await this.ctx.storage.put(`campaign:${account.id}:${campaignId}`, snapshot)
     return json({ ok: true })
   }
 
@@ -466,6 +524,8 @@ export class Directory extends Server<Env> {
       })
     }
 
+    const campaignSnapshots = await this.ctx.storage.list({ prefix: `campaign:${account.id}:` })
+
     await this.ctx.storage.delete([
       `user:${account.id}`,
       `username:${account.username}`,
@@ -473,7 +533,8 @@ export class Directory extends Server<Env> {
       `friendReq:${account.id}`,
       `notifications:${account.id}`,
       `whisperPeers:${account.id}`,
-      `prefs:${account.id}`
+      `prefs:${account.id}`,
+      ...campaignSnapshots.keys()
     ])
 
     return json({ ok: true })

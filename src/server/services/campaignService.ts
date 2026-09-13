@@ -50,15 +50,17 @@ import {
 interface CampaignRepoLike {
   list(): CampaignRow[]
   findById(id: string): CampaignRow | undefined
-  create(name: string, dmUserId: string): CampaignRow
+  create(name: string, dmUserId: string, existingId?: string, createdAt?: string): CampaignRow
   update(id: string, name: string): CampaignRow | undefined
   remove(id: string): void
   addMember(campaignId: string, userId: string, role: CampaignRole): void
   getRole(campaignId: string, userId: string): CampaignRole | null
+  touchContentVersion(id: string, timestamp: string): void
 }
 
 interface NoteRepoLike {
   listVisibleTo(campaignId: string, userId: string): NoteRow[]
+  listAll(campaignId: string): NoteRow[]
   findById(id: string): NoteRow | undefined
   create(input: {
     campaignId: string
@@ -80,11 +82,28 @@ interface NoteRepoLike {
       pinned?: boolean
     }
   ): NoteRow | undefined
+  upsertWithId(
+    id: string,
+    input: {
+      campaignId: string
+      authorUserId: string
+      title: string
+      bodyMarkdown: string
+      visibility: NoteRow['visibility']
+      folderId: string | null
+      editorUserIds: string[]
+      pinned: boolean
+      sceneDeckId: string | null
+      createdAt: string
+      updatedAt: string
+    }
+  ): NoteRow
   remove(id: string): void
 }
 
 interface FolderRepoLike {
   listVisibleTo(campaignId: string, userId: string): FolderRow[]
+  listAll(campaignId: string): FolderRow[]
   findById(id: string): FolderRow | undefined
   create(input: {
     campaignId: string
@@ -94,6 +113,18 @@ interface FolderRepoLike {
     visibility: FolderRow['visibility']
   }): FolderRow
   update(id: string, input: { name?: string; parentFolderId?: string | null }): FolderRow | undefined
+  upsertWithId(
+    id: string,
+    input: {
+      campaignId: string
+      authorUserId: string
+      name: string
+      parentFolderId: string | null
+      visibility: FolderRow['visibility']
+      createdAt: string
+      updatedAt: string
+    }
+  ): FolderRow
   setVisibilityCascade(rootId: string, visibility: FolderRow['visibility']): void
   remove(id: string): void
 }
@@ -374,6 +405,140 @@ export function joinActiveCampaign(db: DatabaseType, userId: string): ServiceRes
   const activeId = new CampaignRepo(db).getActiveCampaignId()
   if (!activeId) return { ok: false, status: 404, error: "The DM hasn't started a session yet." }
   return joinCampaign(db, activeId, userId)
+}
+
+/**
+ * Full, unredacted snapshot of a campaign's own notes/folders/metadata for
+ * cross-device sync (see src/main/campaignContentSync.ts) — DM-only, and
+ * deliberately bypasses listVisibleTo/toNoteJson's viewer-scoped redaction:
+ * syncing your own campaign to your own other device needs every row
+ * exactly as stored, not what one particular viewer would be shown.
+ */
+export interface CampaignContentSnapshot {
+  campaignJson: { id: string; name: string; dmUserId: string; createdAt: string; contentVersion: string | null }
+  notes: NoteRow[]
+  folders: FolderRow[]
+}
+
+export function exportCampaignSnapshot(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignContentSnapshot> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can sync this campaign.' }
+  const noteRepo = makeNoteRepo(db)
+  const folderRepo = makeFolderRepo(db)
+  return {
+    ok: true,
+    data: {
+      campaignJson: {
+        id: campaign.id,
+        name: campaign.name,
+        dmUserId: campaign.dm_user_id,
+        createdAt: campaign.created_at,
+        contentVersion: campaign.content_version
+      },
+      notes: noteRepo.listAll(campaign.id),
+      folders: folderRepo.listAll(campaign.id)
+    }
+  }
+}
+
+/**
+ * Reconciles local notes/folders for a campaign to exactly match a pulled
+ * snapshot: upserts everything present remotely (preserving ids and
+ * timestamps from the snapshot, not stamping "now"), then deletes any local
+ * note/folder for this campaign that isn't in the snapshot — a full
+ * replace, not a merge, since the snapshot is meant to represent the
+ * complete state as of `updatedAt` (see campaignContentSync.ts's timestamp
+ * gate, which only calls this when the snapshot is confirmed newer). Same
+ * DM-only gate as exportCampaignSnapshot.
+ */
+export function importCampaignSnapshot(
+  db: DatabaseType,
+  campaignId: string,
+  userId: string,
+  snapshot: { notes: NoteRow[]; folders: FolderRow[]; contentVersion: string }
+): ServiceResult<void> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can sync this campaign.' }
+  const noteRepo = makeNoteRepo(db)
+  const folderRepo = makeFolderRepo(db)
+
+  const remoteFolderIds = new Set(snapshot.folders.map((f) => f.id))
+  const remoteNoteIds = new Set(snapshot.notes.map((n) => n.id))
+
+  for (const folder of snapshot.folders) {
+    folderRepo.upsertWithId(folder.id, {
+      campaignId: campaign.id,
+      authorUserId: folder.author_user_id,
+      name: folder.name,
+      parentFolderId: folder.parent_folder_id,
+      visibility: folder.visibility,
+      createdAt: folder.created_at,
+      updatedAt: folder.updated_at
+    })
+  }
+  for (const note of snapshot.notes) {
+    noteRepo.upsertWithId(note.id, {
+      campaignId: campaign.id,
+      authorUserId: note.author_user_id,
+      title: note.title,
+      bodyMarkdown: note.body_markdown,
+      visibility: note.visibility,
+      folderId: note.folder_id,
+      editorUserIds: JSON.parse(note.editor_user_ids || '[]'),
+      pinned: !!note.pinned,
+      sceneDeckId: note.scene_deck_id,
+      createdAt: note.created_at,
+      updatedAt: note.updated_at
+    })
+  }
+
+  for (const existing of folderRepo.listAll(campaign.id)) {
+    if (!remoteFolderIds.has(existing.id)) folderRepo.remove(existing.id)
+  }
+  for (const existing of noteRepo.listAll(campaign.id)) {
+    if (!remoteNoteIds.has(existing.id)) noteRepo.remove(existing.id)
+  }
+
+  campaignRepo.touchContentVersion(campaign.id, snapshot.contentVersion)
+  return { ok: true, data: undefined }
+}
+
+/**
+ * Creates a local shell for a campaign this device has never seen before,
+ * at the SAME id/name/dmUserId/createdAt it already has on the relay — used
+ * to "discover" a campaign synced from another device (see
+ * campaignContentSync.ts's discoverAndSyncCampaigns), so its notes/folders
+ * can then be pulled into somewhere that actually exists locally. Only ever
+ * called for an id confirmed not to exist locally yet; no-op-safe collision
+ * handling isn't attempted here since the caller already checked.
+ */
+export function createCampaignShellWithId(
+  db: DatabaseType,
+  id: string,
+  name: string,
+  dmUserId: string,
+  createdAt: string
+): CampaignRow {
+  return makeCampaignRepo(db).create(name, dmUserId, id, createdAt)
+}
+
+/**
+ * Marks a campaign's content as having just changed, for cross-device sync
+ * version comparisons (see src/main/campaignContentSync.ts) — called from
+ * registerIpc.ts right after any local (DM's own, non-session) note/folder
+ * mutation succeeds. Deliberately not baked into createNote/updateNote/etc.
+ * themselves: those also run for connected players during a live session
+ * (via sessionHost's dispatch), and player-made edits during a live session
+ * don't yet trigger a sync push in this pass — a known limitation, not a
+ * bug, since a live session is a different, already-real-time code path
+ * that this stage's occasional-visit sync isn't meant to duplicate.
+ */
+export function touchCampaignContentVersion(db: DatabaseType, campaignId: string): void {
+  makeCampaignRepo(db).touchContentVersion(campaignId, new Date().toISOString())
 }
 
 export function listNotes(

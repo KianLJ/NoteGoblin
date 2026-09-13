@@ -101,4 +101,51 @@ export class FolderRepo {
     })
     runRemoval()
   }
+
+  /** Every folder in the campaign regardless of visibility/author — see NoteRepo.listAll's doc comment; same access-control caveat applies. */
+  listAll(campaignId: string): FolderRow[] {
+    return this.db.prepare('SELECT * FROM folders WHERE campaign_id = ?').all(campaignId) as FolderRow[]
+  }
+
+  /**
+   * Insert-or-replace at a caller-supplied id, writing through the given
+   * timestamps — the folder counterpart to NoteRepo.upsertWithId, used to
+   * import a folder pulled from another device's synced copy (see
+   * src/main/campaignContentSync.ts). Never used for a normal user-created
+   * folder.
+   */
+  upsertWithId(
+    id: string,
+    input: {
+      campaignId: string
+      authorUserId: string
+      name: string
+      parentFolderId: string | null
+      visibility: FolderVisibility
+      createdAt: string
+      updatedAt: string
+    }
+  ): FolderRow {
+    this.db
+      .prepare(
+        `INSERT INTO folders (id, campaign_id, author_user_id, name, parent_folder_id, visibility, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           parent_folder_id = excluded.parent_folder_id,
+           visibility = excluded.visibility,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        id,
+        input.campaignId,
+        input.authorUserId,
+        input.name,
+        input.parentFolderId,
+        input.visibility,
+        input.createdAt,
+        input.updatedAt
+      )
+    return this.findById(id)!
+  }
 }

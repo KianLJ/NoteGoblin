@@ -56,6 +56,37 @@ export function setPrefs(token: string, prefs: unknown): Promise<ClientResult<{ 
   return call('/prefs', 'POST', token, { prefs })
 }
 
+export interface CampaignSnapshotSummary {
+  campaignId: string
+  name: string
+  updatedAt: string
+}
+
+export interface CampaignSnapshot {
+  name: string
+  updatedAt: string
+  campaignJson: unknown
+  notes: unknown[]
+  folders: unknown[]
+}
+
+/** Which campaigns this account has a synced copy of on the relay — lets a device discover a campaign it has no local copy of at all yet. */
+export function listCampaignSnapshots(token: string): Promise<ClientResult<CampaignSnapshotSummary[]>> {
+  return call('/campaigns', 'GET', token)
+}
+
+export function getCampaignSnapshot(token: string, campaignId: string): Promise<ClientResult<CampaignSnapshot>> {
+  return call(`/campaigns/${encodeURIComponent(campaignId)}`, 'GET', token)
+}
+
+export function setCampaignSnapshot(
+  token: string,
+  campaignId: string,
+  snapshot: CampaignSnapshot
+): Promise<ClientResult<{ ok: true }>> {
+  return call(`/campaigns/${encodeURIComponent(campaignId)}`, 'POST', token, snapshot)
+}
+
 export function getFriends(
   token: string
 ): Promise<ClientResult<{ friends: DirectoryFriend[]; incomingRequests: FriendRequest[] }>> {

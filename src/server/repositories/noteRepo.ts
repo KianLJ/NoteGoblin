@@ -97,4 +97,65 @@ export class NoteRepo {
   remove(id: string): void {
     this.db.prepare('DELETE FROM notes WHERE id = ?').run(id)
   }
+
+  /** Every note in the campaign regardless of visibility/author — unlike listVisibleTo, not access-controlled itself; used only by campaignService's sync export, which gates on the caller actually being the DM before ever calling this. */
+  listAll(campaignId: string): NoteRow[] {
+    return this.db.prepare('SELECT * FROM notes WHERE campaign_id = ? ORDER BY updated_at DESC').all(campaignId) as NoteRow[]
+  }
+
+  /**
+   * Insert-or-replace at a caller-supplied id, writing through the given
+   * timestamps instead of stamping "now" — used to import a note pulled from
+   * another device's synced copy (see src/main/campaignContentSync.ts),
+   * where the id and timestamps must survive exactly as authored elsewhere
+   * for version comparisons and cross-references (scene decks, initiative
+   * links) to keep working. Never used for a normal user-authored note.
+   */
+  upsertWithId(
+    id: string,
+    input: {
+      campaignId: string
+      authorUserId: string
+      title: string
+      bodyMarkdown: string
+      visibility: NoteVisibility
+      folderId: string | null
+      editorUserIds: string[]
+      pinned: boolean
+      sceneDeckId: string | null
+      createdAt: string
+      updatedAt: string
+    }
+  ): NoteRow {
+    this.db
+      .prepare(
+        `INSERT INTO notes
+           (id, campaign_id, author_user_id, title, body_markdown, visibility, folder_id, editor_user_ids, pinned, scene_deck_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           title = excluded.title,
+           body_markdown = excluded.body_markdown,
+           visibility = excluded.visibility,
+           folder_id = excluded.folder_id,
+           editor_user_ids = excluded.editor_user_ids,
+           pinned = excluded.pinned,
+           scene_deck_id = excluded.scene_deck_id,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        id,
+        input.campaignId,
+        input.authorUserId,
+        input.title,
+        input.bodyMarkdown,
+        input.visibility,
+        input.folderId,
+        JSON.stringify(input.editorUserIds),
+        input.pinned ? 1 : 0,
+        input.sceneDeckId,
+        input.createdAt,
+        input.updatedAt
+      )
+    return this.findById(id)!
+  }
 }

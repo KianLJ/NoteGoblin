@@ -95,6 +95,7 @@ export interface CampaignFileRow {
   name: string
   dm_user_id: string
   created_at: string
+  content_version: string | null
 }
 
 export type CampaignRole = 'dm' | 'player'
@@ -111,6 +112,8 @@ interface CampaignFileJson {
   dmUserId: string
   createdAt: string
   members: CampaignMemberEntry[]
+  /** See CampaignRow.content_version's doc comment (db/hostSchema.ts) — same purpose, just stored here instead of a DB column since a vault campaign has no row in `campaigns`. Absent until this campaign's content is ever synced. */
+  contentVersion?: string
 }
 
 function listCampaignDirs(): string[] {
@@ -181,7 +184,7 @@ export function resolveVaultAssetPath(campaignId: string, relativePath: string):
 }
 
 function toCampaignRow(json: CampaignFileJson): CampaignFileRow {
-  return { id: json.id, name: json.name, dm_user_id: json.dmUserId, created_at: json.createdAt }
+  return { id: json.id, name: json.name, dm_user_id: json.dmUserId, created_at: json.createdAt, content_version: json.contentVersion ?? null }
 }
 
 export class CampaignFileRepo {
@@ -246,6 +249,13 @@ export class CampaignFileRepo {
     const json: CampaignFileJson = { ...found.json, name }
     writeCampaignJson(found.dir, json)
     return toCampaignRow(json)
+  }
+
+  /** Bumped on every note/folder mutation for this campaign — see CampaignFileJson.contentVersion's doc comment. */
+  touchContentVersion(id: string, timestamp: string): void {
+    const found = findCampaignDir(id)
+    if (!found) return
+    writeCampaignJson(found.dir, { ...found.json, contentVersion: timestamp })
   }
 
   /** Deletes the whole campaign folder — every note, folder, and the campaign.json itself. Irreversible; callers are expected to have already confirmed with the user. */
@@ -442,6 +452,34 @@ function walkVisible(campaignDir: string, campaignId: string, dmUserId: string, 
   return { notes, folders }
 }
 
+/** Every section in the campaign, regardless of viewer — Party, DM Only, and every existing `Private Notes/<uid>` subfolder (not just one). Used only by the sync export path (see NoteFileRepo.listAll/FolderFileRepo.listAll), which — like their SQLite counterparts — isn't access-controlled itself; campaignService gates that before ever calling in. */
+function allSections(campaignDir: string): Array<{ abs: string; rel: string; visibility: FileVisibility }> {
+  const sections: Array<{ abs: string; rel: string; visibility: FileVisibility }> = [
+    { abs: join(campaignDir, SHARED_DIR), rel: SHARED_DIR, visibility: 'shared' },
+    { abs: join(campaignDir, DM_DIR), rel: DM_DIR, visibility: 'dm' }
+  ]
+  const privateRoot = join(campaignDir, PRIVATE_ROOT_DIR)
+  if (existsSync(privateRoot)) {
+    for (const entry of readdirSync(privateRoot, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        sections.push({ abs: join(privateRoot, entry.name), rel: `${PRIVATE_ROOT_DIR}/${entry.name}`, visibility: 'private' })
+      }
+    }
+  }
+  return sections
+}
+
+function walkAll(campaignDir: string, campaignId: string, dmUserId: string): WalkResult {
+  const notes: NoteFileRow[] = []
+  const folders: FolderFileRow[] = []
+  for (const section of allSections(campaignDir)) {
+    const result = walkSection(campaignId, dmUserId, section.abs, section.rel, section.visibility)
+    notes.push(...result.notes)
+    folders.push(...result.folders)
+  }
+  return { notes, folders }
+}
+
 interface FoundNote {
   absPath: string
   campaignDir: string
@@ -543,6 +581,13 @@ export class NoteFileRepo {
     return noteRowFrom(found.absPath, found.campaignDir, found.campaignId, found.visibility, found.folderId, found.frontmatter, found.body)
   }
 
+  /** Every note in the campaign regardless of visibility/author — see this file's `walkAll` doc comment. */
+  listAll(campaignId: string): NoteFileRow[] {
+    const found = findCampaignDir(campaignId)
+    if (!found) return []
+    return walkAll(found.dir, campaignId, found.json.dmUserId).notes
+  }
+
   create(input: {
     campaignId: string
     authorUserId: string
@@ -628,6 +673,55 @@ export class NoteFileRepo {
     const fm: NoteFrontmatter = { ...found.frontmatter, ...meta }
     writeFileSync(found.absPath, serializeNote(fm, found.body), 'utf8')
   }
+
+  /**
+   * Insert-or-replace at a caller-supplied id, writing through the given
+   * timestamps — used to import a note pulled from another device's synced
+   * copy (see src/main/campaignContentSync.ts). Unlike a folder's id (its
+   * path — see FolderFileRepo.upsertWithId), a note's id lives in its
+   * frontmatter independent of its file path, so an existing note is found
+   * by id and moved/renamed in place if its folder/visibility/title
+   * changed remotely, rather than always writing to a fresh path.
+   */
+  upsertWithId(
+    id: string,
+    input: {
+      campaignId: string
+      authorUserId: string
+      title: string
+      bodyMarkdown: string
+      visibility: FileVisibility
+      folderId: string | null
+      editorUserIds: string[]
+      pinned: boolean
+      sceneDeckId: string | null
+      createdAt: string
+      updatedAt: string
+    }
+  ): NoteFileRow {
+    const found = findCampaignDir(input.campaignId)
+    if (!found) throw new Error('Campaign not found.')
+    const fm: NoteFrontmatter = {
+      id,
+      authorUserId: input.authorUserId,
+      editorUserIds: input.editorUserIds,
+      pinned: input.pinned,
+      sceneDeckId: input.sceneDeckId,
+      createdAt: input.createdAt,
+      updatedAt: input.updatedAt
+    }
+    const dirAbs = input.folderId
+      ? join(found.dir, ...toNative(input.folderId))
+      : join(found.dir, ...toNative(sectionRel(input.visibility, input.authorUserId)))
+    mkdirSync(dirAbs, { recursive: true })
+    const fileName = sanitizeFileName(input.title) + NOTE_EXT
+
+    const existing = findNoteEverywhere(id)
+    const absPath = uniqueFilePath(dirAbs, fileName, existing?.absPath)
+    writeFileSync(absPath, serializeNote(fm, input.bodyMarkdown), 'utf8')
+    if (existing && existing.absPath !== absPath) rmSync(existing.absPath)
+    return noteRowFrom(absPath, found.dir, input.campaignId, input.visibility, input.folderId, fm, input.bodyMarkdown)
+  }
 }
 
 interface FoundFolder {
@@ -688,6 +782,13 @@ export class FolderFileRepo {
   findById(id: string): FolderFileRow | undefined {
     const found = findFolder(id)
     return found ? folderRowFrom(found) : undefined
+  }
+
+  /** Every folder in the campaign regardless of visibility/author — see this file's `walkAll` doc comment. */
+  listAll(campaignId: string): FolderFileRow[] {
+    const found = findCampaignDir(campaignId)
+    if (!found) return []
+    return walkAll(found.dir, campaignId, found.json.dmUserId).folders
   }
 
   create(input: { campaignId: string; authorUserId: string; name: string; parentFolderId: string | null; visibility: FileVisibility }): FolderFileRow {
@@ -773,5 +874,129 @@ export class FolderFileRepo {
     const found = findFolder(id)
     if (!found) return
     rmSync(found.absDir, { recursive: true, force: true })
+  }
+
+  /**
+   * Insert-or-replace at a caller-supplied id, writing through the given
+   * timestamps — used to import a folder pulled from another device's
+   * synced copy (see src/main/campaignContentSync.ts). A vault folder's id
+   * IS its relative path (see this class's own findFolder/folderRowFrom),
+   * so unlike a note, there's no separate "move to match a new id" case —
+   * `id` already says exactly where this folder belongs; a rename on one
+   * device between syncs will show up as a new path rather than following
+   * the old one, a known limitation of vault mode's own id scheme, not
+   * something this method attempts to paper over.
+   */
+  upsertWithId(
+    id: string,
+    input: {
+      campaignId: string
+      authorUserId: string
+      name: string
+      parentFolderId: string | null
+      visibility: FileVisibility
+      createdAt: string
+      updatedAt: string
+    }
+  ): FolderFileRow {
+    const found = findCampaignDir(input.campaignId)
+    if (!found) throw new Error('Campaign not found.')
+    const absDir = join(found.dir, ...toNative(id))
+    mkdirSync(absDir, { recursive: true })
+    const meta: FolderMeta = { authorUserId: input.authorUserId, createdAt: input.createdAt, updatedAt: input.updatedAt }
+    writeFolderMeta(absDir, meta)
+    return folderRowFrom({
+      absDir,
+      campaignDir: found.dir,
+      campaignId: input.campaignId,
+      visibility: input.visibility,
+      parentFolderId: input.parentFolderId,
+      meta,
+      name: input.name
+    })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ownership id migration
+// ---------------------------------------------------------------------------
+
+/**
+ * Rewrites every place a specific user id is baked into vault files —
+ * `campaign.json`'s `dmUserId`/`members[].userId`, every note's
+ * `authorUserId`/`editorUserIds` frontmatter, every folder's `.folder.json`
+ * `authorUserId`, and the `Private Notes/<userId>` directory name itself.
+ * Used to reconcile an old per-machine host user id with the new canonical
+ * one (see `hostUserMigration.ts`'s database-side counterpart, which the
+ * caller runs first) — without this, a campaign copied to a new machine
+ * would have its ownership permanently frozen to an id no session there can
+ * ever match. Walks every campaign in the vault, not just one, since the
+ * same person may author content across several.
+ */
+export function reassignVaultOwnerId(oldId: string, newId: string): void {
+  if (oldId === newId) return
+  const root = vaultRoot()
+  if (!existsSync(root)) return
+
+  for (const campaignDir of listCampaignDirs()) {
+    const json = readCampaignJson(campaignDir)
+    if (json) {
+      let changed = json.dmUserId === oldId
+      if (changed) json.dmUserId = newId
+      for (const member of json.members) {
+        if (member.userId === oldId) {
+          member.userId = newId
+          changed = true
+        }
+      }
+      if (changed) writeCampaignJson(campaignDir, json)
+    }
+
+    reassignOwnerIdInDir(campaignDir, oldId, newId)
+
+    const oldPrivateDir = join(campaignDir, PRIVATE_ROOT_DIR, oldId)
+    const newPrivateDir = join(campaignDir, PRIVATE_ROOT_DIR, newId)
+    if (existsSync(oldPrivateDir)) {
+      if (existsSync(newPrivateDir)) {
+        throw new Error(
+          `Vault campaign "${campaignDir}" already has a "Private Notes" folder for both the old and new id — resolve manually before retrying.`
+        )
+      }
+      renameSync(oldPrivateDir, newPrivateDir)
+    }
+  }
+}
+
+function reassignOwnerIdInDir(absDir: string, oldId: string, newId: string): void {
+  if (!existsSync(absDir)) return
+  for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+    const absPath = join(absDir, entry.name)
+    if (entry.isDirectory()) {
+      reassignOwnerIdInDir(absPath, oldId, newId)
+      continue
+    }
+    if (entry.name === FOLDER_META_FILE) {
+      const meta = readFolderMeta(absDir)
+      if (meta && meta.authorUserId === oldId) writeFolderMeta(absDir, { ...meta, authorUserId: newId })
+      continue
+    }
+    if (entry.name.startsWith('.') || !entry.isFile() || !entry.name.endsWith(NOTE_EXT)) continue
+
+    let raw: string
+    try {
+      raw = readFileSync(absPath, 'utf8')
+    } catch {
+      continue
+    }
+    const parsed = parseNote(raw)
+    if (!parsed) continue
+    const fm = { ...parsed.frontmatter }
+    let changed = fm.authorUserId === oldId
+    if (changed) fm.authorUserId = newId
+    if (fm.editorUserIds.includes(oldId)) {
+      fm.editorUserIds = fm.editorUserIds.map((id) => (id === oldId ? newId : id))
+      changed = true
+    }
+    if (changed) writeFileSync(absPath, serializeNote(fm, parsed.body), 'utf8')
   }
 }

@@ -92,6 +92,22 @@ export class PasswordAccountRepo {
   }
 
   /**
+   * Inserts a fresh row at a caller-supplied id, using an already-hashed
+   * password — the "seed the host's own account" counterpart to
+   * `ensureWithHash`, but pinned to a specific id (the relay's stable
+   * account id) rather than a fresh `uuid()`, so the DM's own host user row
+   * shares the same id across every machine they host from. Caller is
+   * responsible for confirming no row already exists at `displayName` or
+   * `id` first (see `reassignHostUserId` for reconciling an old row).
+   */
+  insertWithId(id: string, displayName: string, passwordHash: string): Account {
+    this.db
+      .prepare(`INSERT INTO ${this.table} (id, display_name, password_hash) VALUES (?, ?, ?)`)
+      .run(id, displayName, passwordHash)
+    return { id, displayName }
+  }
+
+  /**
    * Finds or creates an account at a caller-supplied id — used to seed a
    * host's `users` row for a remote player from their relay identity
    * (relay userId, relay username), which already proved who they are

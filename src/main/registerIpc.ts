@@ -6,7 +6,9 @@ import { getLocalDb } from '@server/db/localDb'
 import { getHostDb } from '@server/db/hostDb'
 import { getVaultPath, setVaultPath, initVaultConfig } from '@server/files/vaultConfig'
 import { migrateSqliteCampaignsToVault } from '@server/files/migration'
-import { campaignIdForVaultPath } from '@server/files/vaultStore'
+import { campaignIdForVaultPath, reassignVaultOwnerId } from '@server/files/vaultStore'
+import { reassignHostUserId } from '@server/db/hostUserMigration'
+import { backupBeforeOwnerMigration } from '@server/db/preMigrationBackup'
 import { IdentityRepo } from '@server/repositories/identityRepo'
 import { UserRepo } from '@server/repositories/userRepo'
 import * as campaignService from '@server/services/campaignService'
@@ -15,6 +17,7 @@ import { CharacterRepo, type CharacterRow } from '@server/repositories/character
 import { SnapshotRepo, type CampaignSnapshot } from '@server/repositories/snapshotRepo'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { syncRelayAccount, changeRelayPassword, clearRelaySession, pullAndSendPrefs } from './relaySync'
+import { pullCampaignIfNewer, schedulePushCampaign, discoverAndSyncCampaigns } from './campaignContentSync'
 import * as relayClient from '@server/relay/relayClient'
 import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId, setRelaySession } from './relayState'
 import { queryOnline, connectPresence } from './relaySocket'
@@ -447,13 +450,69 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return undefined
   }
 
-  /** The DM's own host-side account, ensured (not necessarily hosting) from their local identity's existing password hash — no plaintext needed, no server required. */
+  // Once a reconciliation attempt fails, don't retry it (and re-run the
+  // backup step) on every subsequent call this session — ensureMyHostUser
+  // runs on nearly every campaign/notes/folders IPC call, so a persistently
+  // broken migration would otherwise spam backups and disk writes. Cleared
+  // only by restarting the app, which is the same recovery step a real
+  // failure here would need anyway.
+  let hostUserMigrationFailure: string | null = null
+
+  /**
+   * The DM's own host-side account, ensured (not necessarily hosting).
+   *
+   * Pinned to the current relay session's userId when one is available —
+   * that id is stable across every device this account ever logs into,
+   * unlike a freshly-minted local uuid — so a campaign's ownership stays
+   * recognizable no matter which machine hosts it (see hostUserMigration.ts
+   * and vaultStore.ts's reassignVaultOwnerId for what "recognizable"
+   * required). Falls back to today's per-machine hash-seeded row when
+   * offline — hosting still works exactly as before, just without
+   * cross-device portability for that session.
+   */
   function ensureMyHostUser(): { db: ReturnType<typeof getHostDb>; userId: string } | { error: string } {
     const identity = getCurrentIdentity()
     if (!identity) return { error: 'Log in first.' }
     const db = getHostDb(userDataDir)
-    const hostUser = new UserRepo(db).ensureWithHash(identity.displayName, identity.passwordHash)
-    return { db, userId: hostUser.id }
+    const userRepo = new UserRepo(db)
+
+    const relaySession = getRelaySession()
+    if (!relaySession) {
+      const hostUser = userRepo.ensureWithHash(identity.displayName, identity.passwordHash)
+      return { db, userId: hostUser.id }
+    }
+
+    const desiredId = relaySession.userId
+    const existing = userRepo.findByDisplayName(identity.displayName)
+
+    if (!existing) {
+      const collision = userRepo.findById(desiredId)
+      if (collision) {
+        return { error: `Could not set up your host account here — an existing row already uses this id under a different name ("${collision.display_name}").` }
+      }
+      const hostUser = userRepo.insertWithId(desiredId, identity.displayName, identity.passwordHash)
+      return { db, userId: hostUser.id }
+    }
+
+    if (existing.id === desiredId) return { db, userId: desiredId }
+
+    if (hostUserMigrationFailure) return { error: hostUserMigrationFailure }
+
+    try {
+      const { hostDbBackupPath, vaultBackupPath } = backupBeforeOwnerMigration(userDataDir)
+      reassignHostUserId(db, existing.id, desiredId)
+      if (getVaultPath()) reassignVaultOwnerId(existing.id, desiredId)
+      console.log(
+        `[NoteGoblin] Reconciled host account id for cross-device use (backup saved to ${hostDbBackupPath}${vaultBackupPath ? ` and ${vaultBackupPath}` : ''}).`
+      )
+      return { db, userId: desiredId }
+    } catch (err) {
+      hostUserMigrationFailure =
+        err instanceof Error
+          ? `Could not update this account for cross-device use: ${err.message}`
+          : 'Could not update this account for cross-device use.'
+      return { error: hostUserMigrationFailure }
+    }
   }
 
   /**
@@ -480,6 +539,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!sessionId) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
+        await discoverAndSyncCampaigns(me.db, me.userId, mainWindow)
         const result = campaignService.listCampaigns(me.db, me.userId)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
@@ -541,6 +601,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.getActiveCampaign(me.db, me.userId)
+        if (result.ok && result.data) void pullCampaignIfNewer(me.db, result.data.id, me.userId, mainWindow)
         return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
       }
       const err = requireJoinedSession(sessionId)
@@ -557,7 +618,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.setActiveCampaign(me.db, campaignId, me.userId)
-          if (result.ok && getHostedSession()) broadcastActiveCampaignChanged()
+          if (result.ok) {
+            if (getHostedSession()) broadcastActiveCampaignChanged()
+            void pullCampaignIfNewer(me.db, result.data.id, me.userId, mainWindow)
+          }
           return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
@@ -612,7 +676,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.createNote(me.db, campaignId, me.userId, input)
-          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          if (result.ok) {
+            if (getHostedSession()) broadcastCampaignChanged(campaignId)
+            campaignService.touchCampaignContentVersion(me.db, campaignId)
+            schedulePushCampaign(me.db, campaignId, me.userId)
+          }
           return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
@@ -645,7 +713,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.updateNote(me.db, campaignId, noteId, me.userId, input)
-          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          if (result.ok) {
+            if (getHostedSession()) broadcastCampaignChanged(campaignId)
+            campaignService.touchCampaignContentVersion(me.db, campaignId)
+            schedulePushCampaign(me.db, campaignId, me.userId)
+          }
           return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
@@ -665,7 +737,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.deleteNote(me.db, campaignId, noteId, me.userId)
-          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          if (result.ok) {
+            if (getHostedSession()) broadcastCampaignChanged(campaignId)
+            campaignService.touchCampaignContentVersion(me.db, campaignId)
+            schedulePushCampaign(me.db, campaignId, me.userId)
+          }
           return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
@@ -910,7 +986,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.createFolder(me.db, campaignId, me.userId, input)
-          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          if (result.ok) {
+            if (getHostedSession()) broadcastCampaignChanged(campaignId)
+            campaignService.touchCampaignContentVersion(me.db, campaignId)
+            schedulePushCampaign(me.db, campaignId, me.userId)
+          }
           return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
@@ -936,7 +1016,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.updateFolder(me.db, campaignId, folderId, me.userId, input)
-          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          if (result.ok) {
+            if (getHostedSession()) broadcastCampaignChanged(campaignId)
+            campaignService.touchCampaignContentVersion(me.db, campaignId)
+            schedulePushCampaign(me.db, campaignId, me.userId)
+          }
           return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
@@ -956,7 +1040,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         try {
           const result = campaignService.deleteFolder(me.db, campaignId, folderId, me.userId)
-          if (result.ok && getHostedSession()) broadcastCampaignChanged(campaignId)
+          if (result.ok) {
+            if (getHostedSession()) broadcastCampaignChanged(campaignId)
+            campaignService.touchCampaignContentVersion(me.db, campaignId)
+            schedulePushCampaign(me.db, campaignId, me.userId)
+          }
           return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }

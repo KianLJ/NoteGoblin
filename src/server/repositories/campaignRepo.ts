@@ -8,6 +8,7 @@ export interface CampaignRow {
   name: string
   dm_user_id: string
   created_at: string
+  content_version: string | null
 }
 
 export class CampaignRepo {
@@ -25,11 +26,16 @@ export class CampaignRepo {
       | undefined
   }
 
-  create(name: string, dmUserId: string): CampaignRow {
-    const id = uuid()
-    this.db
-      .prepare('INSERT INTO campaigns (id, name, dm_user_id) VALUES (?, ?, ?)')
-      .run(id, name, dmUserId)
+  /** `existingId`/`createdAt` are set when migrating an already-existing vault campaign back to SQLite, or when discovering a campaign synced from another device (see campaignContentSync.ts) — either way, the id must survive exactly as it already is elsewhere, not get a fresh one here. */
+  create(name: string, dmUserId: string, existingId?: string, createdAt?: string): CampaignRow {
+    const id = existingId ?? uuid()
+    if (createdAt) {
+      this.db
+        .prepare('INSERT INTO campaigns (id, name, dm_user_id, created_at) VALUES (?, ?, ?, ?)')
+        .run(id, name, dmUserId, createdAt)
+    } else {
+      this.db.prepare('INSERT INTO campaigns (id, name, dm_user_id) VALUES (?, ?, ?)').run(id, name, dmUserId)
+    }
     this.addMember(id, dmUserId, 'dm')
     return this.findById(id)!
   }
@@ -37,6 +43,11 @@ export class CampaignRepo {
   update(id: string, name: string): CampaignRow | undefined {
     this.db.prepare('UPDATE campaigns SET name = ? WHERE id = ?').run(name, id)
     return this.findById(id)
+  }
+
+  /** Bumped on every note/folder mutation for this campaign — see the schema's own doc comment on this column. */
+  touchContentVersion(id: string, timestamp: string): void {
+    this.db.prepare('UPDATE campaigns SET content_version = ? WHERE id = ?').run(timestamp, id)
   }
 
   /** Cascades via the campaigns table's foreign keys (campaign_members, folders, notes, characters, initiative_entries, messages all reference campaign_id ON DELETE CASCADE) — deleting this one row is enough. */

@@ -19,7 +19,14 @@ CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   dm_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- Bumped to "now" on every note/folder create/update/delete (see
+  -- campaignService.ts) — deliberately NOT derived from those rows' own
+  -- updated_at at read time, since a deletion leaves no row behind to derive
+  -- a "content changed" signal from. Used only for cross-device content sync
+  -- version comparisons (see src/main/campaignContentSync.ts); NULL until
+  -- this campaign's content is ever synced.
+  content_version TEXT
 );
 
 CREATE TABLE IF NOT EXISTS campaign_members (

@@ -171,6 +171,9 @@ export function getHostDb(userDataDir: string): DatabaseType {
       if (tableIsMissingColumn(database, 'session_decks', 'presented_at')) {
         database.exec('ALTER TABLE session_decks ADD COLUMN presented_at TEXT')
       }
+      if (tableIsMissingColumn(database, 'campaigns', 'content_version')) {
+        database.exec('ALTER TABLE campaigns ADD COLUMN content_version TEXT')
+      }
       rebuildVisibilityCheck(database, 'notes')
       rebuildVisibilityCheck(database, 'folders')
       rebuildHostStateWithoutForeignKey(database)
