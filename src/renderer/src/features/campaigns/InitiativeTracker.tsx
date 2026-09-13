@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { activeFeatIds, applyExhaustionToMaxHp, computeMaxHp, exhaustionEffectsDescription, abilityModifier } from '@shared/dnd5e'
 import { buildCheckRollEntry, formatModifierTerm } from '@shared/dice'
-import { ExhaustionIcon } from '../player/characterSheetTabs/icons'
+import { ExhaustionIcon, HeartIcon, ShieldIcon, DiceIcon } from '../player/characterSheetTabs/icons'
 import { effectiveAbilityScores, computeArmorClassFromEquipment } from '@shared/compendium'
 import { HoverDetailCard } from '../player/HoverDetailCard'
 import { renderStatblockHtml } from '../../statblock'
@@ -52,9 +52,6 @@ const STATUS_EFFECT_PRESETS = [
   'Stunned',
   'Unconscious'
 ]
-
-/** The handful of conditions that come up almost every fight — offered as one-click toggle chips alongside the full dropdown (still there for anything less common), so the most-reached-for tags don't need two clicks (open dropdown, then pick). */
-const QUICK_STATUS_EFFECTS = ['Prone', 'Concentrating', 'Poisoned', 'Unconscious']
 
 /** How many past states "Undo" can step back through — capped so a long session's worth of edits doesn't grow this without bound. */
 const MAX_UNDO_HISTORY = 20
@@ -535,23 +532,6 @@ export function InitiativeTracker({
                 <span title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, userSelect: 'none' }}>
                   ⠿
                 </span>
-                <input
-                  type="number"
-                  className="gb-input"
-                  value={c.initiative ?? ''}
-                  onChange={(e) => updateCombatant(c.id, { initiative: e.target.value === '' ? null : Number(e.target.value) })}
-                  placeholder="Init"
-                  style={{ width: 40, fontSize: 12, padding: '3px 4px' }}
-                  title="Initiative"
-                />
-                <button
-                  type="button"
-                  onClick={() => rollInitiativeFor(c)}
-                  title={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd))}`}
-                  style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11 }}
-                >
-                  🎲
-                </button>
                 {c.kind === 'monster' ? (
                   <button
                     type="button"
@@ -568,8 +548,8 @@ export function InitiativeTracker({
                       padding: 0,
                       cursor: 'pointer',
                       color: 'var(--accent)',
-                      fontSize: 13,
-                      fontWeight: 700,
+                      fontSize: 17,
+                      fontWeight: 800,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
@@ -578,10 +558,20 @@ export function InitiativeTracker({
                     {c.name}
                   </button>
                 ) : (
-                  <strong style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <strong style={{ flex: 1, fontSize: 17, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.name}
                   </strong>
                 )}
+                <SvgIconValue
+                  icon={<DiceIcon size={ICON_STAT_SIZE} style={{ color: 'var(--accent)' }} />}
+                  iconTitle={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd))}`}
+                  onIconClick={() => rollInitiativeFor(c)}
+                  value={c.initiative ?? ''}
+                  onChange={(v) => updateCombatant(c.id, { initiative: v === '' ? null : Number(v) })}
+                  inputTitle="Initiative"
+                  valueOffsetY={-2}
+                  placeholder="—"
+                />
                 {c.currentHp <= 0 && (
                   <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)' }}>
                     Dead
@@ -595,28 +585,20 @@ export function InitiativeTracker({
                 </button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--text-muted)' }}>
-                  HP
-                  <input
-                    type="number"
-                    className="gb-input"
-                    value={c.currentHp}
-                    onChange={(e) => setCombatantHp(c.id, Number(e.target.value))}
-                    style={{ width: 60, fontSize: 11, padding: '2px 4px' }}
-                  />
-                  / {c.maxHp}
-                </label>
-                <DamageHealControl onApply={(amount, kind) => applyDamageOrHeal(c.id, amount, kind)} />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--text-muted)' }}>
-                  AC
-                  <input
-                    type="number"
-                    className="gb-input"
-                    value={c.ac}
-                    onChange={(e) => updateCombatant(c.id, { ac: Number(e.target.value) })}
-                    style={{ width: 48, fontSize: 11, padding: '2px 4px' }}
-                  />
-                </label>
+                <HpHeartControl
+                  currentHp={c.currentHp}
+                  maxHp={c.maxHp}
+                  onSetHp={(v) => setCombatantHp(c.id, v)}
+                  onApply={(amount, kind) => applyDamageOrHeal(c.id, amount, kind)}
+                />
+                <SvgIconValue
+                  icon={<ShieldIcon size={ICON_STAT_SIZE} style={{ color: 'var(--text-muted)' }} />}
+                  iconTitle="Armor Class"
+                  value={c.ac}
+                  onChange={(v) => updateCombatant(c.id, { ac: v === '' ? 0 : Number(v) })}
+                  inputTitle="Armor Class"
+                  valueOffsetY={-2}
+                />
                 {c.kind === 'player' &&
                   c.userId &&
                   (() => {
@@ -654,30 +636,10 @@ export function InitiativeTracker({
                     </button>
                   </span>
                 ))}
-                {QUICK_STATUS_EFFECTS.filter((s) => !c.statusEffects.includes(s)).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => addStatusEffect(c.id, s)}
-                    title={`Add ${s}`}
-                    className="gb-badge"
-                    style={{ fontSize: 10, cursor: 'pointer', border: '1px dashed var(--border-subtle)', background: 'none', color: 'var(--text-muted)' }}
-                  >
-                    + {s}
-                  </button>
-                ))}
-                <select
-                  value=""
-                  onChange={(e) => addStatusEffect(c.id, e.target.value)}
-                  style={{ fontSize: 10, padding: '2px 3px', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)' }}
-                >
-                  <option value="">+ Status…</option>
-                  {STATUS_EFFECT_PRESETS.filter((s) => !c.statusEffects.includes(s)).map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                <AddStatusEffectControl
+                  options={STATUS_EFFECT_PRESETS.filter((s) => !c.statusEffects.includes(s))}
+                  onAdd={(effect) => addStatusEffect(c.id, effect)}
+                />
               </div>
             </div>
           ))}
@@ -1115,38 +1077,246 @@ function EncounterBuilder({
   )
 }
 
-/** A typed amount plus Dmg/Heal buttons — applies as a delta to current HP instead of making the DM compute and retype the new absolute number by hand. Keeps its own tiny local amount field rather than lifting it to InitiativeState, since it's transient per-click scratch input, not combat state worth persisting/broadcasting. */
-function DamageHealControl({ onApply }: { onApply: (amount: number, kind: 'damage' | 'heal') => void }): JSX.Element {
-  const [amount, setAmount] = useState('')
+const ICON_STAT_SIZE = 34
 
-  function apply(kind: 'damage' | 'heal'): void {
+/**
+ * An SVG icon (dice/shield/heart) with an editable numeric value overlaid on
+ * top, so the value reads as held inside the icon's shape rather than beside
+ * it behind a text label — used for initiative (d20), AC (shield), and HP
+ * (heart, via HpHeartControl below). When `onIconClick` is given, clicking
+ * the icon itself (outside the overlaid input) triggers that instead of
+ * nothing — e.g. rolling initiative — while the input stays independently
+ * editable by hand.
+ *
+ * `valueOffsetY` nudges the value off dead-center: none of these three icons
+ * are actually symmetric top-to-bottom (a shield/heart is visually top-heavy
+ * before tapering to a point; even the d20's front face sits a hair above
+ * center), so a value pinned to the icon's literal geometric middle read as
+ * low/off relative to the shape around it.
+ */
+function SvgIconValue({
+  icon,
+  iconTitle,
+  onIconClick,
+  value,
+  onChange,
+  inputTitle,
+  valueOffsetY = 0,
+  placeholder
+}: {
+  icon: JSX.Element
+  iconTitle?: string
+  onIconClick?: () => void
+  value: number | string
+  onChange: (value: string) => void
+  inputTitle?: string
+  valueOffsetY?: number
+  placeholder?: string
+}): JSX.Element {
+  return (
+    <div
+      onClick={onIconClick}
+      title={onIconClick ? iconTitle : undefined}
+      style={{
+        position: 'relative',
+        width: ICON_STAT_SIZE,
+        height: ICON_STAT_SIZE,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        cursor: onIconClick ? 'pointer' : 'default'
+      }}
+    >
+      {icon}
+      <input
+        type="number"
+        className="gb-icon-value-input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        placeholder={placeholder}
+        title={inputTitle ?? (onIconClick ? undefined : iconTitle)}
+        style={{
+          position: 'absolute',
+          top: `calc(50% + ${valueOffsetY}px)`,
+          transform: 'translateY(-50%)',
+          width: 18,
+          textAlign: 'center',
+          fontSize: 10,
+          fontWeight: 800,
+          lineHeight: 1,
+          padding: 0,
+          border: 'none',
+          background: 'transparent',
+          color: 'var(--text-primary)'
+        }}
+      />
+    </div>
+  )
+}
+
+/** Current HP overlaid inside a heart icon (still directly editable by typing over it) flanked by − and + buttons for applying damage/healing deltas — clicking either swaps the heart out for a small amount field, applies on Enter, and reverts back to the heart. */
+function HpHeartControl({
+  currentHp,
+  maxHp,
+  onSetHp,
+  onApply
+}: {
+  currentHp: number
+  maxHp: number
+  onSetHp: (value: number) => void
+  onApply: (amount: number, kind: 'damage' | 'heal') => void
+}): JSX.Element {
+  const [pending, setPending] = useState<'damage' | 'heal' | null>(null)
+  const [amount, setAmount] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (pending) inputRef.current?.focus()
+  }, [pending])
+
+  function applyPending(): void {
     const value = Number(amount)
-    if (!Number.isFinite(value) || value <= 0) return
-    onApply(value, kind)
+    if (pending && Number.isFinite(value) && value > 0) onApply(value, pending)
+    setPending(null)
+    setAmount('')
+  }
+
+  function cancelPending(): void {
+    setPending(null)
     setAmount('')
   }
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-      <input
-        type="number"
-        min={0}
-        className="gb-input"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') apply('damage')
-        }}
-        placeholder="Amt"
-        style={{ width: 44, fontSize: 11, padding: '2px 4px' }}
-        title="Damage or heal amount"
-      />
-      <button type="button" onClick={() => apply('damage')} title="Apply as damage" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--danger)' }}>
+      <button type="button" onClick={() => setPending('damage')} title="Apply damage" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--danger)' }}>
         −
       </button>
-      <button type="button" onClick={() => apply('heal')} title="Apply as healing" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--success)' }}>
+      {pending ? (
+        <input
+          ref={inputRef}
+          type="number"
+          min={0}
+          className="gb-input"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') applyPending()
+            else if (e.key === 'Escape') cancelPending()
+          }}
+          onBlur={cancelPending}
+          placeholder={pending === 'damage' ? 'Dmg' : 'Heal'}
+          style={{ width: 44, fontSize: 11, padding: '2px 4px' }}
+          title={pending === 'damage' ? 'Damage amount — Enter to apply' : 'Heal amount — Enter to apply'}
+        />
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <div style={{ position: 'relative', width: ICON_STAT_SIZE, height: ICON_STAT_SIZE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <HeartIcon size={ICON_STAT_SIZE} style={{ color: 'var(--danger)' }} />
+            <input
+              type="number"
+              className="gb-icon-value-input"
+              value={currentHp}
+              onChange={(e) => onSetHp(Number(e.target.value))}
+              title="Current HP"
+              style={{
+                position: 'absolute',
+                top: 'calc(50% - 3px)',
+                transform: 'translateY(-50%)',
+                width: 18,
+                textAlign: 'center',
+                fontSize: 10,
+                fontWeight: 800,
+                lineHeight: 1,
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--text-primary)'
+              }}
+            />
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/ {maxHp}</span>
+        </div>
+      )}
+      <button type="button" onClick={() => setPending('heal')} title="Apply healing" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--success)' }}>
         +
       </button>
+    </div>
+  )
+}
+
+/** A single "+" card that opens the full status-effect list on click, instead of a row of always-visible quick-toggle chips — closes on picking one, on Escape, or on an outside click. */
+function AddStatusEffectControl({ options, onAdd }: { options: string[]; onAdd: (effect: string) => void }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e: MouseEvent): void {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Add status effect"
+        className="gb-badge"
+        style={{ fontSize: 10, cursor: 'pointer', border: '1px dashed var(--border-subtle)', background: 'none', color: 'var(--text-muted)' }}
+      >
+        + Status
+      </button>
+      {open && (
+        <div
+          className="gb-card"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            marginTop: 4,
+            zIndex: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            padding: 4,
+            maxHeight: 220,
+            overflowY: 'auto',
+            minWidth: 120
+          }}
+        >
+          {options.length === 0 ? (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 6px' }}>All applied</span>
+          ) : (
+            options.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => {
+                  onAdd(s)
+                  setOpen(false)
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  textAlign: 'left',
+                  padding: '3px 6px',
+                  borderRadius: 'var(--radius-sm)'
+                }}
+              >
+                {s}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { playSfx } from '../audio/soundEffects'
 import { playSfxCue } from '../audio/sfxBoardEngine'
 import { findSfxCueByLabel } from '../../data/sfxLibrary'
 import { performCheckRoll, performRoll } from './diceLogStore'
+import { D20FacePaths, D12FacePaths, D10FacePaths, D8FacePaths, D6FacePaths, D4FacePaths } from '../player/characterSheetTabs/icons'
 import { dequeueRollAnimation, getRollAnimationQueue, resolvePendingRoll, subscribeRollAnimation } from './rollAnimationStore'
 
 const SPIN_MS = 1300
@@ -232,8 +233,9 @@ function renderDieFace(props: {
   phase: Phase
   flickerT: number
   onClick?: () => void
+  dieFaceRenderer: typeof D20FacePaths
 }): JSX.Element {
-  const { value, spinning = false, spinFlicker = null, side, isKept, phase, flickerT, onClick } = props
+  const { value, spinning = false, spinFlicker = null, side, isKept, phase, flickerT, onClick, dieFaceRenderer } = props
   const sign = side === 'left' ? -1 : 1
   const awaiting = phase === 'awaiting'
   const flickering = phase === 'rolling' || spinning
@@ -289,9 +291,8 @@ function renderDieFace(props: {
     >
       <div style={{ position: 'relative', width: 260, height: 260 }}>
         <div className={phase === 'rolling' ? 'gb-die-tumble' : spinning ? 'gb-die-tumble-quick' : clickable ? 'gb-die-idle-pulse' : undefined}>
-          <svg viewBox="0 0 100 100" width={260} height={260}>
-            <polygon points="50,3 93,26 93,74 50,97 7,74 7,26" fill="rgba(24, 18, 12, 0.9)" stroke={clickable ? 'var(--accent)' : '#8a7256'} strokeWidth={3} />
-            <polygon points="50,3 93,26 50,49 7,26" fill="rgba(255,255,255,0.06)" />
+          <svg viewBox="0 0 24 24" width={260} height={260}>
+            {dieFaceRenderer({ stroke: clickable ? 'var(--accent)' : '#8a7256', bodyFill: 'rgba(24, 18, 12, 0.9)' })}
           </svg>
         </div>
         {shown !== null && (
@@ -305,7 +306,7 @@ function renderDieFace(props: {
               alignItems: 'center',
               justifyContent: 'center',
               fontFamily: 'var(--font-display)',
-              fontSize: 60,
+              fontSize: 50,
               fontWeight: 700,
               color: flickering ? flickerColor(phase === 'rolling' ? flickerT : 0.75) : '#f3e9dc'
             }}
@@ -413,10 +414,45 @@ export function RollAnimationOverlay(): JSX.Element | null {
   // whatever the weapon/spell's real damage dice are for a damage roll) —
   // flickering a 19 while a d6 damage roll settles would be a giveaway that
   // the flicker isn't real, so it needs to respect the actual die in play.
-  const flickerSides = rolledEntry?.groups?.length ? Math.max(...rolledEntry.groups.map((g) => g.sides)) : 20
+  // Read from `current.groups` for a still-pending damage roll too (not just
+  // the already-rolled entry) — otherwise the popup showed a plain d20 for
+  // the entire "click to roll" stretch of a damage roll, then visibly
+  // swapped to the real die shape only once it actually rolled.
+  const pendingGroups = current?.kind === 'pending-damage' ? current.groups : null
+  const flickerSides = pendingGroups?.length
+    ? Math.max(...pendingGroups.map((g) => g.sides))
+    : rolledEntry?.groups?.length
+      ? Math.max(...rolledEntry.groups.map((g) => g.sides))
+      : 20
 
   const isDualFromQueue = isDualDieRoll(rolledEntry)
   const pendingId = current?.kind !== 'rolled' ? current?.id : undefined
+
+  /**
+   * Pick the right die face renderer based on the largest die in this roll.
+   * A damage roll with 2d6 uses d6, a d6+1d8 uses d8 (the biggest). Fallback
+   * to d20 for anything unrecognized (should never happen in practice).
+   */
+  function getDieFaceRenderer(sides: number) {
+    switch (sides) {
+      case 4:
+        return D4FacePaths
+      case 6:
+        return D6FacePaths
+      case 8:
+        return D8FacePaths
+      case 10:
+        return D10FacePaths
+      case 12:
+        return D12FacePaths
+      case 20:
+        return D20FacePaths
+      default:
+        return D20FacePaths
+    }
+  }
+
+  const DieFaceRenderer = getDieFaceRenderer(flickerSides)
 
   function clearSpinTimers(): void {
     const t = spinTimersRef.current
@@ -968,19 +1004,16 @@ export function RollAnimationOverlay(): JSX.Element | null {
       >
         {pairedLayout ? (
           <>
-            {renderDieFace({
+{renderDieFace({
               value: displayValue,
               spinning: spinA,
               spinFlicker: spinFlickerA,
               side: 'left',
               isKept: aIsKept,
-              // Forced to 'awaiting' the instant a pending dual roll shows
-              // up, even before `phase` state itself has caught up (see
-              // isPendingDualNow above) — so the die is clickable and shows
-              // as such from its very first render, not one frame late.
               phase: isPendingDualNow ? 'awaiting' : phase,
               flickerT,
-              onClick: isPendingDualNow ? () => clickDie('a') : undefined
+              onClick: isPendingDualNow ? () => clickDie('a') : undefined,
+              dieFaceRenderer: DieFaceRenderer
             })}
             {renderDieFace({
               value: secondDisplayValue,
@@ -990,7 +1023,8 @@ export function RollAnimationOverlay(): JSX.Element | null {
               isKept: !aIsKept,
               phase: isPendingDualNow ? 'awaiting' : phase,
               flickerT,
-              onClick: isPendingDualNow ? () => clickDie('b') : undefined
+              onClick: isPendingDualNow ? () => clickDie('b') : undefined,
+              dieFaceRenderer: DieFaceRenderer
             })}
           </>
         ) : (
@@ -1000,14 +1034,8 @@ export function RollAnimationOverlay(): JSX.Element | null {
                 the whole time instead of spinning (and briefly turning sideways/
                 upside-down) along with the die. */}
             <div key={entry?.id ?? (current.kind !== 'rolled' ? current.id : undefined)} className={isPending ? 'gb-die-idle-pulse' : dieAnimationClass}>
-              <svg viewBox="0 0 100 100" width={260} height={260} style={{ filter: revealed ? `drop-shadow(0 0 28px ${dieColor})` : 'none' }}>
-                <polygon
-                  points="50,3 93,26 93,74 50,97 7,74 7,26"
-                  fill="rgba(24, 18, 12, 0.9)"
-                  stroke={revealed ? dieColor : isPending ? 'var(--accent)' : '#8a7256'}
-                  strokeWidth={3}
-                />
-                <polygon points="50,3 93,26 50,49 7,26" fill="rgba(255,255,255,0.06)" />
+              <svg viewBox="0 0 24 24" width={260} height={260} style={{ filter: revealed ? `drop-shadow(0 0 28px ${dieColor})` : 'none' }}>
+                {DieFaceRenderer({ stroke: revealed ? dieColor : isPending ? 'var(--accent)' : '#8a7256', bodyFill: 'rgba(24, 18, 12, 0.9)' })}
               </svg>
             </div>
             {displayValue !== null && (
@@ -1029,7 +1057,7 @@ export function RollAnimationOverlay(): JSX.Element | null {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontFamily: 'var(--font-display)',
-                  fontSize: 60,
+                  fontSize: 50,
                   fontWeight: 700,
                   color: numberColor
                 }}

@@ -455,3 +455,18 @@ button {
   width: 4px;
   height: 84px;
 }
+
+/* A number input meant to sit centered inside a small icon (initiative's d20,
+   HP's heart, AC's shield — see InitiativeTracker.tsx) with no visual chrome
+   of its own — no border/background (that's the icon), and critically no
+   browser spin-button arrows, which default-on and are wide enough to blow
+   out past the icon's edges at this size, which is what made the value look
+   like it didn't fit inside the icon at all. */
+.gb-icon-value-input {
+  -moz-appearance: textfield;
+}
+.gb-icon-value-input::-webkit-inner-spin-button,
+.gb-icon-value-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

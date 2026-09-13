@@ -23,20 +23,15 @@ export function PlayersIcon(): JSX.Element {
   )
 }
 
+/** Same d20 wireframe as the app's one DiceIcon (see features/player/characterSheetTabs/icons.tsx) — kept as its own component here since this file's icons take no size/style props (see the rest of this tab strip). */
 export function DiceIcon(): JSX.Element {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <polygon points="8 .45 1.46 11.76 14.54 11.76 8 .45" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
-      <polygon points="8 11.84 11.33 6.08 4.67 6.08 8 11.84" stroke="currentColor" strokeWidth="0.5" strokeLinejoin="round" />
-      <line x1="1.35" y1="4.16" x2="4.67" y2="6.08" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
-      <line x1="14.65" y1="4.16" x2="11.33" y2="6.08" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
-      <line x1="8" y1="11.84" x2="8" y2="15.67" stroke="currentColor" strokeWidth="0.42" strokeLinejoin="round" />
-      <polygon
-        points="1.35 4.16 1.35 11.84 8 15.67 14.65 11.84 14.65 4.16 8 .33 1.35 4.16"
-        stroke="currentColor"
-        strokeWidth="0.5"
-        strokeLinejoin="round"
-      />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 1.5 L21.09 6.75 L21.09 17.25 L12 22.5 L2.91 17.25 L2.91 6.75 Z" />
+      <path d="M12 5.51 L17.62 15.25 L6.38 15.25 Z" />
+      <path d="M12 5.51 L12 1.5 M12 5.51 L21.09 6.75 M12 5.51 L2.91 6.75" />
+      <path d="M17.62 15.25 L21.09 6.75 M17.62 15.25 L21.09 17.25 M17.62 15.25 L12 22.5" />
+      <path d="M6.38 15.25 L12 22.5 M6.38 15.25 L2.91 17.25 M6.38 15.25 L2.91 6.75" />
     </svg>
   )
 }

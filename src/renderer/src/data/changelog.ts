@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.10',
+    title: 'Full dice icon set and a redesigned initiative tracker',
+    highlights: [
+      'Every die shape (d4, d6, d8, d10, d12, d20) now has its own icon, and the roll popup automatically shows the correct one for whatever\'s actually being rolled — a check still shows a d20, but a 2d6 damage roll shows a d6, a d6+1d8 shows a d8, and so on — instead of always showing a d20 regardless of the roll',
+      'Fixed the roll popup briefly flashing a d20 before switching to the correct die shape on a damage roll — it now shows the right die from the very first frame',
+      'Fixed the roll popup\'s d20 losing the wireframe lines around its front face',
+      'Initiative Tracker: status effects now add through a single "+ Status" button that opens the full list, instead of a row of always-visible quick-toggle chips',
+      'Initiative Tracker: initiative, HP, and AC are now shown inside dice/heart/shield icons on each combatant\'s card instead of plain labeled fields, and HP damage/heal now opens a small amount field next to the − and + buttons instead of a separate typed-amount box'
+    ]
+  },
+  {
     version: '0.5.9',
     title: 'Every spell and monster makes noise, plus a smarter encounter builder',
     highlights: [
