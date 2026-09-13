@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import { activeFeatIds, applyExhaustionToMaxHp, computeMaxHp, exhaustionEffectsDescription } from '@shared/dnd5e'
+import { activeFeatIds, applyExhaustionToMaxHp, computeMaxHp, exhaustionEffectsDescription, abilityModifier } from '@shared/dnd5e'
+import { buildCheckRollEntry, formatModifierTerm } from '@shared/dice'
 import { ExhaustionIcon } from '../player/characterSheetTabs/icons'
 import { effectiveAbilityScores, computeArmorClassFromEquipment } from '@shared/compendium'
 import { HoverDetailCard } from '../player/HoverDetailCard'
@@ -22,6 +23,7 @@ import { loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '.
 import type { BestiaryMonster } from '../../data/bestiary'
 import { Button } from '../../ui/Button'
 import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
+import { playSfx } from '../audio/soundEffects'
 
 interface InitiativeTrackerProps {
   sessionId: string | null
@@ -50,6 +52,12 @@ const STATUS_EFFECT_PRESETS = [
   'Stunned',
   'Unconscious'
 ]
+
+/** The handful of conditions that come up almost every fight — offered as one-click toggle chips alongside the full dropdown (still there for anything less common), so the most-reached-for tags don't need two clicks (open dropdown, then pick). */
+const QUICK_STATUS_EFFECTS = ['Prone', 'Concentrating', 'Poisoned', 'Unconscious']
+
+/** How many past states "Undo" can step back through — capped so a long session's worth of edits doesn't grow this without bound. */
+const MAX_UNDO_HISTORY = 20
 
 function playerToCombatant(userId: string, character: CharacterSheet): Combatant {
   const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
@@ -89,6 +97,31 @@ function monsterToCombatant(monster: BestiaryMonster): Combatant {
   }
 }
 
+/** A monster statblock's Dex is a raw score string (e.g. "14"), not a modifier — same shape OverviewTab parses for players' own ability scores, just from `StatblockData` instead of a `CharacterSheet`. Missing/unparseable Dex falls back to a flat 10 (the modifier-0 baseline) rather than blocking the roll. */
+function monsterDexModifier(monster: BestiaryMonster | undefined): number {
+  const score = monster?.dex ? Number(monster.dex) : NaN
+  return abilityModifier(Number.isFinite(score) ? score : 10)
+}
+
+/** Dexterity modifier for whichever combatant this is — the same effective-score derivation already used for HP/AC above, so a feat/ASI Dex bonus raises initiative here too, not just those two. Monsters look themselves up in the bestiary by `monsterIndex`; a combatant that's neither a matched player nor monster (shouldn't normally happen) rolls flat. */
+function initiativeModifierFor(
+  c: Combatant,
+  playerCharacters: Map<string, CharacterSheet>,
+  allMonsters: BestiaryMonster[]
+): number {
+  if (c.kind === 'player' && c.userId) {
+    const character = playerCharacters.get(c.userId)
+    if (character) {
+      const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
+      return abilityModifier(effScores.dex)
+    }
+  }
+  if (c.kind === 'monster') {
+    return monsterDexModifier(allMonsters.find((m) => m.index === c.monsterIndex))
+  }
+  return 0
+}
+
 /**
  * The DM's combat panel — auto-adds connected players (HP/AC pulled live
  * from their synced character), monsters added by hand or via the built-in
@@ -111,6 +144,14 @@ export function InitiativeTracker({
   const [savedEncounters, setSavedEncounters] = useState(() => loadSavedEncounters())
   const [encounterDraft, setEncounterDraft] = useState<Record<string, number>>({})
   const [encounterName, setEncounterName] = useState('')
+  // Snapshots for Undo — pushed explicitly before a discrete action (remove,
+  // start/next/prev/end combat, roll, reorder, status/death-save toggles),
+  // not on every keystroke of a raw text field (initiative/HP/AC typed by
+  // hand), which would otherwise make Undo step back one character at a
+  // time instead of one meaningful action.
+  const [history, setHistory] = useState<InitiativeState[]>([])
+  const [dragFromId, setDragFromId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   useEffect(() => {
     if (sessionId) void window.goblin.initiative.broadcast(state)
@@ -176,6 +217,19 @@ export function InitiativeTracker({
     setState((prev) => ({ ...prev, ...fields }))
   }
 
+  /** Snapshots the current state onto the undo stack — call before a discrete action's own patch/setState, not from inside a raw text-field onChange (see this component's `history` doc comment for why). */
+  function pushHistory(): void {
+    setHistory((h) => [...h.slice(-(MAX_UNDO_HISTORY - 1)), state])
+  }
+
+  function undo(): void {
+    setHistory((h) => {
+      if (h.length === 0) return h
+      setState(h[h.length - 1])
+      return h.slice(0, -1)
+    })
+  }
+
   function updateCombatant(id: string, fields: Partial<Combatant>): void {
     patch({ combatants: state.combatants.map((c) => (c.id === id ? { ...c, ...fields } : c)) })
   }
@@ -195,6 +249,7 @@ export function InitiativeTracker({
 
   /** Only an actual forward roll (delta > 0 — clicking a pip past the current count, not undoing one) plays a cue: the tension-tick for the first two, then a distinct success/fail stinger the moment a third one lands — see playTurnFlowSfx's own doc comment for why these never show up as a manual Sound Board button. */
   function bumpDeathSave(id: string, kind: 'successes' | 'failures', delta: number): void {
+    pushHistory()
     let resultingCount: number | null = null
     patch({
       combatants: state.combatants.map((c) => {
@@ -210,6 +265,7 @@ export function InitiativeTracker({
 
   function addStatusEffect(id: string, effect: string): void {
     if (!effect.trim()) return
+    pushHistory()
     patch({
       combatants: state.combatants.map((c) =>
         c.id === id && !c.statusEffects.includes(effect) ? { ...c, statusEffects: [...c.statusEffects, effect] } : c
@@ -218,19 +274,99 @@ export function InitiativeTracker({
   }
 
   function removeStatusEffect(id: string, effect: string): void {
+    pushHistory()
     patch({ combatants: state.combatants.map((c) => (c.id === id ? { ...c, statusEffects: c.statusEffects.filter((e) => e !== effect) } : c)) })
   }
 
+  /**
+   * Removing a combatant used to always reset turnIndex/round to "combat not
+   * started" — losing your place over dragging off one dead monster. Now it
+   * only ever adjusts what's strictly necessary: whoever's turn it currently
+   * is stays whoever's turn it is (by identity, not position) unless that
+   * exact combatant is the one being removed, in which case the "next" slot
+   * (same numeric index into the now-shorter list, wrapping) naturally
+   * becomes active — matching what nextTurn would have done anyway.
+   */
   function removeCombatant(id: string): void {
-    patch({ combatants: state.combatants.filter((c) => c.id !== id), turnIndex: -1, round: 1 })
+    pushHistory()
+    const activeId = inCombat ? ordered[state.turnIndex]?.id : undefined
+    const remaining = ordered.filter((c) => c.id !== id)
+    let turnIndex = state.turnIndex
+    if (inCombat) {
+      if (remaining.length === 0) turnIndex = -1
+      else if (activeId === id) turnIndex = state.turnIndex % remaining.length
+      else turnIndex = remaining.findIndex((c) => c.id === activeId)
+    }
+    patch({ combatants: state.combatants.filter((c) => c.id !== id), turnIndex })
   }
 
   function addMissingPlayers(): void {
+    pushHistory()
     const existingUserIds = new Set(state.combatants.filter((c) => c.kind === 'player').map((c) => c.userId))
     const toAdd = [...playerCharacters.entries()]
       .filter(([userId]) => !existingUserIds.has(userId))
       .map(([userId, character]) => playerToCombatant(userId, character))
     if (toAdd.length) patch({ combatants: [...state.combatants, ...toAdd] })
+  }
+
+  /** 1d20 + Dex modifier, rolled instantly (no interactive reveal — this is DM-side bulk setup, not a player's own suspenseful check) and written straight into that combatant's initiative field. Kept purely local: never broadcast to the dice log, since a monster's exact initiative roll is meant to stay hidden from players (see sanitizeForPlayer). */
+  function rollInitiativeFor(c: Combatant): void {
+    const modifier = initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd)
+    const entry = buildCheckRollEntry(c.id, c.name, modifier, 'normal', true, 'Initiative')
+    updateCombatant(c.id, { initiative: entry.total })
+    playSfx('diceRoll')
+  }
+
+  /** Rolls initiative for every combatant at once — the common "alright, everybody roll" moment at a fight's start. One history entry for the whole batch, not one per combatant, so Undo reverses it in a single step. */
+  function rollAllInitiative(): void {
+    if (state.combatants.length === 0) return
+    pushHistory()
+    patch({
+      combatants: state.combatants.map((c) => {
+        const modifier = initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd)
+        return { ...c, initiative: buildCheckRollEntry(c.id, c.name, modifier, 'normal', true, 'Initiative').total }
+      })
+    })
+    playSfx('diceRoll')
+  }
+
+  /**
+   * Drag-and-drop reorder — since turn order is always *derived* from each
+   * combatant's initiative number (sortedByInitiative), "moving" a card
+   * means renumbering the whole visible list to strictly descending
+   * integers matching the drop position (length down to 1), which
+   * `sortedByInitiative` then reproduces exactly (no ties left to break by
+   * name). Whoever's turn it currently is stays whoever's turn it is by
+   * identity across the renumbering, same as removeCombatant.
+   */
+  function reorderCombatants(fromId: string, toId: string): void {
+    if (fromId === toId) return
+    const fromIndex = ordered.findIndex((c) => c.id === fromId)
+    const toIndex = ordered.findIndex((c) => c.id === toId)
+    if (fromIndex === -1 || toIndex === -1) return
+    pushHistory()
+
+    const activeId = inCombat ? ordered[state.turnIndex]?.id : undefined
+    const reordered = [...ordered]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+    const renumbered = reordered.map((c, i) => ({ ...c, initiative: reordered.length - i }))
+    const byId = new Map(renumbered.map((c) => [c.id, c]))
+
+    patch({
+      combatants: state.combatants.map((c) => byId.get(c.id) ?? c),
+      turnIndex: inCombat ? renumbered.findIndex((c) => c.id === activeId) : state.turnIndex
+    })
+  }
+
+  /** Applies a typed delta as damage (subtracts) or healing (adds) to current HP, instead of the DM mentally computing the new absolute number and retyping the whole field — same death-save side effects as typing the result directly (see setCombatantHp). Floors at 0. Unlike the raw HP field (no history snapshot per keystroke), this is a discrete button click, so it does get one — a misclicked "10 damage" should be undoable the same as removing the wrong combatant. */
+  function applyDamageOrHeal(id: string, amount: number, kind: 'damage' | 'heal'): void {
+    if (!Number.isFinite(amount) || amount <= 0) return
+    const c = state.combatants.find((x) => x.id === id)
+    if (!c) return
+    pushHistory()
+    const next = kind === 'damage' ? Math.max(0, c.currentHp - amount) : c.currentHp + amount
+    setCombatantHp(id, next)
   }
 
   /** Plays (and, at the table, broadcasts to every connected player) the Creatures cue matching whichever combatant's turn is coming up, if it's a monster — a player's own turn has no such cue, so this is a no-op for one. */
@@ -242,6 +378,7 @@ export function InitiativeTracker({
   }
 
   function startCombat(): void {
+    pushHistory()
     patch({ turnIndex: 0, round: 1 })
     playTurnFlowSfx('Initiative Start', sessionId)
     announceTurnSfx(0)
@@ -265,11 +402,13 @@ export function InitiativeTracker({
   }
 
   function endCombat(): void {
+    pushHistory()
     patch({ turnIndex: -1, round: 1 })
     playTurnFlowSfx('End Combat', sessionId)
   }
 
   function clearAll(): void {
+    pushHistory()
     setState(emptyInitiativeState())
   }
 
@@ -295,7 +434,10 @@ export function InitiativeTracker({
               value=""
               onChange={(e) => {
                 const monster = allMonstersForQuickAdd.find((m) => m.index === e.target.value)
-                if (monster) patch({ combatants: [...state.combatants, monsterToCombatant(monster)] })
+                if (monster) {
+                  pushHistory()
+                  patch({ combatants: [...state.combatants, monsterToCombatant(monster)] })
+                }
               }}
               style={{ fontSize: 11, padding: '3px 4px', maxWidth: 130 }}
               title="Add an enemy"
@@ -307,6 +449,15 @@ export function InitiativeTracker({
                 </option>
               ))}
             </select>
+            <Button
+              variant="secondary"
+              onClick={rollAllInitiative}
+              disabled={state.combatants.length === 0}
+              title="Roll 1d20 + Dex for every combatant"
+              style={{ fontSize: 11, padding: '3px 8px' }}
+            >
+              🎲 Roll All
+            </Button>
             {!inCombat ? (
               <Button variant="primary" onClick={startCombat} disabled={state.combatants.length === 0} style={{ fontSize: 11, padding: '3px 8px' }}>
                 Start Combat
@@ -318,6 +469,9 @@ export function InitiativeTracker({
             )}
             <Button variant="ghost" onClick={clearAll} style={{ fontSize: 11, padding: '3px 8px' }}>
               Clear
+            </Button>
+            <Button variant="ghost" onClick={undo} disabled={history.length === 0} title="Undo the last action" style={{ fontSize: 11, padding: '3px 8px' }}>
+              ↶ Undo
             </Button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto', cursor: 'pointer' }}>
               <input
@@ -353,22 +507,51 @@ export function InitiativeTracker({
             <div
               key={c.id}
               className="gb-card"
+              draggable
+              onDragStart={() => setDragFromId(c.id)}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (dragOverId !== c.id) setDragOverId(c.id)
+              }}
+              onDragLeave={() => setDragOverId((prev) => (prev === c.id ? null : prev))}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragFromId) reorderCombatants(dragFromId, c.id)
+                setDragFromId(null)
+                setDragOverId(null)
+              }}
+              onDragEnd={() => {
+                setDragFromId(null)
+                setDragOverId(null)
+              }}
               style={{
                 padding: 'var(--space-2)',
-                borderColor: inCombat && i === state.turnIndex ? 'var(--accent)' : undefined,
-                background: inCombat && i === state.turnIndex ? 'var(--accent-subtle)' : undefined
+                borderColor: dragOverId === c.id ? 'var(--accent)' : inCombat && i === state.turnIndex ? 'var(--accent)' : undefined,
+                background: inCombat && i === state.turnIndex ? 'var(--accent-subtle)' : undefined,
+                opacity: dragFromId === c.id ? 0.5 : 1
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, userSelect: 'none' }}>
+                  ⠿
+                </span>
                 <input
                   type="number"
                   className="gb-input"
                   value={c.initiative ?? ''}
                   onChange={(e) => updateCombatant(c.id, { initiative: e.target.value === '' ? null : Number(e.target.value) })}
                   placeholder="Init"
-                  style={{ width: 48, fontSize: 12, padding: '3px 4px' }}
+                  style={{ width: 40, fontSize: 12, padding: '3px 4px' }}
                   title="Initiative"
                 />
+                <button
+                  type="button"
+                  onClick={() => rollInitiativeFor(c)}
+                  title={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd))}`}
+                  style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11 }}
+                >
+                  🎲
+                </button>
                 {c.kind === 'monster' ? (
                   <button
                     type="button"
@@ -411,7 +594,7 @@ export function InitiativeTracker({
                   ×
                 </button>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--text-muted)' }}>
                   HP
                   <input
@@ -423,6 +606,7 @@ export function InitiativeTracker({
                   />
                   / {c.maxHp}
                 </label>
+                <DamageHealControl onApply={(amount, kind) => applyDamageOrHeal(c.id, amount, kind)} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--text-muted)' }}>
                   AC
                   <input
@@ -469,6 +653,18 @@ export function InitiativeTracker({
                       ×
                     </button>
                   </span>
+                ))}
+                {QUICK_STATUS_EFFECTS.filter((s) => !c.statusEffects.includes(s)).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => addStatusEffect(c.id, s)}
+                    title={`Add ${s}`}
+                    className="gb-badge"
+                    style={{ fontSize: 10, cursor: 'pointer', border: '1px dashed var(--border-subtle)', background: 'none', color: 'var(--text-muted)' }}
+                  >
+                    + {s}
+                  </button>
                 ))}
                 <select
                   value=""
@@ -915,6 +1111,42 @@ function EncounterBuilder({
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/** A typed amount plus Dmg/Heal buttons — applies as a delta to current HP instead of making the DM compute and retype the new absolute number by hand. Keeps its own tiny local amount field rather than lifting it to InitiativeState, since it's transient per-click scratch input, not combat state worth persisting/broadcasting. */
+function DamageHealControl({ onApply }: { onApply: (amount: number, kind: 'damage' | 'heal') => void }): JSX.Element {
+  const [amount, setAmount] = useState('')
+
+  function apply(kind: 'damage' | 'heal'): void {
+    const value = Number(amount)
+    if (!Number.isFinite(value) || value <= 0) return
+    onApply(value, kind)
+    setAmount('')
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+      <input
+        type="number"
+        min={0}
+        className="gb-input"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') apply('damage')
+        }}
+        placeholder="Amt"
+        style={{ width: 44, fontSize: 11, padding: '2px 4px' }}
+        title="Damage or heal amount"
+      />
+      <button type="button" onClick={() => apply('damage')} title="Apply as damage" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--danger)' }}>
+        −
+      </button>
+      <button type="button" onClick={() => apply('heal')} title="Apply as healing" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--success)' }}>
+        +
+      </button>
     </div>
   )
 }
