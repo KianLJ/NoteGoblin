@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.11',
+    title: '0.5.10 bug fix',
+    highlights: [
+      'Fixed a shared relay account getting permanently stuck as "not connected" once its local password fell out of sync (e.g. after a password change from another device) — logging back in with the account\'s current password now reconnects it instead of failing forever'
+    ]
+  },
+  {
     version: '0.5.10',
     title: 'Full dice icon set and a redesigned initiative tracker',
     highlights: [

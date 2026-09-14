@@ -176,15 +176,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         return { ok: true, identity }
       }
 
-      // No matching local row — this device may just have never seen this
-      // account before (e.g. it was created on another device). The relay
-      // already has its own account store for friends/presence; ask it
-      // directly before giving up, so the same credentials work anywhere.
+      // Local verify failed — either this device has never seen this account
+      // before (e.g. it was created on another device), or it has a row for
+      // this display name but its local password fell out of sync with the
+      // relay's (a shared account whose password was changed from another
+      // device, or a relay-side password reset). Either way, the relay is
+      // the source of truth for a shared account, so ask it directly before
+      // giving up.
       const relayLogin = await relayClient.login(trimmed, password)
       if (!relayLogin.ok) return { ok: false, error: 'That display name and password don’t match.' }
 
       try {
-        const provisioned = await identityRepo.createWithId(relayLogin.data.userId, trimmed, password)
+        const existingRow = identityRepo.findByDisplayName(trimmed)
+        const provisioned = existingRow
+          ? (await identityRepo.setPassword(existingRow.id, password), { id: existingRow.id, displayName: trimmed })
+          : await identityRepo.createWithId(relayLogin.data.userId, trimmed, password)
         setCurrentIdentity({
           ...provisioned,
           passwordHash: identityRepo.findByDisplayName(provisioned.displayName)!.password_hash,
