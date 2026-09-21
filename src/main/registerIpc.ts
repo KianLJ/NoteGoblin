@@ -7,7 +7,7 @@ import { getHostDb } from '@server/db/hostDb'
 import { getVaultPath, setVaultPath, initVaultConfig } from '@server/files/vaultConfig'
 import { migrateSqliteCampaignsToVault } from '@server/files/migration'
 import { campaignIdForVaultPath, reassignVaultOwnerId } from '@server/files/vaultStore'
-import { reassignHostUserId, isHostUserDataFree } from '@server/db/hostUserMigration'
+import { reassignHostUserId } from '@server/db/hostUserMigration'
 import { backupBeforeOwnerMigration } from '@server/db/preMigrationBackup'
 import { IdentityRepo } from '@server/repositories/identityRepo'
 import { UserRepo } from '@server/repositories/userRepo'
@@ -519,23 +519,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (hostUserMigrationFailure) return { error: hostUserMigrationFailure }
 
     try {
-      // Same stale-row check as the !existing branch above — without it,
-      // reassignHostUserId's `UPDATE users SET id = ? WHERE id = ?` throws a
-      // raw "UNIQUE constraint failed: users.id" the instant a data-free
-      // leftover row already occupies desiredId, instead of either clearing
-      // it (the common case) or failing with an actionable message (the
-      // rare case where it isn't actually empty).
-      const collision = userRepo.findById(desiredId)
-      if (collision) {
-        if (isHostUserDataFree(db, desiredId)) {
-          db.prepare('DELETE FROM users WHERE id = ?').run(desiredId)
-        } else {
-          return { error: `Could not set up your host account here — an existing row already uses this id under a different name ("${collision.display_name}").` }
-        }
-      }
+      // A row may already sit at desiredId — e.g. this device previously
+      // completed this exact migration and it carries real data of its
+      // own, or its account was seeded here some other way. Either way it
+      // IS this same relay account (ids here are server-issued and
+      // authoritative), just possibly under a stale display name/password —
+      // reassignHostUserId merges `existing`'s content onto it (rather than
+      // colliding with it) when that's the case, so this always reduces to
+      // one canonical row; the sync below then makes sure that surviving
+      // row's display name/password match the identity logging in now.
       const { hostDbBackupPath, vaultBackupPath } = backupBeforeOwnerMigration(userDataDir)
       reassignHostUserId(db, existing.id, desiredId)
       if (getVaultPath()) reassignVaultOwnerId(existing.id, desiredId)
+      const survivor = userRepo.findById(desiredId)
+      if (survivor && survivor.password_hash !== identity.passwordHash) {
+        db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(identity.passwordHash, desiredId)
+      }
+      if (survivor && survivor.display_name !== identity.displayName) userRepo.rename(desiredId, identity.displayName)
       console.log(
         `[NoteGoblin] Reconciled host account id for cross-device use (backup saved to ${hostDbBackupPath}${vaultBackupPath ? ` and ${vaultBackupPath}` : ''}).`
       )

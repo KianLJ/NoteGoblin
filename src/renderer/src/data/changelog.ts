@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.14',
+    title: '0.5.13 bug fix',
+    highlights: [
+      'Fixed a shared relay account still failing to reconnect its real campaign data ("an existing row already uses this id under a different name") in the specific case where this device already held two local copies of the account under different names — the two are now merged into one instead of the login being blocked'
+    ]
+  },
+  {
     version: '0.5.13',
     title: 'Cross-device login and appearance-sync fixes',
     highlights: [
