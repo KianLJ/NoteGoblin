@@ -7,7 +7,7 @@ import { getHostDb } from '@server/db/hostDb'
 import { getVaultPath, setVaultPath, initVaultConfig } from '@server/files/vaultConfig'
 import { migrateSqliteCampaignsToVault } from '@server/files/migration'
 import { campaignIdForVaultPath, reassignVaultOwnerId } from '@server/files/vaultStore'
-import { reassignHostUserId } from '@server/db/hostUserMigration'
+import { reassignHostUserId, isHostUserDataFree } from '@server/db/hostUserMigration'
 import { backupBeforeOwnerMigration } from '@server/db/preMigrationBackup'
 import { IdentityRepo } from '@server/repositories/identityRepo'
 import { UserRepo } from '@server/repositories/userRepo'
@@ -494,7 +494,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (!existing) {
       const collision = userRepo.findById(desiredId)
       if (collision) {
-        return { error: `Could not set up your host account here — an existing row already uses this id under a different name ("${collision.display_name}").` }
+        // A row with this exact id but no real data attached anywhere
+        // (see isHostUserDataFree) is just leftover debris from some
+        // earlier provisioning path on this device — e.g. this same
+        // machine briefly acting as a different account while testing —
+        // not a second identity worth protecting. Safe to clear it and
+        // proceed rather than blocking the real login over it.
+        if (isHostUserDataFree(db, desiredId)) {
+          db.prepare('DELETE FROM users WHERE id = ?').run(desiredId)
+        } else {
+          return { error: `Could not set up your host account here — an existing row already uses this id under a different name ("${collision.display_name}").` }
+        }
       }
       const hostUser = userRepo.insertWithId(desiredId, identity.displayName, identity.passwordHash)
       return { db, userId: hostUser.id }
@@ -505,6 +515,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (hostUserMigrationFailure) return { error: hostUserMigrationFailure }
 
     try {
+      // Same stale-row check as the !existing branch above — without it,
+      // reassignHostUserId's `UPDATE users SET id = ? WHERE id = ?` throws a
+      // raw "UNIQUE constraint failed: users.id" the instant a data-free
+      // leftover row already occupies desiredId, instead of either clearing
+      // it (the common case) or failing with an actionable message (the
+      // rare case where it isn't actually empty).
+      const collision = userRepo.findById(desiredId)
+      if (collision) {
+        if (isHostUserDataFree(db, desiredId)) {
+          db.prepare('DELETE FROM users WHERE id = ?').run(desiredId)
+        } else {
+          return { error: `Could not set up your host account here — an existing row already uses this id under a different name ("${collision.display_name}").` }
+        }
+      }
       const { hostDbBackupPath, vaultBackupPath } = backupBeforeOwnerMigration(userDataDir)
       reassignHostUserId(db, existing.id, desiredId)
       if (getVaultPath()) reassignVaultOwnerId(existing.id, desiredId)

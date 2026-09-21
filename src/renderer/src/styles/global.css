@@ -95,11 +95,16 @@ button {
   pointer-events: none;
 }
 
-/* Workspace error toast — stays fully readable, then fades over the last
+/* Workspace error toast and friends (see .gb-toast-fade's callers) — fades
+   in quickly on arrival, stays fully readable, then fades over the last
    second before its backing state clears (matches the 5s auto-dismiss timer
-   in useNotesWorkspace.ts/usePlayerWorkspace.ts) instead of just vanishing. */
+   in useNotesWorkspace.ts/usePlayerWorkspace.ts) instead of just popping in
+   and vanishing abruptly at both ends. */
 @keyframes gb-fade-out {
-  0%,
+  0% {
+    opacity: 0;
+  }
+  4%,
   80% {
     opacity: 1;
   }
@@ -109,6 +114,69 @@ button {
 }
 .gb-toast-fade {
   animation: gb-fade-out 5s ease forwards;
+}
+
+/* App-wide "pop into existence" fade-in — a card, badge/tag, menu, or
+   popover appearing (mounting) eases in over a short beat instead of
+   snapping straight into view. Baked directly into the shared .gb-card and
+   .gb-badge primitives below (see primitives.css) so every card/menu/toast/
+   tag built on top of them gets this for free; apply the class directly to
+   anything that doesn't use those. Respects prefers-reduced-motion.
+
+   Opacity-only, deliberately — animating `transform` here too (a lift/scale
+   flourish) fought with any element that sets its own `transform` for
+   positioning, like HoverDetailCard's cursor-follow tooltip: for the
+   animation's duration the keyframe's transform value wins over the
+   element's own inline one, so the tooltip would render at the wrong
+   position (translateY(0) instead of its own translateY(-100%) anchor)
+   until the animation ended and control reverted to the inline style — the
+   card visibly starting in the wrong place, then snapping to the right one.
+   Since .gb-card/.gb-badge apply to essentially anything, "never touches
+   transform" is the only safe default for the shared animation. */
+@keyframes gb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.gb-fade-in {
+  animation: gb-fade-in 140ms ease-out;
+}
+
+/* The inverse — for a menu/popover closing itself out instead of just
+   vanishing. Unlike the mount case, this needs a beat of help from JS: React
+   unmounts the instant its condition goes false, before any exit animation
+   would get a chance to run. See useMountAnimation.ts, which keeps the
+   element rendered (applying this class instead of gb-fade-in) for exactly
+   this animation's duration before actually unmounting it. Opacity-only for
+   the same reason gb-fade-in is — see its own comment. */
+@keyframes gb-pop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.gb-pop-out {
+  /* !important: this is meant to override .gb-card/.gb-badge's own baked-in
+     gb-fade-in animation (see primitives.css) when both classes land on the
+     same element during the closing beat — otherwise plain CSS cascade
+     order (stylesheet order, not className order) would let whichever of
+     the two rules happens to load later win, which is exactly backwards
+     from "the element is closing, so gb-pop-out always wins" regardless of
+     import order. */
+  animation: gb-pop-out 110ms ease-in forwards !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gb-fade-in,
+  .gb-pop-out,
+  .gb-card,
+  .gb-badge {
+    animation: none !important;
+  }
 }
 
 /* Dramatic dice roll popup (RollAnimationOverlay.tsx) — a d20 tumbles for the
@@ -464,9 +532,32 @@ button {
    like it didn't fit inside the icon at all. */
 .gb-icon-value-input {
   -moz-appearance: textfield;
+  /* Bare <input>s don't inherit font-family the way most other elements do
+     (see the plain `button { font-family: inherit }` rule above, which
+     exists for the exact same reason) — without this, these values render
+     in the browser's default UI font instead of whichever font the user has
+     actually picked in Appearance settings. */
+  font-family: inherit;
 }
 .gb-icon-value-input::-webkit-inner-spin-button,
 .gb-icon-value-input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* The Initiative Tracker's combatant cards are draggable to reorder — cursor
+   and a hover outline are the only cues for that (the small ⠿ handle alone
+   was easy to miss), so this applies to the whole card, not just the
+   handle. :active covers the moment a drag is actually being grabbed. */
+.gb-draggable-card {
+  cursor: grab;
+  transition: outline-color 120ms ease;
+  outline: 2px solid transparent;
+  outline-offset: -1px;
+}
+.gb-draggable-card:hover {
+  outline-color: var(--accent-subtle);
+}
+.gb-draggable-card:active {
+  cursor: grabbing;
 }

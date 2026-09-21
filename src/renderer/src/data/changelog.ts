@@ -7,6 +7,18 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.12',
+    title: 'Dismemberment, a redesigned combatant card, and app-wide fade animations',
+    highlights: [
+      'New optional Dismemberment system for the Initiative Tracker (per-encounter toggle in the gear menu) — a hit dealing 1/4 max HP offers small losable parts (hands, fingers, eyes, ears), 1/2 max HP offers whole limbs, and a killing blow dealing full max HP in one hit offers beheading or bisection; rolling now chases a highlight across the options before landing on one instead of just appearing instantly',
+      'Connected players now join the Initiative Tracker automatically the moment they connect — the "+ Add Players" button is gone',
+      'Redesigned the Initiative Tracker\'s combatant card — initiative and AC sit as icon+value columns beside the name, HP got its own bigger heart-shaped column, and the "PC"/"Monster" tag is gone (redundant with the card\'s own layout)',
+      'Cards, menus, popovers, and tags now fade in when they appear and fade out when dismissed, instead of just snapping in and out of existence, across the whole app',
+      'Fixed hover tooltips (spell/item/monster cards) sometimes rendering below the cursor for a frame before snapping to their correct position above it',
+      'Fixed a shared relay account occasionally failing to log in on a device that had previously been used to test a different account, with a raw database error instead of a real explanation — that leftover state is now cleared automatically'
+    ]
+  },
+  {
     version: '0.5.11',
     title: '0.5.10 bug fix',
     highlights: [

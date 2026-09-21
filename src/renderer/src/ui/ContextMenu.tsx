@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getStoredFontScale } from '../theme'
+import { useMountAnimation } from './useMountAnimation'
 
 export interface ContextMenuItem {
   label: string
@@ -24,12 +25,20 @@ export function ContextMenu({
 }): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const { rendered, closing } = useMountAnimation(state !== null)
+  // `state` itself goes null the instant the caller closes it — during the
+  // closing beat (see useMountAnimation) there'd be nothing left to render
+  // (position, items) without remembering the last real one.
+  const lastStateRef = useRef<ContextMenuState | null>(null)
+  if (state) lastStateRef.current = state
+  const shown = state ?? lastStateRef.current
 
   useEffect(() => {
-    if (!state) {
-      setPos(null)
-      return
-    }
+    // Deliberately doesn't reset `pos` back to null when `state` goes null —
+    // the menu stays visible (at its last measured position) through the
+    // closing beat (see useMountAnimation/`shown` above); it only actually
+    // leaves the DOM once `rendered` flips false.
+    if (!state) return
     // Measure after mount so we can clamp to the viewport, then reveal.
     // `state.x`/`state.y` (from the triggering MouseEvent) and window/rect
     // measurements are always in real screen pixels, regardless of the
@@ -67,16 +76,16 @@ export function ContextMenu({
     }
   }, [state, onClose])
 
-  if (!state) return null
+  if (!rendered || !shown) return null
 
   return (
     <div
       ref={menuRef}
-      className="gb-card"
+      className={closing ? 'gb-card gb-pop-out' : 'gb-card'}
       style={{
         position: 'fixed',
-        top: pos?.y ?? state.y,
-        left: pos?.x ?? state.x,
+        top: pos?.y ?? shown.y,
+        left: pos?.x ?? shown.x,
         visibility: pos ? 'visible' : 'hidden',
         padding: 'var(--space-1)',
         minWidth: 160,
@@ -84,7 +93,7 @@ export function ContextMenu({
         boxShadow: 'var(--shadow-lg)'
       }}
     >
-      {state.items.map((item, i) => (
+      {shown.items.map((item, i) => (
         <button
           key={i}
           type="button"

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
+import { useMountAnimation } from '../../ui/useMountAnimation'
 import { GearIcon } from './icons'
 import { ChevronRightIcon } from '../campaigns/icons'
 import { ColorTokenEditor } from './ColorTokenEditor'
@@ -27,6 +28,7 @@ import { playSfx } from '../audio/soundEffects'
 export function AccountSettingsButton(): JSX.Element {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const { rendered, closing } = useMountAnimation(open)
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent): void {
@@ -38,9 +40,9 @@ export function AccountSettingsButton(): JSX.Element {
 
   return (
     <div ref={containerRef} style={{ position: 'relative', flexShrink: 0 }}>
-      {open && (
+      {rendered && (
         <div
-          className="gb-card"
+          className={closing ? 'gb-card gb-pop-out' : 'gb-card'}
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 8px)',

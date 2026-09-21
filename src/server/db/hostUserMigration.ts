@@ -20,6 +20,29 @@ import type { Database as DatabaseType } from 'better-sqlite3'
  * if something in the caller's vault-file half of the migration goes wrong
  * afterward.
  */
+/**
+ * Whether a host `users` row has zero real data attached anywhere
+ * reassignHostUserId would otherwise touch — a stale, empty row left behind
+ * by some earlier provisioning path (e.g. this same device briefly acting
+ * as a different account while testing, or a remote player id that got
+ * seeded here and never used) rather than a real second identity worth
+ * protecting. Only a row this empty is ever safe to silently delete out of
+ * the way of a reassignment — see ensureMyHostUser's collision handling in
+ * registerIpc.ts.
+ */
+export function isHostUserDataFree(db: DatabaseType, id: string): boolean {
+  const checks: [string, string][] = [
+    ['campaigns', 'dm_user_id'],
+    ['campaign_members', 'user_id'],
+    ['folders', 'author_user_id'],
+    ['notes', 'author_user_id'],
+    ['characters', 'owner_user_id'],
+    ['messages', 'sender_user_id'],
+    ['messages', 'recipient_user_id']
+  ]
+  return checks.every(([table, column]) => !db.prepare(`SELECT 1 FROM ${table} WHERE ${column} = ? LIMIT 1`).get(id))
+}
+
 export function reassignHostUserId(db: DatabaseType, oldId: string, newId: string): void {
   if (oldId === newId) return
 

@@ -7,6 +7,7 @@ import { Button } from '../../ui/Button'
 type Mode = 'ability-check' | 'saving-throw' | 'skill-check' | 'flat'
 
 interface ForceRollDialogProps {
+  open: boolean
   playerName: string
   fromDisplayName: string
   onClose: () => void
@@ -21,7 +22,7 @@ function labelFor(mode: Mode, ability?: Ability, skill?: SkillName): string {
 }
 
 /** The DM's "make this player roll" prompt — right-click a connected player in ConnectedPlayersList.tsx to open this. Sends a targeted, un-acked push (see sessionHost.ts's pushForceRoll); the player's own client resolves the actual modifier against their character sheet, so nothing rolled here or anywhere on the DM's side. */
-export function ForceRollDialog({ playerName, fromDisplayName, onClose, onSend }: ForceRollDialogProps): JSX.Element {
+export function ForceRollDialog({ open, playerName, fromDisplayName, onClose, onSend }: ForceRollDialogProps): JSX.Element {
   const [mode, setMode] = useState<Mode>('ability-check')
   const [ability, setAbility] = useState<Ability>('str')
   const [skill, setSkill] = useState<SkillName>(SKILLS[0].id)
@@ -43,7 +44,7 @@ export function ForceRollDialog({ playerName, fromDisplayName, onClose, onSend }
   }
 
   return (
-    <Modal onClose={onClose} width={380}>
+    <Modal open={open} onClose={onClose} width={380}>
       <h3 style={{ marginTop: 0 }}>Force a roll — {playerName}</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>

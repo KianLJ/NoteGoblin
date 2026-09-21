@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { activeFeatIds, applyExhaustionToMaxHp, computeMaxHp, exhaustionEffectsDescription, abilityModifier } from '@shared/dnd5e'
 import { buildCheckRollEntry, formatModifierTerm } from '@shared/dice'
 import { ExhaustionIcon, HeartIcon, ShieldIcon, DiceIcon } from '../player/characterSheetTabs/icons'
+import { GearIcon } from '../account/icons'
+import { useMountAnimation } from '../../ui/useMountAnimation'
+import { useLastTruthy } from '../../ui/useLastTruthy'
 import { effectiveAbilityScores, computeArmorClassFromEquipment } from '@shared/compendium'
 import { HoverDetailCard } from '../player/HoverDetailCard'
 import { renderStatblockHtml } from '../../statblock'
@@ -13,6 +16,8 @@ import {
   computeEncounterDifficulty,
   encounterMultiplier,
   DIFFICULTY_LABELS,
+  MINOR_DISMEMBERMENT_TABLE,
+  MAJOR_DISMEMBERMENT_TABLE,
   type Combatant,
   type InitiativeState,
   type Difficulty
@@ -149,6 +154,17 @@ export function InitiativeTracker({
   const [history, setHistory] = useState<InitiativeState[]>([])
   const [dragFromId, setDragFromId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  // Which combatant just took a qualifying hit and is waiting on the DM to
+  // pick (or roll) a dismemberment — see applyDamageOrHeal for the actual
+  // thresholds. 'minor' (>=1/4 max HP) only offers small losable parts
+  // (hands, fingers, eyes, ears); 'major' (>=1/2 max HP) offers whole limbs;
+  // 'overkill' (a killing blow that also dealt >= full max HP in one hit)
+  // offers beheading/bisection instead of a table roll at all. Only one
+  // prompt at a time; a second qualifying hit before this one is resolved
+  // just replaces it rather than queuing.
+  const [dismemberPrompt, setDismemberPrompt] = useState<{ combatantId: string; mode: 'minor' | 'major' | 'overkill' } | null>(null)
+  const lastDismemberPrompt = useLastTruthy(dismemberPrompt)
+  const { rendered: dismemberPromptRendered, closing: dismemberPromptClosing } = useMountAnimation(dismemberPrompt !== null)
 
   useEffect(() => {
     if (sessionId) void window.goblin.initiative.broadcast(state)
@@ -199,6 +215,22 @@ export function InitiativeTracker({
         return { ...c, maxHp, ac }
       })
       return changed ? { ...prev, combatants } : prev
+    })
+  }, [playerCharacters])
+
+  // A connected player is automatically part of the fight the instant they
+  // join — the DM shouldn't have to remember to click "Add Players" (and a
+  // player who reconnects mid-session, or joins late, shouldn't need a
+  // manual nudge either). Purely additive: never removes a player who
+  // disconnects mid-encounter, since their combatant (HP, status, any
+  // dismemberment) is still real fight state the DM is tracking.
+  useEffect(() => {
+    setState((prev) => {
+      const existingUserIds = new Set(prev.combatants.filter((c) => c.kind === 'player').map((c) => c.userId))
+      const toAdd = [...playerCharacters.entries()]
+        .filter(([userId]) => !existingUserIds.has(userId))
+        .map(([userId, character]) => playerToCombatant(userId, character))
+      return toAdd.length ? { ...prev, combatants: [...prev.combatants, ...toAdd] } : prev
     })
   }, [playerCharacters])
 
@@ -297,15 +329,6 @@ export function InitiativeTracker({
     patch({ combatants: state.combatants.filter((c) => c.id !== id), turnIndex })
   }
 
-  function addMissingPlayers(): void {
-    pushHistory()
-    const existingUserIds = new Set(state.combatants.filter((c) => c.kind === 'player').map((c) => c.userId))
-    const toAdd = [...playerCharacters.entries()]
-      .filter(([userId]) => !existingUserIds.has(userId))
-      .map(([userId, character]) => playerToCombatant(userId, character))
-    if (toAdd.length) patch({ combatants: [...state.combatants, ...toAdd] })
-  }
-
   /** 1d20 + Dex modifier, rolled instantly (no interactive reveal — this is DM-side bulk setup, not a player's own suspenseful check) and written straight into that combatant's initiative field. Kept purely local: never broadcast to the dice log, since a monster's exact initiative roll is meant to stay hidden from players (see sanitizeForPlayer). */
   function rollInitiativeFor(c: Combatant): void {
     const modifier = initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd)
@@ -364,6 +387,36 @@ export function InitiativeTracker({
     pushHistory()
     const next = kind === 'damage' ? Math.max(0, c.currentHp - amount) : c.currentHp + amount
     setCombatantHp(id, next)
+
+    // Dismemberment (opt-in, see the toolbar checkbox) — tiered by how much
+    // of the hit landed. A killing blow that also dealt the target's entire
+    // max HP in one hit is dramatic enough to offer beheading/bisection
+    // outright ('overkill'); short of that, >=1/2 max HP earns a whole limb
+    // ('major'), and >=1/4 max HP earns only something small (a hand,
+    // finger, eye, ear — 'minor'). A heal, or damage below the minor
+    // threshold, never triggers this. Checked highest tier first since a
+    // killing/major blow also always satisfies the lower thresholds.
+    if (kind === 'damage' && state.dismembermentEnabled && c.maxHp > 0) {
+      const fraction = amount / c.maxHp
+      if (next <= 0 && fraction >= 1) setDismemberPrompt({ combatantId: id, mode: 'overkill' })
+      else if (fraction >= 0.5) setDismemberPrompt({ combatantId: id, mode: 'major' })
+      else if (fraction >= 0.25) setDismemberPrompt({ combatantId: id, mode: 'minor' })
+    }
+  }
+
+  function addDismemberment(id: string, tag: string): void {
+    pushHistory()
+    patch({
+      combatants: state.combatants.map((c) =>
+        c.id === id && !c.dismemberments.includes(tag) ? { ...c, dismemberments: [...c.dismemberments, tag] } : c
+      )
+    })
+    setDismemberPrompt(null)
+  }
+
+  function removeDismemberment(id: string, tag: string): void {
+    pushHistory()
+    patch({ combatants: state.combatants.map((c) => (c.id === id ? { ...c, dismemberments: c.dismemberments.filter((t) => t !== tag) } : c)) })
   }
 
   /** Plays (and, at the table, broadcasts to every connected player) the Creatures cue matching whichever combatant's turn is coming up, if it's a monster — a player's own turn has no such cue, so this is a no-op for one. */
@@ -423,9 +476,6 @@ export function InitiativeTracker({
       {view === 'tracker' ? (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <Button variant="secondary" onClick={addMissingPlayers} style={{ fontSize: 11, padding: '3px 8px' }}>
-              + Add Players
-            </Button>
             <select
               className="gb-input"
               value=""
@@ -470,14 +520,14 @@ export function InitiativeTracker({
             <Button variant="ghost" onClick={undo} disabled={history.length === 0} title="Undo the last action" style={{ fontSize: 11, padding: '3px 8px' }}>
               ↶ Undo
             </Button>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={state.deathSavesPrivate}
-                onChange={(e) => patch({ deathSavesPrivate: e.target.checked })}
+            <div style={{ marginLeft: 'auto' }}>
+              <TrackerSettingsMenu
+                dismembermentEnabled={state.dismembermentEnabled}
+                onSetDismembermentEnabled={(v) => patch({ dismembermentEnabled: v })}
+                deathSavesPrivate={state.deathSavesPrivate}
+                onSetDeathSavesPrivate={(v) => patch({ deathSavesPrivate: v })}
               />
-              Private death saves
-            </label>
+            </div>
           </div>
 
           {inCombat && (
@@ -503,7 +553,7 @@ export function InitiativeTracker({
           {ordered.map((c, i) => (
             <div
               key={c.id}
-              className="gb-card"
+              className="gb-card gb-draggable-card"
               draggable
               onDragStart={() => setDragFromId(c.id)}
               onDragOver={(e) => {
@@ -522,124 +572,162 @@ export function InitiativeTracker({
                 setDragOverId(null)
               }}
               style={{
+                position: 'relative',
                 padding: 'var(--space-2)',
                 borderColor: dragOverId === c.id ? 'var(--accent)' : inCombat && i === state.turnIndex ? 'var(--accent)' : undefined,
                 background: inCombat && i === state.turnIndex ? 'var(--accent-subtle)' : undefined,
                 opacity: dragFromId === c.id ? 0.5 : 1
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span title="Drag to reorder" style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, userSelect: 'none' }}>
-                  ⠿
-                </span>
-                {c.kind === 'monster' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const monster = allMonstersForQuickAdd.find((m) => m.index === c.monsterIndex)
-                      if (monster) onSelectMonster(monster)
-                    }}
-                    title="View statblock"
-                    style={{
-                      flex: 1,
-                      textAlign: 'left',
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      cursor: 'pointer',
-                      color: 'var(--accent)',
-                      fontSize: 17,
-                      fontWeight: 800,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
+              <button
+                type="button"
+                onClick={() => removeCombatant(c.id)}
+                title="Remove"
+                style={{
+                  position: 'absolute',
+                  top: 6,
+                  right: 6,
+                  width: 26,
+                  height: 26,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'none',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-muted)',
+                  fontSize: 18,
+                  lineHeight: 1,
+                  cursor: 'pointer'
+                }}
+              >
+                ×
+              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                  <span
+                    title="Drag to reorder"
+                    style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, userSelect: 'none', marginTop: 8 }}
                   >
-                    {c.name}
-                  </button>
-                ) : (
-                  <strong style={{ flex: 1, fontSize: 17, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {c.name}
-                  </strong>
-                )}
-                <SvgIconValue
-                  icon={<DiceIcon size={ICON_STAT_SIZE} style={{ color: 'var(--accent)' }} />}
-                  iconTitle={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd))}`}
-                  onIconClick={() => rollInitiativeFor(c)}
-                  value={c.initiative ?? ''}
-                  onChange={(v) => updateCombatant(c.id, { initiative: v === '' ? null : Number(v) })}
-                  inputTitle="Initiative"
-                  valueOffsetY={-2}
-                  placeholder="—"
-                />
-                {c.currentHp <= 0 && (
-                  <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)' }}>
-                    Dead
+                    ⠿
                   </span>
-                )}
-                <span className="gb-badge" style={{ fontSize: 10 }}>
-                  {c.kind === 'player' ? 'PC' : 'Monster'}
-                </span>
-                <button type="button" onClick={() => removeCombatant(c.id)} title="Remove" style={removeBtnStyle}>
-                  ×
-                </button>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                <HpHeartControl
-                  currentHp={c.currentHp}
-                  maxHp={c.maxHp}
-                  onSetHp={(v) => setCombatantHp(c.id, v)}
-                  onApply={(amount, kind) => applyDamageOrHeal(c.id, amount, kind)}
-                />
-                <SvgIconValue
-                  icon={<ShieldIcon size={ICON_STAT_SIZE} style={{ color: 'var(--text-muted)' }} />}
-                  iconTitle="Armor Class"
-                  value={c.ac}
-                  onChange={(v) => updateCombatant(c.id, { ac: v === '' ? 0 : Number(v) })}
-                  inputTitle="Armor Class"
-                  valueOffsetY={-2}
-                />
-                {c.kind === 'player' &&
-                  c.userId &&
-                  (() => {
-                    const exhaustionLevel = playerCharacters.get(c.userId)?.exhaustionLevel ?? 0
-                    if (exhaustionLevel <= 0) return null
-                    return (
-                      <span
-                        title={`Exhaustion ${exhaustionLevel}\n${exhaustionEffectsDescription(exhaustionLevel)}`}
-                        style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--danger)' }}
+                  <IconValueColumn
+                    icon={<DiceIcon size={ICON_STAT_SIZE} style={{ color: 'var(--accent)' }} />}
+                    iconTitle={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd))}`}
+                    onIconClick={() => rollInitiativeFor(c)}
+                    value={c.initiative ?? ''}
+                    onChange={(v) => updateCombatant(c.id, { initiative: v === '' ? null : Number(v) })}
+                    inputTitle="Initiative"
+                    placeholder="—"
+                  />
+
+                  <div style={{ flex: 1, minWidth: 0, paddingTop: 6 }}>
+                    {c.kind === 'monster' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const monster = allMonstersForQuickAdd.find((m) => m.index === c.monsterIndex)
+                          if (monster) onSelectMonster(monster)
+                        }}
+                        title="View statblock"
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'left',
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          color: 'var(--accent)',
+                          fontSize: 17,
+                          fontWeight: 800,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
                       >
-                        <ExhaustionIcon size={13} style={{ color: 'var(--danger)' }} />
-                        {exhaustionLevel}
+                        {c.name}
+                      </button>
+                    ) : (
+                      <strong style={{ display: 'block', fontSize: 17, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {c.name}
+                      </strong>
+                    )}
+                    {c.currentHp <= 0 && (
+                      <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)', marginTop: 2 }}>
+                        Dead
                       </span>
-                    )
-                  })()}
-              </div>
+                    )}
+                    {c.kind === 'player' &&
+                      c.userId &&
+                      (() => {
+                        const exhaustionLevel = playerCharacters.get(c.userId)?.exhaustionLevel ?? 0
+                        if (exhaustionLevel <= 0) return null
+                        return (
+                          <span
+                            title={`Exhaustion ${exhaustionLevel}\n${exhaustionEffectsDescription(exhaustionLevel)}`}
+                            style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--danger)', marginTop: 2 }}
+                          >
+                            <ExhaustionIcon size={13} style={{ color: 'var(--danger)' }} />
+                            {exhaustionLevel}
+                          </span>
+                        )
+                      })()}
+                  </div>
 
-              {c.deathSaves && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-                  <DeathSaveRow label="Success" count={c.deathSaves.successes} color="var(--success)" onChange={(delta) => bumpDeathSave(c.id, 'successes', delta)} />
-                  <DeathSaveRow label="Fail" count={c.deathSaves.failures} color="var(--danger)" onChange={(delta) => bumpDeathSave(c.id, 'failures', delta)} />
+                  <HpIconColumn
+                    currentHp={c.currentHp}
+                    maxHp={c.maxHp}
+                    onSetHp={(v) => setCombatantHp(c.id, v)}
+                    onSetMaxHp={(v) => updateCombatant(c.id, { maxHp: v })}
+                    onApply={(amount, kind) => applyDamageOrHeal(c.id, amount, kind)}
+                  />
+                  <IconValueColumn
+                    icon={<ShieldIcon size={ICON_STAT_SIZE} style={{ color: 'var(--text-muted)' }} />}
+                    iconTitle="Armor Class"
+                    value={c.ac}
+                    onChange={(v) => updateCombatant(c.id, { ac: v === '' ? 0 : Number(v) })}
+                    inputTitle="Armor Class"
+                  />
                 </div>
-              )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                {c.statusEffects.map((effect) => (
-                  <span key={effect} className="gb-badge" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
-                    {effect}
-                    <button
-                      type="button"
-                      onClick={() => removeStatusEffect(c.id, effect)}
-                      style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-                <AddStatusEffectControl
-                  options={STATUS_EFFECT_PRESETS.filter((s) => !c.statusEffects.includes(s))}
-                  onAdd={(effect) => addStatusEffect(c.id, effect)}
-                />
+                {c.deathSaves && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+                    <DeathSaveRow label="Success" count={c.deathSaves.successes} color="var(--success)" onChange={(delta) => bumpDeathSave(c.id, 'successes', delta)} />
+                    <DeathSaveRow label="Fail" count={c.deathSaves.failures} color="var(--danger)" onChange={(delta) => bumpDeathSave(c.id, 'failures', delta)} />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  {c.statusEffects.map((effect) => (
+                    <FadeOutBadge key={effect} onRemove={() => removeStatusEffect(c.id, effect)}>
+                      {effect}
+                    </FadeOutBadge>
+                  ))}
+                  <AddStatusEffectControl
+                    options={STATUS_EFFECT_PRESETS.filter((s) => !c.statusEffects.includes(s))}
+                    onAdd={(effect) => addStatusEffect(c.id, effect)}
+                  />
+                </div>
+
+                {c.dismemberments.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    {c.dismemberments.map((tag) => (
+                      <FadeOutBadge key={tag} color="var(--danger)" onRemove={() => removeDismemberment(c.id, tag)}>
+                        {tag}
+                      </FadeOutBadge>
+                    ))}
+                  </div>
+                )}
+
+                {dismemberPromptRendered && lastDismemberPrompt?.combatantId === c.id && (
+                  <DismembermentPrompt
+                    mode={lastDismemberPrompt.mode}
+                    closing={dismemberPromptClosing}
+                    onPick={(tag) => addDismemberment(c.id, tag)}
+                    onDismiss={() => setDismemberPrompt(null)}
+                  />
+                )}
               </div>
             </div>
           ))}
@@ -701,6 +789,7 @@ function EncounterBuilder({
   }, [allMonsters, monsterQuery])
   const [searchOpen, setSearchOpen] = useState(false)
   const searchWrapperRef = useRef<HTMLDivElement>(null)
+  const { rendered: searchResultsRendered, closing: searchResultsClosing } = useMountAnimation(searchOpen && filtered.length > 0)
 
   useEffect(() => {
     if (!searchOpen) return
@@ -936,8 +1025,11 @@ function EncounterBuilder({
           }}
           style={{ fontSize: 12, width: '100%' }}
         />
-        {searchOpen && filtered.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
+        {searchResultsRendered && (
+          <div
+            className={searchResultsClosing ? 'gb-pop-out' : 'gb-fade-in'}
+            style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}
+          >
             {filtered.map((m) => (
               <HoverDetailCard key={m.index} bodyHtml={renderStatblockHtml(m)} width={460} interceptWheel={false}>
                 <button
@@ -1077,31 +1169,25 @@ function EncounterBuilder({
   )
 }
 
-const ICON_STAT_SIZE = 34
+const ICON_STAT_SIZE = 26
 
 /**
- * An SVG icon (dice/shield/heart) with an editable numeric value overlaid on
- * top, so the value reads as held inside the icon's shape rather than beside
- * it behind a text label — used for initiative (d20), AC (shield), and HP
- * (heart, via HpHeartControl below). When `onIconClick` is given, clicking
- * the icon itself (outside the overlaid input) triggers that instead of
- * nothing — e.g. rolling initiative — while the input stays independently
- * editable by hand.
- *
- * `valueOffsetY` nudges the value off dead-center: none of these three icons
- * are actually symmetric top-to-bottom (a shield/heart is visually top-heavy
- * before tapering to a point; even the d20's front face sits a hair above
- * center), so a value pinned to the icon's literal geometric middle read as
- * low/off relative to the shape around it.
+ * An icon with its editable value in a small column underneath, instead of
+ * overlaid on top of it — used for initiative (d20) and AC (shield), sitting
+ * directly beside the combatant's name rather than in a separate row below.
+ * Putting the value under the icon (not inside its shape) is what actually
+ * fixed the "text doesn't fit" problem the overlaid version kept running
+ * into — there's no icon geometry to fit inside anymore. When `onIconClick`
+ * is given, the icon itself becomes a button (e.g. rolling initiative),
+ * separate from editing the value by hand below it.
  */
-function SvgIconValue({
+function IconValueColumn({
   icon,
   iconTitle,
   onIconClick,
   value,
   onChange,
   inputTitle,
-  valueOffsetY = 0,
   placeholder
 }: {
   icon: JSX.Element
@@ -1110,40 +1196,35 @@ function SvgIconValue({
   value: number | string
   onChange: (value: string) => void
   inputTitle?: string
-  valueOffsetY?: number
   placeholder?: string
 }): JSX.Element {
   return (
-    <div
-      onClick={onIconClick}
-      title={onIconClick ? iconTitle : undefined}
-      style={{
-        position: 'relative',
-        width: ICON_STAT_SIZE,
-        height: ICON_STAT_SIZE,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        cursor: onIconClick ? 'pointer' : 'default'
-      }}
-    >
-      {icon}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flexShrink: 0, width: ICON_STAT_SIZE }}>
+      {onIconClick ? (
+        <button
+          type="button"
+          onClick={onIconClick}
+          title={iconTitle}
+          style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          {icon}
+        </button>
+      ) : (
+        <span title={iconTitle} style={{ display: 'flex' }}>
+          {icon}
+        </span>
+      )}
       <input
         type="number"
         className="gb-icon-value-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
         placeholder={placeholder}
-        title={inputTitle ?? (onIconClick ? undefined : iconTitle)}
+        title={inputTitle ?? iconTitle}
         style={{
-          position: 'absolute',
-          top: `calc(50% + ${valueOffsetY}px)`,
-          transform: 'translateY(-50%)',
-          width: 18,
+          width: '100%',
           textAlign: 'center',
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 800,
           lineHeight: 1,
           padding: 0,
@@ -1156,16 +1237,24 @@ function SvgIconValue({
   )
 }
 
-/** Current HP overlaid inside a heart icon (still directly editable by typing over it) flanked by − and + buttons for applying damage/healing deltas — clicking either swaps the heart out for a small amount field, applies on Enter, and reverts back to the heart. */
-function HpHeartControl({
+/**
+ * Same column shape as IconValueColumn, but for HP: the heart icon is
+ * flanked by tiny − and + buttons (applying a damage/heal delta — clicking
+ * either swaps the icon row for a small amount field, applies on Enter, and
+ * reverts back), with current and max HP shown as two small fields
+ * underneath, separated by "/" — both directly editable by typing over them.
+ */
+function HpIconColumn({
   currentHp,
   maxHp,
   onSetHp,
+  onSetMaxHp,
   onApply
 }: {
   currentHp: number
   maxHp: number
   onSetHp: (value: number) => void
+  onSetMaxHp: (value: number) => void
   onApply: (amount: number, kind: 'damage' | 'heal') => void
 }): JSX.Element {
   const [pending, setPending] = useState<'damage' | 'heal' | null>(null)
@@ -1188,11 +1277,29 @@ function HpHeartControl({
     setAmount('')
   }
 
+  const valueInputStyle: CSSProperties = {
+    width: 20,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: 800,
+    lineHeight: 1,
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--text-primary)'
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-      <button type="button" onClick={() => setPending('damage')} title="Apply damage" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--danger)' }}>
-        −
-      </button>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <button type="button" onClick={() => setPending('damage')} title="Apply damage" style={{ ...roundBtnStyle, width: 16, height: 16, fontSize: 10, color: 'var(--danger)' }}>
+          −
+        </button>
+        <HeartIcon size={ICON_STAT_SIZE} style={{ color: 'var(--danger)' }} />
+        <button type="button" onClick={() => setPending('heal')} title="Apply healing" style={{ ...roundBtnStyle, width: 16, height: 16, fontSize: 10, color: 'var(--success)' }}>
+          +
+        </button>
+      </div>
       {pending ? (
         <input
           ref={inputRef}
@@ -1207,42 +1314,328 @@ function HpHeartControl({
           }}
           onBlur={cancelPending}
           placeholder={pending === 'damage' ? 'Dmg' : 'Heal'}
-          style={{ width: 44, fontSize: 11, padding: '2px 4px' }}
+          style={{ width: 52, fontSize: 12, padding: '3px 4px' }}
           title={pending === 'damage' ? 'Damage amount — Enter to apply' : 'Heal amount — Enter to apply'}
         />
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <div style={{ position: 'relative', width: ICON_STAT_SIZE, height: ICON_STAT_SIZE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <HeartIcon size={ICON_STAT_SIZE} style={{ color: 'var(--danger)' }} />
-            <input
-              type="number"
-              className="gb-icon-value-input"
-              value={currentHp}
-              onChange={(e) => onSetHp(Number(e.target.value))}
-              title="Current HP"
-              style={{
-                position: 'absolute',
-                top: 'calc(50% - 3px)',
-                transform: 'translateY(-50%)',
-                width: 18,
-                textAlign: 'center',
-                fontSize: 10,
-                fontWeight: 800,
-                lineHeight: 1,
-                padding: 0,
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--text-primary)'
-              }}
-            />
-          </div>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/ {maxHp}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <input
+            type="number"
+            className="gb-icon-value-input"
+            value={currentHp}
+            onChange={(e) => onSetHp(Number(e.target.value))}
+            title="Current HP"
+            style={valueInputStyle}
+          />
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/</span>
+          <input
+            type="number"
+            className="gb-icon-value-input"
+            value={maxHp}
+            onChange={(e) => onSetMaxHp(Number(e.target.value))}
+            title="Max HP"
+            style={{ ...valueInputStyle, fontWeight: 700, color: 'var(--text-secondary)' }}
+          />
         </div>
       )}
-      <button type="button" onClick={() => setPending('heal')} title="Apply healing" style={{ ...roundBtnStyle, width: 20, height: 20, fontSize: 11, color: 'var(--success)' }}>
-        +
-      </button>
     </div>
+  )
+}
+
+/** The gear button in the tracker toolbar's top-right — condenses the encounter-wide toggles (dismemberment, private death saves) into one popup instead of a growing row of checkboxes competing for toolbar space. Closes on picking nothing further — on Escape or an outside click — same idiom as AddStatusEffectControl/EncounterBuilder's search dropdown. */
+function TrackerSettingsMenu({
+  dismembermentEnabled,
+  onSetDismembermentEnabled,
+  deathSavesPrivate,
+  onSetDeathSavesPrivate
+}: {
+  dismembermentEnabled: boolean
+  onSetDismembermentEnabled: (value: boolean) => void
+  deathSavesPrivate: boolean
+  onSetDeathSavesPrivate: (value: boolean) => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const { rendered, closing } = useMountAnimation(open)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e: MouseEvent): void {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function handleEscape(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [open])
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Encounter settings"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 26,
+          height: 26,
+          padding: 0,
+          background: 'none',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-sm)',
+          color: 'var(--text-secondary)',
+          cursor: 'pointer'
+        }}
+      >
+        <span style={{ display: 'flex', transform: 'scale(0.7)' }}>
+          <GearIcon />
+        </span>
+      </button>
+      {rendered && (
+        <div
+          className={closing ? 'gb-card gb-pop-out' : 'gb-card'}
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            marginTop: 4,
+            zIndex: 10,
+            width: 190,
+            padding: 'var(--space-2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6
+          }}
+        >
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={dismembermentEnabled} onChange={(e) => onSetDismembermentEnabled(e.target.checked)} />
+            Dismemberment
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={deathSavesPrivate} onChange={(e) => onSetDeathSavesPrivate(e.target.checked)} />
+            Private death saves
+          </label>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The panel that appears on a combatant's card right after a qualifying hit
+ * (see applyDamageOrHeal's tier thresholds) — 'minor' offers only small
+ * losable parts, 'major' offers whole limbs, and 'overkill' (a killing blow
+ * that also dealt the target's entire max HP in one hit) offers beheading/
+ * bisection instead of a table roll at all, since that's dramatic enough on
+ * its own that a body-part roll would undersell it. Any tier can be
+ * dismissed without adding anything, for a hit the DM decides isn't
+ * dramatic enough this time.
+ */
+const DISMEMBERMENT_TIER: Record<'minor' | 'major' | 'overkill', { label: string; color: string }> = {
+  minor: { label: 'Minor Wound', color: 'var(--accent)' },
+  major: { label: 'Major Wound!', color: '#d9822b' },
+  overkill: { label: 'Killing Blow!', color: 'var(--danger)' }
+}
+
+function DismembermentPrompt({
+  mode,
+  closing,
+  onPick,
+  onDismiss
+}: {
+  mode: 'minor' | 'major' | 'overkill'
+  closing: boolean
+  onPick: (tag: string) => void
+  onDismiss: () => void
+}): JSX.Element {
+  const tier = DISMEMBERMENT_TIER[mode]
+  const table = mode === 'minor' ? MINOR_DISMEMBERMENT_TABLE : mode === 'major' ? MAJOR_DISMEMBERMENT_TABLE : null
+
+  return (
+    <div
+      className={closing ? 'gb-card gb-pop-out' : 'gb-card'}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        padding: 'var(--space-2)',
+        background: 'var(--bg-sunken)',
+        borderColor: tier.color,
+        borderWidth: 2,
+        boxShadow: `0 0 0 1px ${tier.color} inset`
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <strong style={{ fontSize: 12, color: tier.color, letterSpacing: '0.02em', textTransform: 'uppercase' }}>{tier.label}</strong>
+        <button
+          type="button"
+          onClick={onDismiss}
+          title="Dismiss"
+          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}
+        >
+          ×
+        </button>
+      </div>
+      {mode === 'overkill' ? (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <DismembermentTile label="Beheaded" color={tier.color} onClick={() => onPick('Beheaded')} />
+          <DismembermentTile label="Bisected" color={tier.color} onClick={() => onPick('Bisected')} />
+        </div>
+      ) : (
+        table && <DismembermentRoller table={table} color={tier.color} onPick={onPick} />
+      )}
+    </div>
+  )
+}
+
+/** One overkill result (Beheaded/Bisected) — a proper full-width tile rather than a plain small button, since this is the single biggest moment the whole system offers. */
+function DismembermentTile({ label, color, onClick }: { label: string; color: string; onClick: () => void }): JSX.Element {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        flex: 1,
+        padding: '10px 6px',
+        borderRadius: 'var(--radius-sm)',
+        border: `1px solid ${color}`,
+        background: hover ? color : 'transparent',
+        color: hover ? 'var(--bg-surface)' : color,
+        fontSize: 12,
+        fontWeight: 700,
+        letterSpacing: '0.02em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        transition: 'background 100ms ease, color 100ms ease'
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+const ROLL_TICK_MS = 70
+const ROLL_TICKS = 10
+
+/**
+ * The minor/major body-part picker — a grid of proper tiles (not small
+ * dashed badges) for the DM to pick a specific part by hand (a player
+ * targeted it directly), plus a Roll button that chases a highlight through
+ * the tiles for a beat before landing on one and adding it, instead of the
+ * result just appearing instantly. Chained setTimeout rather than
+ * setInterval for the chase, same reasoning as RollAnimationOverlay's own
+ * flicker — see that file's doc comment for why.
+ */
+function DismembermentRoller({ table, color, onPick }: { table: string[]; color: string; onPick: (tag: string) => void }): JSX.Element {
+  const [rollingIndex, setRollingIndex] = useState<number | null>(null)
+  const [landedIndex, setLandedIndex] = useState<number | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  useEffect(() => () => clearTimeout(timerRef.current), [])
+
+  function roll(): void {
+    if (rollingIndex !== null) return
+    playSfx('diceRoll')
+    const finalIndex = Math.floor(Math.random() * table.length)
+
+    function tick(remaining: number): void {
+      setRollingIndex(Math.floor(Math.random() * table.length))
+      if (remaining <= 0) {
+        setRollingIndex(null)
+        setLandedIndex(finalIndex)
+        timerRef.current = setTimeout(() => onPick(table[finalIndex]), 350)
+        return
+      }
+      timerRef.current = setTimeout(() => tick(remaining - 1), ROLL_TICK_MS)
+    }
+    tick(ROLL_TICKS)
+  }
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        onClick={roll}
+        disabled={rollingIndex !== null || landedIndex !== null}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11, padding: '4px 8px' }}
+      >
+        <DiceIcon size={13} style={{ color: 'currentColor' }} />
+        Roll
+      </Button>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+        {table.map((tag, i) => {
+          const active = rollingIndex === i || landedIndex === i
+          return (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => onPick(tag)}
+              disabled={rollingIndex !== null}
+              style={{
+                padding: '5px 4px',
+                borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${active ? color : 'var(--border-subtle)'}`,
+                background: active ? color : 'var(--bg-surface-raised)',
+                color: active ? 'var(--bg-surface)' : 'var(--text-secondary)',
+                fontSize: 10,
+                fontWeight: active ? 700 : 400,
+                cursor: rollingIndex !== null ? 'default' : 'pointer',
+                transition: 'background 60ms ease, color 60ms ease, border-color 60ms ease'
+              }}
+            >
+              {tag}
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+/**
+ * A removable `.gb-badge` (status effect, dismemberment tag) that plays its
+ * own gb-pop-out on the × click before actually calling `onRemove` — array
+ * items don't get the benefit useMountAnimation gives a single popover
+ * (there's no one "open" boolean; each tag needs its own local closing
+ * state), so this owns that locally instead: clicking × flips `leaving`,
+ * which drives useMountAnimation exactly like a lone popover would, and
+ * `onRemove` only actually fires once that animation has played out.
+ */
+function FadeOutBadge({ children, color, onRemove }: { children: ReactNode; color?: string; onRemove: () => void }): JSX.Element | null {
+  const [leaving, setLeaving] = useState(false)
+  const { rendered, closing } = useMountAnimation(!leaving)
+
+  useEffect(() => {
+    if (leaving && !rendered) onRemove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rendered, leaving])
+
+  if (!rendered) return null
+
+  return (
+    <span
+      className={closing ? 'gb-badge gb-pop-out' : 'gb-badge'}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color, borderColor: color }}
+    >
+      {children}
+      <button
+        type="button"
+        onClick={() => setLeaving(true)}
+        style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}
+      >
+        ×
+      </button>
+    </span>
   )
 }
 
@@ -1250,6 +1643,7 @@ function HpHeartControl({
 function AddStatusEffectControl({ options, onAdd }: { options: string[]; onAdd: (effect: string) => void }): JSX.Element {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const { rendered, closing } = useMountAnimation(open)
 
   useEffect(() => {
     if (!open) return
@@ -1271,9 +1665,9 @@ function AddStatusEffectControl({ options, onAdd }: { options: string[]; onAdd: 
       >
         + Status
       </button>
-      {open && (
+      {rendered && (
         <div
-          className="gb-card"
+          className={closing ? 'gb-card gb-pop-out' : 'gb-card'}
           style={{
             position: 'absolute',
             top: '100%',

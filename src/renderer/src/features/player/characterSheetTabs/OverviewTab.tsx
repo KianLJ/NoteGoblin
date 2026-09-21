@@ -342,8 +342,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           Exhaustion 6 — {character.name || 'This character'} has died.
         </div>
       )}
-      {shortRestOpen && (
-        <Modal onClose={() => setShortRestOpen(false)} width={380}>
+      <Modal open={shortRestOpen} onClose={() => setShortRestOpen(false)} width={380}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <div>
               <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>Short Rest</h3>
@@ -375,8 +374,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
               Done
             </Button>
           </div>
-        </Modal>
-      )}
+      </Modal>
 
       <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <label

@@ -110,29 +110,27 @@ export function PlayerWorkspaceBody({
         />
       )}
 
-      {characterPromptOpen && characters && (
-        <Modal onClose={() => setCharacterPromptOpen(false)} width={400}>
-          <h2 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 18 }}>Which character?</h2>
-          <p style={{ margin: '0 0 var(--space-3)', fontSize: 13, color: 'var(--text-muted)' }}>
-            Choose who you're playing at this table — you can always switch later from the corner.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {characters.map((c) => (
-              <Button
-                key={c.id}
-                variant={activeCharacter?.id === c.id ? 'primary' : 'secondary'}
-                onClick={() => {
-                  openTab({ kind: 'character', id: c.id })
-                  setCharacterPromptOpen(false)
-                }}
-                style={{ justifyContent: 'flex-start' }}
-              >
-                {c.name || 'Unnamed Character'}
-              </Button>
-            ))}
-          </div>
-        </Modal>
-      )}
+      <Modal open={characterPromptOpen && !!characters} onClose={() => setCharacterPromptOpen(false)} width={400}>
+        <h2 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 18 }}>Which character?</h2>
+        <p style={{ margin: '0 0 var(--space-3)', fontSize: 13, color: 'var(--text-muted)' }}>
+          Choose who you're playing at this table — you can always switch later from the corner.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(characters ?? []).map((c) => (
+            <Button
+              key={c.id}
+              variant={activeCharacter?.id === c.id ? 'primary' : 'secondary'}
+              onClick={() => {
+                openTab({ kind: 'character', id: c.id })
+                setCharacterPromptOpen(false)
+              }}
+              style={{ justifyContent: 'flex-start' }}
+            >
+              {c.name || 'Unnamed Character'}
+            </Button>
+          ))}
+        </div>
+      </Modal>
 
       {error && (
         <p

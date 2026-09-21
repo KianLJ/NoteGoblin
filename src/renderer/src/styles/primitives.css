@@ -56,6 +56,11 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   padding: var(--space-5);
+  /* Every card — including every menu/popover/toast built on top of this
+     class (ContextMenu, NotificationToasts, the various dropdown panels in
+     InitiativeTracker.tsx, etc.) — eases in on mount instead of snapping
+     into view. See global.css's gb-fade-in keyframes for the shared timing. */
+  animation: gb-fade-in 140ms ease-out;
 }
 
 .gb-input {
@@ -97,6 +102,11 @@
   letter-spacing: 0.05em;
   background: var(--bg-sunken);
   color: var(--text-secondary);
+  /* A status-effect/dismemberment/exhaustion tag popping onto a card reads
+     as a real change happening, not a layout glitch — see global.css's
+     gb-fade-in keyframes for the shared timing every "pop into existence"
+     element in the app uses. */
+  animation: gb-fade-in 140ms ease-out;
 }
 .gb-badge--accent {
   background: var(--accent-subtle);

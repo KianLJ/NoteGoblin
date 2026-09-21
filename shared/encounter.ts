@@ -48,24 +48,42 @@ export type Combatant = {
   statusEffects: string[]
   /** kind 'player' only, and only once currentHp <= 0 — SRD death saving throws. Cleared (set back to null) once currentHp rises back above 0. */
   deathSaves: DeathSaves | null
+  /** Optional dismemberment flavor tags ("Left Arm Severed", "Beheaded", etc.) — see InitiativeState.dismembermentEnabled. Visible to players the same way statusEffects is, since a severed limb is as much normal tactical/narrative information as being prone. */
+  dismemberments: string[]
 }
 
 export interface InitiativeState {
   round: number
   /** DM's call — when true, a player's own death saves are visible only to the DM, not to that player or the rest of the party (some tables prefer the tension of not knowing your own odds). */
   deathSavesPrivate: boolean
+  /** Per-encounter opt-in (defaults off) — a single hit dealing 1/4 or more of a combatant's max HP offers the DM a dismemberment (dice-rolled or manually chosen body part), and a hit that kills outright with damage at or past their full max HP offers a beheading/cut-in-half instead. Applies to any combatant taking damage, player or monster, not just monsters — see InitiativeTracker.tsx's applyDamageOrHeal. */
+  dismembermentEnabled: boolean
   /** Index into `combatants` (already sorted by initiative, highest first) whose turn it is. -1 = combat not started yet. */
   turnIndex: number
   combatants: Combatant[]
 }
 
 export function emptyInitiativeState(): InitiativeState {
-  return { round: 1, turnIndex: -1, combatants: [], deathSavesPrivate: false }
+  return { round: 1, turnIndex: -1, combatants: [], deathSavesPrivate: false, dismembermentEnabled: false }
 }
 
-export function emptyCombatant(): Pick<Combatant, 'statusEffects' | 'deathSaves'> {
-  return { statusEffects: [], deathSaves: null }
+export function emptyCombatant(): Pick<Combatant, 'statusEffects' | 'deathSaves' | 'dismemberments'> {
+  return { statusEffects: [], deathSaves: null, dismemberments: [] }
 }
+
+/**
+ * Dismemberment results, tiered by how much of a hit it takes to earn them —
+ * see InitiativeState.dismembermentEnabled and InitiativeTracker.tsx's
+ * applyDamageOrHeal for the actual thresholds. A glancing-but-still-heavy
+ * hit (>=1/4 max HP) only offers something losable without immediately
+ * crippling the target; a real haymaker (>=1/2 max HP) is what earns a
+ * whole limb. Beheading/bisection isn't a table roll at all — see
+ * DismembermentPrompt's 'overkill' mode — since it only ever comes up
+ * alongside a killing blow that also dealt the target's entire max HP in
+ * one hit, at which point it's a DM pick between the two, not a d-whatever.
+ */
+export const MINOR_DISMEMBERMENT_TABLE = ['Left Hand', 'Right Hand', 'Left Finger', 'Right Finger', 'Left Ear', 'Right Ear', 'Left Eye', 'Right Eye']
+export const MAJOR_DISMEMBERMENT_TABLE = ['Left Arm', 'Right Arm', 'Left Leg', 'Right Leg']
 
 /** Combatants in turn order — initiative descending, ties broken by name so the order is at least stable and predictable. */
 export function sortedByInitiative(combatants: Combatant[]): Combatant[] {
@@ -92,6 +110,7 @@ export interface PlayerVisibleCombatant {
   dead: boolean
   isSelf: boolean
   statusEffects: string[]
+  dismemberments: string[]
   /** Only ever populated for the viewer's own combatant, and only when the DM hasn't made death saves private — see InitiativeState.deathSavesPrivate. */
   deathSaves: DeathSaves | null
 }
@@ -161,6 +180,7 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
         dead: c.currentHp <= 0,
         isSelf,
         statusEffects: c.statusEffects,
+        dismemberments: c.dismemberments,
         deathSaves: isSelf && !state.deathSavesPrivate ? c.deathSaves : null
       }
     })

@@ -10,6 +10,7 @@ import {
 import type { Folder, Note } from '@shared/ipc'
 import { ContextMenu, type ContextMenuItem, type ContextMenuState } from '../../ui/ContextMenu'
 import { Modal } from '../../ui/Modal'
+import { useLastTruthy } from '../../ui/useLastTruthy'
 import { Button } from '../../ui/Button'
 import {
   ChevronRightIcon,
@@ -181,6 +182,7 @@ export function NoteTreeSection({
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pendingDelete, setPendingDelete] = useState<{ message: string; folderIds: string[]; noteIds: string[] } | null>(null)
+  const lastPendingDelete = useLastTruthy(pendingDelete)
   const lastSelectedKeyRef = useRef<string | null>(null)
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map())
   const sortMenuRef = useRef<HTMLDivElement>(null)
@@ -982,28 +984,26 @@ export function NoteTreeSection({
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
 
-      {pendingDelete && (
-        <Modal onClose={() => setPendingDelete(null)} width={360}>
-          <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 var(--space-4)' }}>
-            {pendingDelete.message}
-          </p>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
-            <Button variant="secondary" onClick={() => setPendingDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
-              onClick={() => {
-                performDelete(pendingDelete.folderIds, pendingDelete.noteIds)
-                setPendingDelete(null)
-              }}
-            >
-              Delete
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <Modal open={pendingDelete !== null} onClose={() => setPendingDelete(null)} width={360}>
+        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 var(--space-4)' }}>
+          {lastPendingDelete?.message}
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+          <Button variant="secondary" onClick={() => setPendingDelete(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+            onClick={() => {
+              if (pendingDelete) performDelete(pendingDelete.folderIds, pendingDelete.noteIds)
+              setPendingDelete(null)
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

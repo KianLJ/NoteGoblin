@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { Modal } from '../../ui/Modal'
+import { useLastTruthy } from '../../ui/useLastTruthy'
 import type { Campaign } from '@shared/ipc'
 import { playSfx } from '../audio/soundEffects'
 
@@ -26,6 +27,7 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [pendingDelete, setPendingDelete] = useState<Campaign | null>(null)
+  const lastPendingDelete = useLastTruthy(pendingDelete)
   const [hostingBusy, setHostingBusy] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -339,26 +341,24 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
         </span>
       </button>
 
-      {pendingDelete && (
-        <Modal onClose={() => setPendingDelete(null)} width={360}>
-          <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 var(--space-4)' }}>
-            Delete "{pendingDelete.name}"? Every note, folder, character, and message in it goes with it. This can't
-            be undone.
-          </p>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
-            <Button variant="secondary" onClick={() => setPendingDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
-              onClick={confirmDeleteCampaign}
-            >
-              Delete
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <Modal open={pendingDelete !== null} onClose={() => setPendingDelete(null)} width={360}>
+        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 var(--space-4)' }}>
+          Delete "{lastPendingDelete?.name}"? Every note, folder, character, and message in it goes with it. This
+          can't be undone.
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+          <Button variant="secondary" onClick={() => setPendingDelete(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+            onClick={confirmDeleteCampaign}
+          >
+            Delete
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

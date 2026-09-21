@@ -4,6 +4,7 @@ import { useCalendar } from './useCalendar'
 import { CalendarCreatorWizard } from './CalendarCreatorWizard'
 import { Button } from '../../ui/Button'
 import { Modal } from '../../ui/Modal'
+import { useLastTruthy } from '../../ui/useLastTruthy'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { getStoredFontScale } from '../../theme'
 import {
@@ -91,6 +92,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
   const dayPanelHeightRef = useRef(dayPanelHeight)
   dayPanelHeightRef.current = dayPanelHeight
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+  const lastEditingEvent = useLastTruthy(editingEvent)
 
   useEffect(() => {
     const el = splitRef.current
@@ -643,10 +645,12 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
         />
       )}
 
-      {!readOnly && editingEvent && (
+      {lastEditingEvent && (
         <EventEditorModal
-          event={editingEvent}
-          isNew={!config.events.some((e) => e.id === editingEvent.id)}
+          key={lastEditingEvent.id}
+          open={!readOnly && editingEvent !== null}
+          event={lastEditingEvent}
+          isNew={!config.events.some((e) => e.id === lastEditingEvent.id)}
           notes={notes}
           onSave={commitEvent}
           onDelete={editingEvent && config.events.some((e) => e.id === editingEvent.id) ? () => deleteEvent(editingEvent.id).then(() => setEditingEvent(null)) : undefined}
@@ -658,6 +662,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
 }
 
 function EventEditorModal({
+  open,
   event,
   isNew,
   notes,
@@ -665,6 +670,7 @@ function EventEditorModal({
   onDelete,
   onClose
 }: {
+  open: boolean
   event: CalendarEvent
   isNew: boolean
   notes: Note[]
@@ -675,7 +681,7 @@ function EventEditorModal({
   const [draft, setDraft] = useState(event)
 
   return (
-    <Modal onClose={onClose} width={420}>
+    <Modal open={open} onClose={onClose} width={420}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>{isNew ? 'Add Event' : 'Edit Event'}</h2>
         <div style={{ display: 'flex', gap: 6 }}>

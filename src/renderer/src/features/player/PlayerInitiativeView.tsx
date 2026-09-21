@@ -114,6 +114,15 @@ export function PlayerInitiativeView({ sessionId }: PlayerInitiativeViewProps): 
               ))}
             </div>
           )}
+          {c.dismemberments.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+              {c.dismemberments.map((tag) => (
+                <span key={tag} className="gb-badge" style={{ fontSize: 9, color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

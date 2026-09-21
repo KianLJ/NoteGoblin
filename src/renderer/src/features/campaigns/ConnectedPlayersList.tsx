@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import type { CharacterSheet, ForceRollRequest, PresencePlayer } from '@shared/ipc'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 import { ForceRollDialog } from './ForceRollDialog'
+import { useLastTruthy } from '../../ui/useLastTruthy'
 import { DiceIcon } from '../player/characterSheetTabs/icons'
 import { playSfx } from '../audio/soundEffects'
 
@@ -22,6 +23,7 @@ export function ConnectedPlayersList({
   const [players, setPlayers] = useState<PresencePlayer[]>([])
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [forceRollTarget, setForceRollTarget] = useState<PresencePlayer | null>(null)
+  const lastForceRollTarget = useLastTruthy(forceRollTarget)
   const [myName, setMyName] = useState('The DM')
   const [disconnectToast, setDisconnectToast] = useState<string | null>(null)
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -149,12 +151,14 @@ export function ConnectedPlayersList({
       })}
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
-      {forceRollTarget && (
+      {lastForceRollTarget && (
         <ForceRollDialog
-          playerName={forceRollTarget.displayName}
+          key={lastForceRollTarget.userId}
+          open={forceRollTarget !== null}
+          playerName={lastForceRollTarget.displayName}
           fromDisplayName={myName}
           onClose={() => setForceRollTarget(null)}
-          onSend={(request) => sendForceRoll(forceRollTarget, request)}
+          onSend={(request) => forceRollTarget && sendForceRoll(forceRollTarget, request)}
         />
       )}
     </div>
