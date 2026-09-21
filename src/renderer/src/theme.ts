@@ -93,6 +93,30 @@ const MODE_KEY = 'gb-theme-mode'
 const overridesKey = (theme: ResolvedTheme): string => `gb-theme-overrides-${theme}`
 const groupColorKey = (theme: ResolvedTheme, group: string): string => `gb-theme-group-${theme}-${group}`
 
+/**
+ * Which local identity the theme/font state currently sitting in this
+ * device's localStorage actually belongs to — every key above is a single
+ * device-wide bucket, not namespaced per identity, so switching to a
+ * different local identity on the same device leaves the PREVIOUS
+ * identity's customization sitting right there in storage. Without this,
+ * App.tsx's onPrefsChecked seed-an-empty-account logic (see
+ * hasCustomThemePrefs's own doc comment for why that exists) couldn't tell
+ * "this device's own real customization, made by whoever's logged in now"
+ * apart from "leftover colors from someone else who used this device
+ * earlier" — and would happily push the latter up as if it were the
+ * newly-logged-in identity's own, silently overwriting THEIR real saved
+ * account prefs with a stranger's.
+ */
+const THEME_OWNER_KEY = 'gb-theme-owner-identity'
+
+export function getThemeOwnerIdentityId(): string | null {
+  return localStorage.getItem(THEME_OWNER_KEY)
+}
+
+export function setThemeOwnerIdentityId(id: string): void {
+  localStorage.setItem(THEME_OWNER_KEY, id)
+}
+
 function isThemeMode(value: string | null): value is ThemeMode {
   return value === 'light' || value === 'dark' || value === 'system'
 }
@@ -205,6 +229,29 @@ export function resetAllColorOverrides(theme: ResolvedTheme): void {
   for (const group of TINTABLE_GROUPS) localStorage.removeItem(groupColorKey(theme, group))
   if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
   schedulePrefsPush()
+}
+
+/**
+ * Wipes every local theme/font key back to unset (so every getter above
+ * resolves to its built-in default) and re-applies immediately — used when
+ * switching to an identity that owns none of this device's current
+ * customization (see THEME_OWNER_KEY) and has no relay-saved prefs of its
+ * own either, so it sees the app's real defaults instead of a previous
+ * identity's leftover colors. Deliberately does NOT call schedulePrefsPush
+ * — clearing a display artifact locally is not this identity's own choice
+ * to push up as their saved preference.
+ */
+export function resetThemePrefs(): void {
+  localStorage.removeItem(MODE_KEY)
+  localStorage.removeItem(FONT_KEY)
+  localStorage.removeItem(FONT_SCALE_KEY)
+  for (const theme of ['light', 'dark'] as ResolvedTheme[]) {
+    localStorage.removeItem(overridesKey(theme))
+    for (const group of TINTABLE_GROUPS) localStorage.removeItem(groupColorKey(theme, group))
+  }
+  applyTheme(getStoredMode())
+  applyFont(getStoredFontId())
+  applyFontScale(getStoredFontScale())
 }
 
 /** Applies the stored (or default) theme immediately, and keeps 'system' mode in sync with OS changes while the app is open. Call once at startup. */

@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.13',
+    title: 'Cross-device login and appearance-sync fixes',
+    highlights: [
+      'Fixed logging into a shared relay account sometimes failing to reconnect its real campaign data ("an existing row already uses this id under a different name") when the locally-typed display name didn\'t exactly match how it was stored — it\'s now correctly recognized as the same account and reconnected instead of blocked',
+      'Fixed a device that had already customized its own appearance silently overwriting a different account\'s saved theme/colors with its own the moment that account logged in for the first time with nothing saved yet — appearance sync is now tracked per local identity instead of one shared bucket per device'
+    ]
+  },
+  {
     version: '0.5.12',
     title: 'Dismemberment, a redesigned combatant card, and app-wide fade animations',
     highlights: [

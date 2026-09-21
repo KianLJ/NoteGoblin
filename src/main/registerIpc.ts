@@ -494,17 +494,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (!existing) {
       const collision = userRepo.findById(desiredId)
       if (collision) {
-        // A row with this exact id but no real data attached anywhere
-        // (see isHostUserDataFree) is just leftover debris from some
-        // earlier provisioning path on this device — e.g. this same
-        // machine briefly acting as a different account while testing —
-        // not a second identity worth protecting. Safe to clear it and
-        // proceed rather than blocking the real login over it.
-        if (isHostUserDataFree(db, desiredId)) {
-          db.prepare('DELETE FROM users WHERE id = ?').run(desiredId)
-        } else {
-          return { error: `Could not set up your host account here — an existing row already uses this id under a different name ("${collision.display_name}").` }
+        // A local row at this EXACT id can only ever be this same relay
+        // account — ids here are server-issued and authoritative, never
+        // reused across different real accounts — so this isn't a genuine
+        // conflict with someone else's row, just this account's own row
+        // sitting under a display name that later fell out of sync (e.g.
+        // a local rename via identity:update-display-name, which
+        // deliberately never touches this table — see its own comment).
+        // Renaming in place (rather than deleting it as stale debris, or
+        // erroring out) is what actually reconnects the account's real
+        // campaign data instead of stranding it under the old name.
+        if (collision.password_hash !== identity.passwordHash) {
+          db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(identity.passwordHash, desiredId)
         }
+        if (collision.display_name !== identity.displayName) userRepo.rename(desiredId, identity.displayName)
+        return { db, userId: desiredId }
       }
       const hostUser = userRepo.insertWithId(desiredId, identity.displayName, identity.passwordHash)
       return { db, userId: hostUser.id }

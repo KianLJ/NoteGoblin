@@ -2,7 +2,15 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { LoginScreen } from './features/auth/LoginScreen'
 import { onIdentitySwitched } from './features/auth/identityEvents'
 import { AppShell } from './features/shell/AppShell'
-import { applyThemePrefs, collectThemePrefs, hasCustomThemePrefs, type ThemePrefs } from './theme'
+import {
+  applyThemePrefs,
+  collectThemePrefs,
+  hasCustomThemePrefs,
+  getThemeOwnerIdentityId,
+  setThemeOwnerIdentityId,
+  resetThemePrefs,
+  type ThemePrefs
+} from './theme'
 import type { Identity } from '@shared/ipc'
 
 function App(): JSX.Element {
@@ -20,14 +28,37 @@ function App(): JSX.Element {
   // because the relay came back empty — that would silently overwrite a
   // genuinely customized account with nothing the moment such a device
   // happens to log in first (see hasCustomThemePrefs's doc comment).
-  useEffect(
-    () =>
-      window.goblin.identity.onPrefsChecked((prefs) => {
-        if (prefs) applyThemePrefs(prefs as ThemePrefs)
-        else if (hasCustomThemePrefs()) void window.goblin.identity.pushPrefs(collectThemePrefs())
-      }),
-    []
-  )
+  //
+  // hasCustomThemePrefs alone isn't enough to gate that push, though: every
+  // theme/font key is one device-wide localStorage bucket, not namespaced
+  // per identity (see THEME_OWNER_KEY's own doc comment) — so on a device
+  // someone else already customized, switching to a second local identity
+  // with no relay prefs of its own would otherwise see "yes, customized" and
+  // push THEIR leftover colors up as if they belonged to this new account,
+  // silently overwriting its real saved prefs with a stranger's. Only push
+  // when this identity is the one THEME_OWNER_KEY says actually owns the
+  // current local state (or nothing has claimed it yet, e.g. an existing
+  // install from before this tracking existed). Otherwise this identity
+  // isn't customized at all yet — reset to real defaults instead of
+  // silently showing whoever used this device last, then claim ownership so
+  // a genuine edit from here on gets attributed correctly.
+  useEffect(() => {
+    if (!identity) return
+    return window.goblin.identity.onPrefsChecked((prefs) => {
+      if (prefs) {
+        applyThemePrefs(prefs as ThemePrefs)
+        setThemeOwnerIdentityId(identity.id)
+        return
+      }
+      const owner = getThemeOwnerIdentityId()
+      if (hasCustomThemePrefs() && (owner === null || owner === identity.id)) {
+        void window.goblin.identity.pushPrefs(collectThemePrefs())
+      } else if (owner !== identity.id) {
+        resetThemePrefs()
+      }
+      setThemeOwnerIdentityId(identity.id)
+    })
+  }, [identity])
 
   return (
     <ScaledApp>
