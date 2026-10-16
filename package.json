@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-builder install-app-deps",
     "relay:dev": "cd relay && npx wrangler dev",
-    "relay:deploy": "cd relay && npx wrangler deploy"
+    "relay:deploy": "cd relay && npx wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -51,7 +53,8 @@
     "electron-builder": "24.13.3",
     "electron-vite": "2.3.0",
     "typescript": "5.9.3",
-    "vite": "5.4.21"
+    "vite": "5.4.21",
+    "vitest": "^2.1.9"
   },
   "allowScripts": {
     "argon2@0.40.3": true,
