@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import { activeFeatIds, applyExhaustionToMaxHp, computeMaxHp, exhaustionEffectsDescription, abilityModifier } from '@shared/dnd5e'
+import { exhaustionEffectsDescription, abilityModifier } from '@shared/dnd5e'
+import { deriveSheet } from '@shared/content/sheet'
 import { buildCheckRollEntry, formatModifierTerm } from '@shared/dice'
 import { ExhaustionIcon, HeartIcon, ShieldIcon, DiceIcon } from '../player/characterSheetTabs/icons'
 import { GearIcon } from '../account/icons'
 import { useMountAnimation } from '../../ui/useMountAnimation'
 import { useLastTruthy } from '../../ui/useLastTruthy'
-import { effectiveAbilityScores, computeArmorClassFromEquipment } from '@shared/compendium'
 import { HoverDetailCard } from '../player/HoverDetailCard'
 import { renderStatblockHtml } from '../../statblock'
 import {
@@ -62,21 +62,19 @@ const STATUS_EFFECT_PRESETS = [
 const MAX_UNDO_HISTORY = 20
 
 function playerToCombatant(userId: string, character: CharacterSheet): Combatant {
-  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-  const featIds = activeFeatIds(character.classes, character.asiSlotChoices)
+  // The same content-engine numbers the character's own sheet shows (see
+  // shared/content/sheet.ts) — so a Constitution bonus from a feat/ASI,
+  // exhaustion level 4's halving, or an item's AC bonus all match here
+  // instead of a stale/different number the DM never sees corrected.
+  const { derived } = deriveSheet(character)
   return {
     id: `player:${userId}`,
     name: character.name,
     kind: 'player',
     initiative: null,
-    // effScores (not the raw base scores) so a Constitution bonus from a
-    // feat/ASI actually raises Max HP here too — same source OverviewTab's
-    // own Max HP already uses, and exhaustion level 4's halving on top,
-    // matching what the character's own sheet shows instead of a stale/
-    // higher number the DM never sees corrected.
-    maxHp: applyExhaustionToMaxHp(computeMaxHp(character.classes, effScores), character.exhaustionLevel),
+    maxHp: derived.maxHp,
     currentHp: character.currentHp,
-    ac: computeArmorClassFromEquipment(character.equipment, effScores, featIds, character.classes),
+    ac: derived.armorClass,
     userId,
     ...emptyCombatant()
   }
@@ -105,7 +103,7 @@ function monsterDexModifier(monster: BestiaryMonster | undefined): number {
   return abilityModifier(Number.isFinite(score) ? score : 10)
 }
 
-/** Dexterity modifier for whichever combatant this is — the same effective-score derivation already used for HP/AC above, so a feat/ASI Dex bonus raises initiative here too, not just those two. Monsters look themselves up in the bestiary by `monsterIndex`; a combatant that's neither a matched player nor monster (shouldn't normally happen) rolls flat. */
+/** Initiative modifier for whichever combatant this is — a player's comes from the same content-engine derivation as HP/AC above (Dex modifier plus anything like Alert's proficiency bonus), so it matches their sheet. Monsters look themselves up in the bestiary by `monsterIndex`; a combatant that's neither a matched player nor monster (shouldn't normally happen) rolls flat. */
 function initiativeModifierFor(
   c: Combatant,
   playerCharacters: Map<string, CharacterSheet>,
@@ -113,10 +111,7 @@ function initiativeModifierFor(
 ): number {
   if (c.kind === 'player' && c.userId) {
     const character = playerCharacters.get(c.userId)
-    if (character) {
-      const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-      return abilityModifier(effScores.dex)
-    }
+    if (character) return deriveSheet(character).derived.initiative
   }
   if (c.kind === 'monster') {
     return monsterDexModifier(allMonsters.find((m) => m.index === c.monsterIndex))
@@ -206,10 +201,7 @@ export function InitiativeTracker({
         if (c.kind !== 'player' || !c.userId) return c
         const character = playerCharacters.get(c.userId)
         if (!character) return c
-        const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-        const featIds = activeFeatIds(character.classes, character.asiSlotChoices)
-        const maxHp = applyExhaustionToMaxHp(computeMaxHp(character.classes, effScores), character.exhaustionLevel)
-        const ac = computeArmorClassFromEquipment(character.equipment, effScores, featIds, character.classes)
+        const { maxHp, armorClass: ac } = deriveSheet(character).derived
         if (maxHp === c.maxHp && ac === c.ac) return c
         changed = true
         return { ...c, maxHp, ac }

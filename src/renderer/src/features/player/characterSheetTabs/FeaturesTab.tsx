@@ -17,7 +17,6 @@ import {
   lineageOptionsForRace,
   metamagicSlotCountAtLevel,
   metamagicSlotUnlockLevel,
-  resourcesForCharacter,
   sneakAttackDice,
   subclassFightingStyleSlotLevelsUpToLevel,
   totalLevel,
@@ -33,19 +32,20 @@ import {
   SPELLS,
   buildAsiSlotResolutionPatch,
   circleSpellLevelsUpToLevel,
-  effectiveAbilityScores,
   getSpellById,
   groupedSubclassFeaturesForLevelUp,
-  isActivatableResource,
   spellLevelLabel,
   spellSlotsForClassLevel,
   spellSlotsForClasses,
   subclassesForClass,
   type FeatEffect
 } from '@shared/compendium'
+import type { DerivedToggle } from '@shared/content/engine'
+import { deriveSheet, effectiveScores } from '@shared/content/sheet'
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { useAutosaveDraft } from '../useAutosaveDraft'
+import { useDerivedSheet } from '../useDerivedSheet'
 import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import {
   AsiSlotChooser,
@@ -77,6 +77,14 @@ interface FeaturesTabProps {
   readOnly?: boolean
   /** Threaded down from CombatTab, same as elsewhere — lets an "Activate X" click here play (and, at the table, broadcast) that resource's Class Features cue, same as CombatTab's own duplicate of this section. */
   sessionId?: string | null
+}
+
+const RECHARGE_LABEL: Record<string, string> = {
+  short: 'Short or Long Rest',
+  long: 'Long Rest',
+  dawn: 'Dawn',
+  turn: 'Start of each turn',
+  none: "Doesn't recharge"
 }
 
 function effectLabel(effect: FeatEffect): string {
@@ -187,8 +195,9 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
   )
   const [featureDraft, setFeatureDraft] = useAutosaveDraft<FeaturesDraft>({ features: character.features }, onSave, readOnly)
 
-  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-  const resources = resourcesForCharacter(character.classes, effScores)
+  // Resources (and the toggles that spend them) come from the content engine — see shared/content/sheet.ts.
+  const { derived } = useDerivedSheet(character)
+  const resources = derived.resources
   const activeFeats = activeFeatIds(character.classes, character.asiSlotChoices)
   const feats = activeFeats.map((id) => FEATS.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f)
   const race = RACES.find((r) => r.name.toLowerCase() === character.race.trim().toLowerCase())
@@ -208,18 +217,18 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
     setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
   }
 
-  /** Activating spends a use, same as any other use of this resource (so Rage's uses tracker and its "active" state never drift apart) — deactivating never refunds it, matching how raging doesn't give the use back when it ends. Plays (and, at the table, broadcasts) this resource's own Class Features cue on activation only — see playAbilitySfx. */
-  function toggleBuff(resourceId: string, name: string, kind: 'uses' | 'pool', currentUsed: number, max: number): void {
+  /** Activating spends the toggle's cost from this resource (so Rage's uses tracker and its "active" state never drift apart) — deactivating never refunds it, matching how raging doesn't give the use back when it ends. Plays (and, at the table, broadcasts) the toggle's own sound cue on activation only — see playAbilitySfx. */
+  function toggleBuff(toggle: DerivedToggle, currentUsed: number, max: number): void {
     if (readOnly) return
-    const active = character.activeBuffs.includes(resourceId)
-    if (active) {
-      onSave({ activeBuffs: character.activeBuffs.filter((id) => id !== resourceId) })
+    if (character.activeBuffs.includes(toggle.id)) {
+      onSave({ activeBuffs: character.activeBuffs.filter((id) => id !== toggle.id) })
       return
     }
-    if (kind === 'uses' && currentUsed >= max) return
-    if (kind === 'uses') setUsed(resourceId, currentUsed + 1, max)
-    playAbilitySfx(name, sessionId)
-    onSave({ activeBuffs: [...character.activeBuffs, resourceId] })
+    const cost = toggle.cost?.amount ?? 0
+    if (max - currentUsed < cost) return
+    if (cost) setUsed(toggle.cost!.resourceId, currentUsed + cost, max)
+    playAbilitySfx(toggle.name, sessionId)
+    onSave({ activeBuffs: [...character.activeBuffs, toggle.id] })
   }
 
   function updateFeature(id: string, fields: Partial<Feature>): void {
@@ -264,13 +273,14 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
             {resources.map((r) => {
-              const used = Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)
-              const remaining = r.currentMax - used
-              const activatable = isActivatableResource(r.id)
-              const active = character.activeBuffs.includes(r.id)
+              const used = Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)
+              const remaining = r.max - used
+              const toggle = derived.toggles.find((t) => t.cost?.resourceId === r.id)
+              const active = !!toggle && character.activeBuffs.includes(toggle.id)
+              const cost = toggle?.cost?.amount ?? 0
               return (
                 <div key={r.id} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
-                  <HoverDetailCard title={r.name} subtitle={r.className} fields={[]} description={r.fullDescription}>
+                  <HoverDetailCard title={r.name} subtitle={r.className ?? r.source} fields={[]} description={r.detail || r.description}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, cursor: 'default' }}>
                       <strong style={{ flex: 1 }}>{r.name}</strong>
                       {active && (
@@ -279,41 +289,29 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
                         </span>
                       )}
                       <span className="gb-badge" style={{ fontSize: 10 }}>
-                        {r.className}
+                        {r.className ?? r.source}
                       </span>
                     </div>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 4px' }}>{r.description}</p>
+                    {r.description && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 4px' }}>{r.description}</p>}
                     <p style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 var(--space-2)' }}>
-                      Recharges: {r.currentRecharge === 'short' ? 'Short or Long Rest' : 'Long Rest'}
+                      Recharges: {RECHARGE_LABEL[r.recharge] ?? r.recharge}
                     </p>
 
-                    {r.kind === 'uses' ? (
-                      <UsesTracker
-                        max={r.currentMax}
-                        used={used}
-                        remaining={remaining}
-                        readOnly={readOnly}
-                        onSetUsed={(n) => setUsed(r.id, n, r.currentMax)}
-                      />
+                    {r.display === 'uses' ? (
+                      <UsesTracker max={r.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={(n) => setUsed(r.id, n, r.max)} />
                     ) : (
-                      <PoolTracker
-                        max={r.currentMax}
-                        used={used}
-                        remaining={remaining}
-                        readOnly={readOnly}
-                        onSetUsed={(n) => setUsed(r.id, n, r.currentMax)}
-                      />
+                      <PoolTracker max={r.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={(n) => setUsed(r.id, n, r.max)} />
                     )}
 
-                    {activatable && (
+                    {toggle && (
                       <Button
                         variant={active ? 'secondary' : 'primary'}
-                        onClick={() => toggleBuff(r.id, r.name, r.kind, used, r.currentMax)}
-                        disabled={readOnly || (!active && r.kind === 'uses' && remaining <= 0)}
+                        onClick={() => toggleBuff(toggle, used, r.max)}
+                        disabled={readOnly || (!active && remaining < cost)}
                         style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 10px' }}
-                        title={active ? `End ${r.name} — its bonuses stop applying immediately` : `Activate ${r.name} — applies its bonuses across the sheet until you end it`}
+                        title={active ? `End ${toggle.name} — its bonuses stop applying immediately` : `Activate ${toggle.name} — applies its bonuses across the sheet until you end it`}
                       >
-                        {active ? `End ${r.name}` : `Activate ${r.name}`}
+                        {active ? `End ${toggle.name}` : `Activate ${toggle.name}`}
                       </Button>
                     )}
                   </HoverDetailCard>
@@ -931,7 +929,7 @@ function ClassFeatureSection({
             key={`asi:${level}`}
             classLabel={classLevel.className}
             level={level}
-            abilityScores={effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)}
+            abilityScores={effectiveScores(deriveSheet(character).derived)}
             readOnly={readOnly}
             onResolve={(entry) => onResolveAsi(entry)}
           />

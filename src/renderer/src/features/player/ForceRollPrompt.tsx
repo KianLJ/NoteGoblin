@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ABILITIES, abilityModifier, activeFeatIds, savingThrowBonus, skillBonus } from '@shared/dnd5e'
-import {
-  effectiveAbilityCheckAdvantage,
-  effectiveAbilityScores,
-  effectiveSavingThrowAdvantage,
-  effectiveSavingThrowProficiencies,
-  effectiveSkillAdvantage,
-  effectiveSkillProficiencies
-} from '@shared/compendium'
+import { ABILITIES } from '@shared/dnd5e'
+import { deriveSheet, skillModeOf, skillOf } from '@shared/content/sheet'
 import type { AdvantageMode } from '@shared/dice'
 import type { CharacterSheet, ForceRollRequest } from '@shared/ipc'
 import { Modal } from '../../ui/Modal'
@@ -20,7 +13,7 @@ interface ForceRollPromptProps {
   character: CharacterSheet | null
 }
 
-/** Same 'advantage'/'disadvantage'/undefined shape effectiveXAdvantage returns — coalesced to shared/dice.ts's AdvantageMode for useSheetRoller. */
+/** The content engine's 'advantage'/'disadvantage'/undefined roll mode, coalesced to shared/dice.ts's AdvantageMode for useSheetRoller. */
 function toAdvantageMode(value: 'advantage' | 'disadvantage' | undefined): AdvantageMode {
   return value ?? 'normal'
 }
@@ -42,22 +35,20 @@ export function ForceRollPrompt({ sessionId, character }: ForceRollPromptProps):
 
   if (!request || !character) return null
 
-  const activeFeats = activeFeatIds(character.classes, character.asiSlotChoices)
-  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-  const effSkillProficiencies = effectiveSkillProficiencies(character.skillProficiencies, activeFeats)
-  const effSaveProficiencies = effectiveSavingThrowProficiencies(character.savingThrowProficiencies, activeFeats)
+  // Same numbers the sheet shows — the content engine's (see shared/content/sheet.ts), cached per sheet.
+  const { derived } = deriveSheet(character)
 
   let modifier = 0
   let advantage: AdvantageMode = 'normal'
   if (request.mode === 'ability-check' && request.ability) {
-    modifier = abilityModifier(effScores[request.ability])
-    advantage = toAdvantageMode(effectiveAbilityCheckAdvantage(activeFeats, character.activeBuffs)[request.ability])
+    modifier = derived.abilities[request.ability].mod
+    advantage = toAdvantageMode(derived.checkModes[request.ability])
   } else if (request.mode === 'saving-throw' && request.ability) {
-    modifier = savingThrowBonus(request.ability, effScores, effSaveProficiencies, character.classes)
-    advantage = toAdvantageMode(effectiveSavingThrowAdvantage(activeFeats, character.activeBuffs)[request.ability])
+    modifier = derived.saves[request.ability].bonus
+    advantage = toAdvantageMode(derived.saves[request.ability].mode)
   } else if (request.mode === 'skill-check' && request.skill) {
-    modifier = skillBonus(request.skill, effScores, effSkillProficiencies, character.classes)
-    advantage = toAdvantageMode(effectiveSkillAdvantage(activeFeats, character.equipment)[request.skill])
+    modifier = skillOf(derived, request.skill)?.bonus ?? 0
+    advantage = toAdvantageMode(skillModeOf(derived, request.skill))
   }
 
   function roll(): void {

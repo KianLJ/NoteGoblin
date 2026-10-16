@@ -1,12 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
   ABILITIES,
   actionTypeFromCastingTime,
   formatModifier,
-  preparedSpellLimit,
-  spellAttackBonus,
-  spellSaveDC,
   spellcasterClassNames,
   type Ability,
   type CharacterSheetData,
@@ -14,15 +11,12 @@ import {
 } from '@shared/dnd5e'
 import {
   SPELLS,
-  cantripsKnownLimit,
-  effectiveAbilityScores,
   getSpellById,
-  knownSpellsLimit,
   searchSpells,
   spellLevelLabel,
-  spellSlotsForClasses,
   type CompendiumSpell
 } from '@shared/compendium'
+import { useDerivedSheet } from '../useDerivedSheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { CompendiumPicker } from '../CompendiumPicker'
 import type { DetailField } from '../CompendiumDetailModal'
@@ -97,24 +91,29 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
     setDraft((prev) => ({ ...prev, ...fields }))
   }
 
-  // Slot totals come from the official SRD progression for the character's classes — never hand-entered. Only levels that actually have slots at this level show up at all.
-  const slotTotals = spellSlotsForClasses(character.classes)
+  // Slot totals, DC, attack bonus and the prepared/known/cantrip caps all come from the content engine (see
+  // shared/content/sheet.ts), over the saved sheet with this tab's draft (e.g. a just-changed spellcasting ability)
+  // merged on top. Slots come from each class's spellcasting progression — never hand-entered — and every pool
+  // (Pact Magic included) is summed into one table, as before. Only levels that actually have slots show up at all.
+  const liveSheet = useMemo(() => ({ ...character, ...draft }), [character, draft])
+  const { derived } = useDerivedSheet(liveSheet)
+  const slotTotals: Record<number, number> = {}
+  for (const pool of Object.values(derived.spellcasting.slots)) {
+    for (const [lvl, n] of Object.entries(pool)) slotTotals[Number(lvl)] = (slotTotals[Number(lvl)] ?? 0) + n
+  }
   const slotLevels = Object.keys(slotTotals)
     .map(Number)
     .sort((a, b) => a - b)
 
-  // A feat that boosts the spellcasting ability should raise DC/attack/prepared-count the same way an ASI does — see shared/compendium.ts's effectiveAbilityScores.
-  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-
   // Prepared casters (Cleric/Druid/Wizard/Paladin) and known casters (Bard/Sorcerer/Warlock/Ranger) use different SRD rules, but from here they collapse into the same thing: a cap on how many leveled spells you can have on your list at once.
-  const spellCap = preparedSpellLimit(character.classes, effScores) ?? knownSpellsLimit(character.classes)
+  const spellCap = derived.spellcasting.preparedLimit ?? derived.spellcasting.knownLimit
   // Spells granted for free by a feat or subclass feature (Magic Initiate, Circle Spells) are "always prepared"
   // on top of the normal cap, not counted against it — see Spell.free in shared/dnd5e.ts.
   const leveledSpellCount = draft.spells.filter((s) => s.level > 0 && !s.free).length
   const atSpellCap = spellCap !== null && leveledSpellCount >= spellCap
 
   // Cantrips known is a separate cap from leveled spells — every cantrip-using class tracks the two independently.
-  const cantripCap = cantripsKnownLimit(character.classes)
+  const cantripCap = derived.spellcasting.cantripsLimit
   const cantripCount = draft.spells.filter((s) => s.level === 0 && !s.free).length
   const atCantripCap = cantripCap !== null && cantripCount >= cantripCap
 
@@ -191,8 +190,8 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
     setEditingSpell(null)
   }
 
-  const dc = spellSaveDC(draft.spellcastingAbility, effScores, character.classes)
-  const casterAttackBonus = spellAttackBonus(draft.spellcastingAbility, effScores, character.classes)
+  const dc = derived.spellcasting.dc
+  const casterAttackBonus = derived.spellcasting.attackBonus
 
   const visibleSpells = draft.spells
     .filter(

@@ -3,7 +3,6 @@ import type { CharacterSheet } from '@shared/ipc'
 import type { CharacterSheetData, Currency, EquipmentItem } from '@shared/dnd5e'
 import {
   EQUIPMENT,
-  effectiveAbilityScores,
   getEquipmentById,
   getMagicItemById,
   searchEquipment,
@@ -12,6 +11,7 @@ import {
   type CompendiumMagicItem,
   type EquipmentCategory
 } from '@shared/compendium'
+import { deriveSheet } from '@shared/content/sheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { CompendiumPicker } from '../CompendiumPicker'
 import type { DetailField } from '../CompendiumDetailModal'
@@ -130,9 +130,8 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
   })
 
   const totalWeight = draft.equipment.reduce((sum, item) => sum + item.weight * item.quantity, 0)
-  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-  // SRD carrying capacity: Strength score × 15 lb.
-  const carryCapacity = effScores.str * 15
+  // SRD carrying capacity (Strength score × 15 lb.), from the content engine — so anything that changes it applies here.
+  const carryCapacity = deriveSheet(character).derived.carryingCapacity
   const encumbered = totalWeight > carryCapacity
 
   return (

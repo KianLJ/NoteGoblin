@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
   ABILITIES,
@@ -8,22 +8,11 @@ import {
   SKILLS,
   abilityModifier,
   activeAsiSlotChoices,
-  activeFeatIds,
-  computeInitiative,
   DAMAGE_TYPES,
-  applyExhaustionToMaxHp,
-  applyExhaustionToSpeed,
-  computeMaxHp,
-  computeSpeed,
   exhaustionEffectsDescription,
   formatModifier,
   hitDicePools,
   lineageOptionsForRace,
-  passivePerception,
-  proficiencyBonus,
-  resourcesForCharacter,
-  savingThrowBonus,
-  skillBonus,
   type Ability,
   type AbilityScores,
   type AsiSlotChoice,
@@ -33,24 +22,10 @@ import {
   type HitDicePool,
   type SkillName
 } from '@shared/dnd5e'
-import {
-  FEATS,
-  SPELLS,
-  activeBuffResistances,
-  armorSpeedPenalty,
-  classFeatureSpeedBonus,
-  computeArmorClassFromEquipment,
-  effectiveAbilityCheckAdvantage,
-  effectiveAbilityScores,
-  effectiveInitiativeAdvantage,
-  effectiveSavingThrowAdvantage,
-  effectiveSavingThrowProficiencies,
-  effectiveSkillAdvantage,
-  effectiveSkillProficiencies,
-  featNotes,
-  featSpeedBonus,
-  subclassesForClass
-} from '@shared/compendium'
+import { FEATS, SPELLS, subclassesForClass } from '@shared/compendium'
+import type { DerivedCharacter } from '@shared/content/engine'
+import { deriveSheet, effectiveScores, resourcesRefilledBy, skillModeOf, skillOf, skillProficiencyOf } from '@shared/content/sheet'
+import { useDerivedSheet } from '../useDerivedSheet'
 import { Button } from '../../../ui/Button'
 import { Modal } from '../../../ui/Modal'
 import { useAutosaveDraft } from '../useAutosaveDraft'
@@ -186,26 +161,25 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     onSave({ portraitDataUrl: dataUrl })
   }
 
-  // Every taken feat's mechanical effects folded on top of the base sheet
-  // values — every derived stat below reads from these, never from
-  // draft.abilityScores/skillProficiencies/savingThrowProficiencies
-  // directly, so a feat that grants an ability bonus or a proficiency
-  // actually cascades into max HP, AC, initiative, saves, skills, passive
-  // perception. The ability score *input fields* still bind to the raw
-  // draft values — only derived, read-only numbers use the effective ones.
-  const activeFeats = activeFeatIds(draft.classes, character.asiSlotChoices)
-  const effScores = effectiveAbilityScores(draft.abilityScores, draft.classes, character.asiSlotChoices)
-  const effSkillProficiencies = effectiveSkillProficiencies(draft.skillProficiencies, activeFeats)
-  const effSaveProficiencies = effectiveSavingThrowProficiencies(draft.savingThrowProficiencies, activeFeats)
-  const speedBonus =
-    featSpeedBonus(activeFeats) + armorSpeedPenalty(character.equipment, effScores) + classFeatureSpeedBonus(draft.classes, character.equipment)
-  const notes = featNotes(activeFeats)
-  const skillAdvantage = effectiveSkillAdvantage(activeFeats, character.equipment)
-  const abilityCheckAdvantage = effectiveAbilityCheckAdvantage(activeFeats, character.activeBuffs, draft.exhaustionLevel)
-  const savingThrowAdvantage = effectiveSavingThrowAdvantage(activeFeats, character.activeBuffs, draft.exhaustionLevel)
-  const initiativeAdvantage = effectiveInitiativeAdvantage(activeFeats)
+  // Every derived number below comes from the content engine (see
+  // shared/content/sheet.ts), run over the saved sheet with this tab's
+  // unsaved draft merged on top — so a feat, item, buff or condition that
+  // changes a stat cascades into max HP, AC, initiative, saves, skills and
+  // passive perception, and edits show up before they're saved. The
+  // ability score *input fields* still bind to the raw draft values — only
+  // derived, read-only numbers use the engine's.
+  const liveSheet = useMemo(() => ({ ...character, ...draft }), [character, draft])
+  const { derived } = useDerivedSheet(liveSheet)
+  const effScores = effectiveScores(derived)
+  const notes = derived.notes
+  const abilityCheckAdvantage = derived.checkModes
+  const initiativeAdvantage = derived.initiativeMode
+  const maxHp = derived.maxHp
 
-  const maxHp = applyExhaustionToMaxHp(computeMaxHp(draft.classes, effScores), draft.exhaustionLevel)
+  /** Max HP for the sheet as it would be with these draft fields — used for the HP-gained-on-level-up delta. */
+  function maxHpWith(fields: Partial<OverviewDraft>): number {
+    return deriveSheet({ ...liveSheet, ...fields }).derived.maxHp
+  }
 
   /** Raising a class's level bumps current HP by however much the (fully derived) max just went up, matching the 5e rule that HP gained on level-up is immediate, not just a higher ceiling. Whatever else the new level grants (class features, an ASI/feat slot, a subclass-choice slot) just appears on its own in Combat's Features tab — see FeaturesTab.tsx, which derives all of that live from class/level instead of requiring it to be accepted here. */
   function updateClass(index: number, fields: Partial<ClassLevel>): void {
@@ -218,8 +192,8 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     const updates: Partial<OverviewDraft> = { classes: nextClasses }
 
     if (fields.level !== undefined && fields.level > prev.level) {
-      const prevMax = computeMaxHp(draft.classes, draft.abilityScores)
-      const newMax = computeMaxHp(nextClasses, draft.abilityScores)
+      const prevMax = maxHp
+      const newMax = maxHpWith({ classes: nextClasses })
       updates.currentHp = draft.currentHp + (newMax - prevMax)
       playSfx('levelUp')
       onLevelUp?.(prev.className || fields.className || '', prev.level, fields.level)
@@ -228,11 +202,11 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     patch(updates)
   }
 
-  /** Any ability score can change here, but only Con affects max HP — computing the delta unconditionally (instead of special-casing Con) keeps this simple, and it's a no-op for the other five since their change contributes 0 to computeMaxHp. This is what makes an ability score improvement to Con retroactively raise HP, per the 5e rule. */
+  /** Any ability score can change here, but usually only Con affects max HP — computing the delta unconditionally (instead of special-casing Con) keeps this simple, and it's a no-op when the change doesn't touch max HP. This is what makes an ability score improvement to Con retroactively raise HP, per the 5e rule. */
   function updateAbilityScore(ability: Ability, value: number): void {
-    const prevMax = computeMaxHp(draft.classes, draft.abilityScores)
+    const prevMax = maxHp
     const nextScores = { ...draft.abilityScores, [ability]: value }
-    const newMax = computeMaxHp(draft.classes, nextScores)
+    const newMax = maxHpWith({ abilityScores: nextScores })
     patch({ abilityScores: nextScores, currentHp: Math.max(0, draft.currentHp + (newMax - prevMax)) })
   }
 
@@ -274,12 +248,10 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     patch({ skillProficiencies: nextProficiencies })
   }
 
-  /** Every class resource (Rage, Ki, Bardic Inspiration, etc.) whose recharge matches this rest, reset to 0 used — merged over whatever's still in progress for the resources that DON'T recharge on this rest, not a blanket wipe. */
-  function resetResourcesFor(kinds: Array<'short' | 'long'>): Record<string, number> {
+  /** Every resource (Rage, Ki, Bardic Inspiration, item charges, homebrew pools…) that refills on this rest, reset to 0 used — merged over whatever's still in progress for the resources that DON'T refill on this rest, not a blanket wipe. */
+  function resetResourcesFor(rest: 'short' | 'long'): Record<string, number> {
     const next = { ...character.resourceUsed }
-    for (const r of resourcesForCharacter(draft.classes, effScores)) {
-      if (kinds.includes(r.currentRecharge)) next[r.id] = 0
-    }
+    for (const id of resourcesRefilledBy(derived, rest)) next[id] = 0
     return next
   }
 
@@ -288,7 +260,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     playSfx('longRest')
     const updates = { currentHp: maxHp, deathSaves: { successes: 0, failures: 0 }, hitDiceUsed: {} }
     patch(updates)
-    onSave({ ...updates, spellSlots: resetAllSlots(character.spellSlots), resourceUsed: resetResourcesFor(['short', 'long']) })
+    onSave({ ...updates, spellSlots: resetAllSlots(character.spellSlots), resourceUsed: resetResourcesFor('long') })
   }
 
   function shortRest(): void {
@@ -297,14 +269,14 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     const isWarlock = draft.classes.some((c) => c.className.toLowerCase() === 'warlock')
     onSave({
       deathSaves: { successes: 0, failures: 0 },
-      resourceUsed: resetResourcesFor(['short']),
+      resourceUsed: resetResourcesFor('short'),
       ...(isWarlock ? { spellSlots: resetAllSlots(character.spellSlots) } : {})
     })
     setShortRestOpen(true)
   }
 
   function rollHitDie(pool: HitDicePool): void {
-    const conMod = abilityModifier(effScores.con)
+    const conMod = derived.abilities.con.mod
     const roll = Math.floor(Math.random() * pool.hitDie) + 1
     const healed = Math.max(1, roll + conMod)
     const nextHp = Math.min(maxHp, draft.currentHp + healed)
@@ -318,7 +290,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     else updateClass(0, { className: name })
   }
 
-  const pb = proficiencyBonus(draft.classes)
+  const pb = derived.proficiencyBonus
   const primary = draft.classes[0]
   const additionalClasses = draft.classes.slice(1)
   const primaryIsCustom = customRows.has(0) || (!!primary && primary.className.trim() !== '' && !CLASS_NAMES.includes(primary.className))
@@ -550,7 +522,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           />
         </HeaderField>
         <VitalStat label="Proficiency" value={formatModifier(pb)} />
-        <VitalStat label="Perception" value={String(passivePerception(effScores, effSkillProficiencies, draft.classes))} />
+        <VitalStat label="Perception" value={String(derived.skills.perception?.passive ?? 10 + derived.abilities.wis.mod)} />
 
         <button
           type="button"
@@ -616,21 +588,21 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
 
         <VitalStat
           label="AC"
-          value={String(computeArmorClassFromEquipment(character.equipment, effScores, activeFeats, draft.classes))}
+          value={String(derived.armorClass)}
           icon={<ShieldIcon size={22} style={{ color: 'var(--accent)' }} />}
           accent
           large
         />
         <VitalStat
           label="Initiative"
-          value={formatModifier(computeInitiative(effScores))}
+          value={formatModifier(derived.initiative)}
           icon={<InitiativeIcon />}
           large
           badge={initiativeAdvantage && <AdvantageTag kind={initiativeAdvantage} label="Initiative" />}
         />
         <VitalStat
           label="Speed"
-          value={`${applyExhaustionToSpeed(computeSpeed(draft.race) + speedBonus, draft.exhaustionLevel)} ft`}
+          value={`${derived.speeds.walk ?? 0} ft`}
           icon={<SpeedIcon />}
           large
         />
@@ -708,7 +680,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
 
         <Divider />
 
-        <ResistancesSection character={character} onSave={onSave} readOnly={readOnly} />
+        <ResistancesSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} />
         </div>
       </div>
 
@@ -806,7 +778,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
               className="gb-card"
               style={{ padding: 'var(--space-2) var(--space-3)', borderColor: 'var(--accent)', fontSize: 12 }}
             >
-              <strong style={{ color: 'var(--accent-hover)' }}>{n.featName}.</strong> {n.text}
+              <strong style={{ color: 'var(--accent-hover)' }}>{n.source}.</strong> {n.text}
             </div>
           ))}
         </div>
@@ -932,8 +904,8 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         <div className="gb-label">Saving Throws</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
           {ABILITIES.map(({ id, label }) => {
-            const proficient = effSaveProficiencies.includes(id)
-            const bonus = savingThrowBonus(id, effScores, effSaveProficiencies, draft.classes)
+            const proficient = !!derived.saves[id].proficiency
+            const bonus = derived.saves[id].bonus
             return (
               <div
                 key={id}
@@ -967,7 +939,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                   disabled={readOnly}
                 >
                   {label.slice(0, 3)}
-                  {savingThrowAdvantage[id] && <AdvantageTag kind={savingThrowAdvantage[id]!} label={`${label} saves`} />}
+                  {derived.saves[id].mode && <AdvantageTag kind={derived.saves[id].mode!} label={`${label} saves`} />}
                 </button>
                 {readOnly ? (
                   <span style={{ fontSize: 14, fontWeight: 700, color: proficient ? 'var(--accent-hover)' : 'var(--text-primary)' }}>
@@ -979,7 +951,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                     size="sm"
                     onRoll={(advantage) =>
                       rollCheck(`${label} Saving Throw`, bonus, {
-                        advantage: advantage !== 'normal' ? advantage : (savingThrowAdvantage[id] ?? 'normal')
+                        advantage: advantage !== 'normal' ? advantage : (derived.saves[id].mode ?? 'normal')
                       })
                     }
                   />
@@ -995,14 +967,14 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           <div className="gb-label">Skills</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', rowGap: 5, columnGap: 'var(--space-2)', alignItems: 'center' }}>
             {SKILLS.map(({ id, ability }) => {
-              const bonus = skillBonus(id, effScores, effSkillProficiencies, draft.classes)
+              const bonus = skillOf(derived, id)?.bonus ?? derived.abilities[ability].mod
               return (
                 <div key={id} style={{ display: 'contents' }}>
                   <span style={{ fontSize: 12 }}>
                     {id} <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>({ability.toUpperCase()})</span>
-                    {skillAdvantage[id] && <AdvantageTag kind={skillAdvantage[id]!} label={`${id} checks`} />}
+                    {skillModeOf(derived, id) && <AdvantageTag kind={skillModeOf(derived, id)!} label={`${id} checks`} />}
                   </span>
-                  <ProficiencyDot value={effSkillProficiencies[id] ?? 'none'} onClick={() => cycleSkillProficiency(id)} />
+                  <ProficiencyDot value={skillProficiencyOf(derived, id) ?? 'none'} onClick={() => cycleSkillProficiency(id)} />
                   {readOnly ? (
                     <span style={{ fontSize: 12, width: 28, textAlign: 'right' }}>{formatModifier(bonus)}</span>
                   ) : (
@@ -1010,7 +982,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                       value={formatModifier(bonus)}
                       size="sm"
                       onRoll={(advantage) =>
-                        rollCheck(`${id} Check`, bonus, { advantage: advantage !== 'normal' ? advantage : (skillAdvantage[id] ?? 'normal') })
+                        rollCheck(`${id} Check`, bonus, { advantage: advantage !== 'normal' ? advantage : (skillModeOf(derived, id) ?? 'normal') })
                       }
                     />
                   )}
@@ -1045,10 +1017,27 @@ const RESISTANCE_ROWS: { key: 'damageResistances' | 'damageVulnerabilities' | 'd
   { key: 'damageImmunities', label: 'Immunities' }
 ]
 
-/** Freeform damage-type tags per row, written straight through onSave (a discrete add/remove click, not something that needs debouncing) — plus, on the Resistances row only, a non-removable tag for whatever's granted by an active buff right now (Rage's B/P/S resistance — see activeBuffResistances in shared/compendium.ts). That one's shown separately from the stored list since it's conditional on the buff staying on, not a permanent trait to save. */
-function ResistancesSection({ character, onSave, readOnly }: { character: CharacterSheet; onSave: (patch: Partial<CharacterSheetData>) => void; readOnly?: boolean }): JSX.Element {
+const DERIVED_RELATION: Record<(typeof RESISTANCE_ROWS)[number]['key'], keyof DerivedCharacter['damageRelations']> = {
+  damageResistances: 'resistances',
+  damageVulnerabilities: 'vulnerabilities',
+  damageImmunities: 'immunities'
+}
+
+/** Freeform damage-type tags per row, written straight through onSave (a discrete add/remove click, not something that needs debouncing) — plus a non-removable tag for whatever the content engine grants on top right now (Rage's B/P/S resistance, a species trait, an item, a homebrew feature). Those are shown separately from the stored list since they come from the build, not a permanent trait to save. */
+function ResistancesSection({
+  character,
+  derived,
+  onSave,
+  readOnly
+}: {
+  character: CharacterSheet
+  derived: DerivedCharacter
+  onSave: (patch: Partial<CharacterSheetData>) => void
+  readOnly?: boolean
+}): JSX.Element {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const buffResistances = activeBuffResistances(character.activeBuffs)
+  const grantedFor = (key: (typeof RESISTANCE_ROWS)[number]['key']): string[] =>
+    derived.damageRelations[DERIVED_RELATION[key]].filter((t) => !character[key].some((s) => s.toLowerCase() === t.toLowerCase()))
 
   function addTagValue(key: (typeof RESISTANCE_ROWS)[number]['key'], rawValue: string): void {
     const value = rawValue.trim()
@@ -1097,13 +1086,12 @@ function ResistancesSection({ character, onSave, readOnly }: { character: Charac
               )}
             </span>
           ))}
-          {key === 'damageResistances' &&
-            buffResistances.map((tag) => (
+          {grantedFor(key).map((tag) => (
               <span
-                key={`buff:${tag}`}
+                key={`granted:${tag}`}
                 className="gb-badge gb-badge--accent"
                 style={{ fontSize: 12, padding: '3px 8px' }}
-                title="From an active buff (e.g. Rage) — not a permanent trait, so it isn't saved."
+                title="Granted by a feature, item or active buff (e.g. Rage) — not stored on the sheet."
               >
                 {tag}
               </span>

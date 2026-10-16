@@ -4,14 +4,8 @@ import {
   CLASSES,
   abilityModifier,
   actionTypeFromCastingTime,
-  activeFeatIds,
   curatedFeaturesForLevelUp,
   formatModifier,
-  resourceActionsForCharacter,
-  resourcesForCharacter,
-  spellAttackBonus,
-  spellSaveDC,
-  toggleFeaturesForCharacter,
   type AbilityScores,
   type ActionType,
   type Attack,
@@ -19,20 +13,17 @@ import {
 } from '@shared/dnd5e'
 import {
   UNARMED_STRIKE,
-  activeBuffMeleeDamageBonus,
-  effectiveAbilityScores,
-  effectiveAttackAdvantage,
   getEquipmentById,
   getSpellById,
   groupedSubclassFeaturesForLevelUp,
-  isActivatableResource,
   spellDealsDamage,
   subclassesForClass,
-  suggestedAttackAbility,
-  weaponAttackBonus,
-  weaponAttacksFromEquipment,
   type CompendiumEquipment
 } from '@shared/compendium'
+import type { DerivedAction, DerivedAttack, DerivedResource, DerivedToggle } from '@shared/content/engine'
+import type { Registry } from '@shared/content/registry'
+import { effectiveScores } from '@shared/content/sheet'
+import { useDerivedSheet } from '../useDerivedSheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import { SpellsTab } from './SpellsTab'
@@ -79,6 +70,21 @@ const ACTION_TYPES: { id: ActionType; label: string }[] = [
 ]
 
 const ACTION_TYPE_LABEL: Record<ActionType, string> = { action: 'Action', bonus: 'Bonus Action', reaction: 'Reaction' }
+
+/** A built-in action economy's label, or a pack-defined one's name (vocabulary.actionTypes) — e.g. a homebrew "Technique" action. */
+function actionTypeLabel(id: string | undefined, registry: Registry): string | undefined {
+  if (!id) return undefined
+  if (id in ACTION_TYPE_LABEL) return ACTION_TYPE_LABEL[id as ActionType]
+  if (id === 'free') return 'Free'
+  return registry.vocabulary.actionTypes.find((t) => t.id === id)?.name ?? id
+}
+
+/** "1d8 +3", "2d6 + 1d4 +5", "4" — the attack's main damage roll as the content engine computed it (ability modifier and untyped bonuses like Rage already folded in), plus any separately-typed extra damage ("+ 1d6 Cursed"). */
+function derivedDamageDisplay(attack: DerivedAttack): string {
+  const dice = attack.damageDice.dice.map((d) => `${d.count}d${d.sides}`).join(' + ')
+  const main = dice ? (attack.damageDice.flat ? `${dice} ${formatModifier(attack.damageDice.flat)}` : dice) : String(attack.damageDice.flat)
+  return [main, ...attack.extraDamage.map((x) => `${x.damage} ${x.damageType ?? ''}`.trim())].join(' + ')
+}
 
 /** SRD 2014 core class features that actually spend a reaction — sparse by design, since most classes never grant one baseline (Sentinel-style reactions all come from feats/subclasses outside this SRD's scope, and a custom attack/note can always cover anything homebrew). Keyed by class id, valued with the exact CLASS_LEVEL_FEATURES name so the real curated description comes along for free. */
 const REACTION_FEATURE_NAMES: Record<string, string[]> = {
@@ -127,14 +133,15 @@ function customWeaponFields(attack: Attack): DetailField[] {
 /** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells/Features inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
 export function CombatTab({ character, onSave, readOnly, sessionId = null }: CombatTabProps): JSX.Element {
   const { rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
-  const isCaster =
-    character.spellcastingAbility !== null ||
-    character.classes.some((c) => CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())?.spellcastingAbility)
-  // A feat that boosts Str/Dex should raise attack bonus the same way an
-  // ASI does — see shared/compendium.ts's effectiveAbilityScores.
-  const effScores = effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)
-  // Rage's damage bonus only ever applies to a Str-based melee attack — see activeBuffMeleeDamageBonus in shared/compendium.ts.
-  const meleeBuffDamage = activeBuffMeleeDamageBonus(character.activeBuffs, character.classes)
+  // Attacks, resources, toggles, actions and spell DC/attack all come from
+  // the content engine (see shared/content/sheet.ts) — so a feat, item or
+  // active buff that changes an attack (Rage, Archery, a homebrew cursed
+  // tool) is already folded into what's shown here.
+  const { derived, registry } = useDerivedSheet(character)
+  const isCaster = character.spellcastingAbility !== null || derived.spellcasting.sources.length > 0
+  const effScores = effectiveScores(derived)
+  /** Custom (freeform) attacks aren't part of the build, so their bonus is worked out here: proficiency + the governing ability's modifier, as before. */
+  const customAttackBonus = (ability: 'str' | 'dex'): number => derived.proficiencyBonus + derived.abilities[ability].mod
 
   const [innerTab, setInnerTab] = useState<'Attacks' | 'Spells' | 'Features' | 'Reactions'>('Attacks')
   const [formOpen, setFormOpen] = useState(false)
@@ -151,26 +158,23 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
     setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
   }
 
-  /** Same activate/end semantics as FeaturesTab.tsx's toggleBuff (spends a use on activation, never refunds on end) — duplicated here rather than shared since this tab keeps its own resourceUsed/attacks autosave draft, separate from FeaturesTab's. Plays (and, at the table, broadcasts) this resource's own Class Features cue — see playAbilitySfx — only on activation, never when turning it back off. */
-  function toggleResourceBuff(resourceId: string, name: string, kind: 'uses' | 'pool', currentUsed: number, max: number): void {
+  /** Turns a toggle (Rage, Reckless Attack, a homebrew Domain Expansion) on or off. Turning one on spends its cost from its resource, if it has one (never refunded on end), and is blocked if there isn't enough left — same semantics as FeaturesTab.tsx's toggleBuff, duplicated here since this tab keeps its own resourceUsed autosave draft. Plays (and, at the table, broadcasts) the toggle's sound cue — see playAbilitySfx — only on activation, never when turning it back off. */
+  function toggleBuff(toggle: DerivedToggle): void {
     if (readOnly) return
-    const active = character.activeBuffs.includes(resourceId)
-    if (active) {
-      onSave({ activeBuffs: character.activeBuffs.filter((id) => id !== resourceId) })
+    if (character.activeBuffs.includes(toggle.id)) {
+      onSave({ activeBuffs: character.activeBuffs.filter((id) => id !== toggle.id) })
       return
     }
-    if (kind === 'uses' && currentUsed >= max) return
-    if (kind === 'uses') setResourceUsed(resourceId, currentUsed + 1, max)
-    playAbilitySfx(name, sessionId)
-    onSave({ activeBuffs: [...character.activeBuffs, resourceId] })
-  }
-
-  /** Same activate-only-plays-a-sound rule as toggleResourceBuff above — ending a Toggle Action (Rage wearing off, etc.) stays silent. */
-  function toggleFeature(id: string, name: string): void {
-    if (readOnly) return
-    const active = character.activeBuffs.includes(id)
-    if (!active) playAbilitySfx(name, sessionId)
-    onSave({ activeBuffs: active ? character.activeBuffs.filter((b) => b !== id) : [...character.activeBuffs, id] })
+    if (toggle.cost) {
+      const resource = derived.resources.find((r) => r.id === toggle.cost!.resourceId)
+      if (resource) {
+        const used = resourceDraft.resourceUsed[resource.id] ?? 0
+        if (resource.max - used < toggle.cost.amount) return
+        setResourceUsed(resource.id, used + toggle.cost.amount, resource.max)
+      }
+    }
+    playAbilitySfx(toggle.name, sessionId)
+    onSave({ activeBuffs: [...character.activeBuffs, toggle.id] })
   }
 
   function updateAttack(id: string, fields: Partial<Attack>): void {
@@ -215,8 +219,8 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
       (s): s is { spell: (typeof character.spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } =>
         !!s.compendium && spellDealsDamage(s.compendium)
     )
-  const cantripAttackBonus = spellAttackBonus(character.spellcastingAbility, effScores, character.classes)
-  const spellSaveDc = spellSaveDC(character.spellcastingAbility, effScores, character.classes)
+  const cantripAttackBonus = derived.spellcasting.attackBonus
+  const spellSaveDc = derived.spellcasting.dc
 
   // Every known spell whose own casting time is "1 reaction" (Shield, Counterspell, Feather Fall, Hellish Rebuke,
   // ...) — derived from the compendium's own castingTime field, not a hand-maintained list, so it stays accurate
@@ -259,24 +263,36 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
     return [...base, ...subclassReactions]
   })
 
-  const activeFeats = activeFeatIds(character.classes, character.asiSlotChoices)
-  const toggleFeatures = toggleFeaturesForCharacter(character.classes)
-  const attackAdvantage = effectiveAttackAdvantage(activeFeats, character.activeBuffs, character.exhaustionLevel)
-  const resources = resourcesForCharacter(character.classes, effScores)
+  // A toggle with a cost is how the engine models an activatable resource (Rage) — it's shown on its resource's card;
+  // free toggles (Reckless Attack) get their own Toggle Actions section.
+  const toggleFeatures = derived.toggles.filter((t) => !t.cost)
+  const toggleForResource = (resourceId: string): DerivedToggle | undefined => derived.toggles.find((t) => t.cost?.resourceId === resourceId)
+  const attackAdvantage = derived.attackMode
+  const resources = derived.resources
   const bonusActionResources = resources.filter((r) => r.actionType === 'bonus')
   const otherResources = resources.filter((r) => r.actionType !== 'bonus')
-  const resourceActions = resourceActionsForCharacter(character.classes)
+  const resourceActions = derived.actions
   const isDivineSmiteClass = character.classes.some((c) => c.className.toLowerCase() === 'paladin' && c.level >= 2)
 
-  const equippedWeapons = weaponAttacksFromEquipment(character.equipment)
-  const equippedWeaponIds = new Set(equippedWeapons.map((w) => w.weapon.id))
+  const equipmentById = new Map(character.equipment.map((e) => [e.id, e]))
+  const compendiumWeaponFor = (attack: DerivedAttack): CompendiumEquipment | undefined => {
+    const item = attack.itemKey ? equipmentById.get(attack.itemKey) : undefined
+    return item?.compendiumId ? getEquipmentById(item.compendiumId) : undefined
+  }
+  const equippedWeaponIds = new Set(derived.attacks.flatMap((a) => (a.kind === 'weapon' && a.itemKey ? [equipmentById.get(a.itemKey)?.compendiumId ?? ''] : [])))
   const legacyStoredWeaponAttacks = draft.attacks.filter((a) => a.compendiumId && !equippedWeaponIds.has(a.compendiumId))
   const customAttacks = draft.attacks.filter((a) => !a.compendiumId)
 
   const matchesSearch = (name: string): boolean => listSearch.trim() === '' || name.toLowerCase().includes(listSearch.trim().toLowerCase())
 
-  function rollAttack(label: string, bonus: number): ((advantage: AdvantageMode) => void) | undefined {
-    return readOnly ? undefined : (advantage) => rollCheck(label, bonus, { advantage: advantage !== 'normal' ? advantage : (attackAdvantage ?? 'normal') })
+  function rollAttack(label: string, bonus: number, mode = attackAdvantage): ((advantage: AdvantageMode) => void) | undefined {
+    return readOnly ? undefined : (advantage) => rollCheck(label, bonus, { advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal') })
+  }
+  function rollDerivedDamage(attack: DerivedAttack): (() => void) | undefined {
+    if (readOnly || attack.damageDice.dice.length !== 1) return undefined
+    const [{ count, sides }] = attack.damageDice.dice
+    if (!(DIE_SIDES as readonly number[]).includes(sides)) return undefined
+    return () => rollDamage([{ sides: sides as DieSides, count }], attack.damageDice.flat, `${attack.name} Damage`)
   }
   function rollWeaponDamage(label: string, dice: string, modifier: number): (() => void) | undefined {
     if (readOnly) return undefined
@@ -345,22 +361,17 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
           />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
-          {matchesSearch(UNARMED_STRIKE.name) && (
-            <HoverDetailCard title={UNARMED_STRIKE.name} subtitle="Always available" fields={[]} description={UNARMED_STRIKE.description}>
-              <EntryCard name={<EntryCardTitle value={UNARMED_STRIKE.name} />} badge={<span className="gb-badge">{UNARMED_STRIKE.damageType}</span>}>
-                <MiniStat
-                  label="Atk"
-                  value={formatModifier(weaponAttackBonus('str', effScores, character.classes))}
-                  onRoll={rollAttack(`${UNARMED_STRIKE.name} Attack`, weaponAttackBonus('str', effScores, character.classes))}
-                />
-                <LockedValue
-                  value={weaponDamageDisplay(UNARMED_STRIKE.damage, 'str', effScores, meleeBuffDamage)}
-                  onRoll={rollWeaponDamage(`${UNARMED_STRIKE.name} Damage`, UNARMED_STRIKE.damage, abilityModifier(effScores.str) + meleeBuffDamage)}
-                />
-                <LockedValue value="Action" />
-              </EntryCard>
-            </HoverDetailCard>
-          )}
+          {derived.attacks
+            .filter((a) => a.kind === 'unarmed' && matchesSearch(a.name))
+            .map((attack) => (
+              <HoverDetailCard key={attack.id} title={attack.name} subtitle="Always available" fields={[]} description={UNARMED_STRIKE.description}>
+                <EntryCard name={<EntryCardTitle value={attack.name} />} badge={<span className="gb-badge">{attack.damageType}</span>}>
+                  <MiniStat label="Atk" value={formatModifier(attack.attackBonus)} onRoll={rollAttack(`${attack.name} Attack`, attack.attackBonus, attack.mode ?? attackAdvantage)} />
+                  <LockedValue value={derivedDamageDisplay(attack)} onRoll={rollDerivedDamage(attack)} />
+                  <LockedValue value={actionTypeLabel(attack.actionType, registry) ?? 'Action'} />
+                </EntryCard>
+              </HoverDetailCard>
+            ))}
 
           {damagingCantrips
             .filter(({ spell }) => matchesSearch(spell.name))
@@ -394,28 +405,33 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
               )
             })}
 
-          {equippedWeapons
-            .filter(({ weapon }) => matchesSearch(weapon.name))
-            .map(({ item, weapon }) => {
-              const ability = suggestedAttackAbility(weapon, effScores)
-              const bonus = weaponAttackBonus(ability, effScores, character.classes)
+          {derived.attacks
+            .filter((a) => a.kind !== 'unarmed' && matchesSearch(a.name))
+            .map((attack) => {
+              const weapon = compendiumWeaponFor(attack)
               return (
-                <HoverDetailCard key={item.id} title={weapon.name} subtitle="Equipped weapon" fields={weaponFields(weapon)} description={weapon.description ?? ''}>
-                  <EntryCard name={<EntryCardTitle value={weapon.name} />} badge={weapon.damageType ? <span className="gb-badge">{weapon.damageType}</span> : undefined}>
-                    <MiniStat label="Atk" value={formatModifier(bonus)} onRoll={rollAttack(`${weapon.name} Attack`, bonus)} />
-                    <LockedValue
-                      value={weaponDamageDisplay(
-                        weapon.damageDice ?? '',
-                        ability,
-                        effScores,
-                        ability === 'str' && weapon.weaponRange !== 'Ranged' ? meleeBuffDamage : 0
-                      )}
-                      onRoll={rollWeaponDamage(
-                        `${weapon.name} Damage`,
-                        weapon.damageDice ?? '',
-                        abilityModifier(effScores[ability]) + (ability === 'str' && weapon.weaponRange !== 'Ranged' ? meleeBuffDamage : 0)
-                      )}
+                <HoverDetailCard
+                  key={attack.id}
+                  title={attack.name}
+                  subtitle={attack.kind === 'weapon' ? 'Equipped weapon' : 'Granted attack'}
+                  fields={weapon ? weaponFields(weapon) : []}
+                  description={weapon?.description ?? ''}
+                >
+                  <EntryCard
+                    name={<EntryCardTitle value={attack.name} />}
+                    badge={attack.damageType ? <span className="gb-badge">{attack.damageType}</span> : undefined}
+                  >
+                    <MiniStat
+                      label="Atk"
+                      value={formatModifier(attack.attackBonus)}
+                      onRoll={rollAttack(`${attack.name} Attack`, attack.attackBonus, attack.mode ?? attackAdvantage)}
                     />
+                    <LockedValue value={derivedDamageDisplay(attack)} onRoll={rollDerivedDamage(attack)} />
+                    {!attack.proficient && (
+                      <span className="gb-badge" style={{ fontSize: 10 }} title="Not proficient with this weapon — proficiency bonus isn't added to the attack roll.">
+                        Not proficient
+                      </span>
+                    )}
                   </EntryCard>
                 </HoverDetailCard>
               )
@@ -423,8 +439,8 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
 
           {legacyStoredWeaponAttacks.filter((a) => matchesSearch(a.name)).map((attack) => {
             const weapon = getEquipmentById(attack.compendiumId!)
-            const ability = weapon ? suggestedAttackAbility(weapon, effScores) : customAttackAbility(attack, effScores)
-            const bonus = weaponAttackBonus(ability, effScores, character.classes)
+            const ability = customAttackAbility(weapon ? { ...attack, weaponRange: weapon.weaponRange === 'Ranged' ? 'Ranged' : 'Melee', properties: weapon.properties?.join(', ') } : attack, effScores)
+            const bonus = customAttackBonus(ability)
             return (
               <HoverDetailCard
                 key={attack.id}
@@ -450,7 +466,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
 
           {customAttacks.filter((a) => matchesSearch(a.name)).map((attack) => {
             const ability = customAttackAbility(attack, effScores)
-            const bonus = weaponAttackBonus(ability, effScores, character.classes)
+            const bonus = customAttackBonus(ability)
             return (
               <HoverDetailCard key={attack.id} title={attack.name || 'Untitled Attack'} subtitle={attack.weaponRange} fields={customWeaponFields(attack)} description={attack.notes}>
                 <EntryCard
@@ -504,9 +520,10 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
               {toggleFeatures.map((f) => {
                 const active = character.activeBuffs.includes(f.id)
+                const label = actionTypeLabel(f.actionType, registry)
                 return (
                   <div key={f.id} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
-                    <HoverDetailCard title={f.name} subtitle={f.className} fields={[]} description={f.description}>
+                    <HoverDetailCard title={f.name} subtitle={f.className ?? f.source} fields={[]} description={f.description || f.detail || ''}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, cursor: 'default' }}>
                         <strong style={{ flex: 1 }}>{f.name}</strong>
                         {active && (
@@ -514,14 +531,16 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                             Active
                           </span>
                         )}
-                        <span className="gb-badge" style={{ fontSize: 10 }}>
-                          {ACTION_TYPE_LABEL[f.actionType]}
-                        </span>
+                        {label && (
+                          <span className="gb-badge" style={{ fontSize: 10 }}>
+                            {label}
+                          </span>
+                        )}
                       </div>
                     </HoverDetailCard>
                     <Button
                       variant={active ? 'secondary' : 'primary'}
-                      onClick={() => toggleFeature(f.id, f.name)}
+                      onClick={() => toggleBuff(f)}
                       disabled={readOnly}
                       style={{ width: '100%', fontSize: 12, padding: '4px 10px' }}
                     >
@@ -542,19 +561,19 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
               {isDivineSmiteClass && <DivineSmiteCard character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />}
               {resourceActions.map((action) => {
-                const resource = resources.find((r) => r.id === action.resourceId)
-                if (!resource) return null
-                const used = Math.min(resourceDraft.resourceUsed[resource.id] ?? 0, resource.currentMax)
-                const remaining = resource.currentMax - used
+                const resource = action.cost ? resources.find((r) => r.id === action.cost!.resourceId) : undefined
+                if (action.cost && !resource) return null
+                const used = resource ? Math.min(resourceDraft.resourceUsed[resource.id] ?? 0, resource.max) : 0
                 return (
                   <ResourceActionCard
                     key={action.id}
                     action={action}
-                    remaining={remaining}
+                    actionLabel={actionTypeLabel(action.actionType, registry)}
+                    remaining={resource ? resource.max - used : null}
                     readOnly={readOnly}
                     onUse={() => {
                       playAbilitySfx(action.name, sessionId)
-                      setResourceUsed(resource.id, used + action.cost, resource.currentMax)
+                      if (resource && action.cost) setResourceUsed(resource.id, used + action.cost.amount, resource.max)
                     }}
                   />
                 )
@@ -569,17 +588,21 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
               Bonus Actions
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
-              {bonusActionResources.map((r) => (
-                <ResourceCard
-                  key={r.id}
-                  resource={r}
-                  used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
-                  active={character.activeBuffs.includes(r.id)}
-                  readOnly={readOnly}
-                  onSetUsed={(n) => setResourceUsed(r.id, n, r.currentMax)}
-                  onToggle={() => toggleResourceBuff(r.id, r.name, r.kind, resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
-                />
-              ))}
+              {bonusActionResources.map((r) => {
+                const toggle = toggleForResource(r.id)
+                return (
+                  <ResourceCard
+                    key={r.id}
+                    resource={r}
+                    toggle={toggle}
+                    used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)}
+                    active={!!toggle && character.activeBuffs.includes(toggle.id)}
+                    readOnly={readOnly}
+                    onSetUsed={(n) => setResourceUsed(r.id, n, r.max)}
+                    onToggle={() => toggle && toggleBuff(toggle)}
+                  />
+                )
+              })}
             </div>
           </div>
         )}
@@ -590,17 +613,21 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
               Other Class Resources
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
-              {otherResources.map((r) => (
-                <ResourceCard
-                  key={r.id}
-                  resource={r}
-                  used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
-                  active={character.activeBuffs.includes(r.id)}
-                  readOnly={readOnly}
-                  onSetUsed={(n) => setResourceUsed(r.id, n, r.currentMax)}
-                  onToggle={() => toggleResourceBuff(r.id, r.name, r.kind, resourceDraft.resourceUsed[r.id] ?? 0, r.currentMax)}
-                />
-              ))}
+              {otherResources.map((r) => {
+                const toggle = toggleForResource(r.id)
+                return (
+                  <ResourceCard
+                    key={r.id}
+                    resource={r}
+                    toggle={toggle}
+                    used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)}
+                    active={!!toggle && character.activeBuffs.includes(toggle.id)}
+                    readOnly={readOnly}
+                    onSetUsed={(n) => setResourceUsed(r.id, n, r.max)}
+                    onToggle={() => toggle && toggleBuff(toggle)}
+                  />
+                )
+              })}
             </div>
           </div>
         )}
@@ -654,37 +681,51 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   )
 }
 
-/** A named ability that spends charges from an existing class resource (Turn Undead ⟶ Channel Divinity, Flurry of Blows ⟶ Ki) — see RESOURCE_ACTIONS in shared/dnd5e.ts. Just a "Use" button plus a remaining-charges readout; the backing resource's own tracker (Bonus Actions/Other Class Resources below, or Features) is still the place to see/restore the raw uses pool. */
+/** A named ability, usually spending charges from a resource (Turn Undead ⟶ Channel Divinity, Flurry of Blows ⟶ Ki, a homebrew Cursed Strike ⟶ Cursed Energy) — granted by a feature via the content engine. A "Use" button plus a remaining-charges readout, and the action's own roll numbers when it has any; the backing resource's own tracker (Bonus Actions/Other Class Resources below, or Features) is still the place to see/restore the raw pool. `remaining` is null for an action with no cost. */
 function ResourceActionCard({
   action,
+  actionLabel,
   remaining,
   readOnly,
   onUse
 }: {
-  action: ReturnType<typeof resourceActionsForCharacter>[number]
-  remaining: number
+  action: DerivedAction
+  actionLabel?: string
+  remaining: number | null
   readOnly?: boolean
   onUse: () => void
 }): JSX.Element {
+  const cost = action.cost?.amount ?? 0
+  const stats = [
+    action.attackBonus !== undefined ? `Atk ${formatModifier(action.attackBonus)}` : null,
+    action.saveDc !== undefined ? `DC ${action.saveDc}${action.saveAbility ? ` ${action.saveAbility.toUpperCase()}` : ''}` : null,
+    action.damage ? `${action.damage}${action.damageType ? ` ${action.damageType}` : ''}` : null,
+    action.healing ? `Heals ${action.healing}` : null
+  ].filter((x): x is string => !!x)
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
-      <HoverDetailCard title={action.name} subtitle={action.className} fields={[]} description={action.description}>
+      <HoverDetailCard title={action.name} subtitle={action.className ?? action.source} fields={[]} description={action.description || action.detail || ''}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, cursor: 'default' }}>
           <strong style={{ flex: 1 }}>{action.name}</strong>
-          <span className="gb-badge" style={{ fontSize: 10 }}>
-            {ACTION_TYPE_LABEL[action.actionType]}
-          </span>
+          {actionLabel && (
+            <span className="gb-badge" style={{ fontSize: 10 }}>
+              {actionLabel}
+            </span>
+          )}
         </div>
       </HoverDetailCard>
-      <Button
-        variant="primary"
-        onClick={onUse}
-        disabled={readOnly || remaining < action.cost}
-        style={{ width: '100%', fontSize: 12, padding: '4px 10px' }}
-        title={`Spends ${action.cost} — ${remaining} available`}
-      >
-        Use ({remaining} left)
-      </Button>
+      {stats.length > 0 && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{stats.join(' · ')}</div>}
+      {remaining !== null && (
+        <Button
+          variant="primary"
+          onClick={onUse}
+          disabled={readOnly || remaining < cost}
+          style={{ width: '100%', fontSize: 12, padding: '4px 10px' }}
+          title={`Spends ${cost} — ${remaining} available`}
+        >
+          Use ({remaining} left)
+        </Button>
+      )}
     </div>
   )
 }
@@ -692,24 +733,27 @@ function ResourceActionCard({
 /** A compact class-resource card for the Actions tab's Bonus Actions/Other Class Resources sections — same tracker/activate-button pieces as FeaturesTab.tsx's fuller version, just without the "Class Resources" section header repeated here (that one groups by class; this groups by action type). */
 function ResourceCard({
   resource,
+  toggle,
   used,
   active,
   readOnly,
   onSetUsed,
   onToggle
 }: {
-  resource: ReturnType<typeof resourcesForCharacter>[number]
+  resource: DerivedResource
+  /** The toggle that spends this resource (Rage), if any — gives the card its Activate/End button. */
+  toggle?: DerivedToggle
   used: number
   active: boolean
   readOnly?: boolean
   onSetUsed: (used: number) => void
   onToggle: () => void
 }): JSX.Element {
-  const remaining = resource.currentMax - used
-  const activatable = isActivatableResource(resource.id)
+  const remaining = resource.max - used
+  const cost = toggle?.cost?.amount ?? 0
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
-      <HoverDetailCard title={resource.name} subtitle={resource.className} fields={[]} description={resource.fullDescription}>
+      <HoverDetailCard title={resource.name} subtitle={resource.className ?? resource.source} fields={[]} description={resource.detail || resource.description}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, cursor: 'default' }}>
           <strong style={{ flex: 1 }}>{resource.name}</strong>
           {active && (
@@ -718,23 +762,23 @@ function ResourceCard({
             </span>
           )}
           <span className="gb-badge" style={{ fontSize: 10 }}>
-            {resource.className}
+            {resource.className ?? resource.source}
           </span>
         </div>
       </HoverDetailCard>
-      {resource.kind === 'uses' ? (
-        <UsesTracker max={resource.currentMax} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={onSetUsed} />
+      {resource.display === 'uses' ? (
+        <UsesTracker max={resource.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={onSetUsed} />
       ) : (
-        <PoolTracker max={resource.currentMax} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={onSetUsed} />
+        <PoolTracker max={resource.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={onSetUsed} />
       )}
-      {activatable && (
+      {toggle && (
         <Button
           variant={active ? 'secondary' : 'primary'}
           onClick={onToggle}
-          disabled={readOnly || (!active && resource.kind === 'uses' && remaining <= 0)}
+          disabled={readOnly || (!active && remaining < cost)}
           style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 10px' }}
         >
-          {active ? `End ${resource.name}` : `Activate ${resource.name}`}
+          {active ? `End ${toggle.name}` : `Activate ${toggle.name}`}
         </Button>
       )}
     </div>

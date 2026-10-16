@@ -23,12 +23,12 @@ import {
   SPELLS,
   buildAsiSlotResolutionPatch,
   circleSpellLevelsUpToLevel,
-  effectiveAbilityScores,
   getSpellById,
   groupedSubclassFeaturesForLevelUp,
   spellSlotsForClassLevel,
   subclassesForClass
 } from '@shared/compendium'
+import { deriveSheet, effectiveScores } from '@shared/content/sheet'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import {
@@ -340,7 +340,7 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
         <AsiSlotChooser
           classLabel={className}
           level={lvl}
-          abilityScores={effectiveAbilityScores(character.abilityScores, character.classes, character.asiSlotChoices)}
+          abilityScores={effectiveScores(deriveSheet(character).derived)}
           onResolve={resolveAsiSlot}
         />
       )

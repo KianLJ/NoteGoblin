@@ -227,10 +227,16 @@ Each phase ships on its own and leaves the app working.
    feats, resources, toggles, option lists, spells and items into the
    `srd-5.2.1` pack; switch calculations to `deriveCharacter`; delete
    hard-coded class branches. Must match the phase-1 baseline exactly.
-3. **Generic choices UI** — Features tab and level-up popup render choices,
-   resources, actions and toggles generically; remove `isXxxClass` paths.
-4. **Character migration** — name → id migration, pack-version tracking,
-   missing-pack stubs.
+3. **Engine reads** (done) — every tab, the initiative tracker, the
+   force-roll prompt, inventory and character creation read their numbers
+   from `deriveCharacter` (via the phase 2 adapter) instead of the legacy
+   helpers. Reordered ahead of the generic choices UI: that UI needs
+   native pick storage, which is the migration's job.
+4. **Character migration** — name → id migration, native `choices` on the
+   sheet, pack-version tracking, missing-pack stubs. Then the **generic
+   choices UI**: Features tab and level-up popup render choices,
+   resources, actions and toggles generically; remove `isXxxClass` paths
+   and the legacy helpers in `dnd5e.ts` / `compendium.ts`.
 5. **Pack storage & sync** — local library, campaign enablement (DM only),
    session-protocol requests, offline snapshot, import/export.
 6. **Homebrew Workshop** — editors, effect builder, formula preview, test
@@ -239,7 +245,8 @@ Each phase ships on its own and leaves the app working.
    damage types, conditions, currencies, stats.
 8. **Monsters** — move custom monsters out of localStorage into packs.
 
-Phases 1–4 are invisible to users but are where the risk is. Every phase-2
+Phases 1, 2 and 4 are invisible to users but are where the risk is; phase 3
+ships the rules fixes listed in the phase 2 notes. Every phase-2
 change is checked against the regression snapshots.
 
 ## Phase 1 — status and notes for phase 2
@@ -352,3 +359,50 @@ Notes for phase 3:
   Enemy/Terrain picks become option-list choices on a per-sheet custom
   effect, and Divine Sense (tracked by the sheet but absent from the 5.2.1
   table) is its own Paladin level-1 feature.
+
+## Phase 3 — status and notes for phase 4
+
+Done: `shared/content/sheet.ts` is the app's single entry point —
+`deriveSheet(sheet)` runs `legacySheetToBuild` → `deriveCharacter`,
+cached per sheet object (and the registry per pack set), plus small
+readers that take legacy keys (`skillOf(derived, 'Sleight of Hand')`).
+React tabs use `useDerivedSheet(liveSheet)`, where `liveSheet` is the saved
+character with the tab's unsaved draft merged on top, so edits show
+before they save.
+
+Switched over: OverviewTab (abilities, saves, skills, passive Perception,
+AC, initiative, speed, max HP and level-up HP deltas, notes, rests,
+resistances/immunities/vulnerabilities), CombatTab (every attack incl.
+granted ones and per-attack advantage, toggles, resources, actions,
+cantrip DC/attack), SpellsTab (slots, DC, attack, caps), FeaturesTab's
+resource cards, ForceRollPrompt, InitiativeTracker (HP, AC, initiative —
+now including Alert), InventoryTab carrying capacity, the level-up
+popup's chooser scores, and character creation's starting HP.
+
+Engine output gained `className` and `detail` (the granting feature's
+full text) on resources, toggles and actions, for the cards.
+
+Behaviour changes users will see, beyond the phase 2 rules fixes:
+
+- Activating a toggle spends its full cost from its resource, for pool
+  resources too (legacy only spent from "uses" resources — no pool buff
+  existed, but homebrew ones will).
+- Rests refill `dawn`-recharge resources on a long rest.
+- Granted resistances/immunities/vulnerabilities (species, items,
+  homebrew) appear as read-only tags, not just Rage's.
+- A weapon the character isn't proficient with shows a "Not proficient"
+  tag (follows from the weapon-proficiency fix).
+- Forced rolls now include exhaustion's disadvantage, matching the sheet.
+
+Still on legacy code (structure, not numbers): which features, choosers
+and reactions exist (FeaturesTab, LevelUpPopup, AsiChoosers,
+ClassTableTab, CombatTab's reaction list and Divine Smite card), the
+wizard's review-step preview (AC/HP/speed shown before the sheet
+exists), and custom attacks stored on the sheet (`attacks`, not part of
+the build). Hit-dice pools still come from `CLASSES`.
+
+Not checked in the running app: signing in needs either your existing
+dev profile's password or a new account, and creating one also syncs it
+to the online relay. Check by hand: `npm run dev`, open a few characters
+(a raging barbarian, a caster, a multiclass), and compare against the
+numbers before this change.

@@ -118,6 +118,10 @@ export interface DerivedResource {
   display: 'uses' | 'pool'
   actionType?: string
   source: string
+  /** The class that granted it, when a class or subclass feature did — for the sheet's class badge. */
+  className?: string
+  /** The granting feature's full rules text (the resource/toggle/action's own description is a one-liner). */
+  detail?: string
 }
 
 export interface DerivedToggle {
@@ -128,6 +132,10 @@ export interface DerivedToggle {
   cost?: { resourceId: string; amount: number }
   active: boolean
   source: string
+  /** The class that granted it, when a class or subclass feature did — for the sheet's class badge. */
+  className?: string
+  /** The granting feature's full rules text (the resource/toggle/action's own description is a one-liner). */
+  detail?: string
 }
 
 export interface DerivedAction {
@@ -144,6 +152,10 @@ export interface DerivedAction {
   healing?: string
   activatesToggle?: string
   source: string
+  /** The class that granted it, when a class or subclass feature did — for the sheet's class badge. */
+  className?: string
+  /** The granting feature's full rules text (the resource/toggle/action's own description is a one-liner). */
+  detail?: string
 }
 
 export interface DerivedChoiceOption {
@@ -967,6 +979,16 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     relations[key].add(e.action.damageType)
   }
 
+  /** Where a granted resource/toggle/action came from, for display. */
+  const originOf = (source: Source): { source: string; className?: string; detail?: string } => {
+    const cls = source.classCtx ? classes[source.classCtx.index] : undefined
+    return {
+      source: source.name,
+      ...(cls ? { className: cls.reg.def.name } : {}),
+      ...(source.feature?.description ? { detail: source.feature.description } : {})
+    }
+  }
+
   // Resources
   const resources: DerivedResource[] = resourceGrants().map(({ resource, source }) => ({
     id: resource.id,
@@ -977,7 +999,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     recharge: rechargeLabel(resource.recharge, (c) => conditionPasses(c, source)),
     display: resource.display ?? 'uses',
     ...(resource.actionType ? { actionType: resource.actionType } : {}),
-    source: source.name
+    ...originOf(source)
   }))
   const costOf = (cost: { resourceId: string; amount?: Formula } | undefined, source: Source): { resourceId: string; amount: number } | undefined => {
     if (!cost) return undefined
@@ -996,7 +1018,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       ...(t.actionType ? { actionType: t.actionType } : {}),
       ...(t.cost ? { cost: costOf(t.cost, e.source) } : {}),
       active: toggleActive(t.id),
-      source: e.source.name
+      ...originOf(e.source)
     })
   }
 
@@ -1015,7 +1037,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       ...(a.damageType ? { damageType: a.damageType } : {}),
       ...(a.healing ? { healing: formatDice(dice(a.healing, e.source)) } : {}),
       ...(a.activatesToggle ? { activatesToggle: a.activatesToggle } : {}),
-      source: e.source.name
+      ...originOf(e.source)
     }
   })
 

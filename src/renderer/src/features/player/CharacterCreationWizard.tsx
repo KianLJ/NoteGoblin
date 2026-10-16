@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { deriveSheet } from '@shared/content/sheet'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { OriginFeatChooser } from './AsiChoosers'
@@ -294,7 +295,8 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
       abilityScores: baseScores,
       savingThrowProficiencies: cls?.savingThrowProficiencies ?? [],
       skillProficiencies,
-      currentHp: computeMaxHp(classes, finalScores),
+      // Placeholder — replaced below with the content engine's max HP for the finished sheet.
+      currentHp: 1,
       spellcastingAbility: cls?.spellcastingAbility ?? grantedSpellcastingAbility,
       equipment: cls ? startingEquipmentFor(cls.id) : [],
       asiSlotChoices,
@@ -302,6 +304,8 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
       raceLineageChoice: race && lineage ? { raceId: race.id, lineageName: lineage.name, spellcastingAbility: lineageAbility } : null
     }
 
+    // Start at full HP, as the finished sheet's own Overview tab will compute it.
+    sheet.currentHp = deriveSheet(sheet).derived.maxHp
     onCreate(name.trim(), sheet)
   }
 
