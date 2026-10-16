@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.15',
+    title: 'A new rules engine under the character sheet',
+    highlights: [
+      'Every number on the character sheet — abilities, saves, skills, AC, initiative, speed, HP, attacks, spell DC and slots, class resources — now comes from a new rules engine that will power homebrew content (custom classes, feats, spells and items) in upcoming updates',
+      'Archery now adds +2 to ranged weapon attacks automatically, and Alert adds your proficiency bonus to Initiative (including in the Initiative Tracker) — both used to be notes you had to apply by hand',
+      'Weapon proficiency now follows your class: a weapon you aren\'t proficient with shows a "Not proficient" tag and no longer adds your proficiency bonus to the attack roll',
+      'Resistances, immunities and vulnerabilities granted by a feature, item or active buff now show on the sheet automatically, not just Rage\'s',
+      'Rolls the DM forces now apply exhaustion\'s disadvantage, matching the sheet'
+    ]
+  },
+  {
     version: '0.5.14',
     title: '0.5.13 bug fix',
     highlights: [
