@@ -3,7 +3,7 @@
 // plain JSON (what the author is editing); it only becomes a ContentPack
 // once it validates. See docs/homebrew-engine.md, phase 6.
 
-import type { EntryKind } from './registry'
+import type { EntryKind, Registry } from './registry'
 import type { ContentPack, ContentPackInput } from './schema'
 import { PACK_FORMAT_VERSION } from './schema'
 import { SRD_PACK_ID } from './srd'
@@ -204,4 +204,95 @@ export function packsForTesting(pack: ContentPack, library: ContentPack[]): Cont
   }
   visit(pack, new Set([pack.id]))
   return [...ordered.filter((p) => p.id !== pack.id), pack]
+}
+
+/**
+ * What the Workshop's inputs suggest (their <datalist>s): ids of every entry
+ * the pack can reference (its own and its dependencies'), vocabulary ids,
+ * the resources and toggles the draft grants, and the stat paths and roll
+ * targets effects can use.
+ */
+export function suggestionLists(registry: Registry, draft: PackDraft): Record<string, string[]> {
+  const ids = (kind: EntryKind): string[] => {
+    const out = new Set<string>()
+    for (const e of registry.all(kind)) {
+      out.add(e.fullId)
+      if (e.packId === draft.id) out.add(e.def.id)
+    }
+    for (const e of entriesOf(draft, kind)) if (typeof e.id === 'string' && e.id) out.add(e.id)
+    return [...out].sort()
+  }
+  const resources = new Set<string>()
+  const toggles = new Set<string>()
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) return v.forEach(walk)
+    if (!v || typeof v !== 'object') return
+    const o = v as Record<string, unknown>
+    if (o.kind === 'grantResource' && o.resource && typeof o.resource === 'object') resources.add(String((o.resource as { id?: unknown }).id ?? ''))
+    if (o.kind === 'grantToggle' && o.toggle && typeof o.toggle === 'object') toggles.add(String((o.toggle as { id?: unknown }).id ?? ''))
+    if (o.charges && typeof o.charges === 'object') resources.add(String((o.charges as { id?: unknown }).id ?? ''))
+    Object.values(o).forEach(walk)
+  }
+  walk(draft)
+  const v = registry.vocabulary
+  const skills = v.skills.map((s) => s.id)
+  const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha']
+  const stats = [
+    'ac',
+    'hp.max',
+    'initiative',
+    'prof',
+    'carry.capacity',
+    'crit.threshold',
+    'reactions',
+    'attacks.perAction',
+    'attack.bonus',
+    'attack.damage',
+    'spell.dc',
+    'spell.attack',
+    'spells.preparedLimit',
+    'spells.knownLimit',
+    'spells.cantripsLimit',
+    'speed.walk',
+    'speed.fly',
+    'speed.swim',
+    'speed.climb',
+    'speed.burrow',
+    ...abilities.flatMap((a) => [`ability.${a}.score`, `ability.${a}.max`, `save.${a}`]),
+    ...skills.flatMap((s) => [`skill.${s}`, `passive.${s}`]),
+    ...v.stats.map((s) => `stat.${s.id}`),
+    ...v.counters.map((c) => `counter.${c.id}`),
+    ...v.abilityAliases.map((a) => `alias.${a.id}.score`),
+    ...['darkvision', 'blindsight', 'tremorsense', 'truesight', ...v.senses.map((s) => s.id)].map((s) => `sense.${s}`),
+    ...[...resources].filter(Boolean).map((r) => `resource.${r}.max`),
+    ...Array.from({ length: 9 }, (_, i) => `slots.standard.${i + 1}`)
+  ]
+  const rollTargets = ['attack', 'initiative', 'deathSave', ...abilities.flatMap((a) => [`check:${a}`, `save:${a}`]), ...skills.map((s) => `skill:${s}`)]
+  const archetypeTags = new Set<string>()
+  for (const a of registry.all('archetypes')) for (const t of a.def.tags ?? []) archetypeTags.add(t)
+  for (const a of entriesOf(draft, 'archetypes')) for (const t of Array.isArray(a.tags) ? a.tags : []) archetypeTags.add(String(t))
+  const featCategories = new Set<string>(registry.all('feats').map((f) => f.def.category))
+  for (const f of entriesOf(draft, 'feats')) if (typeof f.category === 'string') featCategories.add(f.category)
+  return {
+    classes: ids('classes'),
+    subclasses: ids('subclasses'),
+    spells: ids('spells'),
+    feats: ids('feats'),
+    items: ids('items'),
+    optionLists: ids('optionLists'),
+    archetypes: ids('archetypes'),
+    entries: WORKSHOP_SECTIONS.flatMap((s) => ids(s.kind)),
+    archetypeTags: [...archetypeTags].sort(),
+    featCategories: [...featCategories].sort(),
+    skills,
+    abilities,
+    damageTypes: v.damageTypes.map((d) => d.id),
+    conditions: v.conditions.map((c) => c.id),
+    weaponProperties: v.weaponProperties.map((w) => w.id),
+    actionTypes: ['action', 'bonus', 'reaction', 'free', ...v.actionTypes.map((a) => a.id)],
+    resources: [...resources].filter(Boolean).sort(),
+    toggles: [...toggles].filter(Boolean).sort(),
+    stats,
+    rollTargets
+  }
 }

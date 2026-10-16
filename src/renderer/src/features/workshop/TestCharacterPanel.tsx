@@ -1,16 +1,14 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { ContentPack } from '@shared/content/schema'
 import { ABILITY_IDS, deriveCharacter, type CharacterBuild, type DerivedCharacter } from '@shared/content/engine'
-import { buildRegistry, type Registry } from '@shared/content/registry'
-import { srdPack } from '@shared/content/srd'
-import { packsForTesting } from '@shared/content/workshop'
+import type { Registry } from '@shared/content/registry'
 import { formatModifier } from '@shared/dnd5e'
 import { ChoiceList } from '../player/ChoiceCards'
 
 type Scores = CharacterBuild['abilityScores']
 const DEFAULT_SCORES: Scores = { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 }
 
-interface Setup {
+export interface TestSetup {
   classId: string
   subclassId: string
   level: number
@@ -20,25 +18,17 @@ interface Setup {
   choices: Record<string, string[]>
   toggles: string[]
 }
+type Setup = TestSetup
 
-/**
- * A scratch character built from this pack (plus the SRD and whatever it
- * builds on) at any level — the derived sheet's numbers, resources,
- * actions, choices and every diagnostic, so a class can be checked before
- * a player ever uses it. Nothing here is saved.
- */
-export function TestCharacterPanel({ pack, others, hasErrors }: { pack: ContentPack | null; others: ContentPack[]; hasErrors: boolean }): JSX.Element {
-  const registry: Registry | null = useMemo(() => (pack ? buildRegistry([srdPack(), ...packsForTesting(pack, others)]) : null), [pack, others])
-  const [setup, setSetup] = useState<Setup | null>(null)
+const ownFirstOf =
+  (packId: string) =>
+  <T extends { fullId: string }>(list: T[]): T[] => [...list.filter((e) => e.fullId.startsWith(`${packId}:`)), ...list.filter((e) => !e.fullId.startsWith(`${packId}:`))]
 
-  if (!pack || !registry) {
-    return <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>The pack has errors — fix them (see Overview → Problems) and the test character will appear.</p>
-  }
-
-  const classes = registry.all('classes')
-  const ownFirst = <T extends { fullId: string }>(list: T[]): T[] => [...list.filter((e) => e.fullId.startsWith(`${pack.id}:`)), ...list.filter((e) => !e.fullId.startsWith(`${pack.id}:`))]
-  const s: Setup = setup ?? {
-    classId: ownFirst(classes)[0]?.fullId ?? '',
+/** A fresh test character: the pack's own first class, species and background (else the SRD's), standard-array scores, level 1. */
+export function defaultTestSetup(registry: Registry, packId: string): TestSetup {
+  const ownFirst = ownFirstOf(packId)
+  return {
+    classId: ownFirst(registry.all('classes'))[0]?.fullId ?? '',
     subclassId: '',
     level: 1,
     speciesId: ownFirst(registry.all('species'))[0]?.fullId ?? '',
@@ -47,11 +37,12 @@ export function TestCharacterPanel({ pack, others, hasErrors }: { pack: ContentP
     choices: {},
     toggles: []
   }
-  const update = (fields: Partial<Setup>): void => setSetup({ ...s, ...fields })
-  const cls = registry.get('classes', s.classId)
-  const subclasses = cls ? registry.all('subclasses').filter((x) => x.def.classId === cls.def.id || x.def.classId === cls.fullId) : []
+}
 
-  const build: CharacterBuild = {
+/** The build a test setup stands for. */
+export function buildFromSetup(s: TestSetup, registry: Registry): CharacterBuild {
+  const cls = registry.get('classes', s.classId)
+  return {
     abilityScores: s.scores,
     ...(s.speciesId ? { speciesId: s.speciesId } : {}),
     ...(s.backgroundId ? { backgroundId: s.backgroundId } : {}),
@@ -59,7 +50,47 @@ export function TestCharacterPanel({ pack, others, hasErrors }: { pack: ContentP
     choices: s.choices,
     activeToggles: s.toggles
   }
-  const derived = deriveCharacter(build, registry)
+}
+
+/** "Jujutsu Sorcerer 5" — who a setup is. */
+export function setupLabel(s: TestSetup, registry: Registry): string {
+  const cls = registry.get('classes', s.classId)
+  return cls ? `${cls.def.name} ${s.level}` : `level ${s.level}`
+}
+
+/**
+ * A scratch character built from this pack (plus the SRD and whatever it
+ * builds on) at any level — the derived sheet's numbers, resources,
+ * actions, choices and every diagnostic, so a class can be checked before
+ * a player ever uses it. Nothing here is saved.
+ */
+export function TestCharacterPanel({
+  pack,
+  registry,
+  setup,
+  onSetup,
+  hasErrors
+}: {
+  pack: ContentPack | null
+  /** The SRD, the pack's dependencies and the pack (null while there's no valid version). */
+  registry: Registry | null
+  setup: TestSetup | null
+  onSetup: (setup: TestSetup | null) => void
+  hasErrors: boolean
+}): JSX.Element {
+  const setSetup = onSetup
+  if (!pack || !registry) {
+    return <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>The pack has errors — fix them (see Overview → Problems) and the test character will appear.</p>
+  }
+
+  const classes = registry.all('classes')
+  const ownFirst = ownFirstOf(pack.id)
+  const s: Setup = setup ?? defaultTestSetup(registry, pack.id)
+  const update = (fields: Partial<Setup>): void => setSetup({ ...s, ...fields })
+  const cls = registry.get('classes', s.classId)
+  const subclasses = cls ? registry.all('subclasses').filter((x) => x.def.classId === cls.def.id || x.def.classId === cls.fullId) : []
+
+  const derived = deriveCharacter(buildFromSetup(s, registry), registry)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>

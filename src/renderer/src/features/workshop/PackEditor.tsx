@@ -3,8 +3,12 @@ import type { ContentPack } from '@shared/content/schema'
 import type { EntryKind } from '@shared/content/registry'
 import { SRD_PACK_ID, srdPack } from '@shared/content/srd'
 import { validatePack, type PackIssue, type PackValidation } from '@shared/content/validate'
+import { buildRegistry, type Registry } from '@shared/content/registry'
+import { deriveCharacter } from '@shared/content/engine'
 import {
   WORKSHOP_SECTIONS,
+  packsForTesting,
+  suggestionLists,
   addEntry,
   bumpVersion,
   duplicateEntry,
@@ -19,7 +23,12 @@ import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { PlusIcon } from '../../ui/icons'
 import { JsonEditor } from './JsonEditor'
-import { TestCharacterPanel } from './TestCharacterPanel'
+import { TestCharacterPanel, buildFromSetup, defaultTestSetup, setupLabel, type TestSetup } from './TestCharacterPanel'
+import { FormContext, Suggestions, type WorkshopFormContext } from './form/fields'
+import { EntryForm } from './form/entries'
+import { TerminologyForm, VocabularyForm } from './form/vocabulary'
+
+type View = 'form' | 'json'
 
 type Tab = 'overview' | 'entries' | 'vocabulary' | 'test' | 'json'
 const TABS: Array<{ id: Tab; label: string }> = [
@@ -85,6 +94,30 @@ export function PackEditor({
   useEffect(() => {
     if (validation.ok) setLastValid(validation.pack)
   }, [validation])
+
+  // The registry the test character and formula previews use: the SRD, what the pack builds on, and the pack.
+  const registry: Registry | null = useMemo(() => (lastValid ? buildRegistry([srdPack(), ...packsForTesting(lastValid, others)]) : null), [lastValid, others])
+  const baseRegistry = useMemo(() => buildRegistry([srdPack(), ...others]), [others])
+  const [setup, setSetup] = useState<TestSetup | null>(null)
+  const [view, setView] = useState<View>('form')
+
+  // Formula previews evaluate against the test character — as the class being edited, when it's a class or subclass.
+  const selectedEntry = selected ? entriesOf(settled, selected.kind)[selected.index] : undefined
+  const formContext: WorkshopFormContext = useMemo(() => {
+    const lists = suggestionLists(registry ?? baseRegistry, settled)
+    if (!registry || !lastValid) return { previewLabel: '', lists }
+    let s = setup ?? defaultTestSetup(registry, lastValid.id)
+    if (selected?.kind === 'classes' && selectedEntry) {
+      const cls = registry.get('classes', `${lastValid.id}:${String(selectedEntry.id ?? '')}`)
+      if (cls) s = { ...s, classId: cls.fullId, subclassId: '' }
+    } else if (selected?.kind === 'subclasses' && selectedEntry) {
+      const sub = registry.get('subclasses', `${lastValid.id}:${String(selectedEntry.id ?? '')}`)
+      const cls = sub ? registry.get('classes', sub.def.classId, sub.packId) : undefined
+      if (sub && cls) s = { ...s, classId: cls.fullId, subclassId: sub.fullId, level: Math.max(s.level, cls.def.subclassLevel) }
+    }
+    const derived = deriveCharacter(buildFromSetup(s, registry), registry, { keepEvaluator: true })
+    return { evaluate: derived.evaluate, previewLabel: setupLabel(s, registry), lists }
+  }, [registry, baseRegistry, lastValid, settled, setup, selected, selectedEntry])
 
   async function save(): Promise<void> {
     setBusy(true)
@@ -171,25 +204,38 @@ export function PackEditor({
         ))}
       </div>
 
+      <FormContext.Provider value={formContext}>
+      <Suggestions />
       <div style={{ flex: 1, minHeight: 0, overflow: tab === 'entries' ? 'hidden' : 'auto', padding: tab === 'entries' ? 0 : 'var(--space-4) var(--space-5)' }}>
         {tab === 'overview' && <Overview draft={draft} others={library.filter((p) => p.id !== storedId)} issues={issues} onSet={set} onOpenIssue={openIssue} onOpenSection={(kind) => {
           setSelected(entriesOf(draft, kind).length ? { kind, index: 0 } : null)
           setTab('entries')
         }} />}
-        {tab === 'entries' && <Entries draft={draft} issues={issues} selected={selected} onSelect={setSelected} onChange={onChange} />}
+        {tab === 'entries' && <Entries draft={draft} issues={issues} selected={selected} onSelect={setSelected} onChange={onChange} view={view} onView={setView} />}
         {tab === 'vocabulary' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 'var(--space-4)' }}>
-            <Panel title="Vocabulary" hint="Skills, damage types, conditions, currencies, custom stats, action types, weapon properties, spell schools, counters, ability aliases and senses this pack adds.">
-              <JsonEditor value={draft.vocabulary ?? {}} onChange={(v) => set({ vocabulary: v as PackDraft['vocabulary'] })} minHeight={420} />
-              <IssueList issues={issues.filter((i) => i.path.startsWith('vocabulary'))} />
-            </Panel>
-            <Panel title="Terminology" hint={'Renames shown in the app, e.g. { "spellSlots": "Technique Slots", "ability.cha": "Cursed Energy Control" }.'}>
-              <JsonEditor value={draft.terminology ?? {}} onChange={(v) => set({ terminology: v as PackDraft['terminology'] })} minHeight={420} />
-              <IssueList issues={issues.filter((i) => i.path.startsWith('terminology'))} />
-            </Panel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <ViewToggle view={view} onView={setView} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 'var(--space-4)', alignItems: 'start' }}>
+              <Panel title="Vocabulary" hint="Skills, custom stats, counters, ability aliases, damage types, conditions, senses, action types, weapon properties, spell schools and currencies this pack adds.">
+                {view === 'form' ? (
+                  <VocabularyForm value={(draft.vocabulary ?? {}) as Record<string, unknown>} onChange={(v) => set({ vocabulary: v as PackDraft['vocabulary'] })} />
+                ) : (
+                  <JsonEditor value={draft.vocabulary ?? {}} onChange={(v) => set({ vocabulary: v as PackDraft['vocabulary'] })} minHeight={420} />
+                )}
+                <IssueList issues={issues.filter((i) => i.path.startsWith('vocabulary'))} />
+              </Panel>
+              <Panel title="Terminology" hint="Renames shown in the app — the rules don't change.">
+                {view === 'form' ? (
+                  <TerminologyForm value={(draft.terminology ?? {}) as Record<string, unknown>} onChange={(v) => set({ terminology: v as PackDraft['terminology'] })} />
+                ) : (
+                  <JsonEditor value={draft.terminology ?? {}} onChange={(v) => set({ terminology: v as PackDraft['terminology'] })} minHeight={420} />
+                )}
+                <IssueList issues={issues.filter((i) => i.path.startsWith('terminology'))} />
+              </Panel>
+            </div>
           </div>
         )}
-        {tab === 'test' && <TestCharacterPanel pack={lastValid} others={others} hasErrors={errors.length > 0} />}
+        {tab === 'test' && <TestCharacterPanel pack={lastValid} registry={registry} setup={setup} onSetup={setSetup} hasErrors={errors.length > 0} />}
         {tab === 'json' && (
           <Panel title="The whole pack" hint="Everything above, as one JSON document — paste a pack in here, or make sweeping edits.">
             <JsonEditor value={draft} onChange={(v) => v && typeof v === 'object' && onChange(v as PackDraft)} minHeight={560} />
@@ -197,6 +243,7 @@ export function PackEditor({
           </Panel>
         )}
       </div>
+      </FormContext.Provider>
     </div>
   )
 }
@@ -295,18 +342,47 @@ function Overview({
   )
 }
 
+function ViewToggle({ view, onView }: { view: View; onView: (v: View) => void }): JSX.Element {
+  return (
+    <div style={{ display: 'inline-flex', padding: 2, borderRadius: 'var(--radius-sm)', background: 'var(--bg-sunken)', border: '1px solid var(--border-subtle)', alignSelf: 'flex-start' }}>
+      {(['form', 'json'] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onView(v)}
+          style={{
+            border: 'none',
+            borderRadius: 'var(--radius-sm)',
+            padding: '3px 10px',
+            fontSize: 11,
+            cursor: 'pointer',
+            background: view === v ? 'var(--bg-surface-raised)' : 'transparent',
+            color: view === v ? 'var(--accent)' : 'var(--text-muted)'
+          }}
+        >
+          {v === 'form' ? 'Form' : 'JSON'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Entries({
   draft,
   issues,
   selected,
   onSelect,
-  onChange
+  onChange,
+  view,
+  onView
 }: {
   draft: PackDraft
   issues: PackIssue[]
   selected: { kind: EntryKind; index: number } | null
   onSelect: (s: { kind: EntryKind; index: number } | null) => void
   onChange: (draft: PackDraft) => void
+  view: View
+  onView: (v: View) => void
 }): JSX.Element {
   const [filter, setFilter] = useState('')
   const entry = selected ? entriesOf(draft, selected.kind)[selected.index] : undefined
@@ -385,6 +461,7 @@ function Entries({
                   {section.singular} · {String(draft.id)}:{String(entry.id ?? '')}
                 </div>
               </div>
+              {selected.kind !== 'monsters' && <ViewToggle view={view} onView={onView} />}
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -408,16 +485,26 @@ function Entries({
                 }}
               />
             </div>
-            <JsonEditor
-              key={`${selected.kind}:${selected.index}`}
-              value={entry}
-              onChange={(v) => v && typeof v === 'object' && !Array.isArray(v) && onChange(replaceEntry(draft, selected.kind, selected.index, v as Record<string, unknown>))}
-              style={{ flex: 1 }}
-            />
             <IssueList issues={issuesForEntry(issues, selected.kind, selected.index)} />
+            {view === 'form' && selected.kind !== 'monsters' ? (
+              <EntryForm
+                key={`${selected.kind}:${selected.index}`}
+                kind={selected.kind}
+                value={entry}
+                packId={String(draft.id)}
+                onChange={(v) => onChange(replaceEntry(draft, selected.kind, selected.index, v))}
+              />
+            ) : (
+              <JsonEditor
+                key={`${selected.kind}:${selected.index}`}
+                value={entry}
+                onChange={(v) => v && typeof v === 'object' && !Array.isArray(v) && onChange(replaceEntry(draft, selected.kind, selected.index, v as Record<string, unknown>))}
+                style={{ flex: 1 }}
+              />
+            )}
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Pick an entry on the left, or add one with the plus button next to a section. Form editors for each kind are coming next; for now entries are edited as JSON, checked as you type.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Pick an entry on the left, or add one with the plus button next to a section. Each entry has a form and a JSON view; formulas show what they work out to for the test character.</p>
         )}
       </div>
     </div>

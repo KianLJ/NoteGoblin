@@ -20,6 +20,7 @@ import {
   removeEntry,
   replaceEntry,
   slugify,
+  suggestionLists,
   uniqueId
 } from '@shared/content/workshop'
 import type { ContentPack } from '@shared/content/schema'
@@ -112,5 +113,19 @@ describe('codex entries', () => {
     const limitless = entries.find((e) => e.fullId === 'jujutsu-codex:limitless')!
     expect(limitless.kindLabel).toBe('Archetype')
     expect(limitless.fields).toContainEqual({ label: 'Levels by', value: 'highest class level' })
+  })
+})
+
+describe('suggestion lists', () => {
+  it('offers the pack’s own ids, its dependencies’, and what its effects grant', () => {
+    const pack = example()
+    const registry = buildRegistry([srdPack(), pack])
+    const lists = suggestionLists(registry, pack as unknown as Parameters<typeof suggestionLists>[1])
+    expect(lists.classes).toEqual(expect.arrayContaining(['jujutsu-sorcerer', 'jujutsu-codex:jujutsu-sorcerer', 'srd-5.2.1:fighter']))
+    expect(lists.resources).toEqual(expect.arrayContaining(['cursed-energy', 'focus']))
+    expect(lists.toggles).toContain('domain-expansion')
+    expect(lists.archetypeTags).toContain('innate-technique')
+    expect(lists.stats).toEqual(expect.arrayContaining(['alias.ce.score', 'counter.breakthroughs', 'stat.output', 'resource.cursed-energy.max']))
+    expect(lists.rollTargets).toContain('skill:cursed-sense')
   })
 })

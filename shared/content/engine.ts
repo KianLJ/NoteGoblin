@@ -298,6 +298,31 @@ export interface DerivedCompanion {
   className?: string
 }
 
+/**
+ * A formula to evaluate against the derived character without it being part
+ * of any pack — the Workshop's live preview. `inClass` evaluates it as if
+ * it sat in the character's first class's feature (@classLevel, @table);
+ * `archetypeId` as if inside that archetype (@archetypeLevel, its table).
+ * @spent, @slotLevel, @value and @self get sample values.
+ */
+export interface FormulaProbe {
+  formula: string
+  inClass?: boolean
+  archetypeId?: string
+  spent?: number
+  spellLevel?: number
+  value?: number
+}
+
+/** A probe's result: the number, or dice ("2d6 + 3"), or why it can't be worked out. */
+export type ProbeResult = { ok: true; value: number; dice?: string } | { ok: false; error: string }
+
+export interface DeriveOptions {
+  probes?: FormulaProbe[]
+  /** Return `evaluate` on the result, for probing more formulas later without deriving again (the Workshop's formula fields). */
+  keepEvaluator?: boolean
+}
+
 export interface DerivedCharacter {
   level: number
   proficiencyBonus: number
@@ -346,6 +371,10 @@ export interface DerivedCharacter {
   damageReductions: { amount: number; damageTypes?: string[]; label?: string; source: string }[]
   companions: DerivedCompanion[]
   archetypes: DerivedArchetype[]
+  /** One per DeriveOptions.probes entry, in order — only when probes were asked for. */
+  probes?: ProbeResult[]
+  /** Only with DeriveOptions.keepEvaluator. */
+  evaluate?: (probe: FormulaProbe) => ProbeResult
   diagnostics: Diagnostic[]
 }
 
@@ -445,7 +474,7 @@ function rechargeLabel(r: ResourceDef['recharge'], test: (c: Condition) => boole
 
 // ---------------------------------------------------------------------------
 
-export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentPack[] | Registry): DerivedCharacter {
+export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentPack[] | Registry, options: DeriveOptions = {}): DerivedCharacter {
   const registry = Array.isArray(packsOrRegistry) ? buildRegistry(packsOrRegistry) : packsOrRegistry
   const diagnostics: Diagnostic[] = [...registry.diagnostics]
   const warn = (message: string, source?: string): void => {
@@ -1784,6 +1813,29 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     damageReductions,
     companions,
     archetypes: archetypeList,
+    ...(options.probes ? { probes: options.probes.map(runProbe) } : {}),
+    ...(options.keepEvaluator ? { evaluate: runProbe } : {}),
     diagnostics
+  }
+
+  function runProbe(probe: FormulaProbe): ProbeResult {
+    const arch = probe.archetypeId ? registry.get('archetypes', probe.archetypeId) : undefined
+    const taken = arch ? archetypeList.find((a) => a.id === arch.fullId) : undefined
+    const source: Source = {
+      key: 'probe',
+      name: 'Preview',
+      packId: arch?.packId ?? '',
+      ...(probe.inClass && classes.length ? { classCtx: { index: 0 } } : {}),
+      ...(arch ? { archetype: { fullId: arch.fullId, def: arch.def, level: taken?.level ?? highestClassLevel } } : {})
+    }
+    const self = {} as Record<AbilityId, number>
+    for (const a of ABILITY_IDS) self[a] = 10
+    const extras: EvalExtras = { spent: probe.spent ?? 1, spellLevel: probe.spellLevel ?? 1, value: probe.value ?? 10, self }
+    try {
+      const d = evaluateDice(probe.formula, (path, index) => resolveRef(path, index, source, extras))
+      return d.dice.length ? { ok: true, value: d.flat, dice: formatDice(d) } : { ok: true, value: d.flat }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
   }
 }

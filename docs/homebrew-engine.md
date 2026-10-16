@@ -637,3 +637,44 @@ Done: the Homebrew Workshop shell, raw editing, testing and browsing.
 
 Next (6b): form editors for every entry kind, the effect builder, formula
 fields with a live preview, and the level-table grid for classes.
+
+## Phase 6b — status
+
+Done: form editors for everything a pack holds.
+
+- **Form / JSON** — every entry (and the vocabulary and terminology) has
+  a Form view and the JSON view from 6a; both edit the same draft, the
+  forms keep keys they don't know, and emptied optional fields are
+  dropped, so switching never loses anything. Monsters stay JSON-only
+  until phase 8.
+- **Entry forms** (`features/workshop/form/entries.tsx`) — class (hit
+  points, proficiencies, skill choices, subclass and multiclass rules,
+  spellcasting, progression), subclass, archetype (tags, level basis,
+  unique, prerequisite), species (speeds, traits), background, feat,
+  option list (options with point cost, group, prerequisite, effects),
+  spell (casting, rolls, ongoing effects), item (weapon, armor, charges,
+  when effects apply).
+- **Level-table grid** (`form/levels.tsx`) — one row per level with the
+  table columns as editable cells (numbers or text such as dice) and the
+  level's features; clicking a level opens its feature editor.
+- **Effect builder** (`form/effects.tsx`) — every effect kind, an
+  optional "only when" condition (`form/conditions.tsx`: every condition
+  kind, nested all / any / not, item and attack filters), and full
+  editors for granted resources, actions (fixed cost, variable spend,
+  restores), toggles, attacks, choices (every option source, point-buy
+  groups, on-pick effects), companions and spellcasting (with a slot
+  grid).
+- **Formula fields** — syntax checked as you type and previewed live
+  against the test character (`deriveCharacter(..., { keepEvaluator })`
+  → `evaluate(probe)`; probes can sit in class or archetype scope and get
+  sample @spent / @slotLevel / @self values). Editing a class or subclass
+  previews as that class. A help mark lists the references.
+- **Suggestions** — inputs for ids offer the pack's and its
+  dependencies' classes, spells, feats, option lists, archetypes and
+  tags, skills, damage types, conditions, the resources and toggles the
+  draft grants, stat paths and roll targets (`suggestionLists`).
+- The test character's setup now lives on the pack editor and is shared
+  with the previews.
+
+Not yet: monsters as forms (phase 8), a guided "new class" wizard, and
+drag-and-drop reordering (rows move with up/down buttons).

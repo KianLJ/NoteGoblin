@@ -296,3 +296,32 @@ describe('example JJK pack', () => {
     expect(d.critThreshold).toBe(19)
   })
 })
+
+describe('formula previews', () => {
+  it('evaluates formulas against a derived character, in class and archetype scope', () => {
+    const d = deriveCharacter(
+      { abilityScores: SCORES, classes: [{ classId: 'sorcerer', level: 4 }], choices: { [TECH]: ['hb:blood'] } },
+      PACKS,
+      {
+        probes: [
+          { formula: '@prof + @wis.mod' },
+          { formula: '@classLevel * 2', inClass: true },
+          { formula: '@classLevel' },
+          { formula: '(@spent + @table.blood-dice)d8', archetypeId: 'hb:blood', spent: 2 },
+          { formula: '@archetypeLevel', archetypeId: 'hb:blood' },
+          { formula: '@nope.thing' }
+        ],
+        keepEvaluator: true
+      }
+    )
+    expect(d.probes).toEqual([
+      { ok: true, value: 4 },
+      { ok: true, value: 8 },
+      { ok: false, error: '@classLevel only works inside a class or subclass feature' },
+      { ok: true, value: 0, dice: '4d8' },
+      { ok: true, value: 4 },
+      { ok: false, error: 'Unknown reference @nope.thing' }
+    ])
+    expect(d.evaluate!({ formula: '@resource.ce.max' })).toEqual({ ok: true, value: 8 })
+  })
+})
