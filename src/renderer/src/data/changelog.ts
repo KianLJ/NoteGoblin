@@ -7,6 +7,19 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.5.16',
+    title: 'Simpler choices and level-ups',
+    highlights: [
+      'Every choice on the character sheet — Ability Score Improvements and feats, Fighting Styles, Metamagic, Eldritch Invocations, subclass options, spell picks, species traits — now uses one consistent card on the Features tab and in the level-up popup, ready for homebrew content in upcoming updates',
+      'No more Choose/Apply buttons: picking from a list is the choice, and you can change a single pick right from its dropdown',
+      'Ability Score Improvements are now two quick steps: pick "Ability Score Improvement" (or a feat) for the slot, then pick your two +1s — the same ability twice gives +2',
+      'Circle Spells and lineage spells (like a Tiefling\'s Fire Bolt) are added automatically instead of behind a grant button, and show up on the Spells tab, in Actions and under Reactions',
+      'Each feat now shows on the choice that picked it, instead of in a separate Feats section',
+      'Fixed the level-up popup briefly showing "nothing new" before your new features appeared',
+      'The Skills column is narrower, giving the Combat area more room'
+    ]
+  },
+  {
     version: '0.5.15',
     title: 'A new rules engine under the character sheet',
     highlights: [
