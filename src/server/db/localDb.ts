@@ -18,6 +18,9 @@ export function getLocalDb(userDataDir: string): DatabaseType {
       if (tableIsMissingColumn(database, 'cached_campaigns', 'session_decks_json')) {
         database.exec("ALTER TABLE cached_campaigns ADD COLUMN session_decks_json TEXT NOT NULL DEFAULT '[]'")
       }
+      if (tableIsMissingColumn(database, 'cached_campaigns', 'packs_json')) {
+        database.exec("ALTER TABLE cached_campaigns ADD COLUMN packs_json TEXT NOT NULL DEFAULT '[]'")
+      }
     })
   }
   return db

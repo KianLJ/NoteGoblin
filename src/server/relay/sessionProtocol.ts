@@ -24,6 +24,7 @@ export type RequestKind =
   | 'calendar.get'
   | 'calendar.save'
   | 'calendar.remove'
+  | 'campaignPacks.list'
   | 'folders.list'
   | 'folders.create'
   | 'folders.update'

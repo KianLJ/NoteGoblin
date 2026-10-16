@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModeToggle, type Mode } from './ModeToggle'
 import { WindowControls } from './WindowControls'
 import { VersionBadge } from './VersionBadge'
-import { BestiaryIcon } from './icons'
+import { BestiaryIcon, PacksIcon } from './icons'
+import { ContentPacksModal } from '../content/ContentPacksModal'
 import { FriendsMenu } from '../friends/FriendsMenu'
 import { MessagesButton } from '../chat/MessagesButton'
 import { NotificationToasts } from '../notifications/NotificationToasts'
@@ -21,6 +22,7 @@ import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
 import { ensureAmbientListening } from '../audio/ambientEngine'
 import { ensureSfxBoardListening } from '../audio/sfxBoardEngine'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
+import { useApplyActivePacks, useCampaignPacks } from '../content/usePacks'
 import type { BestiaryMonster } from '../../data/bestiary'
 
 // Discord presence line shown while the app is open but not actively DMing
@@ -75,6 +77,16 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [joinedSession, setJoinedSession] = useState<{ sessionId: string; label: string } | null>(null)
   const [disconnectMessage, setDisconnectMessage] = useState<string | null>(null)
   const playerWorkspace = usePlayerWorkspace(joinedSession?.sessionId)
+
+  // Which content packs every character sheet derives with (see shared/content/sheet.ts): the open campaign's
+  // enabled packs — the DM's own campaign in DM mode, the joined (or offline) campaign in player mode — and the
+  // whole personal library when no campaign is open.
+  const dmCampaignPacks = useCampaignPacks(mode === 'dm' ? (activeCampaign?.id ?? null) : null)
+  const activeCampaignPacks = useMemo(() => {
+    if (mode === 'dm') return activeCampaign && dmCampaignPacks.packs ? dmCampaignPacks.packs.map((p) => p.pack) : null
+    return playerWorkspace.activeCampaign ? playerWorkspace.campaignPacks : null
+  }, [mode, activeCampaign, dmCampaignPacks.packs, playerWorkspace.activeCampaign, playerWorkspace.campaignPacks])
+  useApplyActivePacks(activeCampaignPacks)
 
   // Lifted here (rather than inside NotificationBell) so FriendsMenu's Join
   // button can also be gated on it — a friend showing as "hosting" doesn't
@@ -323,6 +335,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   }
 
   const [bestiaryOpen, setBestiaryOpen] = useState(false)
+  const [packsOpen, setPacksOpen] = useState(false)
 
   return (
     // height:100% (not 100vh) deliberately — this box is nested inside
@@ -394,6 +407,15 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           >
             <BestiaryIcon />
           </button>
+          <button
+            type="button"
+            onClick={() => setPacksOpen(true)}
+            className="gb-btn gb-btn--secondary"
+            title="Content Packs"
+            style={{ padding: 'var(--space-2)', display: 'flex' }}
+          >
+            <PacksIcon />
+          </button>
           {mode === 'dm' && <MusicButton sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} />}
           {mode === 'dm' && <SoundBoardButton sessionId={hostedSessionId} />}
           <MessagesButton
@@ -416,6 +438,19 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
         <WindowControls />
       </header>
+
+      {packsOpen && (
+        <ContentPacksModal
+          onClose={() => setPacksOpen(false)}
+          role={mode === 'dm' ? 'dm' : 'player'}
+          campaign={
+            mode === 'dm'
+              ? activeCampaign && { id: activeCampaign.id, name: activeCampaign.name }
+              : playerWorkspace.activeCampaign && { id: playerWorkspace.activeCampaign.id, name: playerWorkspace.activeCampaign.name }
+          }
+          playerCampaignPacks={playerWorkspace.campaignPacks}
+        />
+      )}
 
       {disconnectMessage && (
         <div

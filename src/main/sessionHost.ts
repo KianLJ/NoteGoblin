@@ -475,6 +475,9 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (result.ok) broadcastCampaignChanged(campaignId)
       return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
     }
+    // Players only ever read a campaign's packs — the DM changes them locally (see registerIpc.ts's campaignPacks:*).
+    case 'campaignPacks.list':
+      return fromService(frame.reqId, campaignService.listCampaignPacks(db, str('campaignId'), userId))
     case 'folders.list':
       return fromService(frame.reqId, campaignService.listFolders(db, str('campaignId'), userId))
     case 'folders.create': {

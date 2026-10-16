@@ -191,4 +191,24 @@ CREATE TABLE IF NOT EXISTS campaign_calendars (
 );
 
 CREATE INDEX IF NOT EXISTS idx_calendars_campaign ON campaign_calendars(campaign_id);
+
+-- Content packs the DM has enabled for a campaign (see shared/content/schema.ts
+-- and docs/homebrew-engine.md, phase 5). Each row holds its own copy of the
+-- pack as enabled — the campaign keeps that version until the DM explicitly
+-- updates it, so editing or re-importing a pack in the DM's library never
+-- changes a running campaign by surprise. Every member reads these (they're
+-- sent to players with the rest of the campaign); only the DM writes.
+-- 'position' is enable order, which is also pack load order. campaign_id is
+-- deliberately NOT a foreign key, same reasoning as campaign_calendars.
+CREATE TABLE IF NOT EXISTS campaign_packs (
+  campaign_id TEXT NOT NULL,
+  pack_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  pack_json TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  enabled_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  PRIMARY KEY (campaign_id, pack_id)
+);
 `

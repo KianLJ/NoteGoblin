@@ -498,3 +498,48 @@ picks are native-only, so older clients don't show them. The SRD pack is
 still generated from `dnd5e.ts` / `compendium.ts` at import, so most legacy
 helpers stay until the pack is stored as data. Next: phase 5 (pack storage
 and sync).
+
+## Phase 5 — status and notes for phase 6
+
+Done: pack storage and sync.
+
+- **Library** — `content_packs` in local.sqlite3 (per identity, one row per
+  pack id; re-importing an id replaces it). `PackLibraryRepo`; IPC
+  `packs.list/import/exportPack/remove` (native file dialogs; import
+  validates every file with `readPackFile`, reporting warnings and
+  per-file failures). Removing a pack never touches a campaign's copy.
+- **Campaigns** — `campaign_packs` in host.sqlite3: the DM's copy of each
+  enabled pack as enabled, in load order. `listCampaignPacks` (members),
+  `enableCampaignPack` / `disableCampaignPack` (DM only). Enabling an
+  already-enabled id is the explicit **update** — it copies the library's
+  current version; nothing changes on its own. Enable is refused until the
+  pack's dependencies are enabled; disable is refused while another enabled
+  pack depends on it. Changes broadcast `campaign-changed`. Deleting a
+  campaign removes its rows.
+- **Players** — new session request `campaignPacks.list`; the player
+  workspace fetches packs alongside notes/folders/decks and stores them in
+  the offline snapshot (`cached_campaigns.packs_json`), so sheets still
+  derive with them when the DM isn't hosting.
+- **Which packs apply** — `shared/content/sheet.ts` holds the active pack
+  set (`setActivePacks` / `subscribeActivePacks`); `deriveSheet` and
+  `useDerivedSheet` use it, cached per sheet + pack set. `AppShell` applies
+  the open campaign's packs (DM's own campaign, or the joined/offline one)
+  and the whole library otherwise (`useApplyActivePacks`).
+- **Saved ids** — the main process normalizes sheets against every pack the
+  machine knows (SRD, library, cached and hosted campaign packs —
+  `knownPacks` in registerIpc.ts), so homebrew ids are written to disk and
+  survive a pack being disabled.
+- **UI** — a Content Packs button in the header opens `ContentPacksModal`:
+  the open campaign's packs (DM: enable / update / disable; player:
+  read-only) and the library (import / export / remove).
+- `shared/content/packFiles.ts` holds the pure rules (file reading/writing,
+  enable/disable checks), all unit-tested; the new SQL was exercised
+  against real SQLite (library upsert, snapshot column migration, campaign
+  upsert keeping position, disable).
+
+Not yet: packs in the Codex and the add-spell/item pickers (they still
+list SRD data only — phase 6), the `changedPacks` "this pack was updated"
+prompt on sheets, the DM's cross-device relay snapshot (campaign packs
+aren't pushed to the relay with notes/folders yet), and an in-app way for
+a player to send a pack to the DM (export/import for now). Next: phase 6,
+the Homebrew Workshop.

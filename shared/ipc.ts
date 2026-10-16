@@ -6,6 +6,8 @@ import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, R
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
+import type { ContentPack } from './content/schema'
+import type { PackIssue } from './content/validate'
 import type { SessionDeck, SessionScene, LiveSceneState } from './sessionDeck'
 
 /**
@@ -166,7 +168,29 @@ export interface CampaignSnapshot {
   folders: Folder[]
   /** Optional — absent on a snapshot saved before session decks existed; callers should default to []. */
   sessionDecks?: SessionDeck[]
+  /** The content packs the DM had enabled, as of this snapshot — so sheets still derive with them offline. Absent on older snapshots; default to []. */
+  packs?: ContentPack[]
   syncedAt: string
+}
+
+/** A content pack in this identity's personal library (see the content_packs table). */
+export interface LibraryPack {
+  pack: ContentPack
+  createdAt: string
+  updatedAt: string
+}
+
+/** A content pack enabled for a campaign — the DM's copy as of when it was enabled or last updated. */
+export interface CampaignPack {
+  pack: ContentPack
+  enabledAt: string
+  updatedAt: string
+}
+
+/** What importing one or more pack files did. A file that fails validation is skipped, with its issues. */
+export interface PackImportResult {
+  imported: Array<{ pack: ContentPack; replaced: boolean; warnings: PackIssue[] }>
+  failed: Array<{ fileName: string; issues: PackIssue[] }>
 }
 
 /** Fired whenever any participant (DM or a fellow player) mutates notes/folders in a campaign — listeners just re-fetch rather than diffing a pushed payload. */
@@ -358,9 +382,33 @@ export interface AppApi {
   snapshots: {
     list: () => Promise<ApiResult<CampaignSnapshot[]>>
     get: (campaignId: string) => Promise<ApiResult<CampaignSnapshot | null>>
-    save: (campaign: Campaign, notes: Note[], folders: Folder[], sessionDecks: SessionDeck[]) => Promise<void>
+    save: (campaign: Campaign, notes: Note[], folders: Folder[], sessionDecks: SessionDeck[], packs: ContentPack[]) => Promise<void>
     /** Forgets a cached campaign — just the local read-only copy, not anything on the DM's actual host. */
     remove: (campaignId: string) => Promise<ApiResult<void>>
+  }
+  // This identity's personal content-pack library (homebrew "books") —
+  // entirely local. import/exportPack open native file dialogs; import
+  // validates every file (see shared/content/packFiles.ts) and replaces a
+  // pack with the same id (an update). Outside a campaign, character sheets
+  // derive with every library pack.
+  packs: {
+    list: () => Promise<ApiResult<LibraryPack[]>>
+    /** Opens a file picker; resolves null if cancelled. */
+    import: () => Promise<ApiResult<PackImportResult | null>>
+    /** Opens a save dialog; resolves false if cancelled. */
+    exportPack: (packId: string) => Promise<ApiResult<boolean>>
+    remove: (packId: string) => Promise<ApiResult<void>>
+  }
+  // The packs a campaign uses. Every member can list them (a player's goes
+  // to the DM over the session); enable/disable are DM-only and local to the
+  // DM's host — enable copies the pack from the DM's library, and enabling a
+  // pack that's already on replaces it with the library's current version
+  // (the explicit "update" — a campaign never changes on its own). Reuses
+  // campaigns.onChanged to tell everyone to re-fetch.
+  campaignPacks: {
+    list: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignPack[]>>
+    enable: (campaignId: string, packId: string) => Promise<ApiResult<CampaignPack[]>>
+    disable: (campaignId: string, packId: string) => Promise<ApiResult<CampaignPack[]>>
   }
   // Characters live entirely on your own device, owned by your local
   // identity — campaign-independent, no session/network involved.

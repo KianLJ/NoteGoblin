@@ -126,8 +126,19 @@ const api: AppApi = {
   snapshots: {
     list: () => ipcRenderer.invoke('snapshots:list'),
     get: (campaignId) => ipcRenderer.invoke('snapshots:get', campaignId),
-    save: (campaign, notes, folders, sessionDecks) => ipcRenderer.invoke('snapshots:save', campaign, notes, folders, sessionDecks),
+    save: (campaign, notes, folders, sessionDecks, packs) => ipcRenderer.invoke('snapshots:save', campaign, notes, folders, sessionDecks, packs),
     remove: (campaignId) => ipcRenderer.invoke('snapshots:remove', campaignId)
+  },
+  packs: {
+    list: () => ipcRenderer.invoke('packs:list'),
+    import: () => ipcRenderer.invoke('packs:import'),
+    exportPack: (packId) => ipcRenderer.invoke('packs:export', packId),
+    remove: (packId) => ipcRenderer.invoke('packs:remove', packId)
+  },
+  campaignPacks: {
+    list: (campaignId, sessionId) => ipcRenderer.invoke('campaignPacks:list', campaignId, sessionId),
+    enable: (campaignId, packId) => ipcRenderer.invoke('campaignPacks:enable', campaignId, packId),
+    disable: (campaignId, packId) => ipcRenderer.invoke('campaignPacks:disable', campaignId, packId)
   },
   characters: {
     list: () => ipcRenderer.invoke('characters:list'),

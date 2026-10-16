@@ -106,3 +106,18 @@ export function BestiaryIcon(): JSX.Element {
     </svg>
   )
 }
+
+/** Content Packs — a row of book spines (the Codex already has the open book). */
+export function PacksIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path
+        d="M2.5 2.5h2.6v11H2.5zM5.1 2.5h2.6v11H5.1zM8.4 3.3l2.5-.7 2.9 10.6-2.5.7z"
+        stroke="currentColor"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+      <path d="M2.5 5h2.6M5.1 5h2.6M2.5 11h2.6M5.1 11h2.6M9.1 5.6l2.5-.7M10.6 11.1l2.5-.7" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  )
+}

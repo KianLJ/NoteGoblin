@@ -4,6 +4,9 @@ import { NoteRepo, type NoteRow } from '../repositories/noteRepo'
 import { FolderRepo, type FolderRow } from '../repositories/folderRepo'
 import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
 import { CalendarRepo, type CalendarRow } from '../repositories/calendarRepo'
+import { CampaignPackRepo, type EnabledPack } from '../repositories/packRepo'
+import { dependents, enableProblems } from '@shared/content/packFiles'
+import { contentPackSchema } from '@shared/content/schema'
 import { SessionDeckRepo, type SessionDeckRow } from '../repositories/sessionDeckRepo'
 import { UserRepo } from '../repositories/userRepo'
 import { stripDmAsides, type SessionScene } from '@shared/sessionDeck'
@@ -357,6 +360,7 @@ export function deleteCampaign(db: DatabaseType, campaignId: string, userId: str
   db.prepare('DELETE FROM initiative_entries WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM messages WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM campaign_calendars WHERE campaign_id = ?').run(campaignId)
+  new CampaignPackRepo(db).removeAll(campaignId)
   db.prepare('DELETE FROM session_decks WHERE campaign_id = ?').run(campaignId)
   return { ok: true, data: undefined }
 }
@@ -1356,6 +1360,53 @@ export function deleteCalendar(db: DatabaseType, campaignId: string, userId: str
   if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can delete the calendar.' }
   new CalendarRepo(db).remove(campaignId)
   return { ok: true, data: undefined }
+}
+
+// --- Content packs -----------------------------------------------------------
+// The packs a campaign uses (see the campaign_packs table and
+// docs/homebrew-engine.md, phase 5): every member reads them — they're what
+// players' sheets derive with — and only the DM changes them.
+
+/** Every campaign member can read the enabled packs, in load order. */
+export function listCampaignPacks(db: DatabaseType, campaignId: string, userId: string): ServiceResult<EnabledPack[]> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  return { ok: true, data: new CampaignPackRepo(db).list(campaignId) }
+}
+
+/**
+ * DM only — enables a pack for the campaign, or (same pack id) replaces the
+ * enabled copy with a new version. Validated against the packs already
+ * enabled, so a pack can't go in ahead of what it depends on.
+ */
+export function enableCampaignPack(db: DatabaseType, campaignId: string, userId: string, input: unknown): ServiceResult<EnabledPack[]> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change a campaign’s content packs.' }
+  const parsed = contentPackSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, status: 400, error: 'That isn’t a valid content pack.' }
+  const repo = new CampaignPackRepo(db)
+  const problems = enableProblems(parsed.data, repo.list(campaignId).map((e) => e.pack))
+  if (problems.length) return { ok: false, status: 400, error: problems.join(' ') }
+  repo.upsert(campaignId, parsed.data)
+  return { ok: true, data: repo.list(campaignId) }
+}
+
+/** DM only — stops using a pack in this campaign. Refused while another enabled pack depends on it. Sheets keep their ids into it (see migrate.ts), so re-enabling it restores everything. */
+export function disableCampaignPack(db: DatabaseType, campaignId: string, userId: string, packId: string): ServiceResult<EnabledPack[]> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change a campaign’s content packs.' }
+  const repo = new CampaignPackRepo(db)
+  const enabled = repo.list(campaignId).map((e) => e.pack)
+  const blockers = dependents(packId, enabled)
+  if (blockers.length) return { ok: false, status: 400, error: `Disable ${blockers.map((p) => `“${p.name}”`).join(', ')} first — ${blockers.length === 1 ? 'it depends' : 'they depend'} on this pack.` }
+  repo.remove(campaignId, packId)
+  return { ok: true, data: repo.list(campaignId) }
 }
 
 function parseScenes(raw: string): SessionScene[] {

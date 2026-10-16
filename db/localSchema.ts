@@ -62,9 +62,30 @@ CREATE TABLE IF NOT EXISTS cached_campaigns (
   folders_json TEXT NOT NULL,
   -- Added after this table shipped — see hostDb.ts-style migration in localDb.ts. Defaults to '[]' so an old row (or a fresh insert before this cache is first populated) reads back as no decks rather than a JSON parse error.
   session_decks_json TEXT NOT NULL DEFAULT '[]',
+  -- The content packs the DM had enabled for this campaign (whole ContentPack JSON, see shared/content/schema.ts) —
+  -- so character sheets in an offline campaign still derive with its homebrew. Added later; see localDb.ts.
+  packs_json TEXT NOT NULL DEFAULT '[]',
   synced_at TEXT NOT NULL,
   PRIMARY KEY (identity_id, campaign_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_cached_campaigns_identity ON cached_campaigns(identity_id);
+
+-- This identity's personal content-pack library (homebrew "books" — see
+-- docs/homebrew-engine.md and shared/content/schema.ts): every pack they've
+-- imported or made, as one validated ContentPack JSON blob each. Outside a
+-- campaign, character sheets derive with all of these; inside one, only the
+-- packs the DM enabled for it apply (campaign_packs on the DM's host db).
+-- Keyed by (identity, pack id) — importing a pack with an id already here
+-- replaces it (an update), it never duplicates.
+CREATE TABLE IF NOT EXISTS content_packs (
+  identity_id TEXT NOT NULL REFERENCES identity(id) ON DELETE CASCADE,
+  pack_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  pack_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  PRIMARY KEY (identity_id, pack_id)
+);
 `

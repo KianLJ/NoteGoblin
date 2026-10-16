@@ -1,15 +1,18 @@
 // The one entry point the app uses to get a character sheet's derived
 // numbers: CharacterSheetData → normalizeSheet (format v2 ids) →
-// legacySheetToBuild → deriveCharacter. Every tab, the initiative tracker
-// and the force-roll prompt read from this instead of the old
-// effective*/compute* helpers, so the sheet shows exactly what the content
-// engine calculates (docs/homebrew-engine.md, phases 3–4).
+// legacySheetToBuild → deriveCharacter, with whichever content packs are
+// active. Every tab, the initiative tracker and the force-roll prompt read
+// from this instead of the old effective*/compute* helpers, so the sheet
+// shows exactly what the content engine calculates (docs/homebrew-engine.md,
+// phases 3–5).
 
 import { abilityModifier, type Ability, type AbilityScores, type CharacterSheetData, type SkillName, type Spell } from '../dnd5e'
 import { ABILITY_IDS, deriveCharacter, type CharacterBuild, type DerivedCharacter, type RollMode } from './engine'
 import { legacySheetToBuild } from './legacy'
 import { normalizeSheet, registryForPacks } from './migrate'
 import type { Registry } from './registry'
+import type { ContentPack } from './schema'
+import { srdPack } from './srd'
 import { SRD_PACK_ID, skillId } from './srd/common'
 
 export interface DerivedSheet {
@@ -18,24 +21,65 @@ export interface DerivedSheet {
   registry: Registry
 }
 
-const derivedCache = new WeakMap<CharacterSheetData, DerivedSheet>()
+// ---------------------------------------------------------------------------
+// Active content packs
+//
+// Which homebrew packs apply right now, on top of the SRD: inside a campaign
+// (DM hosting it, a joined session, or an offline snapshot) exactly the
+// packs the DM enabled; outside one, the whole personal library. The
+// renderer sets this (see useActivePacks.ts); everything that derives a
+// sheet reads it, so no caller has to thread packs through.
+
+let activePacks: ContentPack[] = []
+let activeKey = ''
+const listeners = new Set<() => void>()
+
+const keyOf = (packs: ContentPack[]): string => packs.map((p) => `${p.id}@${p.version}`).join(',')
+
+/** Sets the homebrew packs sheets derive with (the SRD is always included). A no-op if nothing changed. */
+export function setActivePacks(packs: ContentPack[]): void {
+  const extra = packs.filter((p) => p.id !== SRD_PACK_ID)
+  const key = keyOf(extra)
+  if (key === activeKey) return
+  activePacks = extra
+  activeKey = key
+  for (const listener of listeners) listener()
+}
+
+export function getActivePacks(): ContentPack[] {
+  return activePacks
+}
+
+/** A string that changes whenever the active packs do — for React (useSyncExternalStore) and caches. */
+export function getActivePacksKey(): string {
+  return activeKey
+}
+
+export function subscribeActivePacks(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+const derivedCache = new WeakMap<CharacterSheetData, { key: string; result: DerivedSheet }>()
 
 /**
- * Derived numbers for a sheet. Cached per sheet object, so calling it
- * repeatedly for the same (unchanged) sheet is free. Normalizes first, so a
- * sheet from an older app version (or a DM's copy of one) derives the same
- * as a migrated one; the adapter's workarounds (e.g. a class from a pack
- * that isn't enabled) are added to the diagnostics.
+ * Derived numbers for a sheet with the active packs. Cached per sheet
+ * object (and pack set), so calling it repeatedly for the same unchanged
+ * sheet is free. Normalizes first, so a sheet from an older app version (or
+ * a DM's copy of one) derives the same as a migrated one; the adapter's
+ * workarounds (e.g. a class from a pack that isn't enabled) are added to
+ * the diagnostics.
  */
 export function deriveSheet(sheet: CharacterSheetData): DerivedSheet {
   const cached = derivedCache.get(sheet)
-  if (cached) return cached
-  const { build, packs, warnings } = legacySheetToBuild(normalizeSheet(sheet))
+  if (cached && cached.key === activeKey) return cached.result
+  const srd = srdPack()
+  const { build, packs, warnings } = legacySheetToBuild(normalizeSheet(sheet, [srd, ...activePacks]), { packs: activePacks }, srd)
   const registry = registryForPacks(packs)
   const derived = deriveCharacter(build, registry)
   for (const message of warnings) derived.diagnostics.push({ severity: 'warning', message })
   const result = { derived, build, registry }
-  derivedCache.set(sheet, result)
+  derivedCache.set(sheet, { key: activeKey, result })
   return result
 }
 

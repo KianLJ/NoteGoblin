@@ -1,6 +1,6 @@
 import { app, dialog, ipcMain, type BrowserWindow } from 'electron'
 import { existsSync, watch, type FSWatcher } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { getLocalDb } from '@server/db/localDb'
 import { getHostDb } from '@server/db/hostDb'
@@ -15,6 +15,7 @@ import * as campaignService from '@server/services/campaignService'
 import type { ServiceResult } from '@server/services/campaignService'
 import { CharacterRepo, type CharacterRow } from '@server/repositories/characterRepo'
 import { SnapshotRepo, type CampaignSnapshot } from '@server/repositories/snapshotRepo'
+import { CampaignPackRepo, PackLibraryRepo } from '@server/repositories/packRepo'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { syncRelayAccount, changeRelayPassword, clearRelaySession, pullAndSendPrefs } from './relaySync'
 import { pullCampaignIfNewer, schedulePushCampaign, discoverAndSyncCampaigns } from './campaignContentSync'
@@ -84,6 +85,10 @@ import type {
 import type { CalendarConfig } from '@shared/calendar'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 import { normalizeSheet } from '@shared/content/migrate'
+import { packFileName, readPackFile, writePackFile } from '@shared/content/packFiles'
+import type { ContentPack } from '@shared/content/schema'
+import type { PackIssue } from '@shared/content/validate'
+import { srdPack } from '@shared/content/srd'
 
 // --- Vault file watcher ------------------------------------------------
 // In vault mode, notes/folders are real files — someone can add, rename, or
@@ -1133,13 +1138,149 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   )
 
   // --- Characters -----------------------------------------------------
+  // --- Content packs ------------------------------------------------------
+  // The personal library is local (content_packs in local.sqlite3); a
+  // campaign's enabled packs live on the DM's host (campaign_packs) and reach
+  // players over the session and in their offline snapshots. See
+  // docs/homebrew-engine.md, phase 5.
+  const packLibrary = new PackLibraryRepo(localDb)
+
+  /**
+   * Every content pack this machine knows — the SRD, this identity's
+   * library, packs from cached campaigns, and packs enabled in campaigns it
+   * hosts — so a saved sheet's ids can be resolved into any of them (see
+   * migrate.ts's normalizeSheet). First copy of an id wins.
+   */
+  function knownPacks(): ContentPack[] {
+    const identity = getCurrentIdentity()
+    if (!identity) return [srdPack()]
+    const all: ContentPack[] = [srdPack(), ...packLibrary.list(identity.id).map((p) => p.pack), ...snapshotRepo.allPacks(identity.id)]
+    try {
+      const hosted = getHostDb(userDataDir).prepare('SELECT DISTINCT campaign_id FROM campaign_packs').all() as { campaign_id: string }[]
+      const repo = new CampaignPackRepo(getHostDb(userDataDir))
+      for (const { campaign_id } of hosted) all.push(...repo.list(campaign_id).map((e) => e.pack))
+    } catch {
+      /* no host db yet — nothing hosted */
+    }
+    const seen = new Set<string>()
+    return all.filter((p) => !seen.has(p.id) && seen.add(p.id))
+  }
+
+  ipcMain.handle('packs:list', () => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    return { ok: true, data: packLibrary.list(identity.id) }
+  })
+
+  ipcMain.handle('packs:import', async () => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import content packs',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        // Files are named *.ngpack.json; the dialog can only filter on the last extension.
+        { name: 'NoteGoblin content packs', extensions: ['json'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    mainWindow.focus()
+    if (result.canceled || result.filePaths.length === 0) return { ok: true, data: null }
+    const imported: Array<{ pack: ContentPack; replaced: boolean; warnings: PackIssue[] }> = []
+    const failed: Array<{ fileName: string; issues: PackIssue[] }> = []
+    for (const filePath of result.filePaths) {
+      let text: string
+      try {
+        text = await readFile(filePath, 'utf8')
+      } catch (err) {
+        failed.push({ fileName: basename(filePath), issues: [{ severity: 'error', path: '', message: err instanceof Error ? err.message : 'Could not read the file.' }] })
+        continue
+      }
+      // Packs already in the library (and any imported earlier in this same batch) are available as dependencies.
+      const read = readPackFile(text, [...packLibrary.list(identity.id).map((p) => p.pack), ...imported.map((i) => i.pack)])
+      if (!read.ok) {
+        failed.push({ fileName: basename(filePath), issues: read.issues })
+        continue
+      }
+      const replaced = !!packLibrary.get(identity.id, read.pack.id)
+      packLibrary.save(identity.id, read.pack)
+      imported.push({ pack: read.pack, replaced, warnings: read.issues })
+    }
+    return { ok: true, data: { imported, failed } }
+  })
+
+  ipcMain.handle('packs:export', async (_event, packId: string) => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    const pack = packLibrary.get(identity.id, packId)
+    if (!pack) return { ok: false, error: 'That pack isn’t in your library.' }
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: `Export ${pack.name}`,
+      defaultPath: packFileName(pack),
+      filters: [{ name: 'NoteGoblin content pack', extensions: ['json'] }]
+    })
+    mainWindow.focus()
+    if (result.canceled || !result.filePath) return { ok: true, data: false }
+    try {
+      await writeFile(result.filePath, writePackFile(pack), 'utf8')
+      return { ok: true, data: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not write the file.' }
+    }
+  })
+
+  ipcMain.handle('packs:remove', (_event, packId: string) => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    // Removing from the library never touches a campaign: an enabled copy lives on in campaign_packs.
+    packLibrary.remove(identity.id, packId)
+    return { ok: true, data: undefined }
+  })
+
+  ipcMain.handle('campaignPacks:list', async (_event, campaignId: string, sessionId?: string) => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      return runService(() => campaignService.listCampaignPacks(me.db, campaignId, me.userId))
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest('campaignPacks.list', { campaignId })
+  })
+
+  /** DM-only and local: tells this window and (if hosting) every player to re-fetch the campaign's packs. */
+  function notifyCampaignPacksChanged(campaignId: string): void {
+    mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+    if (getHostedSession()) broadcastCampaignChanged(campaignId)
+  }
+
+  ipcMain.handle('campaignPacks:enable', (_event, campaignId: string, packId: string) => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    const pack = packLibrary.get(identity.id, packId)
+    if (!pack) return { ok: false, error: 'That pack isn’t in your library.' }
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = runService(() => campaignService.enableCampaignPack(me.db, campaignId, me.userId, pack))
+    if (result.ok) notifyCampaignPacksChanged(campaignId)
+    return result
+  })
+
+  ipcMain.handle('campaignPacks:disable', (_event, campaignId: string, packId: string) => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = runService(() => campaignService.disableCampaignPack(me.db, campaignId, me.userId, packId))
+    if (result.ok) notifyCampaignPacksChanged(campaignId)
+    return result
+  })
+
   // Entirely local — owned by the local identity, never routed over the
   // network, so no address/host concept applies here at all.
-  const characterRepo = new CharacterRepo(localDb)
+  const characterRepo = new CharacterRepo(localDb, knownPacks)
 
   function toCharacterSheet(row: CharacterRow): CharacterSheet {
     // Normalized on read too, so a sheet not saved since before the content engine still arrives in format v2.
-    const sheet = normalizeSheet({ ...emptyCharacterSheet(), ...JSON.parse(row.sheet_json || '{}') })
+    const sheet = normalizeSheet({ ...emptyCharacterSheet(), ...JSON.parse(row.sheet_json || '{}') }, knownPacks())
     return {
       ...sheet,
       id: row.id,
@@ -1228,10 +1369,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(
     'snapshots:save',
-    (_event, campaign: Campaign, notes: Note[], folders: Folder[], sessionDecks: SessionDeck[]): void => {
+    (_event, campaign: Campaign, notes: Note[], folders: Folder[], sessionDecks: SessionDeck[], packs: ContentPack[] = []): void => {
       const identity = getCurrentIdentity()
       if (!identity) return
-      snapshotRepo.save(identity.id, campaign, notes, folders, sessionDecks)
+      snapshotRepo.save(identity.id, campaign, notes, folders, sessionDecks, packs)
     }
   )
 

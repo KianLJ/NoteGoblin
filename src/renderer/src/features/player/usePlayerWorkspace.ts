@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Campaign, CampaignSnapshot, CharacterSheet, Folder, Note } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
 import type { SessionDeck } from '@shared/sessionDeck'
+import type { ContentPack } from '@shared/content/schema'
 import { playSfx } from '../audio/soundEffects'
 
 export type PlayerTabRef = { kind: 'character'; id: string } | { kind: 'note'; id: string }
@@ -24,6 +25,9 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [folders, setFolders] = useState<Folder[] | null>(null)
   const [sessionDecks, setSessionDecks] = useState<SessionDeck[] | null>(null)
+  // The content packs the DM enabled for the active campaign (live, or from the offline snapshot) — what this
+  // player's sheets derive with while the campaign is open. null with no campaign open.
+  const [campaignPacks, setCampaignPacks] = useState<ContentPack[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tabs, setTabs] = useState<PlayerTabRef[]>([])
   const [activeTab, setActiveTabState] = useState<PlayerTabRef | null>(null)
@@ -69,6 +73,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       setNotes(null)
       setFolders(null)
       setSessionDecks(null)
+      setCampaignPacks(null)
       return
     }
     refreshNotes(activeCampaign)
@@ -132,8 +137,9 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     Promise.all([
       window.goblin.notes.list(campaignId, sessionId),
       window.goblin.folders.list(campaignId, sessionId),
-      window.goblin.sessionDecks.list(campaignId, sessionId)
-    ]).then(([notesResult, foldersResult, decksResult]) => {
+      window.goblin.sessionDecks.list(campaignId, sessionId),
+      window.goblin.campaignPacks.list(campaignId, sessionId)
+    ]).then(([notesResult, foldersResult, decksResult, packsResult]) => {
       if (!notesResult.ok) {
         setError(notesResult.error)
         return
@@ -149,7 +155,10 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       // since this feature shipped) block notes/folders from still caching.
       const decks = decksResult.ok ? decksResult.data : []
       setSessionDecks(decks)
-      window.goblin.snapshots.save(campaign, notesResult.data, foldersResult.data, decks).then(refreshOfflineSnapshots)
+      // Same for content packs — an older host without them just means none.
+      const packs = packsResult.ok ? packsResult.data.map((p) => p.pack) : []
+      setCampaignPacks(packs)
+      window.goblin.snapshots.save(campaign, notesResult.data, foldersResult.data, decks, packs).then(refreshOfflineSnapshots)
     })
   }
 
@@ -174,6 +183,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       setNotes(result.data.notes)
       setFolders(result.data.folders)
       setSessionDecks(result.data.sessionDecks ?? [])
+      setCampaignPacks(result.data.packs ?? [])
     })
   }
 
@@ -185,6 +195,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     setNotes(null)
     setFolders(null)
     setSessionDecks(null)
+    setCampaignPacks(null)
     setTabs((prev) => prev.filter((t) => t.kind !== 'note'))
     setActiveTabState((current) => (current?.kind === 'note' ? null : current))
   }
@@ -460,6 +471,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     notes,
     folders,
     sessionDecks,
+    campaignPacks,
     error,
     tabItems,
     activeTab,
