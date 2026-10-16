@@ -271,3 +271,84 @@ snapshot diffs once the SRD pack is compared against the baseline):
   SRD pack should use ids and the phase 4 migration maps them.
 - **Multiclass spell slots** are summed per class, same as legacy — the
   real multiclass caster table is a later, deliberate rules change.
+
+## Phase 2 — status and notes for phase 3
+
+Built:
+
+- `shared/content/srd/` — the `srd-5.2.1` pack, generated at import from
+  `dnd5e.ts`, `compendium.ts` and `shared/data/` (`srdPack()` parses and
+  caches it; `buildSrdPackInput()` is the raw input). It passes
+  `validatePack` with no issues. Everything those modules decide in code is
+  pack data now: class tables and resources as formulas, Rage as a toggle
+  that spends its resource, Reckless Attack as a free toggle, resource
+  actions, Unarmored Defense/Movement and Primal Champion as effects,
+  spellcasting configs from the slot/known/cantrip tables (Pact Magic is its
+  own `pact` pool), Champion's Additional Fighting Style as a choice,
+  grouped subclass options as option lists (Circle of the Land grants its
+  spells by level), species lineages, backgrounds, feats, armour AC /
+  Strength requirement / Stealth as item effects, and exhaustion as a graded
+  condition.
+- `shared/content/legacy.ts` — `legacySheetToBuild(sheet)` reads today's
+  `CharacterSheetData` as a `CharacterBuild` plus packs. It mirrors legacy
+  semantics: only active picks count, unrecognised class names become stub
+  classes in a generated `legacy-homebrew` pack (levels, no hit points,
+  placed after the known classes so the first known class keeps its full
+  first hit die), level-0 slots go to the background (or Human's Versatile),
+  and any pick with nowhere to go becomes a per-sheet custom effect so it
+  still counts.
+- `engine.ts` exports `choiceKeys`, the one place choice/pick keys are built.
+- Tests: `tests/regression/parity.test.ts` runs all 166 fixtures through
+  adapter → `deriveCharacter` → `project.ts` (DerivedCharacter →
+  LegacyDerived). Its snapshot started as a renamed copy of the baseline, so
+  `diff` the two snapshot files to see every deliberate difference. A second
+  test compares every class at levels 1–20 against live `legacyDerive` with
+  legacy-compatible options. `tests/content/legacy.test.ts` covers the
+  adapter paths the fixtures don't.
+
+Deliberate differences from the baseline, one commit each:
+
+| Change | Fixtures affected |
+| --- | --- |
+| Defense: its note is gone (the +1 AC in armour was already applied) | 15 |
+| Archery: +2 to ranged weapon attacks, the "add by hand" note is gone | 11 rangers (Longbow) |
+| Alert: + proficiency bonus to Initiative (the swap stays a note) | 1 |
+| Weapon proficiency comes from class proficiencies (`assumeWeaponProficiency: true` restores the old behaviour) | 12 bards (Rapier is martial; the 5.2.1 Bard has simple weapons only) |
+
+Decided against:
+
+- **Spellcasting-ability fallback**: the adapter passes the sheet's stored
+  ability through, including `null`. The sheet field is the player's
+  explicit choice, so it wins; the engine's fallback only applies to builds
+  that leave it `undefined` (future pack-native characters).
+- **Multiclass spell slots** stay summed per class, as before.
+
+Still the same as legacy, though the engine can now express them (each is
+a rules change for its own commit): Martial Arts (die, Dex for monk
+weapons), Fast Movement, Roving, Body and Mind, Slippery Mind and
+Disciplined Survivor save proficiencies, Draconic Resilience, Dwarven
+Toughness, Wood Elf / Drow speed and Darkvision, Rage not working in heavy
+armour, Reckless Attack applying only to Strength melee attacks, and
+magic-item mechanics (magic items are rules text only).
+
+Notes for phase 3:
+
+- Phase 2 in §10 also says "switch calculations to `deriveCharacter`;
+  delete hard-coded class branches". That hasn't happened: no UI reads the
+  engine yet, and the pack is still generated from the legacy modules.
+  Switching the tabs over (using the adapter until phase 4) and then
+  moving the SRD data into the pack itself, so the legacy helpers can be
+  deleted, is the next step.
+- The pack only has choices where today's sheet records a pick (ASIs,
+  Fighting Styles, Epic Boons, Metamagic, Invocations, Mystic Arcanum,
+  Spell Mastery, Signature Spells, Magical Secrets, subclass options,
+  lineages, background picks). Expertise, Skillful and similar picks still
+  live directly on the sheet's skills; add choices for them in phase 4,
+  when the migration can fill them.
+- A toggle with a `cost` is what the legacy sheet calls an activatable
+  resource (`activeBuffs`). Its id is the resource id, so `activeBuffs`
+  maps straight to `activeToggles`.
+- Legacy-only data is kept rather than dropped: the 2014 Favored
+  Enemy/Terrain picks become option-list choices on a per-sheet custom
+  effect, and Divine Sense (tracked by the sheet but absent from the 5.2.1
+  table) is its own Paladin level-1 feature.
