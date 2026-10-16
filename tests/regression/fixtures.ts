@@ -92,7 +92,7 @@ function build(overrides: Partial<CharacterSheetData>): CharacterSheetData {
   return { ...emptyCharacterSheet(), ...overrides }
 }
 
-function classSheet(classId: string, level: number, raceIndex: number): CharacterSheetData {
+export function classSheet(classId: string, level: number, raceIndex: number): CharacterSheetData {
   const cls = CLASSES.find((c) => c.id === classId)!
   const subclass = level >= cls.subclassLevel ? subclassesForClass(classId)[0]?.id : undefined
   const classes: ClassLevel[] = [{ className: cls.name, level, ...(subclass ? { subclass } : {}) }]

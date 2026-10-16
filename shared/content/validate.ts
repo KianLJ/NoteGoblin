@@ -152,6 +152,8 @@ class PackChecker {
   }
 
   private skill(path: string, id: string): void {
+    // "$pick" is filled in from a choice at derive time.
+    if (id.includes('$pick')) return
     if (!this.registry.vocabulary.skills.some((s) => s.id === id)) this.warning(path, `Unknown skill "${id}" — define it in vocabulary.skills.`)
   }
 

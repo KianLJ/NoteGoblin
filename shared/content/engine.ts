@@ -279,6 +279,22 @@ function substitutePick<T>(value: T, pick: string): T {
   return JSON.parse(JSON.stringify(value).split('$pick').join(pick)) as T
 }
 
+/**
+ * How the engine names sources and choice instances — CharacterBuild.choices is keyed by these.
+ * Exported so code that writes picks (the legacy adapter, the choices UI) builds the same keys.
+ */
+export const choiceKeys = {
+  classFeature: (classFullId: string, featureId: string): string => `class:${classFullId}:${featureId}`,
+  subclassFeature: (subclassFullId: string, featureId: string): string => `subclass:${subclassFullId}:${featureId}`,
+  speciesTrait: (speciesFullId: string, traitId: string): string => `species:${speciesFullId}:${traitId}`,
+  backgroundFeature: (backgroundFullId: string, featureId: string): string => `background:${backgroundFullId}:${featureId}`,
+  custom: (index: number): string => `custom:${index}`,
+  /** A choice granted by the source with this key. */
+  choice: (sourceKey: string, choiceId: string): string => `${sourceKey}#${choiceId}`,
+  /** The source key of one pick — choices granted by the picked option hang off it. `repeat` counts earlier picks of the same option. */
+  pick: (choiceKey: string, pick: string, repeat = 0): string => `${choiceKey}/${pick}${repeat ? `@${repeat}` : ''}`
+}
+
 function rechargeLabel(r: ResourceDef['recharge'], test: (c: Condition) => boolean): string {
   if (typeof r === 'string') return r
   return test(r.when) ? r.then : r.else
@@ -363,14 +379,14 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   }
 
   function collectChoice(choice: ChoiceDef, parent: Source, gates: Condition[]): void {
-    const key = `${parent.key}#${choice.id}`
+    const key = choiceKeys.choice(parent.key, choice.id)
     choiceInstances.push({ key, choice, source: parent, gates })
     const picks = build.choices?.[key] ?? []
     const seen = new Map<string, number>()
     for (const pick of picks) {
       const n = seen.get(pick) ?? 0
       seen.set(pick, n + 1)
-      const pickKey = `${key}/${pick}${n ? `@${n}` : ''}`
+      const pickKey = choiceKeys.pick(key, pick, n)
       const pickSource: Source = { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx }
       collectEffects(choice.onPick ? substitutePick(choice.onPick, pick) : [], pickSource, gates)
       collectPickedOption(choice, pick, pickKey, parent, gates)
@@ -408,24 +424,24 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
 
   function collectFeatureDef(
     def: { id: string; name: string; description?: string; effects?: Effect[] },
-    keyPrefix: string,
+    key: string,
     packId: string,
     gates: Condition[],
     classCtx?: ClassContext,
     level?: number
   ): void {
-    const source: Source = { key: `${keyPrefix}:${def.id}`, name: def.name, packId, classCtx, feature: { description: def.description ?? '', level } }
+    const source: Source = { key, name: def.name, packId, classCtx, feature: { description: def.description ?? '', level } }
     addFeature(source, gates)
     collectEffects(def.effects, source, gates)
   }
 
   if (species) {
     entryIds.add(species.fullId)
-    for (const trait of species.def.traits) collectFeatureDef(trait, `species:${species.fullId}`, species.packId, [])
+    for (const trait of species.def.traits) collectFeatureDef(trait, choiceKeys.speciesTrait(species.fullId, trait.id), species.packId, [])
   }
   if (background) {
     entryIds.add(background.fullId)
-    for (const f of background.def.features) collectFeatureDef(f, `background:${background.fullId}`, background.packId, [])
+    for (const f of background.def.features) collectFeatureDef(f, choiceKeys.backgroundFeature(background.fullId, f.id), background.packId, [])
   }
 
   classes.forEach((c, index) => {
@@ -451,7 +467,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     if (def.spellcasting) effects.push({ action: { kind: 'spellcasting', config: def.spellcasting }, gates: [], source: implicit })
     for (const lvl of def.levels) {
       if (lvl.level > c.level) continue
-      for (const f of lvl.features) collectFeatureDef(f, `class:${c.reg.fullId}`, c.reg.packId, [], ctx, lvl.level)
+      for (const f of lvl.features) collectFeatureDef(f, choiceKeys.classFeature(c.reg.fullId, f.id), c.reg.packId, [], ctx, lvl.level)
     }
     if (c.subclass) {
       entryIds.add(c.subclass.fullId)
@@ -461,7 +477,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       }
       for (const lvl of sub.def.levels) {
         if (lvl.level > c.level) continue
-        for (const f of lvl.features) collectFeatureDef(f, `subclass:${sub.fullId}`, sub.packId, [], ctx, lvl.level)
+        for (const f of lvl.features) collectFeatureDef(f, choiceKeys.subclassFeature(sub.fullId, f.id), sub.packId, [], ctx, lvl.level)
       }
     }
   })
@@ -494,7 +510,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   }
 
   ;(build.customEffects ?? []).forEach((custom, i) => {
-    const source: Source = { key: `custom:${i}`, name: custom.name, packId: 'custom', feature: { description: '' } }
+    const source: Source = { key: choiceKeys.custom(i), name: custom.name, packId: 'custom', feature: { description: '' } }
     collectEffects(custom.effects, source, [])
   })
 
