@@ -1,6 +1,6 @@
 // SRD feats (shared/data/srd-feats.json) as pack feats: each legacy
-// FeatEffect becomes an Effect, and the rules compendium.ts applies to a
-// feat by id in code (Defense's +1 AC in armour) become effects too.
+// FeatEffect becomes an Effect, and rules the JSON only describes in a note
+// (or compendium.ts applies by feat id in code) become real effects.
 
 import { FEATS, type CompendiumFeat, type FeatEffect } from '../../compendium'
 import type { ChoiceDef, Condition, ContentPackInput, Effect } from '../schema'
@@ -8,10 +8,14 @@ import { ABILITY_LIST, BODY_ARMOR, skillId } from './common'
 
 type FeatInput = NonNullable<ContentPackInput['feats']>[number]
 
-/** Rules compendium.ts hard-codes for a feat id rather than reading from its effects. */
-const CODED_FEAT_RULES: Record<string, Effect[]> = {
-  // computeArmorClassFromEquipment: +1 AC only while wearing body armour.
-  defense: [{ when: BODY_ARMOR, do: { kind: 'modify', target: 'ac', op: 'add', value: '1' } }]
+/**
+ * Rules srd-feats.json only carries as notes that the pack now automates:
+ * the effects to add, and which of the feat's notes (by index among its
+ * note effects) they make redundant.
+ */
+const AUTOMATED_FEAT_NOTES: Record<string, { replacesNotes: number[]; effects: Effect[] }> = {
+  // +1 AC only while wearing body armour (computeArmorClassFromEquipment already applied it; its note just repeated it).
+  defense: { replacesNotes: [0], effects: [{ when: BODY_ARMOR, do: { kind: 'modify', target: 'ac', op: 'add', value: '1' } }] }
 }
 
 /** The ASI feat's own pick: +2 to one score or +1 to two (legacy kind: 'ability' slots). */
@@ -100,10 +104,13 @@ function prerequisite(feat: CompendiumFeat): Condition | undefined {
 export function srdFeats(): FeatInput[] {
   return FEATS.map((feat) => {
     const epicBoon = feat.category === 'Epic Boon'
+    const automated = AUTOMATED_FEAT_NOTES[feat.id]
+    let noteIndex = 0
+    const legacyEffects = (feat.effects ?? []).filter((e) => e.kind !== 'note' || !automated?.replacesNotes.includes(noteIndex++))
     const effects: Effect[] = [
       ...(feat.id === 'ability-score-improvement' ? [{ do: { kind: 'grantChoice' as const, choice: ASI_CHOICE } }] : []),
-      ...(CODED_FEAT_RULES[feat.id] ?? []),
-      ...(feat.effects ?? []).flatMap((e) => featEffect(e, epicBoon))
+      ...(automated?.effects ?? []),
+      ...legacyEffects.flatMap((e) => featEffect(e, epicBoon))
     ]
     const prereq = prerequisite(feat)
     return {
