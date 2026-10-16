@@ -19,8 +19,9 @@ import {
   type SubclassFeatureChoice
 } from '../dnd5e'
 import { choiceKeys, type CharacterBuild, type ProficiencyLevel } from './engine'
-import { buildRegistry, type Registered, type Registry } from './registry'
-import type { ChoiceDef, ClassDef, ContentPack, Effect, FeatDef, OptionSource } from './schema'
+import { registryForPacks } from './migrate'
+import type { Registered, Registry } from './registry'
+import type { BackgroundDef, ChoiceDef, ClassDef, ContentPack, Effect, FeatDef, OptionSource, SpeciesDef } from './schema'
 import { srdPack } from './srd'
 import { SRD_LIST_IDS } from './srd/classes'
 import { skillId, slug } from './srd/common'
@@ -32,11 +33,15 @@ export const LEGACY_HOMEBREW_PACK_ID = 'legacy-homebrew'
 
 export interface LegacyBuild {
   build: CharacterBuild
-  /** The SRD pack, plus a generated pack for any class name it doesn't recognise. */
+  /** The SRD pack, any extra enabled packs, plus a generated pack for any class the enabled packs don't recognise. */
   packs: ContentPack[]
+  /** Problems the adapter worked around (a class from a pack that isn't enabled, …), for the sheet's diagnostics. */
+  warnings: string[]
 }
 
 export interface LegacyBuildOptions {
+  /** Enabled content packs beyond the SRD (homebrew), in enable order. */
+  packs?: ContentPack[]
   /**
    * The legacy sheet treats every weapon as proficient. Off by default, so
    * class weapon proficiencies decide; on reproduces the legacy numbers.
@@ -134,43 +139,74 @@ function homebrewPack(names: string[]): { pack: ContentPack; ids: Map<string, st
     // hitPointBase adds the Con modifier per level; cancelling it keeps today's "no hit points from an unknown class".
     return { id, name: name.trim() || 'Unnamed class', hitDie: 1, hpFirstLevel: '-@con.mod', hpPerLevel: '-@con.mod' }
   })
-  const pack = parsePack({ formatVersion: 1, id: LEGACY_HOMEBREW_PACK_ID, name: 'Homebrew classes', classes })
+  // The version encodes the class list: registries are cached by pack id + version (see migrate.ts's registryForPacks),
+  // and this pack's contents differ per sheet.
+  const version = `generated:${classes.map((c) => c.name).join('|')}`
+  const pack = parsePack({ formatVersion: 1, id: LEGACY_HOMEBREW_PACK_ID, name: 'Homebrew classes', version, classes })
   return { pack, ids }
 }
 
 export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBuildOptions = {}, srd: ContentPack = srdPack()): LegacyBuild {
-  const srdRegistry = buildRegistry([srd])
+  const enabled = [srd, ...(options.packs ?? []).filter((p) => p.id !== srd.id)]
+  const enabledRegistry = registryForPacks(enabled)
+  const warnings: string[] = []
   const byName = <T extends { name: string }>(entries: Registered<T>[], name: string): Registered<T> | undefined =>
     name.trim() ? entries.find((e) => lower(e.def.name) === lower(name)) : undefined
+  /** A v2 sheet's id wins (see migrate.ts); a v1 sheet, or an id the enabled packs don't have, falls back to the name. */
+  const byIdOrName = <T extends { name: string }>(kind: 'classes' | 'species' | 'backgrounds', id: string | undefined, name: string): Registered<T> | undefined =>
+    ((id ? enabledRegistry.get(kind, id) : undefined) as Registered<T> | undefined) ?? (byName(enabledRegistry.all(kind) as unknown as Registered<T>[], name))
+  const packMissing = (id: string | undefined): string | undefined => {
+    const packId = id?.includes(':') ? id.split(':')[0] : undefined
+    return packId && !enabled.some((p) => p.id === packId) ? packId : undefined
+  }
 
   // --- classes: known ones in order, unknown ones after (so the first known class keeps its full first-level hit die, as today)
-  const known: { reg: Registered<ClassDef>; level: number; subclass?: string; className: string }[] = []
+  const known: { reg: Registered<ClassDef>; level: number; subclass?: string; subclassId?: string; className: string }[] = []
   const unknown: { name: string; level: number }[] = []
   for (const c of sheet.classes) {
-    const reg = byName(srdRegistry.all('classes'), c.className)
-    if (reg) known.push({ reg, level: c.level, subclass: c.subclass, className: c.className })
-    else unknown.push({ name: c.className, level: c.level })
+    const reg = byIdOrName<ClassDef>('classes', c.classId, c.className)
+    if (reg) {
+      known.push({ reg, level: c.level, subclass: c.subclass, subclassId: c.subclassId, className: c.className })
+      continue
+    }
+    const missing = packMissing(c.classId)
+    if (missing) warnings.push(`${c.className || 'A class'} comes from the "${missing}" content pack, which isn't enabled — only its levels count until it is.`)
+    unknown.push({ name: c.className, level: c.level })
   }
-  const packs = [srd]
+  const packs = [...enabled]
   let homebrewIds = new Map<string, string>()
   if (unknown.length) {
     const hb = homebrewPack([...new Set(unknown.map((u) => u.name))])
     packs.push(hb.pack)
     homebrewIds = hb.ids
   }
-  const registry = packs.length === 1 ? srdRegistry : buildRegistry(packs)
+  const registry = packs.length === enabled.length ? enabledRegistry : registryForPacks(packs)
   const adapter = new Adapter(registry)
 
   const resolvedClasses = known.map((k) => {
-    const sub = k.subclass
-      ? registry.all('subclasses').find((s) => (s.def.classId === k.reg.def.id || s.def.classId === k.reg.fullId) && (s.def.id === k.subclass || lower(s.def.name) === lower(k.subclass!)))
-      : undefined
+    const byId = k.subclassId ? registry.get('subclasses', k.subclassId) : undefined
+    const sub =
+      byId ??
+      (k.subclass
+        ? registry
+            .all('subclasses')
+            .find((s) => (s.def.classId === k.reg.def.id || s.def.classId === k.reg.fullId) && (s.def.id === k.subclass || lower(s.def.name) === lower(k.subclass!)))
+        : undefined)
+    if (!sub && packMissing(k.subclassId)) warnings.push(`${k.className}'s subclass comes from the "${packMissing(k.subclassId)}" content pack, which isn't enabled.`)
     return { ...k, sub }
   })
 
   // An unrecognised species is left out (base speed 30, no traits), as today.
-  const species = byName(registry.all('species'), sheet.race)
-  const background = byName(registry.all('backgrounds'), sheet.background)
+  const species = byIdOrName<SpeciesDef>('species', sheet.speciesId, sheet.race)
+  const background = byIdOrName<BackgroundDef>('backgrounds', sheet.backgroundId, sheet.background)
+  const origins = [
+    { found: !!species, id: sheet.speciesId, name: sheet.race },
+    { found: !!background, id: sheet.backgroundId, name: sheet.background }
+  ]
+  for (const o of origins) {
+    const missing = o.found ? undefined : packMissing(o.id)
+    if (missing) warnings.push(`${o.name || 'This'} comes from the "${missing}" content pack, which isn't enabled.`)
+  }
 
   // --- where picks can go
   const classSites = (className: string): ChoiceSite[] => {
@@ -284,7 +320,8 @@ export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBui
       ...resolvedClasses.map((c) => ({ classId: c.reg.fullId, level: c.level, ...(c.sub ? { subclassId: c.sub.fullId } : {}) })),
       ...unknown.map((u) => ({ classId: `${LEGACY_HOMEBREW_PACK_ID}:${homebrewIds.get(lower(u.name))}`, level: u.level }))
     ],
-    choices: adapter.choices,
+    // Native picks (v2 sheets, the new choices UI, homebrew) override whatever the legacy fields say for the same choice.
+    choices: { ...adapter.choices, ...(sheet.choices ?? {}) },
     equipment: sheet.equipment.flatMap((e) => {
       const itemId = e.compendiumId ?? e.magicItemId
       return itemId ? [{ key: e.id, itemId: registry.get('items', itemId)?.fullId ?? itemId, equipped: !!e.equipped, quantity: e.quantity }] : []
@@ -302,5 +339,5 @@ export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBui
     damageVulnerabilities: [...sheet.damageVulnerabilities],
     customEffects: adapter.customEffects
   }
-  return { build, packs }
+  return { build, packs, warnings }
 }

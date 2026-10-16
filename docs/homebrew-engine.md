@@ -406,3 +406,47 @@ dev profile's password or a new account, and creating one also syncs it
 to the online relay. Check by hand: `npm run dev`, open a few characters
 (a raging barbarian, a caster, a multiclass), and compare against the
 numbers before this change.
+
+## Phase 4a — status and notes for 4b
+
+Done: sheet format v2 (`shared/content/migrate.ts`). All new fields are
+optional and additive — `sheetVersion`, `speciesId`, `backgroundId`,
+`ClassLevel.classId` / `subclassId`, `choices` and `packVersions` — so
+older app versions keep reading the name-based fields, and saves (shallow
+patches) never drop fields an older version doesn't know.
+
+- `normalizeSheet(sheet, packs)` fills ids from names, keeps legacy fields
+  untouched, and returns the same object when nothing changes. Names win:
+  the UI still edits classes/species/backgrounds by name, so an id that no
+  longer matches its name is re-resolved — except an id into a pack that
+  isn't enabled, which is kept so disabling a pack never loses it.
+- Runs on every read (`toCharacterSheet` in registerIpc.ts, and
+  `deriveSheet` for DM-side copies and offline snapshots) and on every save
+  (`characterRepo.create/update`, after the patch merges), which is where a
+  sheet is actually written as v2.
+- `packVersions` records the version of each pack an id points into *when
+  first seen*; `changedPacks()` reports a pack that has since moved on and
+  `acknowledgePackVersions()` is the patch to accept it (UI in phase 5).
+  `missingPacks()` lists packs a sheet needs that aren't enabled.
+- The adapter prefers ids, accepts extra enabled packs
+  (`legacySheetToBuild(sheet, { packs })`), turns a class from a missing
+  pack into a level-keeping stub with a warning in the sheet diagnostics,
+  and applies `sheet.choices` as an override layer: for any choice key
+  present there, native picks win over the legacy fields.
+- The generated `legacy-homebrew` pack's version encodes its class names,
+  since registries are now cached by pack id + version.
+
+Notes for 4b (generic choices UI, with dual-write):
+
+- Write picks to `choices` (keys from `choiceKeys`, options from
+  `DerivedChoice.options`). For SRD picks that have a legacy equivalent,
+  also mirror them into `asiSlotChoices` / `subclassFeatureChoices` /
+  `raceLineageChoice` so older clients still show them — the adapter's
+  `Adapter.fillFeat` / `placeFeatureChoice` mapping is the inverse to
+  write. Homebrew-only picks are native-only.
+- Removing a pick must clear both the native key and its legacy mirror,
+  or the legacy value reappears once the native key is gone.
+- An older client editing a legacy pick whose key also has a native pick
+  will be shadowed by the native one — acceptable for the dual-write
+  window; drop the mirroring (and then the legacy fields) in a later
+  release once old clients have auto-updated.

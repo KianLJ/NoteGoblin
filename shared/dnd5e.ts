@@ -577,6 +577,10 @@ export interface ClassLevel {
   className: string
   level: number
   subclass?: string
+  /** Content-pack id of the class ("srd-5.2.1:fighter"), filled in by shared/content/migrate.ts's normalizeSheet. className stays the display name (and what older app versions read). Re-resolved whenever it stops matching className, since the UI still changes classes by name. */
+  classId?: string
+  /** Content-pack id of the subclass, same rules as classId. */
+  subclassId?: string
 }
 
 /** One headline feature unlocked at a given class level — name + a short one-line gist, not full rules text. Ability Score Improvement levels are deliberately generic since the exact choice (ASI vs feat) is the player's. */
@@ -1634,9 +1638,30 @@ export interface DeathSaves {
 // inputs they're computed from change (e.g. an ability score improvement
 // retroactively raising max HP, per the 5e rule).
 export interface CharacterSheetData {
+  /**
+   * Sheet format version — absent/1 for sheets from before the content
+   * engine, 2 once normalizeSheet (shared/content/migrate.ts) has filled in
+   * the content-pack fields below. Every field added for v2 is optional and
+   * additive: older app versions keep reading the name-based fields.
+   */
+  sheetVersion?: number
   race: string
+  /** Content-pack id of the species — see ClassLevel.classId for how it's kept in sync with `race`. */
+  speciesId?: string
   classes: ClassLevel[]
   background: string
+  /** Content-pack id of the background — kept in sync with `background` the same way. */
+  backgroundId?: string
+  /**
+   * Engine-native picks, keyed by choice instance key (shared/content/engine.ts's
+   * choiceKeys). An override layer on top of the legacy pick fields
+   * (asiSlotChoices, subclassFeatureChoices, raceLineageChoice): for any key
+   * present here, these picks win; every other choice still comes from the
+   * legacy fields. Homebrew choices with no legacy equivalent live only here.
+   */
+  choices?: Record<string, string[]>
+  /** Version of every content pack this sheet's ids point into, as of the last normalize — so a pack update or a missing pack can be flagged instead of silently changing the sheet. */
+  packVersions?: Record<string, string>
   alignment: string
   experiencePoints: number
   appearance: Appearance

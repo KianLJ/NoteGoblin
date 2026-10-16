@@ -83,6 +83,7 @@ import type {
 } from '@shared/ipc'
 import type { CalendarConfig } from '@shared/calendar'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
+import { normalizeSheet } from '@shared/content/migrate'
 
 // --- Vault file watcher ------------------------------------------------
 // In vault mode, notes/folders are real files — someone can add, rename, or
@@ -1137,7 +1138,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const characterRepo = new CharacterRepo(localDb)
 
   function toCharacterSheet(row: CharacterRow): CharacterSheet {
-    const sheet = { ...emptyCharacterSheet(), ...JSON.parse(row.sheet_json || '{}') }
+    // Normalized on read too, so a sheet not saved since before the content engine still arrives in format v2.
+    const sheet = normalizeSheet({ ...emptyCharacterSheet(), ...JSON.parse(row.sheet_json || '{}') })
     return {
       ...sheet,
       id: row.id,

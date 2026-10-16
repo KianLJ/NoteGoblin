@@ -1,15 +1,15 @@
 // The one entry point the app uses to get a character sheet's derived
-// numbers: today's CharacterSheetData → legacySheetToBuild → deriveCharacter.
-// Every tab, the initiative tracker and the force-roll prompt read from
-// this instead of the old effective*/compute* helpers, so the sheet shows
-// exactly what the content engine calculates (docs/homebrew-engine.md,
-// phase 3).
+// numbers: CharacterSheetData → normalizeSheet (format v2 ids) →
+// legacySheetToBuild → deriveCharacter. Every tab, the initiative tracker
+// and the force-roll prompt read from this instead of the old
+// effective*/compute* helpers, so the sheet shows exactly what the content
+// engine calculates (docs/homebrew-engine.md, phases 3–4).
 
 import { abilityModifier, type Ability, type AbilityScores, type CharacterSheetData, type SkillName } from '../dnd5e'
 import { ABILITY_IDS, deriveCharacter, type CharacterBuild, type DerivedCharacter, type RollMode } from './engine'
 import { legacySheetToBuild } from './legacy'
-import { buildRegistry, type Registry } from './registry'
-import type { ContentPack } from './schema'
+import { normalizeSheet, registryForPacks } from './migrate'
+import type { Registry } from './registry'
 import { skillId } from './srd/common'
 
 export interface DerivedSheet {
@@ -18,32 +18,23 @@ export interface DerivedSheet {
   registry: Registry
 }
 
-// Building a registry is the expensive part, and the pack list only changes
-// when a sheet gains or loses an unrecognised class name — key the cache on
-// that instead of on pack object identity (the adapter generates a fresh
-// homebrew pack object every call).
-const registryCache = new Map<string, Registry>()
-
-function registryFor(packs: ContentPack[]): Registry {
-  const key = packs.map((p) => (p.id === 'legacy-homebrew' ? `${p.id}:${p.classes.map((c) => c.name).join('|')}` : p.id)).join(',')
-  let registry = registryCache.get(key)
-  if (!registry) {
-    if (registryCache.size > 50) registryCache.clear()
-    registry = buildRegistry(packs)
-    registryCache.set(key, registry)
-  }
-  return registry
-}
-
 const derivedCache = new WeakMap<CharacterSheetData, DerivedSheet>()
 
-/** Derived numbers for a sheet. Cached per sheet object, so calling it repeatedly for the same (unchanged) sheet is free. */
+/**
+ * Derived numbers for a sheet. Cached per sheet object, so calling it
+ * repeatedly for the same (unchanged) sheet is free. Normalizes first, so a
+ * sheet from an older app version (or a DM's copy of one) derives the same
+ * as a migrated one; the adapter's workarounds (e.g. a class from a pack
+ * that isn't enabled) are added to the diagnostics.
+ */
 export function deriveSheet(sheet: CharacterSheetData): DerivedSheet {
   const cached = derivedCache.get(sheet)
   if (cached) return cached
-  const { build, packs } = legacySheetToBuild(sheet)
-  const registry = registryFor(packs)
-  const result = { derived: deriveCharacter(build, registry), build, registry }
+  const { build, packs, warnings } = legacySheetToBuild(normalizeSheet(sheet))
+  const registry = registryForPacks(packs)
+  const derived = deriveCharacter(build, registry)
+  for (const message of warnings) derived.diagnostics.push({ severity: 'warning', message })
+  const result = { derived, build, registry }
   derivedCache.set(sheet, result)
   return result
 }

@@ -1,6 +1,7 @@
 import type { Database as DatabaseType } from 'better-sqlite3'
 import { v4 as uuid } from 'uuid'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
+import { normalizeSheet } from '@shared/content/migrate'
 
 export interface CharacterRow {
   id: string
@@ -40,7 +41,7 @@ export class CharacterRepo {
       .prepare(
         'INSERT INTO characters (id, owner_identity_id, name, sheet_json) VALUES (?, ?, ?, ?)'
       )
-      .run(id, ownerIdentityId, name, JSON.stringify(sheet))
+      .run(id, ownerIdentityId, name, JSON.stringify(normalizeSheet(sheet)))
     return this.findById(id)!
   }
 
@@ -55,7 +56,9 @@ export class CharacterRepo {
     const { name: patchName, ...sheetPatch } = input
     const name = patchName ?? existing.name
     const currentSheet = { ...emptyCharacterSheet(), ...JSON.parse(existing.sheet_json || '{}') }
-    const sheet: CharacterSheetData = { ...currentSheet, ...sheetPatch }
+    // Normalized after the patch is merged, so a class/species/background renamed by this patch gets its id
+    // re-resolved — this is where a pre-engine sheet is actually upgraded to format v2 on disk (see migrate.ts).
+    const sheet: CharacterSheetData = normalizeSheet({ ...currentSheet, ...sheetPatch })
 
     this.db
       .prepare(
