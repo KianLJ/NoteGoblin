@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { PencilIcon } from '../../ui/icons'
 
 interface EntryCardProps {
   name: ReactNode
@@ -18,7 +19,7 @@ export function EntryCard({ name, badge, onEdit, onRemove, children }: EntryCard
         {badge}
         {onEdit && (
           <button type="button" onClick={onEdit} title="Edit description" style={editBtnStyle}>
-            ✎
+            <PencilIcon size={12} />
           </button>
         )}
         {onRemove && (

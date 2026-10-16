@@ -9,6 +9,7 @@ import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncoun
 import type { BestiaryMonster } from '../../data/bestiary'
 import { playSfx } from '../audio/soundEffects'
 import { pickMood, playSpecificTrack } from '../audio/musicEngine'
+import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, IconLabel } from '../../ui/icons'
 
 interface SessionDeckPanelProps {
   campaignId: string | null
@@ -259,7 +260,7 @@ export function SessionDeckPanel({
           title="Back to sessions"
           style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}
         >
-          ←
+          <ArrowLeftIcon />
         </button>
         {readOnly ? (
           <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 600 }}>
@@ -377,10 +378,10 @@ export function SessionDeckPanel({
                 {!readOnly && (
                   <div style={{ display: 'flex', flexShrink: 0, paddingRight: 4 }}>
                     <button type="button" disabled={index === 0} onClick={() => moveScene(index, -1)} title="Move up" style={smallBtnStyle}>
-                      ↑
+                      <ArrowUpIcon size={12} />
                     </button>
                     <button type="button" disabled={index === scenes.length - 1} onClick={() => moveScene(index, 1)} title="Move down" style={smallBtnStyle}>
-                      ↓
+                      <ArrowDownIcon size={12} />
                     </button>
                     <button type="button" onClick={() => handleRemoveScene(scene.noteId)} title="Delete scene" style={smallBtnStyle}>
                       ×
@@ -396,7 +397,7 @@ export function SessionDeckPanel({
       {sceneCount > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-2) var(--space-3)', borderTop: '1px solid var(--border-subtle)' }}>
           <button type="button" disabled={clampedIndex <= 0} onClick={() => selectScene(clampedIndex - 1)} className="gb-btn gb-btn--secondary" style={{ fontSize: 12 }}>
-            ← Prev
+            <IconLabel icon={<ArrowLeftIcon size={12} />}>Prev</IconLabel>
           </button>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Scene {clampedIndex + 1} / {sceneCount}
@@ -408,7 +409,9 @@ export function SessionDeckPanel({
             className="gb-btn gb-btn--secondary"
             style={{ fontSize: 12 }}
           >
-            Next →
+            <IconLabel icon={<ArrowRightIcon size={12} />} iconAfter>
+              Next
+            </IconLabel>
           </button>
         </div>
       )}

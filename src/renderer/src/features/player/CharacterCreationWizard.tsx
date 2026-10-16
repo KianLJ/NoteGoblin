@@ -1,5 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { deriveSheet } from '@shared/content/sheet'
+import { deriveSheet, normalizeForActivePacks } from '@shared/content/sheet'
+import { choicePatch } from '@shared/content/legacyMirror'
+import type { DerivedChoice } from '@shared/content/engine'
+import { ChoiceList } from './ChoiceCards'
+import { usePickerContent } from '../content/pickerContent'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { OriginFeatChooser } from './AsiChoosers'
@@ -7,9 +11,7 @@ import { generateNpcName } from '../../data/npcNames'
 import {
   ABILITIES,
   ALIGNMENTS,
-  BACKGROUNDS,
   CLASSES,
-  RACES,
   SKILLS,
   STANDARD_ARRAY,
   abilityModifier,
@@ -25,6 +27,7 @@ import {
   type SkillName
 } from '@shared/dnd5e'
 import { startingEquipmentFor, FEATS, SPELLS, type CompendiumSpell, type FeatEffect } from '@shared/compendium'
+import { DiceIcon, IconLabel } from '../../ui/icons'
 
 interface CharacterCreationWizardProps {
   onCreate: (name: string, sheet: CharacterSheetData) => void
@@ -84,6 +87,9 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
   const [lineageAbility, setLineageAbility] = useState<Ability>('wis')
   const [classId, setClassId] = useState<string | null>(null)
   const [chosenSkills, setChosenSkills] = useState<SkillName[]>([])
+  // Picks for the chosen class's own level-1 choices (a Fighting Style, a homebrew Innate Technique…), keyed like
+  // sheet.choices. Applied through choicePatch at creation, so SRD ones are mirrored into the legacy fields too.
+  const [classChoices, setClassChoices] = useState<Record<string, string[]>>({})
   const [backgroundId, setBackgroundId] = useState<string | null>(null)
   // The background's ability score bonus (SRD 5.2.1): either +1 to all
   // three of its listed abilities, or +2 to one and +1 to another —
@@ -131,11 +137,31 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
     hair: ''
   })
 
-  const race = useMemo(() => RACES.find((r) => r.id === raceId) ?? null, [raceId])
+  // SRD entries plus whatever the active content packs add (see pickerContent.ts) — outside a campaign that's the
+  // whole library, so a homebrew class can be picked here.
+  const picker = usePickerContent()
+  const race = useMemo(() => picker.races.find((r) => r.id === raceId) ?? null, [picker, raceId])
   const lineageOptions = race ? lineageOptionsForRace(race.id) : []
   const lineage = lineageOptions.find((l) => l.name === lineageName) ?? null
-  const cls = useMemo(() => CLASSES.find((c) => c.id === classId) ?? null, [classId])
-  const background = useMemo(() => BACKGROUNDS.find((b) => b.id === backgroundId) ?? null, [backgroundId])
+  const cls = useMemo(() => picker.classes.find((c) => c.id === classId) ?? null, [picker, classId])
+  const background = useMemo(() => picker.backgrounds.find((b) => b.id === backgroundId) ?? null, [picker, backgroundId])
+
+  // The character as built so far, just enough to ask the content engine which choices the chosen class grants
+  // at 1st level — so any class (SRD or homebrew) gets its own picks here, rendered generically.
+  const previewSheet = useMemo<CharacterSheetData>(
+    () => ({ ...emptyCharacterSheet(), race: race?.name ?? '', background: background?.name ?? '', classes: cls ? [{ className: cls.name, level: 1 }] : [], choices: classChoices }),
+    [race, background, cls, classChoices]
+  )
+  const preview = deriveSheet(previewSheet)
+  const previewClassId = normalizeForActivePacks(previewSheet).classes[0]?.classId
+  const classLevelChoices = preview.derived.choices.filter((c) => !!previewClassId && c.classId === previewClassId)
+  const needsPick = (c: DerivedChoice): boolean => c.remaining > 0 || preview.derived.choices.some((n) => n.parentKey === c.key && needsPick(n))
+  const classChoicesDone = classLevelChoices.filter((c) => !c.parentKey).every((c) => !needsPick(c))
+
+  function setClassChoice(choice: DerivedChoice, picks: string[]): void {
+    // choicePatch's native part already drops picks nested under anything removed.
+    setClassChoices(choicePatch(previewSheet, preview.derived, choice, picks).choices ?? {})
+  }
 
   const baseScores: AbilityScores =
     abilityMethod === 'standard'
@@ -186,7 +212,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
         (lineageOptions.length === 0 || lineageName !== null)
       )
     }
-    if (step === 2) return classId !== null && chosenSkills.length === cls?.skillChoice.choose
+    if (step === 2) return classId !== null && chosenSkills.length === cls?.skillChoice.choose && classChoicesDone
     if (step === 3) {
       return (
         backgroundId !== null &&
@@ -199,6 +225,24 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
       return ABILITIES.every(({ id }) => standardAssignment[id] !== null)
     }
     return true
+  }
+
+  /** Standard Array: deals 15/14/13/12/10/8 out in a random order. Manual Entry: rolls 4d6 for each ability, dropping the lowest die. */
+  function randomizeAbilities(): void {
+    if (abilityMethod === 'standard') {
+      const shuffled = [...STANDARD_ARRAY]
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+      }
+      setStandardAssignment(Object.fromEntries(ABILITIES.map(({ id }, i) => [id, shuffled[i]])) as Record<Ability, number>)
+      return
+    }
+    const roll4d6DropLowest = (): number => {
+      const dice = Array.from({ length: 4 }, () => Math.floor(Math.random() * 6) + 1).sort((a, b) => a - b)
+      return dice[1] + dice[2] + dice[3]
+    }
+    setManualScores(Object.fromEntries(ABILITIES.map(({ id }) => [id, roll4d6DropLowest()])) as AbilityScores)
   }
 
   function usedStandardValues(exceptAbility?: Ability): number[] {
@@ -304,9 +348,18 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
       raceLineageChoice: race && lineage ? { raceId: race.id, lineageName: lineage.name, spellcastingAbility: lineageAbility } : null
     }
 
+    // The class's level-1 picks, through the same path as the Features tab — parents first, since a nested
+    // choice (a feat's own picks) only exists once its parent pick does.
+    let built: CharacterSheetData = sheet
+    for (const key of Object.keys(classChoices).sort((a, b) => a.length - b.length)) {
+      const { derived } = deriveSheet(built)
+      const choice = derived.choices.find((c) => c.key === key)
+      if (choice) built = { ...built, ...choicePatch(built, derived, choice, classChoices[key]) }
+    }
+
     // Start at full HP, as the finished sheet's own Overview tab will compute it.
-    sheet.currentHp = deriveSheet(sheet).derived.maxHp
-    onCreate(name.trim(), sheet)
+    built.currentHp = deriveSheet(built).derived.maxHp
+    onCreate(name.trim(), built)
   }
 
   return (
@@ -407,7 +460,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               <CardGrid>
-                {RACES.map((r) => (
+                {picker.races.map((r) => (
                   <PickCard
                     key={r.id}
                     selected={raceId === r.id}
@@ -496,13 +549,14 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               <CardGrid>
-                {CLASSES.map((c) => (
+                {picker.classes.map((c) => (
                   <PickCard
                     key={c.id}
                     selected={classId === c.id}
                     onClick={() => {
                       setClassId(c.id)
                       setChosenSkills([])
+                      setClassChoices({})
                     }}
                   >
                     <strong>{c.name}</strong>
@@ -530,13 +584,19 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                   </div>
                 </Section>
               )}
+
+              {cls && classLevelChoices.some((c) => !c.parentKey) && (
+                <Section title={`${cls.name} choices`}>
+                  <ChoiceList choices={classLevelChoices} all={preview.derived.choices} onSetPicks={setClassChoice} />
+                </Section>
+              )}
             </div>
           )}
 
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               <CardGrid>
-                {BACKGROUNDS.map((b) => {
+                {picker.backgrounds.map((b) => {
                   const feat = FEATS.find((f) => f.id === b.featId)
                   return (
                     <PickCard
@@ -677,6 +737,14 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                   onClick={() => setAbilityMethod('manual')}
                 >
                   Manual Entry
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={randomizeAbilities}
+                  style={{ marginLeft: 'auto' }}
+                  title={abilityMethod === 'standard' ? 'Deal the standard array out in a random order' : 'Roll 4d6 for each ability, dropping the lowest die'}
+                >
+                  <IconLabel icon={<DiceIcon size={14} />}>Randomize</IconLabel>
                 </Button>
               </div>
 
@@ -924,7 +992,7 @@ function RandomButton({ title, onClick }: { title: string; onClick: () => void }
         fontSize: 14
       }}
     >
-      🎲
+      <DiceIcon size={14} />
     </button>
   )
 }

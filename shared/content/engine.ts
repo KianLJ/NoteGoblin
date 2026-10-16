@@ -35,6 +35,7 @@ import { buildRegistry, localPart, type Diagnostic, type Registered, type Regist
 import type {
   AbilityId,
   ActionDef,
+  ArchetypeDef,
   AttackDef,
   AttackFilter,
   ChoiceDef,
@@ -84,6 +85,14 @@ export interface CharacterBuild {
   damageVulnerabilities?: string[]
   /** Per-sheet homebrew boons that aren't in any pack. */
   customEffects?: { name: string; effects: Effect[] }[]
+  /** Values of the packs' counters (vocabulary.counters), by counter id. */
+  counters?: Record<string, number>
+  /** The ability each ability alias (vocabulary.abilityAliases) points at, by alias id. */
+  abilityAliases?: Record<string, AbilityId>
+  /** Temporary points sitting on top of a resource's maximum, by resource id. */
+  resourceTemp?: Record<string, number>
+  /** Tracked state and current HP of each granted companion, by companion id. */
+  companions?: Record<string, { state?: string; currentHp?: number }>
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +125,37 @@ export interface DerivedResource {
   used: number
   recharge: string
   display: 'uses' | 'pool'
+  /** Temporary points on top of the maximum (spent before the regular ones). */
+  temp?: number
+  /** For a long-rest resource: how much a short rest gives back. */
+  shortRestRegain?: number
   actionType?: string
   source: string
   /** The class that granted it, when a class or subclass feature did — for the sheet's class badge. */
   className?: string
   /** The granting feature's full rules text (the resource/toggle/action's own description is a one-liner). */
   detail?: string
+}
+
+/** An action putting points back into a resource. `amount` is dice or a number; `value` is set when it's a plain number. */
+export interface DerivedRestore {
+  resourceId: string
+  amount: string
+  value?: number
+  temporary: boolean
+}
+
+/** A variable-spend action's numbers at one amount spent. */
+export interface DerivedActionScaling {
+  spent: number
+  attackBonus?: number
+  saveDc?: number
+  damage?: string
+  healing?: string
+  tempHp?: string
+  range?: number
+  area?: number
+  restores?: DerivedRestore[]
 }
 
 export interface DerivedToggle {
@@ -150,6 +184,15 @@ export interface DerivedAction {
   damage?: string
   damageType?: string
   healing?: string
+  tempHp?: string
+  /** Feet. */
+  range?: number
+  area?: number
+  duration?: string
+  restores?: DerivedRestore[]
+  /** A variable amount chosen at use time; the numbers above are at `min`, `scaling` has them at every amount. */
+  spend?: { resourceId: string; min: number; max: number }
+  scaling?: DerivedActionScaling[]
   activatesToggle?: string
   source: string
   /** The class that granted it, when a class or subclass feature did — for the sheet's class badge. */
@@ -162,7 +205,13 @@ export interface DerivedChoiceOption {
   id: string
   name: string
   description: string
+  /** Meets its prerequisite. */
   available: boolean
+  /** Point-buy cost (choices with a budget). */
+  cost?: number
+  group?: string
+  /** Why it can't be added right now even though it's available ("Not enough points", "… is full"). */
+  blocked?: string
 }
 
 export interface DerivedChoice {
@@ -185,6 +234,12 @@ export interface DerivedChoice {
   /** The class it came from, when a class or subclass feature granted it. */
   classId?: string
   className?: string
+  /** The archetype whose feature granted it. */
+  archetypeId?: string
+  /** Point-buy: the budget, how much the picks cost, and the per-group caps. `remaining` is then points left. */
+  budget?: number
+  spent?: number
+  groups?: { id: string; label: string; max: number; used: number }[]
 }
 
 export interface DerivedSpellcastingSource {
@@ -204,6 +259,43 @@ export interface DerivedFeature {
   description: string
   source: string
   level?: number
+  /** The class it belongs to (for a class/subclass feature, or anything picked under one). */
+  classId?: string
+  /** Set for an archetype's features (and the archetype itself). */
+  archetypeId?: string
+  archetypeName?: string
+}
+
+export interface DerivedArchetype {
+  id: string
+  name: string
+  description: string
+  /** The level its features unlock by. */
+  level: number
+  /** Key of the choice that granted it. */
+  choiceKey: string
+  classId?: string
+  className?: string
+}
+
+export interface DerivedCompanion {
+  id: string
+  name: string
+  description: string
+  size?: string
+  creatureType?: string
+  ac: number
+  maxHp: number
+  currentHp: number
+  speed?: string
+  abilities: Record<AbilityId, { score: number; mod: number }>
+  attacks: { name: string; bonus: number; damage: string; damageType?: string; reach?: string }[]
+  traits: { name: string; description: string }[]
+  summonCost?: { resourceId: string; amount: number }
+  state: string
+  states: string[]
+  source: string
+  className?: string
 }
 
 export interface DerivedCharacter {
@@ -243,6 +335,17 @@ export interface DerivedCharacter {
   notes: { source: string; text: string }[]
   choices: DerivedChoice[]
   stats: Record<string, { name: string; value: number; display: boolean }>
+  counters: { id: string; name: string; description: string; value: number; min: number; max?: number }[]
+  abilityAliases: { id: string; name: string; description: string; ability: AbilityId; options: AbilityId[]; chosen: boolean }[]
+  /** Sense ranges in feet, only those the character has. */
+  senses: Record<string, { name: string; range: number }>
+  /** The lowest d20 roll that's a critical hit. */
+  critThreshold: number
+  reactions: number
+  attacksPerAction: number
+  damageReductions: { amount: number; damageTypes?: string[]; label?: string; source: string }[]
+  companions: DerivedCompanion[]
+  archetypes: DerivedArchetype[]
   diagnostics: Diagnostic[]
 }
 
@@ -263,6 +366,14 @@ interface Source {
   level?: number
   /** "Rage", "Darkvision"… shown on the sheet's Features list. */
   feature?: { description: string; level?: number }
+  /** Set inside an archetype (and everything picked under it): @archetypeLevel and @table read it. */
+  archetype?: ArchetypeContext
+}
+
+interface ArchetypeContext {
+  fullId: string
+  def: ArchetypeDef
+  level: number
 }
 
 interface CollectedEffect {
@@ -286,6 +397,15 @@ interface ResolvedItem {
 
 type Op = 'add' | 'set' | 'multiply' | 'atLeast' | 'atMost' | 'transform'
 const PROFICIENCY_VALUE: Record<ProficiencyLevel, number> = { half: 0.5, proficient: 1, expertise: 2 }
+const BUILT_IN_SENSES: Array<{ id: string; name: string }> = [
+  { id: 'darkvision', name: 'Darkvision' },
+  { id: 'blindsight', name: 'Blindsight' },
+  { id: 'tremorsense', name: 'Tremorsense' },
+  { id: 'truesight', name: 'Truesight' }
+]
+const COMPANION_STATES = ['summoned', 'dismissed', 'defeated']
+/** A variable-spend action lists its numbers for at most this many amounts. */
+const MAX_SCALING_ROWS = 40
 
 function proficiencyFromValue(v: number): ProficiencyLevel | undefined {
   if (v >= 2) return 'expertise'
@@ -353,6 +473,12 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     classes.push({ reg, level: Math.max(0, Math.floor(c.level)), subclass })
   }
   const rawLevel = classes.reduce((sum, c) => sum + c.level, 0)
+  const highestClassLevel = classes.reduce((max, c) => Math.max(max, c.level), 0)
+  if (classes.length > 1) {
+    for (const c of classes) {
+      if (c.reg.def.multiclass === 'never') warn(`${c.reg.def.name} can't be multiclassed — a character with it can't take levels in another class.`, c.reg.fullId)
+    }
+  }
 
   const species = build.speciesId ? registry.get('species', build.speciesId) : undefined
   if (build.speciesId && !species) warn(`Species "${build.speciesId}" isn't in any enabled pack.`, build.speciesId)
@@ -379,6 +505,9 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   const features: Array<{ feature: DerivedFeature; gates: Condition[]; source: Source }> = []
   const entryIds = new Set<string>()
   const choiceInstances: Array<{ key: string; choice: ChoiceDef; source: Source; gates: Condition[] }> = []
+  /** Archetype full id → the pick key that granted it. */
+  const archetypesTaken = new Map<string, string>()
+  const archetypeList: DerivedArchetype[] = []
 
   function collectEffects(list: Effect[] | undefined, source: Source, gates: Condition[]): void {
     for (const effect of list ?? []) {
@@ -393,11 +522,16 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     if (!source.feature) return
     const feature: DerivedFeature = { key: source.key, name: source.name, description: source.feature.description, source: source.packId }
     if (source.feature.level !== undefined) feature.level = source.feature.level
+    if (source.classCtx) feature.classId = classes[source.classCtx.index].reg.fullId
+    if (source.archetype) {
+      feature.archetypeId = source.archetype.fullId
+      feature.archetypeName = source.archetype.def.name
+    }
     features.push({ feature, gates, source })
   }
 
   function collectToggle(toggle: ToggleDef, parent: Source, gates: Condition[]): void {
-    const source: Source = { key: `toggle:${toggle.id}`, name: toggle.name, packId: parent.packId, classCtx: parent.classCtx, level: parent.level }
+    const source: Source = { key: `toggle:${toggle.id}`, name: toggle.name, packId: parent.packId, classCtx: parent.classCtx, archetype: parent.archetype, level: parent.level }
     collectEffects(toggle.effects, source, [...gates, { kind: 'toggle', toggleId: toggle.id }])
   }
 
@@ -410,7 +544,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       const n = seen.get(pick) ?? 0
       seen.set(pick, n + 1)
       const pickKey = choiceKeys.pick(key, pick, n)
-      const pickSource: Source = { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx, level: parent.level }
+      const pickSource: Source = { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx, archetype: parent.archetype, level: parent.level }
       collectEffects(choice.onPick ? substitutePick(choice.onPick, pick) : [], pickSource, gates)
       collectPickedOption(choice, pick, pickKey, parent, gates)
     }
@@ -422,7 +556,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       const feat = registry.get('feats', pick, parent.packId)
       if (!feat) return warn(`Picked feat "${pick}" isn't in any enabled pack.`, pickKey)
       entryIds.add(feat.fullId)
-      const source: Source = { key: pickKey, name: feat.def.name, packId: feat.packId, classCtx: parent.classCtx, level: parent.level, feature: { description: feat.def.description } }
+      const source: Source = { key: pickKey, name: feat.def.name, packId: feat.packId, classCtx: parent.classCtx, archetype: parent.archetype, level: parent.level, feature: { description: feat.def.description } }
       addFeature(source, gates)
       collectEffects(feat.def.effects, source, gates)
     } else if (from.kind === 'optionList') {
@@ -431,7 +565,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       const option = list.def.options.find((o) => o.id === pick)
       if (!option) return warn(`"${pick}" isn't an option in ${list.def.name}.`, pickKey)
       entryIds.add(`${list.fullId}/${option.id}`)
-      const source: Source = { key: pickKey, name: option.name, packId: list.packId, classCtx: parent.classCtx, level: parent.level, feature: { description: option.description } }
+      const source: Source = { key: pickKey, name: option.name, packId: list.packId, classCtx: parent.classCtx, archetype: parent.archetype, level: parent.level, feature: { description: option.description } }
       addFeature(source, gates)
       collectEffects(option.effects, source, gates)
     } else if (from.kind === 'spells') {
@@ -440,8 +574,33 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       effects.push({
         action: { kind: 'grantSpells', spellIds: [spell.fullId], alwaysPrepared: false, free: true },
         gates,
-        source: { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx, level: parent.level }
+        source: { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx, archetype: parent.archetype, level: parent.level }
       })
+    } else if (from.kind === 'archetypes') {
+      const arch = registry.get('archetypes', pick, parent.packId)
+      if (!arch) return warn(`Picked archetype "${pick}" isn't in any enabled pack.`, pickKey)
+      if (arch.def.unique && archetypesTaken.has(arch.fullId)) return warn(`${arch.def.name} is already granted by another choice — a character can only have it once.`, pickKey)
+      archetypesTaken.set(arch.fullId, pickKey)
+      entryIds.add(arch.fullId)
+      const basis = arch.def.levelBasis ?? 'grantingClass'
+      const level =
+        basis === 'highestClass' ? highestClassLevel : basis === 'character' || !parent.classCtx ? rawLevel : classes[parent.classCtx.index].level
+      const archetype: ArchetypeContext = { fullId: arch.fullId, def: arch.def, level }
+      const cls = parent.classCtx ? classes[parent.classCtx.index] : undefined
+      archetypeList.push({
+        id: arch.fullId,
+        name: arch.def.name,
+        description: arch.def.description,
+        level,
+        choiceKey: pickKey.slice(0, pickKey.lastIndexOf('/')),
+        ...(cls ? { classId: cls.reg.fullId, className: cls.reg.def.name } : {})
+      })
+      const source: Source = { key: pickKey, name: arch.def.name, packId: arch.packId, classCtx: parent.classCtx, archetype, level: parent.level, feature: { description: arch.def.description } }
+      addFeature(source, gates)
+      for (const lvl of arch.def.levels ?? []) {
+        if (lvl.level > level) continue
+        for (const f of lvl.features) collectFeatureDef(f, `${pickKey}:${f.id}`, arch.packId, gates, parent.classCtx, lvl.level, archetype)
+      }
     }
   }
 
@@ -451,9 +610,10 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     packId: string,
     gates: Condition[],
     classCtx?: ClassContext,
-    level?: number
+    level?: number,
+    archetype?: ArchetypeContext
   ): void {
-    const source: Source = { key, name: def.name, packId, classCtx, level, feature: { description: def.description ?? '', level } }
+    const source: Source = { key, name: def.name, packId, classCtx, level, feature: { description: def.description ?? '', level }, ...(archetype ? { archetype } : {}) }
     addFeature(source, gates)
     collectEffects(def.effects, source, gates)
   }
@@ -541,12 +701,32 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
 
   const statCache = new Map<string, number | null>()
   const computing: string[] = []
+  const aliasDefs = registry.vocabulary.abilityAliases ?? []
+  const counterDefs = registry.vocabulary.counters ?? []
+  const senseDefs = [...BUILT_IN_SENSES, ...(registry.vocabulary.senses ?? []).filter((s) => !BUILT_IN_SENSES.some((b) => b.id === s.id))]
+
+  /** The ability an alias points at: the player's pick if it's one of the options, else the default, else the first option. */
+  function aliasAbility(id: string): AbilityId | undefined {
+    const def = aliasDefs.find((d) => sameId(d.id, id))
+    if (!def) return undefined
+    const chosen = build.abilityAliases?.[def.id]
+    return chosen && def.options.includes(chosen) ? chosen : (def.default ?? def.options[0])
+  }
+
+  /** alias.<id>.score → ability.<chosen>.score, so effects on an alias raise the ability it points at. */
+  function canonicalTarget(target: string): string {
+    const m = target.match(/^alias\.([^.]+)\.(score|max)$/)
+    const ability = m ? aliasAbility(m[1]) : undefined
+    return m && ability ? `ability.${ability}.${m[2]}` : target
+  }
+
   const modsByTarget = new Map<string, CollectedEffect[]>()
   for (const e of effects) {
     if (e.action.kind !== 'modify' || e.action.appliesTo) continue
-    const list = modsByTarget.get(e.action.target) ?? []
+    const target = canonicalTarget(e.action.target)
+    const list = modsByTarget.get(target) ?? []
     list.push(e)
-    modsByTarget.set(e.action.target, list)
+    modsByTarget.set(target, list)
   }
 
   const skillDefs = registry.vocabulary.skills
@@ -646,6 +826,23 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
         const def = customStats.find((s) => s.id === a)
         return def && parts.length === 2 ? () => num(def.base, { key: `stat:${def.id}`, name: def.name, packId: def.packId }) : undefined
       }
+      case 'counter': {
+        const def = counterDefs.find((d) => sameId(d.id, a))
+        if (!def || parts.length !== 2) return undefined
+        return () => {
+          const value = build.counters?.[def.id] ?? def.default ?? 0
+          const max = def.max !== undefined ? num(def.max, { key: `counter:${def.id}`, name: def.name, packId: def.packId }) : Infinity
+          return Math.max(def.min ?? 0, Math.min(max, value))
+        }
+      }
+      case 'crit':
+        return a === 'threshold' && parts.length === 2 ? () => 20 : undefined
+      case 'reactions':
+        return parts.length === 1 ? () => 1 : undefined
+      case 'attacks':
+        return a === 'perAction' && parts.length === 2 ? () => 1 : undefined
+      case 'sense':
+        return parts.length === 2 && senseDefs.some((s) => s.id === a) ? () => 0 : undefined
     }
     return undefined
   }
@@ -705,6 +902,20 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   interface EvalExtras {
     value?: number
     spellLevel?: number
+    /** The amount chosen for a variable-spend action. */
+    spent?: number
+    /** A companion's own ability scores. */
+    self?: Record<AbilityId, number>
+  }
+
+  function archetypeTableValue(arch: ArchetypeContext, columnId: string, level: number): number | undefined {
+    const column = (arch.def.columns ?? []).find((col) => col.id === columnId)
+    if (!column) return undefined
+    if (level < 1) return 0
+    const raw = column.values[Math.min(level, column.values.length) - 1]
+    const n = typeof raw === 'number' ? raw : Number(raw)
+    if (raw === undefined || raw === '' || !Number.isFinite(n)) throw new FormulaError(`${arch.def.name}'s "${column.label}" column has no number at level ${level}`)
+    return n
   }
 
   function tableValue(c: ResolvedClass, columnId: string, level: number): number {
@@ -739,12 +950,41 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
         if (extras.spellLevel === undefined) throw new FormulaError('@slotLevel only works in spell formulas')
         return extras.spellLevel
       }
+      if (head === 'highestClassLevel') return highestClassLevel
+      if (head === 'archetypeLevel') {
+        if (!source.archetype) throw new FormulaError('@archetypeLevel only works inside an archetype')
+        return source.archetype.level
+      }
+      if (head === 'spent') {
+        if (extras.spent === undefined) throw new FormulaError('@spent only works in an action with a variable spend')
+        return extras.spent
+      }
+    }
+    if (head === 'self') {
+      if (!extras.self) throw new FormulaError('@self only works in a companion\'s stats')
+      const score = extras.self[a as AbilityId]
+      if (score === undefined) throw new FormulaError(`Unknown reference @${path.join('.')}`)
+      if (path.length === 2 || (path.length === 3 && b === 'score')) return score
+      if (path.length === 3 && b === 'mod') return Math.floor((score - 10) / 2)
+    }
+    if (head === 'alias' && a) {
+      const ability = aliasAbility(a)
+      if (!ability) throw new FormulaError(`No pack defines an ability alias "${a}"`)
+      if (path.length === 2 || (path.length === 3 && b === 'score')) return stat(`ability.${ability}.score`)
+      if (path.length === 3 && (b === 'mod' || b === 'max')) return stat(`ability.${ability}.${b}`)
+    }
+    if (head === 'archetype' && a && path.length === 3 && b === 'level') {
+      return archetypeList.find((x) => sameId(x.id, a))?.level ?? 0
     }
     if (ABILITY_IDS.includes(head as AbilityId)) {
       if (path.length === 1 || (path.length === 2 && a === 'score')) return stat(`ability.${head}.score`)
       if (path.length === 2 && (a === 'mod' || a === 'max')) return stat(`ability.${head}.${a}`)
     }
     if (head === 'table' && path.length === 2) {
+      if (source.archetype) {
+        const v = archetypeTableValue(source.archetype, a, index ?? source.archetype.level)
+        if (v !== undefined) return v
+      }
       if (!ctxClass) throw new FormulaError('@table only works inside a class or subclass feature — use @class.<id>.table.<column> elsewhere')
       return tableValue(ctxClass, a, index ?? ctxClass.level)
     }
@@ -757,9 +997,10 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       for (const [id, level] of conditionLevels) if (sameId(id, a)) return level
       return 0
     }
+    if (head === 'resource' && a && path.length === 3 && b === 'temp') return Math.max(0, build.resourceTemp?.[a] ?? 0)
     if (head === 'resource' && a && path.length === 3 && (b === 'used' || b === 'remaining')) {
       const used = build.resourceUsed?.[a] ?? 0
-      return b === 'used' ? used : Math.max(0, stat(`resource.${a}.max`) - used)
+      return b === 'used' ? used : Math.max(0, stat(`resource.${a}.max`) - used) + Math.max(0, build.resourceTemp?.[a] ?? 0)
     }
     if (head === 'hp' && a === 'current' && path.length === 2) return build.currentHp ?? stat('hp.max')
     if (head === 'spell' && a === 'level' && path.length === 2) {
@@ -1009,6 +1250,8 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     used: build.resourceUsed?.[resource.id] ?? 0,
     recharge: rechargeLabel(resource.recharge, (c) => conditionPasses(c, source)),
     display: resource.display ?? 'uses',
+    ...((build.resourceTemp?.[resource.id] ?? 0) > 0 ? { temp: build.resourceTemp![resource.id] } : {}),
+    ...(resource.shortRestRegain ? { shortRestRegain: Math.max(0, num(resource.shortRestRegain, source)) } : {}),
     ...(resource.actionType ? { actionType: resource.actionType } : {}),
     ...originOf(source)
   }))
@@ -1033,22 +1276,105 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     })
   }
 
+  const restoresOf = (list: ActionDef['restores'], source: Source, extras: EvalExtras): DerivedRestore[] =>
+    (list ?? []).map((r) => {
+      if (!resources.some((x) => x.id === r.resourceId)) warn(`${source.name} restores "${r.resourceId}", which this character doesn't have.`, source.key)
+      const d = dice(r.amount, source, extras)
+      return { resourceId: r.resourceId, amount: formatDice(d), ...(d.dice.length === 0 ? { value: d.flat } : {}), temporary: !!r.temporary }
+    })
+
   const actions: DerivedAction[] = activeEffects('grantAction').map((e) => {
     const a: ActionDef = e.action.action
+    const numbersAt = (extras: EvalExtras): Omit<DerivedActionScaling, 'spent'> => ({
+      ...(a.attackBonus ? { attackBonus: num(a.attackBonus, e.source, extras) } : {}),
+      ...(a.saveDc ? { saveDc: num(a.saveDc, e.source, extras) } : {}),
+      ...(a.damage ? { damage: formatDice(dice(a.damage, e.source, extras)) } : {}),
+      ...(a.healing ? { healing: formatDice(dice(a.healing, e.source, extras)) } : {}),
+      ...(a.tempHp ? { tempHp: formatDice(dice(a.tempHp, e.source, extras)) } : {}),
+      ...(a.range ? { range: num(a.range, e.source, extras) } : {}),
+      ...(a.area ? { area: num(a.area, e.source, extras) } : {}),
+      ...(a.restores?.length ? { restores: restoresOf(a.restores, e.source, extras) } : {})
+    })
+    let spend: DerivedAction['spend']
+    let scaling: DerivedActionScaling[] | undefined
+    if (a.spend) {
+      if (!resources.some((r) => r.id === a.spend!.resourceId)) warn(`${e.source.name} spends "${a.spend.resourceId}", which this character doesn't have.`, e.source.key)
+      const min = Math.max(0, num(a.spend.min ?? '1', e.source))
+      const max = Math.max(min, num(a.spend.max, e.source))
+      spend = { resourceId: a.spend.resourceId, min, max }
+      scaling = []
+      for (let s = min; s <= Math.min(max, min + MAX_SCALING_ROWS - 1); s++) scaling.push({ spent: s, ...numbersAt({ spent: s }) })
+    }
     return {
       id: a.id,
       name: a.name,
       description: a.description ?? '',
       actionType: a.actionType,
       ...(a.cost ? { cost: costOf(a.cost, e.source) } : {}),
-      ...(a.attackBonus ? { attackBonus: num(a.attackBonus, e.source) } : {}),
-      ...(a.saveDc ? { saveDc: num(a.saveDc, e.source) } : {}),
       ...(a.saveAbility ? { saveAbility: a.saveAbility } : {}),
-      ...(a.damage ? { damage: formatDice(dice(a.damage, e.source)) } : {}),
       ...(a.damageType ? { damageType: a.damageType } : {}),
-      ...(a.healing ? { healing: formatDice(dice(a.healing, e.source)) } : {}),
+      ...numbersAt(spend ? { spent: spend.min } : {}),
+      ...(a.duration ? { duration: a.duration } : {}),
+      ...(spend ? { spend, scaling } : {}),
       ...(a.activatesToggle ? { activatesToggle: a.activatesToggle } : {}),
       ...originOf(e.source)
+    }
+  })
+
+  const damageReductions: DerivedCharacter['damageReductions'] = activeEffects('damageReduction').map((e) => ({
+    amount: num(e.action.amount, e.source),
+    ...(e.action.damageTypes?.length ? { damageTypes: e.action.damageTypes } : {}),
+    ...(e.action.label ? { label: e.action.label } : {}),
+    source: e.source.name
+  }))
+
+  const companions: DerivedCompanion[] = []
+  for (const e of activeEffects('grantCompanion')) {
+    const c = e.action.companion
+    if (companions.some((x) => x.id === c.id)) continue
+    const self = {} as Record<AbilityId, number>
+    for (const ab of ABILITY_IDS) {
+      const formula = c.abilities?.[ab]
+      self[ab] = formula ? num(formula, e.source) : 10
+    }
+    const extras: EvalExtras = { self }
+    const maxHp = Math.max(1, num(c.hp, e.source, extras))
+    const tracked = build.companions?.[c.id]
+    const states = [...COMPANION_STATES, ...(c.states ?? []).filter((s) => !COMPANION_STATES.includes(s))]
+    const defaultState = c.summonCost ? 'dismissed' : 'summoned'
+    const abilitiesOut = {} as DerivedCompanion['abilities']
+    for (const ab of ABILITY_IDS) abilitiesOut[ab] = { score: self[ab], mod: Math.floor((self[ab] - 10) / 2) }
+    companions.push({
+      id: c.id,
+      name: c.name,
+      description: c.description ?? '',
+      ...(c.size ? { size: c.size } : {}),
+      ...(c.creatureType ? { creatureType: c.creatureType } : {}),
+      ac: num(c.ac, e.source, extras),
+      maxHp,
+      currentHp: Math.max(0, Math.min(maxHp, tracked?.currentHp ?? maxHp)),
+      ...(c.speed ? { speed: c.speed } : {}),
+      abilities: abilitiesOut,
+      attacks: (c.attacks ?? []).map((at) => ({
+        name: at.name,
+        bonus: num(at.bonus, e.source, extras),
+        damage: formatDice(dice(at.damage, e.source, extras)),
+        ...(at.damageType ? { damageType: at.damageType } : {}),
+        ...(at.reach ? { reach: at.reach } : {})
+      })),
+      traits: c.traits ?? [],
+      ...(c.summonCost ? { summonCost: costOf(c.summonCost, e.source) } : {}),
+      state: tracked?.state && states.includes(tracked.state) ? tracked.state : defaultState,
+      states,
+      source: e.source.name,
+      ...(e.source.classCtx ? { className: classes[e.source.classCtx.index].reg.def.name } : {})
+    })
+  }
+
+  classes.forEach((c, index) => {
+    const prereq = c.reg.def.multiclassPrerequisite
+    if (index > 0 && prereq && !conditionPasses(prereq, { key: `class:${c.reg.fullId}`, name: c.reg.def.name, packId: c.reg.packId, classCtx: { index } })) {
+      warn(`${c.reg.def.name}: the character doesn't meet its multiclassing prerequisite.`, c.reg.fullId)
     }
   })
 
@@ -1251,11 +1577,13 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   for (const inst of choiceInstances) {
     if (!gatesPass(inst.gates, inst.source)) continue
     const { choice, source, key } = inst
-    const count = num(choice.count ?? '1', source)
     const picks = build.choices?.[key] ?? []
-    const options = choiceOptions(choice, source)
+    const budget = choice.budget !== undefined ? num(choice.budget, source) : undefined
+    // A point-buy choice without its own count is limited only by its budget.
+    const count = choice.count !== undefined || budget === undefined ? num(choice.count ?? '1', source) : Math.max(budget, picks.length)
+    const options = choiceOptions(choice, source, key)
     const freeform = choice.from.kind === 'freeform'
-    if (picks.length > count) warn(`${choice.label}: ${picks.length} picked but only ${count} allowed.`, key)
+    if (picks.length > count && !(budget !== undefined && choice.count === undefined)) warn(`${choice.label}: ${picks.length} picked but only ${count} allowed.`, key)
     if (!freeform) {
       const counts = new Map<string, number>()
       for (const p of picks) {
@@ -1269,26 +1597,48 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
         else if (choice.maxRepeats !== undefined && n > choice.maxRepeats) warn(`${choice.label}: "${p}" is picked more than ${choice.maxRepeats} times.`, key)
       }
     }
+    // Point-buy: what the picks cost, per-group use, and what can't be added any more.
+    const optionFor = (p: string): DerivedChoiceOption | undefined => options.find((o) => sameId(o.id, p))
+    const spent = budget !== undefined ? picks.reduce((sum, p) => sum + (optionFor(p)?.cost ?? 1), 0) : undefined
+    const groups = choice.groups?.map((g) => ({
+      id: g.id,
+      label: g.label,
+      max: num(g.max, source),
+      used: picks.filter((p) => optionFor(p)?.group === g.id).length
+    }))
+    if (budget !== undefined && spent! > budget) warn(`${choice.label}: the picks cost ${spent} but only ${budget} points are available.`, key)
+    for (const g of groups ?? []) if (g.used > g.max) warn(`${choice.label}: ${g.used} picks from ${g.label}, but the limit is ${g.max}.`, key)
+    if (budget !== undefined || groups?.length) {
+      for (const o of options) {
+        const group = groups?.find((g) => g.id === o.group)
+        if (budget !== undefined && (o.cost ?? 1) > budget - spent!) o.blocked = 'Not enough points'
+        else if (group && group.used >= group.max) o.blocked = `${group.label} is full`
+      }
+    }
     choices.push({
       key,
       label: choice.label,
       source: source.name,
       count,
       picks,
-      remaining: Math.max(0, count - picks.length),
+      remaining: budget !== undefined ? Math.max(0, budget - spent!) : Math.max(0, count - picks.length),
+      ...(budget !== undefined ? { budget, spent } : {}),
+      ...(groups?.length ? { groups } : {}),
       allowRepeats: !!choice.allowRepeats,
       freeform,
       options,
       sourceKey: source.key,
       ...(source.key.includes('#') ? { parentKey: source.key.slice(0, source.key.lastIndexOf('/')) } : {}),
       ...(source.level !== undefined ? { level: source.level } : {}),
-      ...(source.classCtx ? { classId: classes[source.classCtx.index].reg.fullId, className: classes[source.classCtx.index].reg.def.name } : {})
+      ...(source.classCtx ? { classId: classes[source.classCtx.index].reg.fullId, className: classes[source.classCtx.index].reg.def.name } : {}),
+      ...(source.archetype ? { archetypeId: source.archetype.fullId } : {})
     })
   }
 
-  function choiceOptions(choice: ChoiceDef, source: Source): DerivedChoiceOption[] {
+  function choiceOptions(choice: ChoiceDef, source: Source, key: string): DerivedChoiceOption[] {
     const from = choice.from
     const available = (cond: Condition | undefined): boolean => !cond || conditionPasses(cond, source)
+    const pointBuy = choice.budget !== undefined
     switch (from.kind) {
       case 'optionList': {
         const list = registry.get('optionLists', from.listId, source.packId)
@@ -1296,7 +1646,14 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
           warn(`${choice.label}: option list "${from.listId}" isn't in any enabled pack.`, source.key)
           return []
         }
-        return list.def.options.map((o: OptionDef) => ({ id: o.id, name: o.name, description: o.description, available: available(o.prerequisite) }))
+        return list.def.options.map((o: OptionDef) => ({
+          id: o.id,
+          name: o.name,
+          description: o.description,
+          available: available(o.prerequisite),
+          ...(pointBuy ? { cost: o.cost !== undefined ? num(o.cost, source) : 1 } : {}),
+          ...(o.group ? { group: o.group } : {})
+        }))
       }
       case 'feats': {
         const categories = from.categories?.map((c) => c.toLowerCase())
@@ -1324,6 +1681,25 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
         return skillDefs
           .filter((s) => !from.skillIds || from.skillIds.includes(s.id))
           .map((s) => ({ id: s.id, name: s.name, description: '', available: true }))
+      case 'archetypes':
+        return registry
+          .all('archetypes')
+          .filter(
+            (x) =>
+              (!from.tags || from.tags.some((t) => (x.def.tags ?? []).some((own) => own.toLowerCase() === t.toLowerCase()))) &&
+              (!from.archetypeIds || from.archetypeIds.some((id) => sameId(id, x.fullId)))
+          )
+          .map((x) => {
+            const takenBy = archetypesTaken.get(x.fullId)
+            const takenElsewhere = !!takenBy && x.def.unique !== false && !takenBy.startsWith(`${key}/`)
+            return {
+              id: x.fullId,
+              name: x.def.name,
+              description: x.def.description,
+              available: available(x.def.prerequisite),
+              ...(takenElsewhere ? { blocked: 'Already granted by another choice' } : {})
+            }
+          })
       case 'freeform':
         return []
     }
@@ -1332,6 +1708,24 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   const notes = activeEffects('note').map((e) => ({ source: e.source.name, text: e.action.text }))
   const stats: DerivedCharacter['stats'] = {}
   for (const s of customStats) stats[s.id] = { name: s.name, value: stat(`stat.${s.id}`), display: s.display }
+
+  const counters: DerivedCharacter['counters'] = counterDefs.map((d) => {
+    const max = d.max !== undefined ? num(d.max, { key: `counter:${d.id}`, name: d.name, packId: d.packId }) : undefined
+    return { id: d.id, name: d.name, description: d.description ?? '', value: stat(`counter.${d.id}`), min: d.min ?? 0, ...(max !== undefined ? { max } : {}) }
+  })
+  const abilityAliases: DerivedCharacter['abilityAliases'] = aliasDefs.map((d) => ({
+    id: d.id,
+    name: d.name,
+    description: d.description ?? '',
+    ability: aliasAbility(d.id)!,
+    options: d.options,
+    chosen: !!build.abilityAliases?.[d.id] && d.options.includes(build.abilityAliases[d.id])
+  }))
+  const senses: DerivedCharacter['senses'] = {}
+  for (const s of senseDefs) {
+    const range = stat(`sense.${s.id}`)
+    if (range > 0) senses[s.id] = { name: registry.terminology[`sense.${s.id}`] ?? s.name, range }
+  }
 
   const initiativeMode = modeFor('initiative')
   const attackMode = combineModes(globalAttackMode)
@@ -1381,6 +1775,15 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     notes,
     choices,
     stats,
+    counters,
+    abilityAliases,
+    senses,
+    critThreshold: stat('crit.threshold'),
+    reactions: stat('reactions'),
+    attacksPerAction: stat('attacks.perAction'),
+    damageReductions,
+    companions,
+    archetypes: archetypeList,
     diagnostics
   }
 }

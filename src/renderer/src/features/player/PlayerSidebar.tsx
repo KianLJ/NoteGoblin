@@ -6,6 +6,7 @@ import { NoteTreeSection, type ClipboardItem, type ClipboardState } from '../cam
 import { getStoredFontScale } from '../../theme'
 import type { Campaign, CampaignSnapshot, Folder, Note } from '@shared/ipc'
 import type { PlayerTabRef } from './usePlayerWorkspace'
+import { XIcon } from '../../ui/icons'
 
 /** Rough "how long ago" for the offline snapshot's "as of" label — doesn't need to be precise, just orient the reader. */
 function formatSyncedAt(iso: string): string {
@@ -343,7 +344,7 @@ export function PlayerSidebar({
                         </span>
                       </button>
                       <ConfirmButton
-                        label="✕"
+                        label={<XIcon size={12} />}
                         confirmLabel="Sure?"
                         variant="ghost"
                         danger

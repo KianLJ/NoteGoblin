@@ -33,6 +33,7 @@ import {
   type EventRepeat
 } from '@shared/calendar'
 import type { Note } from '@shared/ipc'
+import { ArrowLeftIcon, ArrowRightIcon, SunIcon, XIcon } from '../../ui/icons'
 
 interface CalendarPanelProps {
   sessionId: string | null
@@ -342,7 +343,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
               title="Previous day"
               onClick={() => advanceDay(-1)}
             >
-              ←
+              <ArrowLeftIcon size={12} />
             </button>
             <button type="button" className="gb-btn gb-btn--secondary" style={{ fontSize: 12 }} onClick={goToToday}>
               Today
@@ -354,7 +355,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
               title="Next day"
               onClick={() => advanceDay(1)}
             >
-              →
+              <ArrowRightIcon size={12} />
             </button>
           </div>
         )}
@@ -531,7 +532,8 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
           )}
           {sunHours && (
             <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-              ☀ {formatHour(sunHours.sunrise)}–{formatHour(sunHours.sunset)}
+              <SunIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
+              {formatHour(sunHours.sunrise)}–{formatHour(sunHours.sunset)}
               {daytime !== null && <span style={{ color: 'var(--text-muted)' }}> · {daytime ? 'Daytime' : 'Night'} now</span>}
             </p>
           )}
@@ -607,7 +609,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
                     </button>
                     {!readOnly && (
                       <ConfirmButton
-                        label="✕"
+                        label={<XIcon size={12} />}
                         confirmLabel="Sure?"
                         variant="ghost"
                         danger

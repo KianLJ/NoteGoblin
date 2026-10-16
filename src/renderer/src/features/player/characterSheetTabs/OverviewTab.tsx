@@ -3,8 +3,6 @@ import type { CharacterSheet } from '@shared/ipc'
 import {
   ABILITIES,
   ABILITY_DESCRIPTIONS,
-  CLASSES,
-  RACES,
   SKILLS,
   abilityModifier,
   activeAsiSlotChoices,
@@ -20,9 +18,11 @@ import {
   type HitDicePool,
   type SkillName
 } from '@shared/dnd5e'
-import { FEATS, subclassesForClass } from '@shared/compendium'
+import { FEATS } from '@shared/compendium'
 import type { DerivedCharacter } from '@shared/content/engine'
-import { deriveSheet, effectiveScores, resourcesRefilledBy, skillModeOf, skillOf, skillProficiencyOf } from '@shared/content/sheet'
+import { deriveSheet, effectiveScores, skillModeOf, skillOf, skillProficiencyOf } from '@shared/content/sheet'
+import { restResources } from '@shared/content/resourceMath'
+import { PackTraitsSection } from './PackTraitsSection'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { Button } from '../../../ui/Button'
 import { Modal } from '../../../ui/Modal'
@@ -33,6 +33,7 @@ import { RollButton } from '../../dice/RollButton'
 import { CombatTab } from './CombatTab'
 import { playSfx } from '../../audio/soundEffects'
 import { ChoiceList, useChoiceEditor } from '../ChoiceCards'
+import { usePickerContent } from '../../content/pickerContent'
 import { AbilityIcon, ExhaustionIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
@@ -88,7 +89,6 @@ interface OverviewTabProps {
   sessionId?: string | null
 }
 
-const CLASS_NAMES = CLASSES.map((c) => c.name)
 const CUSTOM_CLASS = '__custom__'
 const CUSTOM_RACE = '__custom__'
 
@@ -97,6 +97,10 @@ function resetAllSlots(slots: Record<number, { total: number; used: number }>): 
 }
 
 export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId = null }: OverviewTabProps): JSX.Element {
+  // SRD classes/species plus whatever the active content packs add (see pickerContent.ts).
+  const picker = usePickerContent()
+  const CLASS_NAMES = picker.classes.map((c) => c.name)
+  const RACES = picker.races
   const { rollCheck } = useSheetRoller(sessionId, character.name)
   const [customRows, setCustomRows] = useState<Set<number>>(new Set())
   const [shortRestOpen, setShortRestOpen] = useState(false)
@@ -247,10 +251,9 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   }
 
   /** Every resource (Rage, Ki, Bardic Inspiration, item charges, homebrew pools…) that refills on this rest, reset to 0 used — merged over whatever's still in progress for the resources that DON'T refill on this rest, not a blanket wipe. */
-  function resetResourcesFor(rest: 'short' | 'long'): Record<string, number> {
-    const next = { ...character.resourceUsed }
-    for (const id of resourcesRefilledBy(derived, rest)) next[id] = 0
-    return next
+  function resetResourcesFor(rest: 'short' | 'long'): Pick<CharacterSheetData, 'resourceUsed' | 'resourceTemp'> {
+    // Short-rest partial regain for long-rest pools and clearing temporary points come from the engine's resources (restResources).
+    return restResources(rest, derived.resources, { resourceUsed: character.resourceUsed, resourceTemp: character.resourceTemp ?? {} })
   }
 
   /** Long rest: full HP, all spell slots refresh, death saves clear, all spent hit dice are fully restored (a house-rule simplification of the 5e default, which only recovers half), and every resource that recharges on a short OR long rest clears. Short rest clears death saves, refreshes Warlock Pact Magic and any short-recharge resources (Second Wind, Channel Divinity, etc.), and opens the hit-die picker below so the player can choose which dice to spend. Neither one touches temp HP, which RAW only goes away when it's reduced to 0, not on a rest. */
@@ -258,7 +261,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     playSfx('longRest')
     const updates = { currentHp: maxHp, deathSaves: { successes: 0, failures: 0 }, hitDiceUsed: {} }
     patch(updates)
-    onSave({ ...updates, spellSlots: resetAllSlots(character.spellSlots), resourceUsed: resetResourcesFor('long') })
+    onSave({ ...updates, spellSlots: resetAllSlots(character.spellSlots), ...resetResourcesFor('long') })
   }
 
   function shortRest(): void {
@@ -267,7 +270,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     const isWarlock = draft.classes.some((c) => c.className.toLowerCase() === 'warlock')
     onSave({
       deathSaves: { successes: 0, failures: 0 },
-      resourceUsed: resetResourcesFor('short'),
+      ...resetResourcesFor('short'),
       ...(isWarlock ? { spellSlots: resetAllSlots(character.spellSlots) } : {})
     })
     setShortRestOpen(true)
@@ -289,6 +292,14 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   }
 
   const pb = derived.proficiencyBonus
+  // The 18 SRD skills in their usual order, then any skill a content pack adds (Cursed Sense…) — proficiency for
+  // those is stored by display name like any other skill.
+  const skillRows: { id: SkillName; ability: Ability }[] = [
+    ...SKILLS,
+    ...Object.values(derived.skills)
+      .filter((sk) => !SKILLS.some((k) => k.id.toLowerCase() === sk.name.toLowerCase()))
+      .map((sk) => ({ id: sk.name as SkillName, ability: sk.ability }))
+  ]
   const primary = draft.classes[0]
   const additionalClasses = draft.classes.slice(1)
   const primaryIsCustom = customRows.has(0) || (!!primary && primary.className.trim() !== '' && !CLASS_NAMES.includes(primary.className))
@@ -678,6 +689,8 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         <Divider />
 
         <ResistancesSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} />
+
+        <PackTraitsSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} />
         </div>
       </div>
 
@@ -965,7 +978,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         <div>
           <div className="gb-label">Skills</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'max-content auto auto', rowGap: 5, columnGap: 'var(--space-2)', alignItems: 'center' }}>
-            {SKILLS.map(({ id, ability }) => {
+            {skillRows.map(({ id, ability }) => {
               const bonus = skillOf(derived, id)?.bonus ?? derived.abilities[ability].mod
               return (
                 <div key={id} style={{ display: 'contents' }}>
@@ -1153,8 +1166,9 @@ function SubclassField({
   onChange: (value: string) => void
   style?: CSSProperties
 }): JSX.Element {
-  const cls = CLASSES.find((c) => c.name.toLowerCase() === className.trim().toLowerCase())
-  const options = cls ? subclassesForClass(cls.id) : []
+  const picker = usePickerContent()
+  const cls = picker.classes.find((c) => c.name.toLowerCase() === className.trim().toLowerCase())
+  const options = cls ? picker.subclassesFor(cls.name) : []
   if (options.length === 0) {
     return <input className="gb-input" style={style} value={value} onChange={(e) => onChange(e.target.value)} placeholder="Subclass" />
   }

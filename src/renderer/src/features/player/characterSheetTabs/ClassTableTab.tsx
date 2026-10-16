@@ -11,7 +11,10 @@ import {
   type CustomClassFeature
 } from '@shared/dnd5e'
 import { FEATS, spellSlotsForClassLevel, spellsKnownForClassLevel } from '@shared/compendium'
+import { choicePatch } from '@shared/content/legacyMirror'
+import { normalizeForActivePacks } from '@shared/content/sheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
+import { useDerivedSheet } from '../useDerivedSheet'
 
 /** A short human summary of one resolved ASI slot — "+2 STR", "+1 STR, +1 DEX", or the feat's name. */
 function asiChoiceSummary(choice: AsiSlotChoice): string {
@@ -84,9 +87,7 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
               {c.className || 'Unnamed Class'} — Level {c.level}
             </div>
             {!cls ? (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Not a recognized class — add its progression below as custom features.
-              </p>
+              <PackClassTable character={character} classIndex={classIndex} readOnly={readOnly} onSave={onSave} />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {levels.map((level) => {
@@ -251,6 +252,120 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The full 1–20 progression for a class from a content pack (homebrew), read
+ * straight from the pack: each level's class and subclass features with
+ * their descriptions, the class table's columns (Cursed Energy, Technique
+ * Die…), proficiency bonus, spell slots if it casts, and whatever was picked
+ * at that level (with Change to clear it). Falls back to the custom-feature
+ * hint for a class name no enabled pack knows.
+ */
+function PackClassTable({
+  character,
+  classIndex,
+  readOnly,
+  onSave
+}: {
+  character: CharacterSheet
+  classIndex: number
+  readOnly?: boolean
+  onSave: (patch: Partial<CharacterSheetData>) => void
+}): JSX.Element {
+  const { derived, registry } = useDerivedSheet(character)
+  const c = normalizeForActivePacks(character).classes[classIndex]
+  const cls = c?.classId ? registry.get('classes', c.classId) : undefined
+  if (!c || !cls) {
+    return (
+      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        Not a recognized class — add its progression below as custom features, or import the content pack it comes from (Content Packs, top right).
+      </p>
+    )
+  }
+  const sub = c.subclassId ? registry.get('subclasses', c.subclassId) : undefined
+  const columns = [...cls.def.columns, ...(sub?.def.columns ?? [])]
+  const slotRows = cls.def.spellcasting?.slots?.rows ?? sub?.def.spellcasting?.slots?.rows ?? []
+  const choices = derived.choices.filter((ch) => ch.classId === cls.fullId && !ch.parentKey && ch.picks.length > 0)
+  // Archetypes (an innate technique, a bloodline) this class granted — their features and columns join the table at their own levels.
+  const archetypes = derived.archetypes.flatMap((a) => {
+    const reg = a.classId === cls.fullId ? registry.get('archetypes', a.id) : undefined
+    return reg ? [{ ...a, def: reg.def }] : []
+  })
+  const nameOf = (choice: (typeof choices)[number], id: string): string => choice.options.find((o) => o.id === id)?.name ?? id
+
+  function clear(choice: (typeof choices)[number]): void {
+    onSave(choicePatch(character, derived, choice, []))
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {cls.def.description && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 4px' }}>{cls.def.description}</p>}
+      {Array.from({ length: 20 }, (_, i) => i + 1).map((level) => {
+        const unlocked = level <= c.level
+        const features = [
+          ...(cls.def.levels.find((l) => l.level === level)?.features ?? []).map((f) => ({ ...f, fromSubclass: false })),
+          ...(sub?.def.levels.find((l) => l.level === level)?.features ?? []).map((f) => ({ ...f, fromSubclass: true }))
+        ]
+        const cells = columns.flatMap((col) => {
+          const v = col.values[level - 1]
+          return v === undefined || v === '' || v === 0 ? [] : [`${col.label}: ${v}`]
+        })
+        const archetypeFeatures = archetypes.flatMap((a) =>
+          (a.def.levels.find((l) => l.level === level)?.features ?? []).map((f) => ({ ...f, archetype: a.name, archetypeId: a.id }))
+        )
+        for (const a of archetypes) {
+          for (const col of a.def.columns) {
+            const v = col.values[level - 1]
+            if (v !== undefined && v !== '' && v !== 0) cells.push(`${col.label}: ${v}`)
+          }
+        }
+        const slots = slotRows[level - 1] ?? []
+        const picks = choices.filter((ch) => ch.level === level)
+        if (features.length === 0 && archetypeFeatures.length === 0 && cells.length === 0 && !slots.some((n) => n > 0) && picks.length === 0) return null
+        return (
+          <div key={level} className="gb-card" style={{ padding: 'var(--space-2)', opacity: unlocked ? 1 : 0.45, borderColor: unlocked ? 'var(--accent)' : undefined }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Lv {level}</span>
+              <span className="gb-badge" style={{ fontSize: 10 }}>
+                PB +{proficiencyBonusAtLevel(level)}
+              </span>
+              {!unlocked && <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Locked</span>}
+            </div>
+            {features.map((f) => (
+              <div key={`${f.fromSubclass ? 'sub' : 'cls'}:${f.id}`} style={{ marginTop: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: f.fromSubclass ? 'var(--accent-hover)' : 'var(--text-primary)' }}>{f.name}</span>
+                {f.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{f.description}</div>}
+              </div>
+            ))}
+            {archetypeFeatures.map((f) => (
+              <div key={`arch:${f.archetypeId}:${f.id}`} style={{ marginTop: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-hover)' }}>{f.name}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 6 }}>{f.archetype}</span>
+                {f.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{f.description}</div>}
+              </div>
+            ))}
+            {picks.map((choice) =>
+              readOnly ? (
+                <div key={choice.key} style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  {choice.label}: {choice.picks.map((id) => nameOf(choice, id)).join(', ')}
+                </div>
+              ) : (
+                <ResolvedChoiceRow key={choice.key} label={`${choice.label}: ${choice.picks.map((id) => nameOf(choice, id)).join(', ')}`} onChange={() => clear(choice)} />
+              )
+            )}
+            {(cells.length > 0 || slots.some((n) => n > 0)) && (
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                {cells.join(' · ')}
+                {cells.length > 0 && slots.some((n) => n > 0) ? ' · ' : ''}
+                {slots.some((n) => n > 0) && `Slots: ${slots.map((n, i) => (n > 0 ? `${ORDINALS[i] ?? `${i + 1}th`} ×${n}` : null)).filter(Boolean).join(', ')}`}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -1,0 +1,764 @@
+{
+  "formatVersion": 1,
+  "id": "jujutsu-codex",
+  "name": "Jujutsu Codex",
+  "version": "0.3.0",
+  "author": "NoteGoblin example",
+  "description": "An example homebrew pack: the Jujutsu Sorcerer class with Cursed Energy, Innate Techniques (Limitless, Ten Shadows), Domain Expansion, cursed tools and a Cursed Energy Output stat.",
+  "builtIn": false,
+  "dependsOn": [
+    "srd-5.2.1"
+  ],
+  "hides": [],
+  "terminology": {
+    "spellSlots": "Technique Slots",
+    "ability.cha": "Cursed Energy Control",
+    "subclass": "Cursed Lineage"
+  },
+  "vocabulary": {
+    "skills": [
+      {
+        "id": "cursed-sense",
+        "name": "Cursed Sense",
+        "ability": "wis"
+      }
+    ],
+    "damageTypes": [
+      {
+        "id": "cursed",
+        "name": "Cursed"
+      }
+    ],
+    "conditions": [],
+    "currencies": [],
+    "stats": [
+      {
+        "id": "output",
+        "name": "Cursed Energy Output",
+        "base": "@alias.ce.mod + @prof",
+        "display": true
+      }
+    ],
+    "actionTypes": [
+      {
+        "id": "technique",
+        "name": "Technique"
+      }
+    ],
+    "weaponProperties": [],
+    "spellSchools": [],
+    "abilityAliases": [
+      {
+        "id": "ce",
+        "name": "Cursed Energy ability",
+        "description": "The ability your Cursed Energy flows from — Wisdom (control) or Charisma (raw force). Everything that says \"Cursed Energy modifier\" uses it.",
+        "options": [
+          "wis",
+          "cha"
+        ],
+        "default": "cha"
+      }
+    ],
+    "counters": [
+      {
+        "id": "breakthroughs",
+        "name": "Breakthroughs",
+        "description": "Moments your understanding of jujutsu leaps forward, awarded by the DM. Each one raises your Cursed Energy ability by 1 (up to 5).",
+        "min": 0,
+        "max": "5",
+        "default": 0
+      }
+    ]
+  },
+  "classes": [
+    {
+      "id": "jujutsu-sorcerer",
+      "name": "Jujutsu Sorcerer",
+      "description": "Sorcerers who wield Cursed Energy — the power of negative emotion — through innate techniques, and who can one day expand their own domain.",
+      "hitDie": 10,
+      "primaryAbilities": [],
+      "saves": [
+        "con",
+        "cha"
+      ],
+      "skillChoice": {
+        "count": 2,
+        "from": [
+          "cursed-sense",
+          "perception"
+        ]
+      },
+      "armorProficiencies": [],
+      "weaponProficiencies": [
+        "simple",
+        "martial"
+      ],
+      "toolProficiencies": [],
+      "subclassLevel": 3,
+      "subclassLabel": "Cursed Lineage",
+      "columns": [
+        {
+          "id": "cursedEnergy",
+          "label": "Cursed Energy",
+          "values": [
+            4,
+            6,
+            8,
+            10,
+            12,
+            14,
+            16,
+            18,
+            20,
+            22,
+            24,
+            26,
+            28,
+            30,
+            32,
+            34,
+            36,
+            38,
+            40,
+            42
+          ]
+        },
+        {
+          "id": "techniqueDie",
+          "label": "Technique Die",
+          "values": [
+            6,
+            6,
+            6,
+            6,
+            8,
+            8,
+            8,
+            8,
+            8,
+            8,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ]
+        }
+      ],
+      "levels": [
+        {
+          "level": 1,
+          "features": [
+            {
+              "id": "cursed-energy",
+              "name": "Cursed Energy",
+              "description": "Negative emotion condensed into usable power. You have a pool of Cursed Energy (the class table, plus your Cursed Energy modifier). It refills on a Long Rest; a Short Rest gives back half your Jujutsu Sorcerer level (rounded down, minimum 1). Cursed Strike: as an action, channel 2 Cursed Energy into a strike — proficiency + Cursed Energy modifier to hit, Technique Die twice + your modifier in Cursed damage. Cursed Energy Burst: as an action, release any amount of Cursed Energy up to your Cursed Energy modifier — a 30-foot line (+5 feet per point) dealing one Technique Die per point (Dexterity save halves). Focus (once per Short Rest, bonus action): steady your breathing to gain temporary Cursed Energy equal to your proficiency bonus.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "grantResource",
+                    "resource": {
+                      "id": "cursed-energy",
+                      "name": "Cursed Energy",
+                      "max": "@table.cursedEnergy + @alias.ce.mod",
+                      "recharge": "long",
+                      "shortRestRegain": "max(1, floor(@classLevel / 2))",
+                      "display": "pool",
+                      "description": "Fuels your techniques. Refills on a Long Rest; a Short Rest gives some back."
+                    }
+                  }
+                },
+                {
+                  "do": {
+                    "kind": "grantResource",
+                    "resource": {
+                      "id": "focus",
+                      "name": "Focus",
+                      "max": "1",
+                      "recharge": "short",
+                      "display": "uses",
+                      "actionType": "bonus",
+                      "description": "Gain temporary Cursed Energy equal to your proficiency bonus."
+                    }
+                  }
+                },
+                {
+                  "do": {
+                    "kind": "grantAction",
+                    "action": {
+                      "id": "cursed-strike",
+                      "name": "Cursed Strike",
+                      "actionType": "technique",
+                      "cost": {
+                        "resourceId": "cursed-energy",
+                        "amount": "2"
+                      },
+                      "attackBonus": "@prof + @alias.ce.mod",
+                      "damage": "2d@table.techniqueDie + @alias.ce.mod",
+                      "damageType": "Cursed",
+                      "description": "Spend 2 Cursed Energy: proficiency + Cursed Energy modifier to hit, Technique Die x2 + modifier Cursed damage."
+                    }
+                  }
+                },
+                {
+                  "do": {
+                    "kind": "grantAction",
+                    "action": {
+                      "id": "cursed-burst",
+                      "name": "Cursed Energy Burst",
+                      "actionType": "technique",
+                      "spend": {
+                        "resourceId": "cursed-energy",
+                        "min": "1",
+                        "max": "max(1, @alias.ce.mod)"
+                      },
+                      "saveDc": "8 + @prof + @alias.ce.mod",
+                      "saveAbility": "dex",
+                      "damage": "(@spent)d@table.techniqueDie",
+                      "damageType": "Cursed",
+                      "range": "30 + 5 * @spent",
+                      "description": "Release any amount of Cursed Energy up to your modifier as a line: one Technique Die of Cursed damage per point, Dexterity save for half."
+                    }
+                  }
+                },
+                {
+                  "do": {
+                    "kind": "grantAction",
+                    "action": {
+                      "id": "focus-breath",
+                      "name": "Focus",
+                      "actionType": "bonus",
+                      "cost": {
+                        "resourceId": "focus",
+                        "amount": "1"
+                      },
+                      "restores": [
+                        {
+                          "resourceId": "cursed-energy",
+                          "amount": "@prof",
+                          "temporary": true
+                        }
+                      ],
+                      "description": "Gain temporary Cursed Energy equal to your proficiency bonus (spent first, gone on a rest)."
+                    }
+                  }
+                },
+                {
+                  "do": {
+                    "kind": "modify",
+                    "target": "alias.ce.score",
+                    "op": "add",
+                    "value": "@counter.breakthroughs"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "innate-technique",
+              "name": "Innate Technique",
+              "description": "You were born with a cursed technique — a unique way your Cursed Energy manifests. It grows with your highest class level: Limitless (requires a Cursed Energy ability of 16) or Ten Shadows.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "grantChoice",
+                    "choice": {
+                      "id": "technique",
+                      "label": "Innate Technique",
+                      "from": {
+                        "kind": "archetypes",
+                        "tags": [
+                          "innate-technique"
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 2,
+          "features": [
+            {
+              "id": "body-improvements",
+              "name": "Body Improvements",
+              "description": "Cursed Energy hardens your body. You have points equal to your Jujutsu Sorcerer level to spend on improvements (at most one Toughness improvement).",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "grantChoice",
+                    "choice": {
+                      "id": "improvements",
+                      "label": "Body Improvements",
+                      "budget": "@classLevel",
+                      "allowRepeats": true,
+                      "groups": [
+                        {
+                          "id": "toughness",
+                          "label": "Toughness",
+                          "max": "1"
+                        }
+                      ],
+                      "from": {
+                        "kind": "optionList",
+                        "listId": "body-improvements"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 3,
+          "features": [
+            {
+              "id": "domain-expansion",
+              "name": "Domain Expansion",
+              "description": "The pinnacle of jujutsu: you manifest your inner world around you. As an action, spend 5 Cursed Energy to expand your domain. While it lasts you gain +2 AC, advantage on attack rolls, and your Cursed Energy Output rises by your Jujutsu Sorcerer level. It ends when you choose to end it.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "grantToggle",
+                    "toggle": {
+                      "id": "domain-expansion",
+                      "name": "Domain Expansion",
+                      "actionType": "action",
+                      "cost": {
+                        "resourceId": "cursed-energy",
+                        "amount": "5"
+                      },
+                      "effects": [
+                        {
+                          "do": {
+                            "kind": "modify",
+                            "target": "ac",
+                            "op": "add",
+                            "value": "2"
+                          }
+                        },
+                        {
+                          "do": {
+                            "kind": "rollMode",
+                            "target": "attack",
+                            "mode": "advantage"
+                          }
+                        },
+                        {
+                          "do": {
+                            "kind": "modify",
+                            "target": "stat.output",
+                            "op": "add",
+                            "value": "@classLevel"
+                          }
+                        }
+                      ],
+                      "description": "Spend 5 Cursed Energy to expand your domain: +2 AC, advantage on attack rolls, and +your Jujutsu Sorcerer level to Cursed Energy Output until it ends."
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 4,
+          "features": [
+            {
+              "id": "asi-4",
+              "name": "Ability Score Improvement",
+              "description": "Increase your ability scores (one by 2, or two by 1) or take a feat you qualify for.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "grantChoice",
+                    "choice": {
+                      "id": "feat",
+                      "label": "Ability Score Improvement or feat",
+                      "from": {
+                        "kind": "feats",
+                        "categories": [
+                          "General"
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 5,
+          "features": [
+            {
+              "id": "black-flash",
+              "name": "Black Flash",
+              "description": "When Cursed Energy meets a blow within a millionth of a second, space distorts. Your attacks score a critical hit on a 19 or 20, and you have one extra reaction each round.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "modify",
+                    "target": "crit.threshold",
+                    "op": "add",
+                    "value": "-1"
+                  }
+                },
+                {
+                  "do": {
+                    "kind": "modify",
+                    "target": "reactions",
+                    "op": "add",
+                    "value": "1"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "startingEquipment": []
+    }
+  ],
+  "subclasses": [],
+  "species": [],
+  "backgrounds": [],
+  "feats": [],
+  "spells": [],
+  "items": [
+    {
+      "id": "heavy-longsword",
+      "name": "Longsword",
+      "description": "In this setting, longswords are heavier blades — they deal 1d10 slashing damage.",
+      "overrides": "srd-5.2.1:longsword",
+      "category": "Weapon",
+      "requiresAttunement": false,
+      "weapon": {
+        "category": "martial",
+        "range": "melee",
+        "damage": "1d10",
+        "damageType": "Slashing",
+        "properties": []
+      },
+      "effectsWhen": "equipped",
+      "effects": []
+    },
+    {
+      "id": "playful-cloud",
+      "name": "Playful Cloud",
+      "description": "A three-section staff, a special-grade cursed tool. Its strikes deal an extra 1d6 Cursed damage.",
+      "category": "Cursed Tool",
+      "requiresAttunement": false,
+      "weapon": {
+        "category": "martial",
+        "range": "melee",
+        "damage": "3d6",
+        "damageType": "Bludgeoning",
+        "properties": []
+      },
+      "effectsWhen": "equipped",
+      "effects": [
+        {
+          "do": {
+            "kind": "extraDamage",
+            "damage": "1d6",
+            "damageType": "Cursed",
+            "appliesTo": {
+              "item": {
+                "itemIds": [
+                  "playful-cloud"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "monsters": [],
+  "optionLists": [
+    {
+      "id": "shikigami",
+      "name": "Shikigami",
+      "description": "Shadow creatures a Ten Shadows user can summon.",
+      "options": [
+        {
+          "id": "divine-dogs",
+          "name": "Divine Dogs",
+          "description": "A pair of shadow hounds that track by scent. You gain expertise in Perception, and can summon them (2 Cursed Energy) to fight beside you.",
+          "effects": [
+            {
+              "do": {
+                "kind": "proficiency",
+                "category": "skill",
+                "value": "perception",
+                "level": "expertise"
+              }
+            },
+            {
+              "do": {
+                "kind": "grantCompanion",
+                "companion": {
+                  "id": "divine-dogs",
+                  "name": "Divine Dogs",
+                  "size": "Medium",
+                  "creatureType": "Shikigami",
+                  "speed": "40 ft",
+                  "ac": "12 + @prof",
+                  "hp": "4 * @level + @self.con.mod",
+                  "abilities": {
+                    "str": "14",
+                    "dex": "15",
+                    "con": "13 + floor(@level / 4)",
+                    "int": "6",
+                    "wis": "14",
+                    "cha": "6"
+                  },
+                  "attacks": [
+                    {
+                      "name": "Bite",
+                      "bonus": "@self.dex.mod + @prof",
+                      "damage": "1d8 + @self.dex.mod",
+                      "damageType": "piercing",
+                      "reach": "5 ft"
+                    }
+                  ],
+                  "traits": [
+                    {
+                      "name": "Keen Smell",
+                      "description": "Advantage on Wisdom (Perception) checks that rely on smell."
+                    }
+                  ],
+                  "summonCost": {
+                    "resourceId": "cursed-energy",
+                    "amount": "2"
+                  },
+                  "states": [
+                    "Totality"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "nue",
+          "name": "Nue",
+          "description": "A great owl-like shikigami you can ride. You gain a flying speed of 30 feet.",
+          "effects": [
+            {
+              "do": {
+                "kind": "modify",
+                "target": "speed.fly",
+                "op": "set",
+                "value": "30"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "body-improvements",
+      "name": "Body Improvements",
+      "description": "Point-buy physical upgrades.",
+      "options": [
+        {
+          "id": "reinforced-frame",
+          "name": "Reinforced Frame",
+          "description": "Reduce bludgeoning, piercing and slashing damage you take by your proficiency bonus.",
+          "cost": "2",
+          "group": "toughness",
+          "effects": [
+            {
+              "do": {
+                "kind": "damageReduction",
+                "amount": "@prof",
+                "damageTypes": [
+                  "bludgeoning",
+                  "piercing",
+                  "slashing"
+                ],
+                "label": "Reinforced Frame"
+              }
+            }
+          ]
+        },
+        {
+          "id": "swift-legs",
+          "name": "Swift Legs",
+          "description": "Your walking speed increases by 5 feet. Can be taken more than once.",
+          "cost": "1",
+          "effects": [
+            {
+              "do": {
+                "kind": "modify",
+                "target": "speed.walk",
+                "op": "add",
+                "value": "5"
+              }
+            }
+          ]
+        },
+        {
+          "id": "keen-eyes",
+          "name": "Keen Eyes",
+          "description": "Darkvision out to 60 feet (or +30 feet if you already have it).",
+          "cost": "1",
+          "effects": [
+            {
+              "do": {
+                "kind": "modify",
+                "target": "sense.darkvision",
+                "op": "add",
+                "value": "30 + 30 * (@sense.darkvision == 0)"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "archetypes": [
+    {
+      "id": "limitless",
+      "name": "Limitless",
+      "description": "Infinity surrounds you, slowing anything that approaches. Prerequisite: Cursed Energy ability 16 or higher.",
+      "tags": [
+        "innate-technique"
+      ],
+      "levelBasis": "highestClass",
+      "prerequisite": {
+        "kind": "formula",
+        "formula": "@alias.ce.score >= 16"
+      },
+      "columns": [
+        {
+          "id": "blueRange",
+          "label": "Blue Range",
+          "values": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            30,
+            30,
+            30,
+            30,
+            30,
+            60,
+            60,
+            60,
+            60,
+            60,
+            60,
+            60,
+            90,
+            90,
+            90
+          ]
+        }
+      ],
+      "levels": [
+        {
+          "level": 1,
+          "features": [
+            {
+              "id": "infinity",
+              "name": "Infinity",
+              "description": "You add half your Cursed Energy modifier (rounded down) to your Armor Class.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "modify",
+                    "target": "ac",
+                    "op": "add",
+                    "value": "floor(@alias.ce.mod / 2)"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "level": 6,
+          "features": [
+            {
+              "id": "blue",
+              "name": "Lapse: Blue",
+              "description": "Spend Cursed Energy to pull everything toward a point within range (the Blue Range column): creatures in a 10-foot radius per point make a Strength save or are pulled to the centre and take one Technique Die of force damage per point.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "grantAction",
+                    "action": {
+                      "id": "lapse-blue",
+                      "name": "Lapse: Blue",
+                      "actionType": "technique",
+                      "spend": {
+                        "resourceId": "cursed-energy",
+                        "min": "1",
+                        "max": "@alias.ce.mod + 1"
+                      },
+                      "saveDc": "8 + @prof + @alias.ce.mod",
+                      "saveAbility": "str",
+                      "damage": "(@spent)d6",
+                      "damageType": "force",
+                      "range": "@table.blueRange",
+                      "area": "10 * @spent"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ten-shadows",
+      "name": "Ten Shadows",
+      "description": "Your shadow is a gateway for shikigami. You start with one and learn another at 4th level and every 4 levels after.",
+      "tags": [
+        "innate-technique"
+      ],
+      "levelBasis": "highestClass",
+      "levels": [
+        {
+          "level": 1,
+          "features": [
+            {
+              "id": "shadow-summoning",
+              "name": "Shadow Summoning",
+              "description": "Your shadow is a gateway for shikigami. You start with one and learn another at 4th level and every 4 levels after.",
+              "effects": [
+                {
+                  "do": {
+                    "kind": "grantChoice",
+                    "choice": {
+                      "id": "shikigami",
+                      "label": "Shikigami",
+                      "count": "floor(@archetypeLevel / 4) + 1",
+                      "from": {
+                        "kind": "optionList",
+                        "listId": "shikigami"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

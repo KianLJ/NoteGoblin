@@ -1,9 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
 import type { DerivedChoice } from '@shared/content/engine'
-import { normalizeSheet } from '@shared/content/migrate'
-import { deriveSheet } from '@shared/content/sheet'
+import { deriveSheet, normalizeForActivePacks } from '@shared/content/sheet'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { SubclassChooser } from './AsiChoosers'
@@ -56,6 +55,9 @@ function slotTotals(sheet: CharacterSheetData): Record<number, number> {
  */
 export function LevelUpPopup({ character: savedCharacter, className, fromLevel, toLevel, onSave, onClose }: LevelUpPopupProps): JSX.Element | null {
   const [slideIndex, setSlideIndex] = useState(0)
+  // Every choice (and the subclass pick) this popup has shown, in first-shown order — so a slide stays put after you
+  // pick, showing what you picked (still changeable), instead of vanishing from under you the moment it's resolved.
+  const shown = useRef<string[]>([])
   // Overview opens this the moment a level is raised, but saves that level on a debounce — so for the first moments
   // the saved character is still at the old level. Work from the character at the new level from the start, so the
   // popup doesn't flash "nothing new" before the save lands.
@@ -65,7 +67,7 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
   }, [savedCharacter, className, toLevel])
   const setPicks = useChoiceEditor(character, onSave)
 
-  const normalized = normalizeSheet(character)
+  const normalized = normalizeForActivePacks(character)
   const classIndex = normalized.classes.findIndex((c) => c.className.toLowerCase() === className.toLowerCase())
   const classLevel = classIndex >= 0 ? normalized.classes[classIndex] : undefined
   const { derived, registry } = deriveSheet(character)
@@ -75,13 +77,15 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
   const subclassId = classLevel.subclassId
 
   function chooseSubclass(name: string): void {
-    const nextClasses = character.classes.map((c, i) => (i === classIndex ? { ...c, subclass: name } : c))
+    const nextClasses = character.classes.map((c, i) => (i === classIndex ? { ...c, subclass: name || undefined } : c))
     onSave({ classes: nextClasses })
   }
 
   // ---- Recap (informational only, strictly this level-up's delta) ----
   const isOwn = (key: string): boolean => !key.includes('#') && (key.startsWith(`class:${classId}:`) || (!!subclassId && key.startsWith(`subclass:${subclassId}:`)))
-  const newFeatures = derived.features.filter((f) => isOwn(f.key) && f.level !== undefined && f.level > fromLevel && f.level <= toLevel)
+  // Archetype features (an innate technique this class granted) count too — they unlock with the class's level.
+  const isOwnArchetype = (f: (typeof derived.features)[number]): boolean => !!f.archetypeId && f.classId === classId && f.key.includes(':', f.key.lastIndexOf('/'))
+  const newFeatures = derived.features.filter((f) => (isOwn(f.key) || isOwnArchetype(f)) && f.level !== undefined && f.level > fromLevel && f.level <= toLevel)
   const before: CharacterSheetData = { ...character, classes: character.classes.map((c, i) => (i === classIndex ? { ...c, level: fromLevel } : c)) }
   const derivedBefore = deriveSheet(before).derived
   const resourceChanges = derived.resources
@@ -103,6 +107,10 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
   // ---- Choices (cumulative — every currently-unresolved choice for this class, not just newly unlocked ones) ----
   const needsPick = (c: DerivedChoice): boolean => c.remaining > 0 || derived.choices.some((n) => n.parentKey === c.key && needsPick(n))
   const openChoices = derived.choices.filter((c) => !c.parentKey && c.classId === classId && needsPick(c))
+  const needsSubclass = classLevel.level >= cls.def.subclassLevel && !classLevel.subclass
+  for (const key of [...(needsSubclass ? ['subclass'] : []), ...openChoices.map((c) => c.key)]) {
+    if (!shown.current.includes(key)) shown.current.push(key)
+  }
   const subclasses = registry.all('subclasses').filter((s) => s.def.classId === cls.def.id || s.def.classId === cls.fullId)
   const subclassLabel = cls.def.subclassLabel ?? 'Subclass'
 
@@ -163,23 +171,36 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
     })
   }
 
-  if (classLevel.level >= cls.def.subclassLevel && !classLevel.subclass && subclasses.length > 0) {
-    slides.push({
-      key: 'subclass',
-      render: () => (
-        <SubclassChooser
-          classLabel={className}
-          featureName={subclassLabel}
-          slotLevel={cls.def.subclassLevel}
-          options={subclasses.map((s) => ({ id: s.def.id, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
-          onChoose={chooseSubclass}
-        />
-      )
-    })
-  }
-
-  for (const choice of openChoices) {
-    slides.push({ key: choice.key, render: () => <ChoiceCard choice={choice} all={derived.choices} onSetPicks={setPicks} /> })
+  for (const key of shown.current) {
+    if (key === 'subclass') {
+      if (subclasses.length === 0) continue
+      slides.push({
+        key,
+        render: () =>
+          classLevel.subclass ? (
+            <div className="gb-card" style={{ padding: 'var(--space-3)', borderColor: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <strong>{subclassLabel}</strong>
+                <div style={{ fontSize: 13, color: 'var(--accent-hover)', marginTop: 2 }}>{classLevel.subclass}</div>
+              </div>
+              <Button variant="secondary" onClick={() => chooseSubclass('')} style={{ fontSize: 12, padding: '4px 10px' }}>
+                Change
+              </Button>
+            </div>
+          ) : (
+            <SubclassChooser
+              classLabel={className}
+              featureName={subclassLabel}
+              slotLevel={cls.def.subclassLevel}
+              options={subclasses.map((s) => ({ id: s.def.id, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
+              onChoose={chooseSubclass}
+            />
+          )
+      })
+      continue
+    }
+    const choice = derived.choices.find((c) => c.key === key)
+    if (choice) slides.push({ key, render: () => <ChoiceCard choice={choice} all={derived.choices} onSetPicks={setPicks} /> })
   }
 
   const clampedIndex = Math.min(slideIndex, Math.max(0, slides.length - 1))

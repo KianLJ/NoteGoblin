@@ -60,6 +60,11 @@ export function subscribeActivePacks(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+/** normalizeSheet against the SRD plus the active packs — so a homebrew class added since the last save already resolves to its pack id. */
+export function normalizeForActivePacks<T extends CharacterSheetData>(sheet: T): T {
+  return normalizeSheet(sheet, [srdPack(), ...activePacks])
+}
+
 const derivedCache = new WeakMap<CharacterSheetData, { key: string; result: DerivedSheet }>()
 
 /**

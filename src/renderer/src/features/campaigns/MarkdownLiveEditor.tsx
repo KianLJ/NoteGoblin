@@ -23,6 +23,7 @@ import { statblockToFencedBlock } from '../../statblock'
 import { SFX_LIBRARY, findSfxCue, parseOneShotCodeSpan } from '../../data/sfxLibrary'
 import { parseDiceCodeSpan, type DieSides } from '@shared/dice'
 import type { Note } from '@shared/ipc'
+import { DICE_ICON_SVG, SPEAKER_ICON_SVG } from '../../ui/iconMarkup'
 
 export interface MarkdownLiveEditorHandle {
   insertText: (text: string) => void
@@ -252,7 +253,8 @@ class DiceRollWidget extends WidgetType {
     btn.className = 'gb-dice-roll'
     btn.dataset.diceRoll = JSON.stringify(this.dice)
     btn.title = 'Click to roll'
-    btn.textContent = `🎲 ${this.label}`
+    btn.innerHTML = DICE_ICON_SVG
+    btn.append(this.label)
     return btn
   }
 
@@ -280,7 +282,8 @@ class OneShotWidget extends WidgetType {
     btn.className = 'gb-oneshot-play'
     btn.dataset.oneshotCue = this.cueId
     btn.title = 'Click to play'
-    btn.textContent = `🔊 ${this.label}`
+    btn.innerHTML = SPEAKER_ICON_SVG
+    btn.append(this.label)
     return btn
   }
 

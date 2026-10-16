@@ -5,6 +5,7 @@ import type { DerivedChoice } from '@shared/content/engine'
 import { choicePatch } from '@shared/content/legacyMirror'
 import { deriveSheet } from '@shared/content/sheet'
 import { HoverDetailCard } from './HoverDetailCard'
+import { XIcon } from '../../ui/icons'
 
 /**
  * Saves picks for a content-engine choice — natively in sheet.choices, and
@@ -61,19 +62,35 @@ export function ChoiceCard({
   }
 
   // A single pick is edited in place by its dropdown; chips are for choices with several picks (or read-only views).
-  const single = choice.count === 1 && !choice.allowRepeats && !choice.freeform && !readOnly
+  const single = choice.count === 1 && !choice.allowRepeats && !choice.freeform && !readOnly && choice.budget === undefined
+  const pointBuy = choice.budget !== undefined
 
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)', borderColor: choice.remaining > 0 ? 'var(--accent)' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
         <strong style={{ flex: 1 }}>{choice.label}</strong>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{choiceOrigin(choice)}</span>
-        {choice.count > 1 && (
-          <span className="gb-badge" style={{ fontSize: 10 }} title={`${choice.picks.length} of ${choice.count} picked`}>
-            {choice.picks.length}/{choice.count}
+        {pointBuy ? (
+          <span className="gb-badge" style={{ fontSize: 10 }} title={`${choice.spent} of ${choice.budget} points spent`}>
+            {choice.spent}/{choice.budget} pts
           </span>
+        ) : (
+          choice.count > 1 && (
+            <span className="gb-badge" style={{ fontSize: 10 }} title={`${choice.picks.length} of ${choice.count} picked`}>
+              {choice.picks.length}/{choice.count}
+            </span>
+          )
         )}
       </div>
+      {choice.groups && choice.groups.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+          {choice.groups.map((g) => (
+            <span key={g.id} style={{ color: g.used > g.max ? 'var(--danger, #e05555)' : undefined }}>
+              {g.label} {g.used}/{g.max}
+            </span>
+          ))}
+        </div>
+      )}
 
       {single && <SinglePicker choice={choice} onSet={(id) => onSetPicks(choice, id ? [id] : [])} />}
 
@@ -85,7 +102,7 @@ export function ChoiceCard({
                 {nameOf(id)}
                 {!readOnly && (
                   <button type="button" onClick={() => removeAt(i)} style={removeStyle} title={`Remove ${nameOf(id)}`}>
-                    ×
+                    <XIcon size={10} />
                   </button>
                 )}
               </span>
@@ -135,9 +152,10 @@ function OptionSelect({
     <select className="gb-input" value={value} onChange={(e) => onChange(e.target.value)} style={{ fontSize: 12, width: '100%' }}>
       <option value="">{placeholder}</option>
       {options.map((o) => (
-        <option key={o.id} value={o.id} disabled={!o.available && o.id !== value} title={o.description}>
+        <option key={o.id} value={o.id} disabled={(!o.available || !!o.blocked) && o.id !== value} title={o.description}>
           {o.name}
-          {o.available ? '' : ' (prerequisite not met)'}
+          {o.cost !== undefined ? ` (${o.cost} pt${o.cost === 1 ? '' : 's'})` : ''}
+          {!o.available ? ' (prerequisite not met)' : o.blocked && o.id !== value ? ` (${o.blocked.toLowerCase()})` : ''}
         </option>
       ))}
     </select>
@@ -194,7 +212,7 @@ function ChoicePicker({ choice, onPick }: { choice: DerivedChoice; onPick: (id: 
       {pickable.length > SEARCH_THRESHOLD && (
         <input className="gb-input" placeholder={`Search ${pickable.length} options…`} value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: '100%', fontSize: 12, marginBottom: 6 }} />
       )}
-      <OptionSelect options={shown} value="" placeholder={`Add a pick (${choice.remaining} left)…`} onChange={(id) => id && onPick(id)} />
+      <OptionSelect options={shown} value="" placeholder={choice.budget !== undefined ? `Add a pick (${choice.remaining} points left)…` : `Add a pick (${choice.remaining} left)…`} onChange={(id) => id && onPick(id)} />
     </div>
   )
 }
@@ -228,4 +246,4 @@ export function ChoiceList({
   )
 }
 
-const removeStyle = { background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 } as const
+const removeStyle = { background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'inline-flex' } as const

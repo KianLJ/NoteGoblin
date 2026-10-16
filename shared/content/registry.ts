@@ -5,8 +5,8 @@
 
 import type { ContentPack, Terminology, Vocabulary } from './schema'
 
-export type EntryKind = 'classes' | 'subclasses' | 'species' | 'backgrounds' | 'feats' | 'spells' | 'items' | 'monsters' | 'optionLists'
-export const ENTRY_KINDS: EntryKind[] = ['classes', 'subclasses', 'species', 'backgrounds', 'feats', 'spells', 'items', 'monsters', 'optionLists']
+export type EntryKind = 'classes' | 'subclasses' | 'species' | 'backgrounds' | 'feats' | 'spells' | 'items' | 'monsters' | 'optionLists' | 'archetypes'
+export const ENTRY_KINDS: EntryKind[] = ['classes', 'subclasses', 'species', 'backgrounds', 'feats', 'spells', 'items', 'monsters', 'optionLists', 'archetypes']
 
 type EntryOf<K extends EntryKind> = ContentPack[K][number]
 
@@ -103,7 +103,7 @@ export function buildRegistry(packs: ContentPack[]): Registry {
   for (const pack of ordered) {
     for (const kind of ENTRY_KINDS) {
       const table = entries.get(kind)!
-      for (const def of pack[kind] as Array<{ id: string; overrides?: string }>) {
+      for (const def of (pack[kind] ?? []) as Array<{ id: string; overrides?: string }>) {
         let id = fullId(pack.id, def.id)
         if (def.overrides) {
           const target = resolveIn(kind, def.overrides, pack.id)
@@ -154,10 +154,22 @@ export function buildRegistry(packs: ContentPack[]): Registry {
   }
 
   const vocabulary = {} as MergedVocabulary
-  const vocabKeys: Array<keyof Vocabulary> = ['skills', 'damageTypes', 'conditions', 'currencies', 'stats', 'actionTypes', 'weaponProperties', 'spellSchools']
+  const vocabKeys: Array<keyof Vocabulary> = [
+    'skills',
+    'damageTypes',
+    'conditions',
+    'currencies',
+    'stats',
+    'actionTypes',
+    'weaponProperties',
+    'spellSchools',
+    'counters',
+    'abilityAliases',
+    'senses'
+  ]
   for (const key of vocabKeys) {
     const merged = new Map<string, Vocabulary[typeof key][number] & { packId: string }>()
-    for (const pack of ordered) for (const v of pack.vocabulary[key]) merged.set(v.id, { ...v, packId: pack.id })
+    for (const pack of ordered) for (const v of pack.vocabulary[key] ?? []) merged.set(v.id, { ...v, packId: pack.id })
     ;(vocabulary as Record<string, unknown>)[key] = [...merged.values()]
   }
 

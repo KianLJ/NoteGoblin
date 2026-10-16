@@ -98,6 +98,8 @@ export const resourceDefSchema = z.object({
   ]),
   /** How much comes back on recharge; omitted = all of it. */
   regain: formulaSchema.optional(),
+  /** For a resource that recharges on a long rest (or dawn): how much a short rest gives back — e.g. "floor(@classLevel / 2)". Omitted = none. */
+  shortRestRegain: formulaSchema.optional(),
   display: z.enum(['uses', 'pool']).optional(),
   actionType: actionTypeSchema.optional()
 })
@@ -121,12 +123,36 @@ export const attackDefSchema = z.object({
 })
 export type AttackDef = z.infer<typeof attackDefSchema>
 
+/**
+ * A variable amount the player chooses to spend when using an action ("spend
+ * Cursed Energy up to your modifier", "spend any number of ki points") —
+ * every formula on the action can read the chosen amount as @spent, so
+ * damage, range, area and DC can scale with it.
+ */
+export const spendDefSchema = z.object({
+  resourceId: idSchema,
+  /** Defaults to 1. */
+  min: formulaSchema.optional(),
+  max: formulaSchema
+})
+
+/** Puts points back into a resource (or adds temporary ones on top of its max) — a potion of mana, a charm that refills ki. */
+export const restoreDefSchema = z.object({
+  resourceId: idSchema,
+  amount: formulaSchema,
+  /** Adds temporary points above the maximum instead of refilling spent ones. */
+  temporary: z.boolean().optional()
+})
+
 export const actionDefSchema = z.object({
   id: idSchema,
   name: nameSchema,
   description: z.string().optional(),
   actionType: actionTypeSchema,
+  /** A fixed cost paid every use. */
   cost: costSchema.optional(),
+  /** A variable amount chosen at use time, on top of any fixed cost; the action's formulas read it as @spent. */
+  spend: spendDefSchema.optional(),
   /** Optional roll the action makes. */
   attackBonus: formulaSchema.optional(),
   saveDc: formulaSchema.optional(),
@@ -134,6 +160,12 @@ export const actionDefSchema = z.object({
   damage: formulaSchema.optional(),
   damageType: z.string().optional(),
   healing: formulaSchema.optional(),
+  tempHp: formulaSchema.optional(),
+  /** Range and area in feet (formulas, so they can scale with @spent). */
+  range: formulaSchema.optional(),
+  area: formulaSchema.optional(),
+  duration: z.string().optional(),
+  restores: z.array(restoreDefSchema).optional(),
   /** Turning this action on activates a toggle (e.g. "Enter Rage" → the rage toggle). */
   activatesToggle: idSchema.optional()
 })
@@ -178,6 +210,8 @@ export const optionSourceSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('abilities'), abilities: z.array(abilitySchema).optional() }),
   z.object({ kind: z.literal('skills'), skillIds: z.array(idSchema).optional() }),
+  /** Archetypes (leveled feature sets — an innate technique, a bloodline, a patron any class can take), filtered by tag or id. */
+  z.object({ kind: z.literal('archetypes'), tags: z.array(z.string()).optional(), archetypeIds: z.array(idSchema).optional() }),
   /** Free text the player types (e.g. a language or a favoured enemy). */
   z.object({ kind: z.literal('freeform') })
 ])
@@ -211,6 +245,14 @@ export interface ChoiceDef {
   maxRepeats?: number
   /** Applied once per pick, with "$pick" substituted. Options that carry their own effects (feats, option-list entries) apply those too. */
   onPick?: Effect[]
+  /**
+   * Point-buy: instead of a fixed number of picks, picks are paid for out of
+   * this budget (option costs come from OptionDef.cost; anything else costs
+   * 1). `count`, if also set, still caps the number of picks.
+   */
+  budget?: Formula
+  /** Caps on how many picks can come from each OptionDef.group ("as many Strength improvements as your Strength modifier"). */
+  groups?: { id: string; label: string; max: Formula }[]
 }
 
 const effectActionSchema: z.ZodType<unknown> = z.lazy(() =>
@@ -274,6 +316,15 @@ const effectActionSchema: z.ZodType<unknown> = z.lazy(() =>
       ability: abilitySchema,
       appliesTo: attackFilterSchema.optional()
     }),
+    z.object({
+      kind: z.literal('damageReduction'),
+      /** Flat amount taken off each instance of damage. */
+      amount: formulaSchema,
+      /** Omitted = all damage. */
+      damageTypes: z.array(z.string()).optional(),
+      label: z.string().optional()
+    }),
+    z.object({ kind: z.literal('grantCompanion'), companion: companionDefSchema }),
     z.object({ kind: z.literal('note'), text: z.string().min(1) })
   ])
 )
@@ -291,7 +342,9 @@ export const choiceDefSchema: z.ZodType<ChoiceDef> = z.lazy(() =>
     from: optionSourceSchema,
     allowRepeats: z.boolean().optional(),
     maxRepeats: z.number().int().min(1).optional(),
-    onPick: z.array(effectSchema).optional()
+    onPick: z.array(effectSchema).optional(),
+    budget: formulaSchema.optional(),
+    groups: z.array(z.object({ id: idSchema, label: nameSchema, max: formulaSchema })).optional()
   })
 ) as z.ZodType<ChoiceDef>
 
@@ -332,7 +385,48 @@ export type EffectActionShape =
   | { kind: 'spellcasting'; config: SpellcastingDef }
   | { kind: 'extraDamage'; damage: Formula; damageType?: string; appliesTo?: AttackFilter }
   | { kind: 'attackAbility'; ability: AbilityId; appliesTo?: AttackFilter }
+  | { kind: 'damageReduction'; amount: Formula; damageTypes?: string[]; label?: string }
+  | { kind: 'grantCompanion'; companion: CompanionDef }
   | { kind: 'note'; text: string }
+
+// ---------------------------------------------------------------------------
+// Companions
+
+/**
+ * A creature that comes with a feature — a beast companion, a familiar, a
+ * summoned shikigami. Its numbers are formulas over its owner (@level,
+ * @prof, @classLevel, the owner's modifiers…) plus its own ability scores
+ * as @self.<ability>.score / @self.<ability>.mod, so it scales as the
+ * owner levels. The sheet tracks each one's state and current HP.
+ */
+export const companionDefSchema = z.object({
+  id: idSchema,
+  name: nameSchema,
+  description: z.string().optional(),
+  size: z.string().optional(),
+  creatureType: z.string().optional(),
+  ac: formulaSchema,
+  hp: formulaSchema,
+  speed: z.string().optional(),
+  abilities: z.record(abilitySchema, formulaSchema).optional(),
+  attacks: z
+    .array(
+      z.object({
+        name: nameSchema,
+        bonus: formulaSchema,
+        damage: formulaSchema,
+        damageType: z.string().optional(),
+        reach: z.string().optional()
+      })
+    )
+    .optional(),
+  traits: z.array(z.object({ name: nameSchema, description: z.string() })).optional(),
+  /** What summoning it costs, if anything. */
+  summonCost: costSchema.optional(),
+  /** States the sheet offers besides the built-in summoned / dismissed / defeated (e.g. "Totality", "Untamed"). */
+  states: z.array(z.string()).optional()
+})
+export type CompanionDef = z.infer<typeof companionDefSchema>
 
 // ---------------------------------------------------------------------------
 // Content entries
@@ -379,6 +473,8 @@ export const classDefSchema = z.object({
   /** Extra proficiencies granted when this class is taken as a multiclass (not the first class). */
   multiclassProficiencies: z.array(z.string()).optional(),
   multiclassPrerequisite: conditionSchema.optional(),
+  /** 'never': a character with this class can't take levels in any other (and vice versa). */
+  multiclass: z.enum(['allowed', 'never']).default('allowed'),
   subclassLevel: z.number().int().min(1).default(3),
   /** Shown in place of "Subclass" for this class — e.g. "Cursed Lineage". */
   subclassLabel: z.string().optional(),
@@ -422,11 +518,37 @@ export const featDefSchema = z.object({
 })
 export type FeatDef = z.infer<typeof featDefSchema>
 
+/**
+ * A leveled feature set that isn't tied to one class — an innate technique,
+ * a bloodline, a patron or pact several classes can take, a prestige path.
+ * Granted by a choice (`from: { kind: 'archetypes' }`) on any class,
+ * species, background or feat; its features unlock by `levelBasis`:
+ * the level of the class whose feature granted it (default), the
+ * character's highest class level, or total character level. Inside its
+ * features, @archetypeLevel is that level and @table.<column> reads its
+ * own columns.
+ */
+export const archetypeDefSchema = z.object({
+  ...entryBase,
+  tags: z.array(z.string()).default([]),
+  prerequisite: conditionSchema.optional(),
+  levelBasis: z.enum(['grantingClass', 'highestClass', 'character']).default('grantingClass'),
+  /** A character can only have it once, however many choices could grant it. */
+  unique: z.boolean().default(true),
+  columns: z.array(tableColumnSchema).default([]),
+  levels: z.array(levelEntrySchema).default([])
+})
+export type ArchetypeDef = z.infer<typeof archetypeDefSchema>
+
 export const optionDefSchema = z.object({
   id: idSchema,
   name: nameSchema,
   description: z.string().default(''),
   prerequisite: conditionSchema.optional(),
+  /** Point-buy cost when the choice has a budget (default 1). */
+  cost: formulaSchema.optional(),
+  /** Point-buy group, capped by the choice's `groups`. */
+  group: z.string().optional(),
   effects: z.array(effectSchema).default([])
 })
 export type OptionDef = z.infer<typeof optionDefSchema>
@@ -524,7 +646,31 @@ export const vocabularySchema = z.object({
   stats: z.array(z.object({ id: idSchema, name: nameSchema, base: formulaSchema.default('0'), display: z.boolean().default(true) })).default([]),
   actionTypes: z.array(z.object({ id: idSchema, name: nameSchema })).default([]),
   weaponProperties: z.array(z.object({ id: idSchema, name: nameSchema, description: z.string().default('') })).default([]),
-  spellSchools: z.array(z.object({ id: idSchema, name: nameSchema })).default([])
+  spellSchools: z.array(z.object({ id: idSchema, name: nameSchema })).default([]),
+  /** Numbers the player or DM keeps on the sheet (Breakthroughs, Renown, Corruption…) — read as @counter.<id>, usable in prerequisites. */
+  counters: z
+    .array(
+      z.object({
+        id: idSchema,
+        name: nameSchema,
+        description: z.string().default(''),
+        min: z.number().default(0),
+        max: formulaSchema.optional(),
+        default: z.number().default(0)
+      })
+    )
+    .default([]),
+  /**
+   * A named ability the player points at one of the six ("your Cursed
+   * Energy ability is Wisdom or Charisma"). Formulas read @alias.<id>.mod /
+   * .score; effects can target alias.<id>.score (it raises the chosen
+   * ability). Until picked, the first option (or `default`) is used.
+   */
+  abilityAliases: z
+    .array(z.object({ id: idSchema, name: nameSchema, description: z.string().default(''), options: z.array(abilitySchema).min(1), default: abilitySchema.optional() }))
+    .default([]),
+  /** Senses beyond the built-in ones (darkvision, blindsight, tremorsense, truesight) — ranges are the stat sense.<id>. */
+  senses: z.array(z.object({ id: idSchema, name: nameSchema })).default([])
 })
 export type Vocabulary = z.infer<typeof vocabularySchema>
 
@@ -558,7 +704,8 @@ export const contentPackSchema = z.object({
   spells: z.array(spellDefSchema).default([]),
   items: z.array(itemDefSchema).default([]),
   monsters: z.array(monsterDefSchema).default([]),
-  optionLists: z.array(optionListDefSchema).default([])
+  optionLists: z.array(optionListDefSchema).default([]),
+  archetypes: z.array(archetypeDefSchema).default([])
 })
 export type ContentPack = z.infer<typeof contentPackSchema>
 /** What a pack author writes — every defaulted field optional. */

@@ -5,6 +5,7 @@ import { resolveImageSrc } from './imageSrc'
 import { parseStatblock, renderStatblockHtml } from './statblock'
 import { parseDiceCodeSpan } from '@shared/dice'
 import { findSfxCue, parseOneShotCodeSpan } from './data/sfxLibrary'
+import { DICE_ICON_SVG, SPEAKER_ICON_SVG } from './ui/iconMarkup'
 
 /** A minimal Obsidian-style wikilink token — `[[Target]]`/`[[Target|Alias]]` or `[Target]`/`[Target|Alias]`. */
 interface WikilinkToken extends Tokens.Generic {
@@ -84,7 +85,7 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
           const dice = parseDiceCodeSpan(text)
           if (dice) {
             const payload = escapeHtml(JSON.stringify(dice))
-            return `<button type="button" class="gb-dice-roll" data-dice-roll="${payload}" title="Click to roll">🎲 ${escapeHtml(text.replace(/^dice:\s*/i, ''))}</button>`
+            return `<button type="button" class="gb-dice-roll" data-dice-roll="${payload}" title="Click to roll">${DICE_ICON_SVG}${escapeHtml(text.replace(/^dice:\s*/i, ''))}</button>`
           }
           // Inline `` `oneshot: <cueId>` `` code spans render as a clickable
           // Sound Board button instead of plain code — same "a note-authored
@@ -96,7 +97,7 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
           const cueId = parseOneShotCodeSpan(text)
           if (cueId) {
             const cue = findSfxCue(cueId)!
-            return `<button type="button" class="gb-oneshot-play" data-oneshot-cue="${escapeHtml(cueId)}" title="Click to play">🔊 ${escapeHtml(cue.label)}</button>`
+            return `<button type="button" class="gb-oneshot-play" data-oneshot-cue="${escapeHtml(cueId)}" title="Click to play">${SPEAKER_ICON_SVG}${escapeHtml(cue.label)}</button>`
           }
           return `<code>${escapeHtml(text)}</code>`
         }

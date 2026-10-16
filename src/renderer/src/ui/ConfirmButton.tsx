@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from './Button'
 
 const ARM_MS = 3500
 
 interface ConfirmButtonProps {
-  /** Shown normally. */
-  label: string
+  /** Shown normally — text or an icon. */
+  label: ReactNode
   /** Shown for ARM_MS after the first click, while waiting for the confirming second one — defaults to "Confirm?". */
   confirmLabel?: string
   /** Fires only on the second click, while still armed. */

@@ -3,8 +3,7 @@ import type { CharacterSheet } from '@shared/ipc'
 import { sneakAttackDice, type CharacterSheetData, type ClassLevel, type Feature } from '@shared/dnd5e'
 import { spellSlotsForClasses } from '@shared/compendium'
 import type { DerivedChoice, DerivedToggle } from '@shared/content/engine'
-import { normalizeSheet } from '@shared/content/migrate'
-import { deriveSheet } from '@shared/content/sheet'
+import { deriveSheet, normalizeForActivePacks } from '@shared/content/sheet'
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { useAutosaveDraft } from '../useAutosaveDraft'
@@ -107,7 +106,7 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
   // Resources (and the toggles that spend them) come from the content engine — see shared/content/sheet.ts.
   const { derived } = useDerivedSheet(character)
   const resources = derived.resources
-  const normalized = normalizeSheet(character)
+  const normalized = normalizeForActivePacks(character)
   const setPicks = useChoiceEditor(character, onSave)
   // Species traits and background features (top-level only — picks show on their choice's card).
   const originFeatures = derived.features.filter((f) => /^(species|background):/.test(f.key) && !f.key.includes('#'))
@@ -343,6 +342,10 @@ function ClassFeatureSection({
   const isOwnFeature = (key: string): boolean =>
     !key.includes('#') && ((!!classId && key.startsWith(`class:${classId}:`)) || (!!subclassId && key.startsWith(`subclass:${subclassId}:`)))
   const features = derived.features.filter((f) => isOwnFeature(f.key))
+  // An archetype this class granted (an innate technique, a bloodline): its unlocked features, under its own heading.
+  const archetypes = derived.archetypes
+    .filter((a) => !!classId && a.classId === classId)
+    .map((a) => ({ ...a, features: derived.features.filter((f) => f.archetypeId === a.id && f.level !== undefined) }))
   const choices = derived.choices.filter((c) => !!classId && c.classId === classId)
   const customFeatures = character.customClassFeatures.filter(
     (f) => f.className.toLowerCase() === classLevel.className.toLowerCase() && f.level <= classLevel.level
@@ -380,6 +383,19 @@ function ClassFeatureSection({
             />
           )}
         </div>
+
+        {archetypes.map((a) => (
+          <div key={a.id}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 4px' }}>
+              {a.name} <span style={{ opacity: 0.8 }}>· level {a.level}</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {a.features.map((f) => (
+                <InfoChip key={f.key} title={f.name} subtitle={`${a.name} ${f.level}`} description={f.description} accent />
+              ))}
+            </div>
+          </div>
+        ))}
 
         {isDivineSmiteClass && <DivineSmiteCard character={character} onSave={onSave} readOnly={readOnly} />}
 

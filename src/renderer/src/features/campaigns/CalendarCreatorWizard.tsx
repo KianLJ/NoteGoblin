@@ -19,6 +19,7 @@ import {
   type EventRepeat
 } from '@shared/calendar'
 import type { Note } from '@shared/ipc'
+import { XIcon } from '../../ui/icons'
 
 interface CalendarCreatorWizardProps {
   /** Editing an existing calendar starts the wizard pre-filled with it instead of the Gregorian-shaped default. */
@@ -331,7 +332,7 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
               placeholder="Abbr"
             />
             <Button variant="ghost" onClick={() => removeWeekday(i)}>
-              ✕
+              <XIcon />
             </Button>
           </div>
         ))}
@@ -363,7 +364,7 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
               placeholder="Days"
             />
             <Button variant="ghost" onClick={() => removeMonth(i)}>
-              ✕
+              <XIcon />
             </Button>
           </div>
         ))}
@@ -415,7 +416,7 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
               onChange={(e) => updateLeapRule(i, { offset: Math.max(0, Number(e.target.value) || 0) })}
             />
             <Button variant="ghost" onClick={() => removeLeapRule(i)}>
-              ✕
+              <XIcon />
             </Button>
           </div>
         ))}
@@ -595,7 +596,7 @@ function SeasonsStep({ config, onPatch }: StepProps): JSX.Element {
               />
             </FieldLabel>
             <Button variant="ghost" onClick={() => removeSeason(i)}>
-              ✕
+              <XIcon />
             </Button>
           </div>
           <ClimateEditor climate={season.climate} unit={config.temperatureUnit} onChange={(climate) => updateSeason(i, { climate })} />
@@ -723,7 +724,7 @@ function LocationsStep({ config, onPatch }: StepProps): JSX.Element {
               />
             </FieldLabel>
             <Button variant="ghost" onClick={() => removeLocation(li)}>
-              ✕
+              <XIcon />
             </Button>
           </div>
           <FieldLabel label="Description">
@@ -757,7 +758,7 @@ function LocationsStep({ config, onPatch }: StepProps): JSX.Element {
                   </select>
                 </FieldLabel>
                 <Button variant="ghost" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => removeOverride(li, oi)}>
-                  ✕
+                  <XIcon />
                 </Button>
               </div>
               <ClimateEditor
@@ -845,7 +846,7 @@ function ErasStep({ config, onPatch }: StepProps): JSX.Element {
               title="The year this era begins"
             />
             <Button variant="ghost" onClick={() => removeEra(i)}>
-              ✕
+              <XIcon />
             </Button>
           </div>
           <FieldLabel label="Description">
@@ -928,7 +929,7 @@ function CelestialStep({ config, onPatch }: StepProps): JSX.Element {
             onChange={(e) => updateMoon(i, { offset: Number(e.target.value) || 0 })}
           />
           <Button variant="ghost" onClick={() => removeMoon(i)}>
-            ✕
+            <XIcon />
           </Button>
         </div>
       ))}
@@ -1024,7 +1025,7 @@ function EventsStep({ config, onPatch, notes }: StepProps & { notes: Note[] }): 
                 placeholder="Category"
               />
             </FieldLabel>
-            <ConfirmButton label="✕" confirmLabel="Sure?" variant="ghost" danger onConfirm={() => removeEvent(i)} />
+            <ConfirmButton label={<XIcon />} confirmLabel="Sure?" variant="ghost" danger onConfirm={() => removeEvent(i)} />
           </div>
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>

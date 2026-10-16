@@ -20,7 +20,8 @@ import {
   subclassesForClass,
   type CompendiumEquipment
 } from '@shared/compendium'
-import type { DerivedAction, DerivedAttack, DerivedResource, DerivedToggle } from '@shared/content/engine'
+import type { DerivedAction, DerivedAttack, DerivedCompanion, DerivedResource, DerivedToggle } from '@shared/content/engine'
+import { applyRestores, resourceRemaining, rollAmount, spendResource, type ResourceState } from '@shared/content/resourceMath'
 import type { Registry } from '@shared/content/registry'
 import { effectiveScores, knownSpells } from '@shared/content/sheet'
 import { useDerivedSheet } from '../useDerivedSheet'
@@ -43,6 +44,7 @@ interface CombatDraft {
 
 interface ResourcesDraft {
   resourceUsed: Record<string, number>
+  resourceTemp: Record<string, number>
 }
 
 interface CombatTabProps {
@@ -151,14 +153,63 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   const [editingAttack, setEditingAttack] = useState<Attack | null>(null)
   const [listSearch, setListSearch] = useState('')
   const [draft, setDraft] = useAutosaveDraft<CombatDraft>({ attacks: character.attacks }, onSave, readOnly)
-  const [resourceDraft, setResourceDraft] = useAutosaveDraft<ResourcesDraft>({ resourceUsed: character.resourceUsed }, onSave, readOnly)
+  const [resourceDraft, setResourceDraft] = useAutosaveDraft<ResourcesDraft>(
+    { resourceUsed: character.resourceUsed, resourceTemp: character.resourceTemp ?? {} },
+    onSave,
+    readOnly
+  )
 
   function patch(fields: Partial<CombatDraft>): void {
     setDraft((prev) => ({ ...prev, ...fields }))
   }
 
   function setResourceUsed(id: string, used: number, max: number): void {
-    setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
+    setResourceDraft((prev) => ({ ...prev, resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
+  }
+
+  function commitResources(state: ResourceState): void {
+    setResourceDraft(() => ({ resourceUsed: state.resourceUsed, resourceTemp: state.resourceTemp }))
+  }
+
+  /** Spends from a resource, temporary points first; false (and nothing spent) when there isn't enough. */
+  function spend(resourceId: string, amount: number, state: ResourceState = resourceDraft): ResourceState | null {
+    const resource = derived.resources.find((r) => r.id === resourceId)
+    if (!resource) return state
+    return spendResource(resource, state, amount)
+  }
+
+  /**
+   * Uses an engine action: pays its fixed cost and the chosen variable amount
+   * (@spent), then applies what it gives back — restored or temporary
+   * resource points, and temporary HP (which, as in 5e, doesn't stack: the
+   * higher value is kept).
+   */
+  function useAction(action: DerivedAction, spent: number): void {
+    if (readOnly) return
+    let state: ResourceState | null = resourceDraft
+    if (action.cost) state = spend(action.cost.resourceId, action.cost.amount, state)
+    if (state && action.spend) state = spend(action.spend.resourceId, spent, state)
+    if (!state) return
+    const numbers = action.spend ? (action.scaling?.find((x) => x.spent === spent) ?? action) : action
+    if (numbers.restores?.length) state = applyRestores(numbers.restores, derived.resources, state).state
+    commitResources(state)
+    if (numbers.tempHp) {
+      const gained = rollAmount(numbers.tempHp)
+      if (gained > character.tempHp) onSave({ tempHp: gained })
+    }
+    playAbilitySfx(action.name, sessionId)
+  }
+
+  function saveCompanion(companion: DerivedCompanion, fields: { state?: string; currentHp?: number }): void {
+    if (readOnly) return
+    // Summoning one that has a cost pays it (blocked if there isn't enough).
+    if (fields.state === 'summoned' && companion.state !== 'summoned' && companion.summonCost) {
+      const state = spend(companion.summonCost.resourceId, companion.summonCost.amount)
+      if (!state) return
+      commitResources(state)
+    }
+    const prev = character.companionStates?.[companion.id] ?? {}
+    onSave({ companionStates: { ...character.companionStates, [companion.id]: { ...prev, ...fields } } })
   }
 
   /** Turns a toggle (Rage, Reckless Attack, a homebrew Domain Expansion) on or off. Turning one on spends its cost from its resource, if it has one (never refunded on end), and is blocked if there isn't enough left — same semantics as FeaturesTab.tsx's toggleBuff, duplicated here since this tab keeps its own resourceUsed autosave draft. Plays (and, at the table, broadcasts) the toggle's sound cue — see playAbilitySfx — only on activation, never when turning it back off. */
@@ -169,12 +220,9 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
       return
     }
     if (toggle.cost) {
-      const resource = derived.resources.find((r) => r.id === toggle.cost!.resourceId)
-      if (resource) {
-        const used = resourceDraft.resourceUsed[resource.id] ?? 0
-        if (resource.max - used < toggle.cost.amount) return
-        setResourceUsed(resource.id, used + toggle.cost.amount, resource.max)
-      }
+      const state = spend(toggle.cost.resourceId, toggle.cost.amount)
+      if (!state) return
+      commitResources(state)
     }
     playAbilitySfx(toggle.name, sessionId)
     onSave({ activeBuffs: [...character.activeBuffs, toggle.id] })
@@ -566,18 +614,43 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
               {resourceActions.map((action) => {
                 const resource = action.cost ? resources.find((r) => r.id === action.cost!.resourceId) : undefined
                 if (action.cost && !resource) return null
-                const used = resource ? Math.min(resourceDraft.resourceUsed[resource.id] ?? 0, resource.max) : 0
+                const spendResourceDef = action.spend ? resources.find((r) => r.id === action.spend!.resourceId) : undefined
+                const remainingOf = (r: DerivedResource | undefined): number | null => (r ? resourceRemaining(r, resourceDraft) : null)
                 return (
                   <ResourceActionCard
                     key={action.id}
                     action={action}
                     actionLabel={actionTypeLabel(action.actionType, registry)}
-                    remaining={resource ? resource.max - used : null}
+                    remaining={remainingOf(resource)}
+                    spendRemaining={remainingOf(spendResourceDef)}
+                    spendName={spendResourceDef?.name}
+                    resourceName={(id) => resources.find((r) => r.id === id)?.name ?? id}
                     readOnly={readOnly}
-                    onUse={() => {
-                      playAbilitySfx(action.name, sessionId)
-                      if (resource && action.cost) setResourceUsed(resource.id, used + action.cost.amount, resource.max)
-                    }}
+                    onUse={(spent) => useAction(action, spent)}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {derived.companions.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div className="gb-label" style={{ margin: '0 0 4px' }}>
+              Companions
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+              {derived.companions.map((c) => {
+                const costResource = c.summonCost ? resources.find((r) => r.id === c.summonCost!.resourceId) : undefined
+                return (
+                  <CompanionCard
+                    key={c.id}
+                    companion={c}
+                    costLabel={c.summonCost ? `${c.summonCost.amount} ${costResource?.name ?? c.summonCost.resourceId}` : undefined}
+                    canSummon={!c.summonCost || !costResource || resourceRemaining(costResource, resourceDraft) >= c.summonCost.amount}
+                    readOnly={readOnly}
+                    onRollAttack={(name, bonus) => rollAttack(`${c.name}: ${name}`, bonus, undefined)}
+                    onSave={(fields) => saveCompanion(c, fields)}
                   />
                 )
               })}
@@ -599,6 +672,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                     resource={r}
                     toggle={toggle}
                     used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)}
+                    temp={resourceDraft.resourceTemp[r.id] ?? 0}
                     active={!!toggle && character.activeBuffs.includes(toggle.id)}
                     readOnly={readOnly}
                     onSetUsed={(n) => setResourceUsed(r.id, n, r.max)}
@@ -624,6 +698,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                     resource={r}
                     toggle={toggle}
                     used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)}
+                    temp={resourceDraft.resourceTemp[r.id] ?? 0}
                     active={!!toggle && character.activeBuffs.includes(toggle.id)}
                     readOnly={readOnly}
                     onSetUsed={(n) => setResourceUsed(r.id, n, r.max)}
@@ -647,6 +722,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
       </div>
 
       <div style={{ display: innerTab === 'Reactions' ? 'block' : 'none' }}>
+        {derived.reactions !== 1 && (
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+            Reactions per round: <strong>{derived.reactions}</strong>
+          </p>
+        )}
         {reactionFeatures.length === 0 && reactionSpells.length === 0 && (
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             No reactions yet — a class feature that spends a reaction, or a known spell with a casting time of 1
@@ -684,27 +764,47 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   )
 }
 
-/** A named ability, usually spending charges from a resource (Turn Undead ⟶ Channel Divinity, Flurry of Blows ⟶ Ki, a homebrew Cursed Strike ⟶ Cursed Energy) — granted by a feature via the content engine. A "Use" button plus a remaining-charges readout, and the action's own roll numbers when it has any; the backing resource's own tracker (Bonus Actions/Other Class Resources below, or Features) is still the place to see/restore the raw pool. `remaining` is null for an action with no cost. */
+/** A named ability, usually spending charges from a resource (Turn Undead ⟶ Channel Divinity, Flurry of Blows ⟶ Ki, a homebrew Cursed Strike ⟶ Cursed Energy) — granted by a feature via the content engine. A "Use" button plus a remaining-charges readout, and the action's own roll numbers when it has any. A variable-spend action ("spend up to your modifier in Cursed Energy") gets an amount picker, and its numbers follow the amount. `remaining` is null for an action with no fixed cost. */
 function ResourceActionCard({
   action,
   actionLabel,
   remaining,
+  spendRemaining,
+  spendName,
+  resourceName,
   readOnly,
   onUse
 }: {
   action: DerivedAction
   actionLabel?: string
   remaining: number | null
+  /** Points left in the variable-spend resource. */
+  spendRemaining: number | null
+  spendName?: string
+  resourceName: (id: string) => string
   readOnly?: boolean
-  onUse: () => void
+  onUse: (spent: number) => void
 }): JSX.Element {
   const cost = action.cost?.amount ?? 0
+  const [chosen, setChosen] = useState(action.spend?.min ?? 0)
+  const spendMax = action.spend ? Math.max(action.spend.min, Math.min(action.spend.max, action.scaling?.[action.scaling.length - 1]?.spent ?? action.spend.max)) : 0
+  const spent = action.spend ? Math.max(action.spend.min, Math.min(chosen, spendMax)) : 0
+  const n = action.spend ? (action.scaling?.find((x) => x.spent === spent) ?? action) : action
+  const restoreText = (n.restores ?? []).map((r) => `${r.temporary ? '+' : 'Restores '}${r.amount} ${r.temporary ? 'temp ' : ''}${resourceName(r.resourceId)}`)
   const stats = [
-    action.attackBonus !== undefined ? `Atk ${formatModifier(action.attackBonus)}` : null,
-    action.saveDc !== undefined ? `DC ${action.saveDc}${action.saveAbility ? ` ${action.saveAbility.toUpperCase()}` : ''}` : null,
-    action.damage ? `${action.damage}${action.damageType ? ` ${action.damageType}` : ''}` : null,
-    action.healing ? `Heals ${action.healing}` : null
+    n.attackBonus !== undefined ? `Atk ${formatModifier(n.attackBonus)}` : null,
+    n.saveDc !== undefined ? `DC ${n.saveDc}${action.saveAbility ? ` ${action.saveAbility.toUpperCase()}` : ''}` : null,
+    n.damage ? `${n.damage}${action.damageType ? ` ${action.damageType}` : ''}` : null,
+    n.healing ? `Heals ${n.healing}` : null,
+    n.tempHp ? `${n.tempHp} temp HP` : null,
+    n.range !== undefined ? `${n.range} ft` : null,
+    n.area !== undefined ? `${n.area} ft area` : null,
+    action.duration ?? null,
+    ...restoreText
   ].filter((x): x is string => !!x)
+  const usable = !!action.cost || !!action.spend || !!n.restores?.length || !!n.tempHp
+  const affordable = (remaining === null || remaining >= cost) && (!action.spend || spendRemaining === null || spendRemaining >= spent + (action.cost?.resourceId === action.spend.resourceId ? cost : 0))
+  const left = action.spend ? spendRemaining : remaining
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
       <HoverDetailCard title={action.name} subtitle={action.className ?? action.source} fields={[]} description={action.description || action.detail || ''}>
@@ -717,18 +817,115 @@ function ResourceActionCard({
           )}
         </div>
       </HoverDetailCard>
+      {action.spend && spendMax > action.spend.min && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 6 }}>
+          <span style={{ color: 'var(--text-muted)' }}>Spend</span>
+          <input
+            type="range"
+            min={action.spend.min}
+            max={spendMax}
+            value={spent}
+            onChange={(e) => setChosen(Number(e.target.value))}
+            disabled={readOnly}
+            style={{ flex: 1 }}
+          />
+          <strong style={{ minWidth: 20, textAlign: 'right' }}>{spent}</strong>
+          <span style={{ color: 'var(--text-muted)' }}>{spendName}</span>
+        </label>
+      )}
       {stats.length > 0 && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{stats.join(' · ')}</div>}
-      {remaining !== null && (
+      {usable && (
         <Button
           variant="primary"
-          onClick={onUse}
-          disabled={readOnly || remaining < cost}
+          onClick={() => onUse(spent)}
+          disabled={readOnly || !affordable}
           style={{ width: '100%', fontSize: 12, padding: '4px 10px' }}
-          title={`Spends ${cost} — ${remaining} available`}
+          title={action.spend ? `Spends ${spent}${cost ? ` + ${cost}` : ''}` : cost ? `Spends ${cost}` : undefined}
         >
-          Use ({remaining} left)
+          {left !== null ? `Use (${left} left)` : 'Use'}
         </Button>
       )}
+    </div>
+  )
+}
+
+/** A companion, familiar or summon a feature grants: its owner-scaled numbers, its state (summoned / dismissed / defeated / the pack's own) and its current HP. */
+function CompanionCard({
+  companion: c,
+  costLabel,
+  canSummon,
+  readOnly,
+  onRollAttack,
+  onSave
+}: {
+  companion: DerivedCompanion
+  costLabel?: string
+  canSummon: boolean
+  readOnly?: boolean
+  onRollAttack: (name: string, bonus: number) => ((advantage: AdvantageMode) => void) | undefined
+  onSave: (fields: { state?: string; currentHp?: number }) => void
+}): JSX.Element {
+  const summoned = c.state === 'summoned'
+  const subtitle = [c.size, c.creatureType].filter(Boolean).join(' ')
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)', borderColor: summoned ? 'var(--accent)' : undefined, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <HoverDetailCard
+        title={c.name}
+        subtitle={subtitle || c.source}
+        fields={[]}
+        description={[c.description, ...c.traits.map((t) => `${t.name}. ${t.description}`)].filter(Boolean).join('\n\n')}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'default' }}>
+          <strong style={{ flex: 1 }}>{c.name}</strong>
+          <span className="gb-badge" style={{ fontSize: 10 }}>
+            {c.className ?? c.source}
+          </span>
+        </div>
+      </HoverDetailCard>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, flexWrap: 'wrap' }}>
+        <span>
+          AC <strong>{c.ac}</strong>
+        </span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          HP
+          <input
+            className="gb-input"
+            type="number"
+            value={c.currentHp}
+            min={0}
+            max={c.maxHp}
+            disabled={readOnly}
+            onChange={(e) => onSave({ currentHp: Math.max(0, Math.min(c.maxHp, Number(e.target.value) || 0)) })}
+            style={{ width: 52, fontSize: 12, padding: '2px 4px' }}
+          />
+          / {c.maxHp}
+        </label>
+        {c.speed && <span style={{ color: 'var(--text-muted)' }}>{c.speed}</span>}
+      </div>
+      {c.attacks.map((a) => (
+        <div key={a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <span style={{ flex: 1 }}>{a.name}</span>
+          <MiniStat label="Atk" value={formatModifier(a.bonus)} onRoll={onRollAttack(a.name, a.bonus)} />
+          <span style={{ color: 'var(--text-secondary)' }}>
+            {a.damage}
+            {a.damageType ? ` ${a.damageType}` : ''}
+          </span>
+        </div>
+      ))}
+      <select
+        className="gb-input"
+        value={c.state}
+        disabled={readOnly}
+        onChange={(e) => onSave({ state: e.target.value, ...(e.target.value === 'summoned' && c.state === 'defeated' ? { currentHp: c.maxHp } : {}) })}
+        style={{ fontSize: 12 }}
+      >
+        {c.states.map((st) => (
+          <option key={st} value={st} disabled={st === 'summoned' && !summoned && !canSummon}>
+            {st.charAt(0).toUpperCase() + st.slice(1)}
+            {st === 'summoned' && costLabel && !summoned ? ` (costs ${costLabel})` : ''}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -738,6 +935,7 @@ function ResourceCard({
   resource,
   toggle,
   used,
+  temp,
   active,
   readOnly,
   onSetUsed,
@@ -747,12 +945,14 @@ function ResourceCard({
   /** The toggle that spends this resource (Rage), if any — gives the card its Activate/End button. */
   toggle?: DerivedToggle
   used: number
+  /** Temporary points on top of the max. */
+  temp: number
   active: boolean
   readOnly?: boolean
   onSetUsed: (used: number) => void
   onToggle: () => void
 }): JSX.Element {
-  const remaining = resource.max - used
+  const remaining = resource.max - used + temp
   const cost = toggle?.cost?.amount ?? 0
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
@@ -764,16 +964,24 @@ function ResourceCard({
               Active
             </span>
           )}
+          {temp > 0 && (
+            <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }} title="Temporary points, spent first and lost on a rest">
+              +{temp} temp
+            </span>
+          )}
           <span className="gb-badge" style={{ fontSize: 10 }}>
             {resource.className ?? resource.source}
           </span>
         </div>
       </HoverDetailCard>
       {resource.display === 'uses' ? (
-        <UsesTracker max={resource.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={onSetUsed} />
+        <UsesTracker max={resource.max} used={used} remaining={resource.max - used} readOnly={readOnly} onSetUsed={onSetUsed} />
       ) : (
-        <PoolTracker max={resource.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={onSetUsed} />
+        <PoolTracker max={resource.max} used={used} remaining={resource.max - used} readOnly={readOnly} onSetUsed={onSetUsed} />
       )}
+      {resource.shortRestRegain ? (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Short rest: regain {resource.shortRestRegain}</div>
+      ) : null}
       {toggle && (
         <Button
           variant={active ? 'secondary' : 'primary'}

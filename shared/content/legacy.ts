@@ -337,7 +337,11 @@ export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBui
     damageResistances: [...sheet.damageResistances],
     damageImmunities: [...sheet.damageImmunities],
     damageVulnerabilities: [...sheet.damageVulnerabilities],
-    customEffects: adapter.customEffects
+    customEffects: adapter.customEffects,
+    ...(sheet.counters ? { counters: { ...sheet.counters } } : {}),
+    ...(sheet.abilityAliases ? { abilityAliases: { ...sheet.abilityAliases } } : {}),
+    ...(sheet.resourceTemp ? { resourceTemp: { ...sheet.resourceTemp } } : {}),
+    ...(sheet.companionStates ? { companions: { ...sheet.companionStates } } : {})
   }
   return { build, packs, warnings }
 }

@@ -29,6 +29,7 @@ import type { BestiaryMonster } from '../../data/bestiary'
 import { Button } from '../../ui/Button'
 import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
 import { playSfx } from '../audio/soundEffects'
+import { IconLabel, UndoIcon } from '../../ui/icons'
 
 interface InitiativeTrackerProps {
   sessionId: string | null
@@ -495,7 +496,7 @@ export function InitiativeTracker({
               title="Roll 1d20 + Dex for every combatant"
               style={{ fontSize: 11, padding: '3px 8px' }}
             >
-              🎲 Roll All
+              <IconLabel icon={<DiceIcon size={12} />}>Roll All</IconLabel>
             </Button>
             {!inCombat ? (
               <Button variant="primary" onClick={startCombat} disabled={state.combatants.length === 0} style={{ fontSize: 11, padding: '3px 8px' }}>
@@ -510,7 +511,7 @@ export function InitiativeTracker({
               Clear
             </Button>
             <Button variant="ghost" onClick={undo} disabled={history.length === 0} title="Undo the last action" style={{ fontSize: 11, padding: '3px 8px' }}>
-              ↶ Undo
+              <IconLabel icon={<UndoIcon size={12} />}>Undo</IconLabel>
             </Button>
             <div style={{ marginLeft: 'auto' }}>
               <TrackerSettingsMenu

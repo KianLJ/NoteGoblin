@@ -1624,6 +1624,14 @@ export interface CharacterSheetData {
    * legacy fields. Homebrew choices with no legacy equivalent live only here.
    */
   choices?: Record<string, string[]>
+  /** Values of the enabled packs' counters (Breakthroughs, Renown…), by counter id. */
+  counters?: Record<string, number>
+  /** Which ability each pack-defined ability alias points at ("Cursed Energy ability: Wisdom"), by alias id. */
+  abilityAliases?: Record<string, 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>
+  /** Temporary points sitting on top of a resource's maximum, by resource id — spent before regular uses, gone on a rest. */
+  resourceTemp?: Record<string, number>
+  /** Tracked state and current HP of each pack-granted companion or summon, by companion id. */
+  companionStates?: Record<string, { state?: string; currentHp?: number }>
   /** Version of every content pack this sheet's ids point into, as of the last normalize — so a pack update or a missing pack can be flagged instead of silently changing the sheet. */
   packVersions?: Record<string, string>
   alignment: string

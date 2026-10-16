@@ -75,6 +75,7 @@ class PackChecker {
     for (const item of pack.items) if (item.charges) this.resourceIds.add(item.charges.id)
 
     pack.vocabulary.stats.forEach((s, i) => this.formula(`vocabulary.stats[${i}].base`, s.base))
+    ;(pack.vocabulary.counters ?? []).forEach((c, i) => this.formula(`vocabulary.counters[${i}].max`, c.max))
     pack.vocabulary.conditions.forEach((c, i) => this.effects(`vocabulary.conditions[${i}].effects`, c.effects))
 
     pack.classes.forEach((c, i) => {
@@ -99,7 +100,16 @@ class PackChecker {
     })
     pack.backgrounds.forEach((b, i) => b.features.forEach((f, j) => this.effects(`backgrounds[${i}].features[${j}].effects`, f.effects)))
     pack.feats.forEach((f, i) => this.effects(`feats[${i}].effects`, f.effects))
-    pack.optionLists.forEach((l, i) => l.options.forEach((o, j) => this.effects(`optionLists[${i}].options[${j}].effects`, o.effects)))
+    pack.optionLists.forEach((l, i) =>
+      l.options.forEach((o, j) => {
+        this.formula(`optionLists[${i}].options[${j}].cost`, o.cost)
+        this.effects(`optionLists[${i}].options[${j}].effects`, o.effects)
+      })
+    )
+    ;(pack.archetypes ?? []).forEach((a, i) => {
+      this.levels(`archetypes[${i}]`, a.levels)
+      this.columns(`archetypes[${i}]`, a.columns)
+    })
     pack.spells.forEach((s, i) => {
       this.formula(`spells[${i}].damage`, s.damage)
       this.formula(`spells[${i}].healing`, s.healing)
@@ -129,6 +139,7 @@ class PackChecker {
     for (const b of pack.backgrounds) for (const f of b.features) walk(f.effects)
     for (const f of pack.feats) walk(f.effects)
     for (const l of pack.optionLists) for (const o of l.options) walk(o.effects)
+    for (const a of pack.archetypes ?? []) for (const l of a.levels) for (const f of l.features) walk(f.effects)
     for (const s of pack.spells) walk(s.effects)
     for (const i of pack.items) walk(i.effects)
   }
@@ -160,6 +171,7 @@ class PackChecker {
   private resource(path: string, r: ResourceDef): void {
     this.formula(`${path}.max`, r.max)
     this.formula(`${path}.regain`, r.regain)
+    this.formula(`${path}.shortRestRegain`, r.shortRestRegain)
   }
 
   private cost(path: string, cost: { resourceId: string; amount?: string } | undefined): void {
@@ -175,7 +187,12 @@ class PackChecker {
 
   private choice(path: string, c: ChoiceDef): void {
     this.formula(`${path}.count`, c.count)
+    this.formula(`${path}.budget`, c.budget)
+    c.groups?.forEach((g, i) => this.formula(`${path}.groups[${i}].max`, g.max))
     const from = c.from
+    if (from.kind === 'archetypes') {
+      for (const id of from.archetypeIds ?? []) if (!this.registry.get('archetypes', id, this.pack.id)) this.error(`${path}.from.archetypeIds`, `No archetype "${id}".`)
+    }
     if (from.kind === 'optionList' && !this.registry.get('optionLists', from.listId, this.pack.id)) {
       this.error(`${path}.from.listId`, `No option list "${from.listId}" in this pack or its dependencies.`)
     }
@@ -213,6 +230,18 @@ class PackChecker {
           this.formula(`${dp}.action.saveDc`, d.action.saveDc)
           this.formula(`${dp}.action.damage`, d.action.damage)
           this.formula(`${dp}.action.healing`, d.action.healing)
+          this.formula(`${dp}.action.tempHp`, d.action.tempHp)
+          this.formula(`${dp}.action.range`, d.action.range)
+          this.formula(`${dp}.action.area`, d.action.area)
+          if (d.action.spend) {
+            this.formula(`${dp}.action.spend.min`, d.action.spend.min)
+            this.formula(`${dp}.action.spend.max`, d.action.spend.max)
+            if (!this.resourceIds.has(d.action.spend.resourceId)) this.warning(`${dp}.action.spend.resourceId`, `No resource "${d.action.spend.resourceId}" is granted anywhere in this pack.`)
+          }
+          d.action.restores?.forEach((r, j) => {
+            this.formula(`${dp}.action.restores[${j}].amount`, r.amount)
+            if (!this.resourceIds.has(r.resourceId)) this.warning(`${dp}.action.restores[${j}].resourceId`, `No resource "${r.resourceId}" is granted anywhere in this pack.`)
+          })
           if (d.action.activatesToggle && !this.toggleIds.has(d.action.activatesToggle)) {
             this.warning(`${dp}.action.activatesToggle`, `No toggle "${d.action.activatesToggle}" is granted anywhere in this pack.`)
           }
@@ -235,6 +264,22 @@ class PackChecker {
         case 'extraDamage':
           this.formula(`${dp}.damage`, d.damage)
           break
+        case 'damageReduction':
+          this.formula(`${dp}.amount`, d.amount)
+          break
+        case 'grantCompanion': {
+          const c = d.companion
+          const cp = `${dp}.companion`
+          this.formula(`${cp}.ac`, c.ac)
+          this.formula(`${cp}.hp`, c.hp)
+          Object.entries(c.abilities ?? {}).forEach(([k, v]) => this.formula(`${cp}.abilities.${k}`, v))
+          c.attacks?.forEach((a, j) => {
+            this.formula(`${cp}.attacks[${j}].bonus`, a.bonus)
+            this.formula(`${cp}.attacks[${j}].damage`, a.damage)
+          })
+          this.cost(`${cp}.summonCost`, c.summonCost)
+          break
+        }
       }
     })
   }

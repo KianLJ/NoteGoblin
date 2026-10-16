@@ -72,7 +72,7 @@ export interface PackSummary {
   author: string
   description: string
   dependsOn: string[]
-  counts: Record<'classes' | 'subclasses' | 'species' | 'backgrounds' | 'feats' | 'spells' | 'items' | 'monsters' | 'optionLists', number>
+  counts: Record<'classes' | 'subclasses' | 'species' | 'backgrounds' | 'feats' | 'spells' | 'items' | 'monsters' | 'optionLists' | 'archetypes', number>
 }
 
 export function packSummary(pack: ContentPack): PackSummary {
@@ -92,7 +92,8 @@ export function packSummary(pack: ContentPack): PackSummary {
       spells: pack.spells.length,
       items: pack.items.length,
       monsters: pack.monsters.length,
-      optionLists: pack.optionLists.length
+      optionLists: pack.optionLists.length,
+      archetypes: (pack.archetypes ?? []).length
     }
   }
 }
@@ -108,7 +109,8 @@ export function describePackContents(pack: ContentPack): string {
     ['spells', 'spell', 'spells'],
     ['items', 'item', 'items'],
     ['monsters', 'monster', 'monsters'],
-    ['optionLists', 'option list', 'option lists']
+    ['optionLists', 'option list', 'option lists'],
+    ['archetypes', 'archetype', 'archetypes']
   ]
   const counts = packSummary(pack).counts
   const parts = labels.filter(([k]) => counts[k] > 0).map(([k, one, many]) => `${counts[k]} ${counts[k] === 1 ? one : many}`)

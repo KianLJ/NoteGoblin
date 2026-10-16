@@ -543,3 +543,57 @@ prompt on sheets, the DM's cross-device relay snapshot (campaign packs
 aren't pushed to the relay with notes/folders yet), and an in-app way for
 a player to send a pack to the DM (export/import for now). Next: phase 6,
 the Homebrew Workshop.
+
+## Engine additions — universal pack features
+
+Added so a full third-party book (the JJK 5e test case) converts without
+special cases. Everything below is generic pack data; nothing is keyed to
+one pack. Tests: `tests/content/engineAdditions.test.ts`,
+`tests/content/resourceMath.test.ts`.
+
+- **Archetypes** (`pack.archetypes`, entry kind `archetypes`) — leveled
+  feature sets any class, species, background or feat can grant through a
+  choice `from: { kind: 'archetypes', tags?, archetypeIds? }` (innate
+  techniques, bloodlines, cross-class patrons). `levelBasis`:
+  `grantingClass` (default), `highestClass` or `character`. `unique`
+  (default true) blocks taking the same one twice. Inside one,
+  `@archetypeLevel` is its level and `@table.<col>` reads its own columns;
+  elsewhere `@archetype.<id>.level`. Its features carry `archetypeId`, and
+  the Features tab, class table and level-up recap list them under the
+  class that granted them. Nested choices hang off the pick as usual.
+- **Variable spend** — `action.spend { resourceId, min?, max }`; every
+  action formula reads the chosen amount as `@spent`. The engine returns
+  the numbers at `min` plus a `scaling` row per amount (capped at 40); the
+  Actions tab shows a slider.
+- **Restores and temporary points** — `action.restores[] { resourceId,
+  amount, temporary? }` refills spent points or adds temporary ones on top
+  of the max (`sheet.resourceTemp`, spent first, cleared by any rest);
+  `action.tempHp`; `resource.shortRestRegain` gives part of a long-rest
+  pool back on a short rest. `@resource.<id>.temp`; `remaining` includes
+  temp. Spending and rest rules live in `shared/content/resourceMath.ts`.
+- **Point-buy choices** — `choice.budget` (formula), `option.cost`
+  (default 1), `option.group` + `choice.groups[{ id, label, max }]`.
+  Derived choices report `budget`, `spent`, `groups` and per-option
+  `blocked` reasons; `remaining` is points left. Overspending or going over
+  a group cap is a warning, never a hard block.
+- **Counters** (`vocabulary.counters`) — numbers kept on the sheet
+  (`sheet.counters`), clamped to `min`/`max`, read as `@counter.<id>`.
+- **Ability aliases** (`vocabulary.abilityAliases`) — "the CE ability is
+  Wis or Cha": `@alias.<id>.mod|score`, and `modify alias.<id>.score`
+  raises the chosen ability. The pick is `sheet.abilityAliases`.
+- **Companions** — effect `grantCompanion { companion }` with owner-scaled
+  formulas plus `@self.<ability>.mod|score`; state (summoned / dismissed /
+  defeated / pack states) and current HP in `sheet.companionStates`;
+  summoning pays `summonCost`.
+- **New stats/effects** — `damageReduction { amount, damageTypes?, label? }`,
+  `crit.threshold` (20), `reactions` (1), `attacks.perAction` (1),
+  `sense.<id>` (darkvision, blindsight, tremorsense, truesight plus
+  `vocabulary.senses`), `@highestClassLevel`, `class.multiclass: 'never'`
+  and the `multiclassPrerequisite` check (both warnings).
+- **Sheet** — Overview shows aliases, counters, displayed custom stats,
+  senses, changed combat numbers and damage reduction
+  (`PackTraitsSection`); the Actions tab has the spend slider, restores,
+  temp points, short-rest regain and a Companions section.
+
+Not yet: the Homebrew Workshop editors for these (phase 6), and applying
+damage reduction automatically when damage is taken (it is displayed).
