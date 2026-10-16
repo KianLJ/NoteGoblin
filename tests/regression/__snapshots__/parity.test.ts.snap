@@ -16259,7 +16259,7 @@ exports[`SRD pack parity > ranger 2 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 4,
+      "attackBonus": 6,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -16279,9 +16279,7 @@ exports[`SRD pack parity > ranger 2 1`] = `
   "initiative": 2,
   "level": 2,
   "maxHp": 18,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 2,
   "resistances": [],
@@ -16415,7 +16413,7 @@ exports[`SRD pack parity > ranger 3 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 4,
+      "attackBonus": 6,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -16435,9 +16433,7 @@ exports[`SRD pack parity > ranger 3 1`] = `
   "initiative": 2,
   "level": 3,
   "maxHp": 25,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 2,
   "resistances": [],
@@ -16571,7 +16567,7 @@ exports[`SRD pack parity > ranger 4 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 5,
+      "attackBonus": 7,
       "damageBonus": 3,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -16591,9 +16587,7 @@ exports[`SRD pack parity > ranger 4 1`] = `
   "initiative": 3,
   "level": 4,
   "maxHp": 32,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 2,
   "resistances": [],
@@ -16727,7 +16721,7 @@ exports[`SRD pack parity > ranger 5 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 6,
+      "attackBonus": 8,
       "damageBonus": 3,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -16747,9 +16741,7 @@ exports[`SRD pack parity > ranger 5 1`] = `
   "initiative": 3,
   "level": 5,
   "maxHp": 39,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 3,
   "resistances": [],
@@ -16884,7 +16876,7 @@ exports[`SRD pack parity > ranger 6 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 6,
+      "attackBonus": 8,
       "damageBonus": 3,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -16904,9 +16896,7 @@ exports[`SRD pack parity > ranger 6 1`] = `
   "initiative": 3,
   "level": 6,
   "maxHp": 46,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 3,
   "resistances": [],
@@ -17041,7 +17031,7 @@ exports[`SRD pack parity > ranger 9 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 8,
+      "attackBonus": 10,
       "damageBonus": 4,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -17061,9 +17051,7 @@ exports[`SRD pack parity > ranger 9 1`] = `
   "initiative": 4,
   "level": 9,
   "maxHp": 67,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 4,
   "resistances": [],
@@ -17199,7 +17187,7 @@ exports[`SRD pack parity > ranger 11 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 8,
+      "attackBonus": 10,
       "damageBonus": 4,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -17219,9 +17207,7 @@ exports[`SRD pack parity > ranger 11 1`] = `
   "initiative": 4,
   "level": 11,
   "maxHp": 81,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 4,
   "resistances": [],
@@ -17357,7 +17343,7 @@ exports[`SRD pack parity > ranger 14 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 10,
+      "attackBonus": 12,
       "damageBonus": 5,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -17377,9 +17363,7 @@ exports[`SRD pack parity > ranger 14 1`] = `
   "initiative": 5,
   "level": 14,
   "maxHp": 102,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 5,
   "resistances": [],
@@ -17516,7 +17500,7 @@ exports[`SRD pack parity > ranger 17 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 11,
+      "attackBonus": 13,
       "damageBonus": 5,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -17536,9 +17520,7 @@ exports[`SRD pack parity > ranger 17 1`] = `
   "initiative": 5,
   "level": 17,
   "maxHp": 123,
-  "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
-  ],
+  "notes": [],
   "passivePerception": 12,
   "proficiencyBonus": 6,
   "resistances": [],
@@ -17676,7 +17658,7 @@ exports[`SRD pack parity > ranger 19 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 11,
+      "attackBonus": 13,
       "damageBonus": 5,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -17697,7 +17679,6 @@ exports[`SRD pack parity > ranger 19 1`] = `
   "level": 19,
   "maxHp": 137,
   "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
     "Boon of Fate: When a D20 Test succeeds or fails within 60 feet of you, you can roll 2d4 and apply it as a bonus or penalty to that roll — once, until you roll Initiative or finish a Short or Long Rest.",
   ],
   "passivePerception": 12,
@@ -17837,7 +17818,7 @@ exports[`SRD pack parity > ranger 20 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 11,
+      "attackBonus": 13,
       "damageBonus": 5,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -17858,7 +17839,6 @@ exports[`SRD pack parity > ranger 20 1`] = `
   "level": 20,
   "maxHp": 144,
   "notes": [
-    "Archery: +2 bonus to attack rolls with Ranged weapons — add this by hand to the relevant Attacks entries on the Combat tab.",
     "Boon of Fate: When a D20 Test succeeds or fails within 60 feet of you, you can roll 2d4 and apply it as a bonus or penalty to that roll — once, until you roll Initiative or finish a Short or Long Rest.",
   ],
   "passivePerception": 12,
