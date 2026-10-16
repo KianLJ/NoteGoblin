@@ -5,10 +5,10 @@
 // whatever generated pack it needs (classes the SRD doesn't know).
 //
 // This is the bridge until characters store pack ids themselves (phase 4).
-// It mirrors legacy semantics exactly — a pick only counts while its class
-// is at or above the pick's level, unrecognised classes add levels but no
-// hit points, every weapon is proficient — so the derived sheet matches the
-// legacy calculations (tests/regression/parity.test.ts).
+// It mirrors legacy semantics — a pick only counts while its class is at or
+// above the pick's level, unrecognised classes add levels but no hit points
+// — so the derived sheet matches the legacy calculations apart from the
+// deliberate rules fixes recorded in tests/regression/parity.test.ts.snap.
 
 import {
   activeAsiSlotChoices,
@@ -38,8 +38,8 @@ export interface LegacyBuild {
 
 export interface LegacyBuildOptions {
   /**
-   * The legacy sheet treats every weapon as proficient. On by default for
-   * parity; off lets class weapon proficiencies decide.
+   * The legacy sheet treats every weapon as proficient. Off by default, so
+   * class weapon proficiencies decide; on reproduces the legacy numbers.
    */
   assumeWeaponProficiency?: boolean
 }
@@ -271,7 +271,7 @@ export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBui
     }
   }
 
-  if (options.assumeWeaponProficiency ?? true) adapter.custom('Weapon proficiency (legacy sheet)', [{ do: { kind: 'proficiency', category: 'weapon', value: 'all' } }])
+  if (options.assumeWeaponProficiency) adapter.custom('Weapon proficiency (legacy sheet)', [{ do: { kind: 'proficiency', category: 'weapon', value: 'all' } }])
 
   const skillProficiencies: Record<string, ProficiencyLevel> = {}
   for (const [name, level] of Object.entries(sheet.skillProficiencies)) if (level) skillProficiencies[skillId(name)] = level

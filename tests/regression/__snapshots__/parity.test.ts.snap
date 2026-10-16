@@ -3061,7 +3061,7 @@ exports[`SRD pack parity > bard 1 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 4,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -3213,7 +3213,7 @@ exports[`SRD pack parity > bard 2 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 4,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -3365,7 +3365,7 @@ exports[`SRD pack parity > bard 3 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 4,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -3518,7 +3518,7 @@ exports[`SRD pack parity > bard 4 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 4,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -3671,7 +3671,7 @@ exports[`SRD pack parity > bard 5 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 5,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -3825,7 +3825,7 @@ exports[`SRD pack parity > bard 6 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 5,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -3979,7 +3979,7 @@ exports[`SRD pack parity > bard 9 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 6,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -4135,7 +4135,7 @@ exports[`SRD pack parity > bard 11 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 6,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -4292,7 +4292,7 @@ exports[`SRD pack parity > bard 14 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 7,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -4450,7 +4450,7 @@ exports[`SRD pack parity > bard 17 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 8,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -4610,7 +4610,7 @@ exports[`SRD pack parity > bard 19 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 8,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
@@ -4772,7 +4772,7 @@ exports[`SRD pack parity > bard 20 1`] = `
     },
     {
       "ability": "dex",
-      "attackBonus": 8,
+      "attackBonus": 2,
       "damageBonus": 2,
       "damageDice": "1d8",
       "damageType": "Piercing",
