@@ -16,6 +16,7 @@ import {
   spellLevelLabel,
   type CompendiumSpell
 } from '@shared/compendium'
+import { knownSpells } from '@shared/content/sheet'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { CompendiumPicker } from '../CompendiumPicker'
@@ -193,36 +194,12 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   const dc = derived.spellcasting.dc
   const casterAttackBonus = derived.spellcasting.attackBonus
 
-  // Spells the content engine grants on its own (Circle Spells, a lineage's spells, a homebrew feature) that aren't
-  // stored on the sheet — listed alongside the rest, but not removable here (remove what grants them instead).
-  const storedIds = new Set(draft.spells.map((s) => s.compendiumId).filter(Boolean))
-  const grantedSpells: Array<Spell & { grantedBy: string }> = []
-  for (const g of derived.spellcasting.granted) {
-    const isSrd = g.spellId.startsWith('srd-5.2.1:')
-    const localId = g.spellId.slice(g.spellId.indexOf(':') + 1)
-    const def = registry.get('spells', g.spellId)?.def
-    if (!def || (isSrd && storedIds.has(localId)) || grantedSpells.some((x) => x.id === `granted:${g.spellId}`)) continue
-    grantedSpells.push({
-      id: `granted:${g.spellId}`,
-      name: def.name,
-      level: def.level,
-      description: def.description,
-      school: def.school,
-      castingTime: def.castingTime,
-      range: def.range,
-      components: def.components,
-      duration: def.duration,
-      concentration: def.concentration,
-      ritual: def.ritual,
-      ...(def.higherLevel ? { higherLevel: def.higherLevel } : {}),
-      ...(isSrd ? { compendiumId: localId } : {}),
-      free: true,
-      grantedBy: g.source
-    })
-  }
-  const grantedBy = (spell: Spell): string | undefined => grantedSpells.find((g) => g.id === spell.id)?.grantedBy
+  // Stored spells plus the ones the content engine grants on its own (Circle Spells, a lineage's spells, a homebrew
+  // feature) — granted ones are listed alongside the rest but not removable here (remove what grants them instead).
+  const allSpells = knownSpells(draft.spells, { derived, registry })
+  const grantedBy = (spell: Spell): string | undefined => allSpells.find((k) => k.id === spell.id)?.grantedBy
 
-  const visibleSpells = [...draft.spells, ...grantedSpells]
+  const visibleSpells = allSpells
     .filter(
       (s) =>
         (listSearch.trim() === '' || s.name.toLowerCase().includes(listSearch.trim().toLowerCase())) &&

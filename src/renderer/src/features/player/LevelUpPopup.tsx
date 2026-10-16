@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
 import type { DerivedChoice } from '@shared/content/engine'
@@ -54,8 +54,15 @@ function slotTotals(sheet: CharacterSheetData): Record<number, number> {
  * nested choice (an ASI's ability scores) stays on its slide until that's
  * done too.
  */
-export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave, onClose }: LevelUpPopupProps): JSX.Element | null {
+export function LevelUpPopup({ character: savedCharacter, className, fromLevel, toLevel, onSave, onClose }: LevelUpPopupProps): JSX.Element | null {
   const [slideIndex, setSlideIndex] = useState(0)
+  // Overview opens this the moment a level is raised, but saves that level on a debounce — so for the first moments
+  // the saved character is still at the old level. Work from the character at the new level from the start, so the
+  // popup doesn't flash "nothing new" before the save lands.
+  const character = useMemo<CharacterSheet>(() => {
+    const raise = (c: CharacterSheet['classes'][number]): boolean => c.className.toLowerCase() === className.toLowerCase() && c.level < toLevel
+    return savedCharacter.classes.some(raise) ? { ...savedCharacter, classes: savedCharacter.classes.map((c) => (raise(c) ? { ...c, level: toLevel } : c)) } : savedCharacter
+  }, [savedCharacter, className, toLevel])
   const setPicks = useChoiceEditor(character, onSave)
 
   const normalized = normalizeSheet(character)

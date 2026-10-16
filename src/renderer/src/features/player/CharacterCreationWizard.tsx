@@ -450,11 +450,6 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                     </select>
                   </div>
                   <OriginFeatChooser label="Versatile" level={0} onResolve={setHumanFeatChoice} />
-                  {humanFeatChoice && (
-                    <p style={{ fontSize: 12, color: 'var(--accent)', margin: 0 }}>
-                      Chosen: {FEATS.find((f) => f.id === humanFeatChoice.featId)?.name}
-                    </p>
-                  )}
                 </Section>
               )}
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveSheet, effectiveScores, resourcesRefilledBy, skillModeOf, skillOf, skillProficiencyOf } from '@shared/content/sheet'
+import { deriveSheet, effectiveScores, knownSpells, resourcesRefilledBy, skillModeOf, skillOf, skillProficiencyOf } from '@shared/content/sheet'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { engineDerive } from '../regression/project'
 
@@ -40,5 +40,22 @@ describe('deriveSheet', () => {
     expect(derived.resources.find((r) => r.id === 'barbarian-rage')).toMatchObject({ recharge: 'long', className: 'Barbarian' })
     expect(resourcesRefilledBy(derived, 'short')).not.toContain('barbarian-rage')
     expect(resourcesRefilledBy(derived, 'long')).toContain('barbarian-rage')
+  })
+
+  it('lists engine-granted spells alongside stored ones, without duplicating a stored copy', () => {
+    const druid: CharacterSheetData = {
+      ...emptyCharacterSheet(),
+      classes: [{ className: 'Druid', level: 3, subclass: 'land' }],
+      spellcastingAbility: 'wis',
+      subclassFeatureChoices: [{ id: 'c', className: 'Druid', level: 3, featureName: 'Circle of the Land', chosenName: 'Circle of the Land: Arid' }]
+    }
+    const granted = knownSpells(druid.spells, deriveSheet(druid)).filter((s) => s.grantedBy)
+    expect(granted.length).toBeGreaterThan(0)
+    expect(granted.every((s) => s.id.startsWith('granted:') && s.compendiumId)).toBe(true)
+
+    const first = granted[0]
+    const stored = { ...druid, spells: [{ id: 's1', name: first.name, level: first.level, description: '', compendiumId: first.compendiumId, free: true }] }
+    const again = knownSpells(stored.spells, deriveSheet(stored))
+    expect(again.filter((s) => s.compendiumId === first.compendiumId)).toHaveLength(1)
   })
 })

@@ -22,7 +22,7 @@ import {
 } from '@shared/compendium'
 import type { DerivedAction, DerivedAttack, DerivedResource, DerivedToggle } from '@shared/content/engine'
 import type { Registry } from '@shared/content/registry'
-import { effectiveScores } from '@shared/content/sheet'
+import { effectiveScores, knownSpells } from '@shared/content/sheet'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { playAbilitySfx } from '../../audio/sfxBoardEngine'
@@ -137,7 +137,10 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   // the content engine (see shared/content/sheet.ts) — so a feat, item or
   // active buff that changes an attack (Rage, Archery, a homebrew cursed
   // tool) is already folded into what's shown here.
-  const { derived, registry } = useDerivedSheet(character)
+  const derivedSheet = useDerivedSheet(character)
+  const { derived, registry } = derivedSheet
+  // Stored spells plus engine-granted ones (a lineage's Fire Bolt, Circle Spells, homebrew grants) — see knownSpells.
+  const spells = knownSpells(character.spells, derivedSheet)
   const isCaster = character.spellcastingAbility !== null || derived.spellcasting.sources.length > 0
   const effScores = effectiveScores(derived)
   /** Custom (freeform) attacks aren't part of the build, so their bonus is worked out here: proficiency + the governing ability's modifier, as before. */
@@ -212,11 +215,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   // Affinity bonus, a Circle of the Land spell), since a spell that lands
   // in character.spells isn't distinguishable here from one a class
   // granted directly.
-  const damagingCantrips = character.spells
+  const damagingCantrips = spells
     .filter((s) => s.level === 0)
     .map((s) => ({ spell: s, compendium: s.compendiumId ? getSpellById(s.compendiumId) : undefined }))
     .filter(
-      (s): s is { spell: (typeof character.spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } =>
+      (s): s is { spell: (typeof spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } =>
         !!s.compendium && spellDealsDamage(s.compendium)
     )
   const cantripAttackBonus = derived.spellcasting.attackBonus
@@ -225,9 +228,9 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   // Every known spell whose own casting time is "1 reaction" (Shield, Counterspell, Feather Fall, Hellish Rebuke,
   // ...) — derived from the compendium's own castingTime field, not a hand-maintained list, so it stays accurate
   // as spells are added or removed on the Spells tab.
-  const reactionSpells = character.spells
+  const reactionSpells = spells
     .map((s) => ({ spell: s, compendium: s.compendiumId ? getSpellById(s.compendiumId) : undefined }))
-    .filter((s): s is { spell: (typeof character.spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } =>
+    .filter((s): s is { spell: (typeof spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } =>
       s.compendium?.castingTime === '1 reaction'
     )
   // Reactions from a class's own base table (the sparse, hand-curated set —

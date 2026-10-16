@@ -5,12 +5,12 @@
 // effective*/compute* helpers, so the sheet shows exactly what the content
 // engine calculates (docs/homebrew-engine.md, phases 3–4).
 
-import { abilityModifier, type Ability, type AbilityScores, type CharacterSheetData, type SkillName } from '../dnd5e'
+import { abilityModifier, type Ability, type AbilityScores, type CharacterSheetData, type SkillName, type Spell } from '../dnd5e'
 import { ABILITY_IDS, deriveCharacter, type CharacterBuild, type DerivedCharacter, type RollMode } from './engine'
 import { legacySheetToBuild } from './legacy'
 import { normalizeSheet, registryForPacks } from './migrate'
 import type { Registry } from './registry'
-import { skillId } from './srd/common'
+import { SRD_PACK_ID, skillId } from './srd/common'
 
 export interface DerivedSheet {
   derived: DerivedCharacter
@@ -71,4 +71,43 @@ export function skillModeOf(derived: DerivedCharacter, skill: SkillName): RollMo
 export function resourcesRefilledBy(derived: DerivedCharacter, rest: 'short' | 'long'): string[] {
   const kinds = rest === 'short' ? ['short'] : ['short', 'long', 'dawn']
   return derived.resources.filter((r) => kinds.includes(r.recharge)).map((r) => r.id)
+}
+
+/** A spell the character knows, as the spell lists show it: one stored on the sheet, or one the engine grants on its own. */
+export type KnownSpell = Spell & { grantedBy?: string }
+
+/**
+ * Every spell the character has: the ones stored on the sheet, plus spells
+ * the content engine grants that aren't stored (Circle Spells, a lineage's
+ * spells, a homebrew feature) — those are marked with `grantedBy` and an id
+ * of "granted:<spell id>". The Spells tab and the Actions/Reactions lists
+ * all read this, so a granted Fire Bolt shows (and casts) everywhere.
+ */
+export function knownSpells(stored: Spell[], { derived, registry }: Pick<DerivedSheet, 'derived' | 'registry'>): KnownSpell[] {
+  const storedIds = new Set(stored.map((s) => s.compendiumId).filter(Boolean))
+  const granted: KnownSpell[] = []
+  for (const g of derived.spellcasting.granted) {
+    const isSrd = g.spellId.startsWith(`${SRD_PACK_ID}:`)
+    const localId = g.spellId.slice(g.spellId.indexOf(':') + 1)
+    const def = registry.get('spells', g.spellId)?.def
+    if (!def || (isSrd && storedIds.has(localId)) || granted.some((x) => x.id === `granted:${g.spellId}`)) continue
+    granted.push({
+      id: `granted:${g.spellId}`,
+      name: def.name,
+      level: def.level,
+      description: def.description,
+      school: def.school,
+      castingTime: def.castingTime,
+      range: def.range,
+      components: def.components,
+      duration: def.duration,
+      concentration: def.concentration,
+      ritual: def.ritual,
+      ...(def.higherLevel ? { higherLevel: def.higherLevel } : {}),
+      ...(isSrd ? { compendiumId: localId } : {}),
+      free: true,
+      grantedBy: g.source
+    })
+  }
+  return [...stored, ...granted]
 }

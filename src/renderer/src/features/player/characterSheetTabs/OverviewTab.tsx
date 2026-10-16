@@ -959,10 +959,12 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 'var(--space-4)', alignItems: 'start' }}>
+      {/* Skills take only the width their longest row needs (so the proficiency dot and roll button sit right after the
+          names instead of out at a fixed column edge); Combat gets everything else. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: 'var(--space-4)', alignItems: 'start' }}>
         <div>
           <div className="gb-label">Skills</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', rowGap: 5, columnGap: 'var(--space-2)', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'max-content auto auto', rowGap: 5, columnGap: 'var(--space-2)', alignItems: 'center' }}>
             {SKILLS.map(({ id, ability }) => {
               const bonus = skillOf(derived, id)?.bonus ?? derived.abilities[ability].mod
               return (
