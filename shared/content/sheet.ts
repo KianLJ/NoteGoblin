@@ -11,7 +11,7 @@ import { ABILITY_IDS, deriveCharacter, type CharacterBuild, type DerivedCharacte
 import { legacySheetToBuild } from './legacy'
 import { normalizeSheet, registryForPacks } from './migrate'
 import type { Registry } from './registry'
-import type { ContentPack } from './schema'
+import type { ContentPack, SpellDef } from './schema'
 import { srdPack } from './srd'
 import { SRD_PACK_ID, skillId } from './srd/common'
 
@@ -120,6 +120,25 @@ export function skillModeOf(derived: DerivedCharacter, skill: SkillName): RollMo
 export function resourcesRefilledBy(derived: DerivedCharacter, rest: 'short' | 'long'): string[] {
   const kinds = rest === 'short' ? ['short'] : ['short', 'long', 'dawn']
   return derived.resources.filter((r) => kinds.includes(r.recharge)).map((r) => r.id)
+}
+
+/** A content pack's spell as a sheet spell (no id yet) — every rules field copied across, so it reads the same as an SRD one. */
+export function sheetSpellFromPack(fullId: string, def: SpellDef): Omit<Spell, 'id'> {
+  return {
+    name: def.name,
+    level: def.level,
+    description: def.description,
+    actionType: 'action',
+    school: def.school,
+    castingTime: def.castingTime,
+    range: def.range,
+    components: def.components,
+    duration: def.duration,
+    concentration: def.concentration,
+    ritual: def.ritual,
+    ...(def.higherLevel ? { higherLevel: def.higherLevel } : {}),
+    packSpellId: fullId
+  }
 }
 
 /** A spell the character knows, as the spell lists show it: one stored on the sheet, or one the engine grants on its own. */

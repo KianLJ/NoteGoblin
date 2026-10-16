@@ -1,4 +1,16 @@
 /** DM mode — a robed/armored figure, for table authority. */
+/** Workshop mode — a hammer over an anvil. */
+export function WorkshopModeIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M2 9.5h9.5c0 1.6-1.3 2.6-3 2.8v1.7h2v1H5v-1h2v-1.7C4.4 12 2.6 11 2 9.5z" />
+      <path d="M11.5 9.5h1.8c.9 0 1.7-.6 2-1.5h-3.8" />
+      <path d="M9.2 1.3l2.6 2.6-1.4 1.4-2.6-2.6z" />
+      <path d="M8.5 4.2L4.6 8.1" />
+    </svg>
+  )
+}
+
 export function DmModeIcon(): JSX.Element {
   return (
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>

@@ -1497,6 +1497,8 @@ export interface EquipmentItem {
   compendiumId?: string
   /** Links back to a shared/compendium.ts magic item entry (Potion of Healing, Ring of Protection, etc.) — a separate id space/lookup from compendiumId since magic items are a different SRD list (rarity/category, no weight/cost) from mundane equipment. */
   magicItemId?: string
+  /** Links to a content pack's item by full id ("my-pack:cursed-tool") — its rules (attacks, AC, effects) come from the pack through the content engine. */
+  packItemId?: string
 }
 
 export interface Feature {
@@ -1569,6 +1571,8 @@ export interface Spell {
   higherLevel?: string
   /** Links back to a shared/compendium.ts spell — see Attack.compendiumId. */
   compendiumId?: string
+  /** For a spell added from a content pack's spell list: its full pack id ("my-pack:shadow-bolt"). Its rules text is copied onto the spell, so it still reads fine if the pack is later disabled. */
+  packSpellId?: string
   /** True for a spell granted for free by a feat or subclass feature (Magic Initiate's cantrips/spell, a Druid Circle's circle spells) rather than chosen against the class's normal known/prepared spell cap — excluded from SpellsTab's spellCap/cantripCap counts, matching the SRD rule that these "always prepared"/bonus spells don't eat into your normal allotment. */
   free?: boolean
 }

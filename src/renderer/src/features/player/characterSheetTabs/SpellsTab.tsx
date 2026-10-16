@@ -16,7 +16,8 @@ import {
   spellLevelLabel,
   type CompendiumSpell
 } from '@shared/compendium'
-import { knownSpells } from '@shared/content/sheet'
+import { knownSpells, sheetSpellFromPack } from '@shared/content/sheet'
+import { SRD_PACK_ID } from '@shared/content/srd'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { CompendiumPicker } from '../CompendiumPicker'
@@ -126,6 +127,29 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   const casterClasses = spellcasterClassNames(character.classes).map((c) => c.toLowerCase())
 
   const knownCompendiumSpellIds = new Set(draft.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
+  const knownPackSpellIds = new Set(draft.spells.map((s) => s.packSpellId).filter((id): id is string => !!id))
+  // The active packs' own spells, offered in the same picker as the SRD's (id "pack:<full id>"; lists name the classes).
+  const packSpells: CompendiumSpell[] = useMemo(
+    () =>
+      registry
+        .all('spells')
+        .filter((s) => s.packId !== SRD_PACK_ID)
+        .map((s) => ({
+          id: `pack:${s.fullId}`,
+          name: s.def.name,
+          level: s.def.level,
+          school: s.def.school,
+          castingTime: s.def.castingTime,
+          range: s.def.range,
+          components: s.def.components,
+          duration: s.def.duration,
+          concentration: s.def.concentration,
+          ritual: s.def.ritual,
+          classes: s.def.lists,
+          description: s.def.description
+        })),
+    [registry]
+  )
 
   function setSlotUsed(level: number, used: number): void {
     const total = slotTotals[level] ?? 0
@@ -166,6 +190,13 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
     if (spell.level > 0 && atSpellCap) return
     if (spell.level === 0 && atCantripCap) return
     if (knownCompendiumSpellIds.has(spell.id)) return
+    if (spell.id.startsWith('pack:')) {
+      const fullId = spell.id.slice('pack:'.length)
+      const def = registry.get('spells', fullId)?.def
+      if (!def || knownPackSpellIds.has(fullId)) return
+      patch({ spells: [...draft.spells, { id: crypto.randomUUID(), ...sheetSpellFromPack(fullId, def) }] })
+      return
+    }
     patch({
       spells: [
         ...draft.spells,
@@ -404,22 +435,25 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
               searchSpells(
                 q,
                 30,
-                SPELLS.filter((s) => {
+                [...SPELLS, ...packSpells].filter((s) => {
+                  const fromPack = s.id.startsWith('pack:')
                   if (s.level > maxCastableLevel) return false
                   if (pickerLevelFilter !== 'all' && s.level !== pickerLevelFilter) return false
                   if (s.level === 0 && atCantripCap) return false
                   if (s.level > 0 && atSpellCap) return false
-                  if (casterClasses.length > 0 && !s.classes.some((c) => casterClasses.includes(c.toLowerCase()))) return false
-                  return !knownCompendiumSpellIds.has(s.id)
+                  // A pack spell's lists may name pack classes ("my-pack:warden") — compare by local id too; an empty list means anyone.
+                  const listed = (c: string): boolean => casterClasses.includes(c.toLowerCase()) || casterClasses.includes(c.slice(c.indexOf(':') + 1).toLowerCase())
+                  if (casterClasses.length > 0 && !(fromPack && s.classes.length === 0) && !s.classes.some(listed)) return false
+                  return fromPack ? !knownPackSpellIds.has(s.id.slice('pack:'.length)) : !knownCompendiumSpellIds.has(s.id)
                 })
               )
             }
             getLabel={(s: CompendiumSpell) => s.name}
-            getSublabel={(s: CompendiumSpell) => `${spellLevelLabel(s.level)} · ${s.classes.join(', ')}`}
+            getSublabel={(s: CompendiumSpell) => `${spellLevelLabel(s.level)}${s.classes.length ? ` · ${s.classes.join(', ')}` : ''}${s.id.startsWith('pack:') ? ' · homebrew' : ''}`}
             onPick={addFromCompendium}
             onAddCustom={openCreateForm}
             buttonLabel="+ Add Spell"
-            searchPlaceholder="Search SRD spells…"
+            searchPlaceholder={packSpells.length ? 'Search spells…' : 'Search SRD spells…'}
             filters={
               <select
                 className="gb-input"

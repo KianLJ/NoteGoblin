@@ -16,6 +16,7 @@ import { PlayerWorkspaceBody } from '../player/PlayerWorkspaceBody'
 import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
 import { Bestiary } from '../bestiary/Bestiary'
+import { Workshop } from '../workshop/Workshop'
 import { MusicButton } from '../audio/MusicButton'
 import { SoundBoardButton } from '../audio/SoundBoardButton'
 import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
@@ -47,6 +48,8 @@ export type DmTabRef = { kind: 'note'; id: string } | { kind: 'monster'; id: str
 
 export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [mode, setMode] = useState<Mode>('dm')
+  // The Homebrew Workshop covers the workspace without unmounting it, so a hosted or joined session carries on underneath.
+  const [workshopOpen, setWorkshopOpen] = useState(false)
 
   // --- DM side: one active campaign workspace, switched via CampaignSwitcher (lives in the sidebar footer) ---
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
@@ -104,6 +107,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     stopMusic()
     setJoinedSession({ sessionId, label })
     setMode('player')
+    setWorkshopOpen(false)
   }
 
   // Locks the mode you're NOT currently using once you're mid-session, so
@@ -121,6 +125,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     function handleKeyDown(e: KeyboardEvent): void {
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault()
+        setWorkshopOpen(false)
         setMode((m) => {
           const next = m === 'dm' ? 'player' : 'dm'
           return next === lockedMode ? m : next
@@ -362,9 +367,19 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           className="gb-no-drag"
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0, flexShrink: 1 }}
         >
-          <ModeToggle mode={mode} onChange={setMode} disabledMode={lockedMode} disabledReason={lockedReason} />
+          <ModeToggle
+            mode={mode}
+            onChange={(m) => {
+              setWorkshopOpen(false)
+              setMode(m)
+            }}
+            disabledMode={lockedMode}
+            disabledReason={lockedReason}
+            workshop={workshopOpen}
+            onWorkshop={() => setWorkshopOpen(true)}
+          />
 
-          {mode === 'dm' && activeCampaign && (
+          {!workshopOpen && mode === 'dm' && activeCampaign && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
               <WorkspaceHeaderBar
@@ -380,7 +395,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             </>
           )}
 
-          {mode === 'player' && playerWorkspace.tabItems.length > 0 && (
+          {!workshopOpen && mode === 'player' && playerWorkspace.tabItems.length > 0 && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
               <PlayerWorkspaceHeaderBar workspace={playerWorkspace} />
@@ -466,7 +481,12 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
         </div>
       )}
 
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {workshopOpen && (
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Workshop authorName={displayName} />
+        </main>
+      )}
+      <main style={{ flex: 1, display: workshopOpen ? 'none' : 'flex', flexDirection: 'column', minHeight: 0 }}>
         {mode === 'dm' ? (
           <CampaignWorkspace
             campaign={activeCampaign}

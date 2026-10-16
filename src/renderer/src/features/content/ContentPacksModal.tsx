@@ -140,7 +140,7 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
         >
           {importResult && <ImportSummary result={importResult} onDismiss={() => setImportResult(null)} />}
           {library.packs && libraryPacks.length === 0 && (
-            <Muted>No packs yet. Import a .ngpack.json file someone shared with you — the Homebrew Workshop for making your own is coming next.</Muted>
+            <Muted>No packs yet. Import a .ngpack.json file someone shared with you, or make your own in the Homebrew Workshop (the hammer next to DM and Player mode).</Muted>
           )}
           {libraryPacks.map(({ pack }) => (
             <PackRow
@@ -219,7 +219,7 @@ function PackRow({ pack, badge, actions }: { pack: ContentPack; badge?: string; 
   )
 }
 
-function ImportSummary({ result, onDismiss }: { result: PackImportResult; onDismiss: () => void }): JSX.Element {
+export function ImportSummary({ result, onDismiss }: { result: PackImportResult; onDismiss: () => void }): JSX.Element {
   return (
     <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {result.imported.map(({ pack, replaced, warnings }) => (

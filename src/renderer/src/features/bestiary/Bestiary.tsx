@@ -15,6 +15,9 @@ import {
   removeCustomEntitySfx
 } from '../audio/customEntitySfxStore'
 import { RACES } from '@shared/dnd5e'
+import { codexEntries, type CodexEntry } from '@shared/content/codexContent'
+import { WORKSHOP_SECTIONS } from '@shared/content/workshop'
+import { useActivePackRegistry } from '../content/pickerContent'
 import {
   EQUIPMENT,
   MAGIC_ITEMS,
@@ -36,8 +39,8 @@ interface BestiaryProps {
   sessionId?: string | null
 }
 
-type Category = 'Monsters' | 'NPCs' | 'Equipment' | 'Spells' | 'Magic Items' | 'Playing the Game'
-const CATEGORIES: Category[] = ['Monsters', 'NPCs', 'Equipment', 'Spells', 'Magic Items', 'Playing the Game']
+type Category = 'Monsters' | 'NPCs' | 'Equipment' | 'Spells' | 'Magic Items' | 'Homebrew' | 'Playing the Game'
+const CATEGORIES: Category[] = ['Monsters', 'NPCs', 'Equipment', 'Spells', 'Magic Items', 'Homebrew', 'Playing the Game']
 const EQUIPMENT_CATEGORIES: EquipmentCategory[] = ['Weapon', 'Armor', 'Adventuring Gear', 'Tools', 'Mounts and Vehicles']
 
 function toTitleCase(s: string): string {
@@ -74,7 +77,11 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
     portraitDataUrl: null
   })
 
-  const visibleCategories = hideMonsters ? CATEGORIES.filter((c) => c !== 'Monsters' && c !== 'NPCs') : CATEGORIES
+  // Homebrew: everything the active content packs add (the open campaign's, or your library outside one).
+  const { packs: activePacks, registry: packRegistry } = useActivePackRegistry()
+  const homebrew = useMemo(() => codexEntries(packRegistry, activePacks), [packRegistry, activePacks])
+  const [packFilter, setPackFilter] = useState('')
+  const visibleCategories = (hideMonsters ? CATEGORIES.filter((c) => c !== 'Monsters' && c !== 'NPCs') : CATEGORIES).filter((c) => c !== 'Homebrew' || homebrew.length > 0)
 
   // Opened as a note's "Import from Bestiary" picker — only a monster can become a ```statblock block, so the
   // other categories would just be dead ends here. hideMonsters wins over a stale 'Monsters' category value
@@ -151,6 +158,11 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
     }).sort((a, b) => a.name.localeCompare(b.name))
   }, [query, typeFilter])
 
+  const filteredHomebrew = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return homebrew.filter((e) => (!typeFilter || e.kind === typeFilter) && (!packFilter || e.packId === packFilter) && (!q || e.name.toLowerCase().includes(q)))
+  }, [homebrew, query, typeFilter, packFilter])
+
   // No type filter for this one — ten topics is short enough that a search
   // box alone (matching title or dek) covers it without another dropdown.
   const filteredTopics = useMemo(() => {
@@ -173,6 +185,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   const selectedSpell: CompendiumSpell | undefined = SPELLS.find((s) => s.id === selectedIndex)
   const selectedMagicItem: CompendiumMagicItem | undefined = MAGIC_ITEMS.find((m) => m.id === selectedIndex)
   const selectedTopic: RuleTopic | undefined = PLAYING_THE_GAME_TOPICS.find((t) => t.id === selectedIndex)
+  const selectedHomebrew: CodexEntry | undefined = homebrew.find((e) => e.key === selectedIndex)
 
   function handleDeleteCustom(index: string): void {
     removeCustomMonster(index)
@@ -362,6 +375,28 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                   ))}
                 </select>
               )}
+              {effectiveCategory === 'Homebrew' && (
+                <>
+                  <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                    <option value="">All kinds</option>
+                    {WORKSHOP_SECTIONS.filter((sec) => homebrew.some((e) => e.kind === sec.kind)).map((sec) => (
+                      <option key={sec.kind} value={sec.kind}>
+                        {sec.label}
+                      </option>
+                    ))}
+                  </select>
+                  {activePacks.length > 1 && (
+                    <select className="gb-input" value={packFilter} onChange={(e) => setPackFilter(e.target.value)} style={{ fontSize: 13 }}>
+                      <option value="">All packs</option>
+                      {activePacks.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              )}
               {effectiveCategory === 'Magic Items' && (
                 <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
                   <option value="">All rarities</option>
@@ -379,6 +414,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                 {effectiveCategory === 'Spells' && `${filteredSpells.length} spell${filteredSpells.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Magic Items' && `${filteredMagicItems.length} item${filteredMagicItems.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Playing the Game' && `${filteredTopics.length} topic${filteredTopics.length === 1 ? '' : 's'}`}
+                {effectiveCategory === 'Homebrew' && `${filteredHomebrew.length} entr${filteredHomebrew.length === 1 ? 'y' : 'ies'}`}
               </div>
             </div>
 
@@ -457,6 +493,16 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                   </button>
                 ))}
 
+              {effectiveCategory === 'Homebrew' &&
+                filteredHomebrew.map((e) => (
+                  <button key={e.key} type="button" onClick={() => setSelectedIndex(e.key)} style={{ ...listRowStyle(selectedHomebrew?.key === e.key), display: 'block' }}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {e.kindLabel} · {e.packName}
+                    </div>
+                  </button>
+                ))}
+
               {effectiveCategory === 'Playing the Game' &&
                 filteredTopics.map((t) => (
                   <button key={t.id} type="button" onClick={() => setSelectedIndex(t.id)} style={{ ...listRowStyle(selectedTopic?.id === t.id), display: 'block' }}>
@@ -470,6 +516,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                 (effectiveCategory === 'Equipment' && filteredEquipment.length === 0) ||
                 (effectiveCategory === 'Spells' && filteredSpells.length === 0) ||
                 (effectiveCategory === 'Playing the Game' && filteredTopics.length === 0) ||
+                (effectiveCategory === 'Homebrew' && filteredHomebrew.length === 0) ||
                 (effectiveCategory === 'Magic Items' && filteredMagicItems.length === 0)) && (
                 <div style={{ padding: 'var(--space-3)', fontSize: 12, color: 'var(--text-muted)' }}>No matches.</div>
               )}
@@ -506,6 +553,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
               {effectiveCategory === 'Spells' && (selectedSpell ? <SpellDetail spell={selectedSpell} /> : <NoneSelected />)}
               {effectiveCategory === 'Magic Items' && (selectedMagicItem ? <MagicItemDetail item={selectedMagicItem} /> : <NoneSelected />)}
               {effectiveCategory === 'Playing the Game' && (selectedTopic ? <RuleTopicDetail topic={selectedTopic} /> : <NoneSelected />)}
+              {effectiveCategory === 'Homebrew' && (selectedHomebrew ? <HomebrewDetail entry={selectedHomebrew} /> : <NoneSelected />)}
             </div>
             {onPick && selectedMonster && (
               <div style={{ padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
@@ -517,6 +565,40 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** A content-pack entry, whatever its kind: its facts, description and longer parts (levels, traits, options), with the pack it's from. */
+function HomebrewDetail({ entry }: { entry: CodexEntry }): JSX.Element {
+  return (
+    <div>
+      <DetailHeader name={entry.name} subtitle={`${entry.kindLabel} · ${entry.packName}`} />
+      <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }} title={entry.fullId}>
+        {entry.packName}
+      </span>
+      <div style={{ marginTop: 'var(--space-3)' }}>
+        {entry.fields.map((f) => (
+          <DetailField key={f.label} label={f.label} value={f.value} />
+        ))}
+      </div>
+      {entry.description && <p style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>{entry.description}</p>}
+      {entry.sections.map((section) => (
+        <div key={section.title} style={{ marginTop: 'var(--space-4)' }}>
+          <div className="gb-label">{section.title}</div>
+          {section.items.map((item, i) => (
+            <div key={i} style={{ marginBottom: 'var(--space-2)' }}>
+              {(item.name || item.meta) && (
+                <div style={{ fontSize: 13 }}>
+                  {item.name && <strong>{item.name}</strong>}
+                  {item.meta && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{item.meta}</span>}
+                </div>
+              )}
+              {item.description && <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{item.description}</div>}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

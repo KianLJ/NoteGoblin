@@ -597,3 +597,43 @@ one pack. Tests: `tests/content/engineAdditions.test.ts`,
 
 Not yet: the Homebrew Workshop editors for these (phase 6), and applying
 damage reduction automatically when damage is taken (it is displayed).
+
+## Phase 6a — status and notes for 6b
+
+Done: the Homebrew Workshop shell, raw editing, testing and browsing.
+
+- **Workshop mode** — a third button (hammer) beside DM and Player mode in
+  the header. It covers the workspace without unmounting it, so a hosted
+  or joined session carries on underneath (`AppShell` `workshopOpen`).
+- **Library editing** — `features/workshop/Workshop.tsx`: the library on
+  the left (New pack, Import), the selected pack's editor on the right.
+  Drafts are kept per pack while the Workshop is open; nothing is stored
+  until Save. New IPC `packs.save(pack, previousId?)` validates in the
+  main process (`readPackFile` against the rest of the library) and
+  refuses a pack with errors or an id clash; a changed id replaces the old
+  row. Campaign copies never change from here — the DM updates them in
+  Content Packs as before.
+- **Pack editor** (`PackEditor.tsx`) — Overview (name, id, version with
+  patch/minor/major bump, author, description, which packs it builds on,
+  per-kind counts, every problem, click to jump to it), Entries (every
+  entry of every kind as JSON, add from a template that validates,
+  duplicate, delete, per-entry problems), Vocabulary & terms, Test
+  character, Raw JSON. Validation re-runs 300 ms after typing stops.
+- **Test character** (`TestCharacterPanel.tsx`) — class, level, subclass,
+  species, background and scores; derives with the SRD, the pack's
+  dependencies and the pack (`packsForTesting`), using the last version
+  that validated. Shows every number, choices (pickable), toggles,
+  features, resources, actions with spend ranges, companions and all
+  diagnostics. Nothing is saved.
+- **Codex** — a Homebrew category (shown when the active packs add
+  anything) lists every pack entry with its pack, filtered by kind and
+  pack (`shared/content/codexContent.ts`).
+- **Pickers** — the Spells tab's picker offers pack spells (copied onto
+  the sheet with `packSpellId`); the Inventory tab has "Add Homebrew Item"
+  (`packItemId`, which the legacy adapter prefers, so the engine applies
+  the item's attacks, AC and effects when equipped).
+- Pure rules in `shared/content/workshop.ts`, tested in
+  `tests/content/workshop.test.ts`.
+
+Next (6b): form editors for every entry kind, the effect builder, formula
+fields with a live preview, and the level-table grid for classes.

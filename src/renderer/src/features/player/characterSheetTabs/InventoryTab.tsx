@@ -12,6 +12,9 @@ import {
   type EquipmentCategory
 } from '@shared/compendium'
 import { deriveSheet } from '@shared/content/sheet'
+import { SRD_PACK_ID } from '@shared/content/srd'
+import type { ItemDef } from '@shared/content/schema'
+import { useDerivedSheet } from '../useDerivedSheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { CompendiumPicker } from '../CompendiumPicker'
 import type { DetailField } from '../CompendiumDetailModal'
@@ -101,6 +104,20 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
   function addMagicItemFromCompendium(item: CompendiumMagicItem): void {
     patch({
       equipment: [...draft.equipment, { id: crypto.randomUUID(), name: item.name, quantity: 1, weight: 0, notes: '', magicItemId: item.id }]
+    })
+  }
+
+  // The active packs' items, offered in their own picker (the SRD lists stay as they were).
+  const { registry } = useDerivedSheet(character)
+  const packItems = registry.all('items').filter((i) => i.packId !== SRD_PACK_ID)
+  const packItemFor = (item: EquipmentItem): ItemDef | undefined => (item.packItemId ? registry.get('items', item.packItemId)?.def : undefined)
+
+  function addPackItem(item: (typeof packItems)[number]): void {
+    patch({
+      equipment: [
+        ...draft.equipment,
+        { id: crypto.randomUUID(), name: item.def.name, quantity: 1, weight: item.def.weight ?? 0, notes: '', category: item.def.category, ...(item.def.cost ? { cost: item.def.cost } : {}), packItemId: item.fullId }
+      ]
     })
   }
 
@@ -206,13 +223,16 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
           {visibleEquipment.map((item) => {
             const compendium = item.compendiumId ? getEquipmentById(item.compendiumId) : undefined
             const magicItem = item.magicItemId ? getMagicItemById(item.magicItemId) : undefined
+            const packItem = packItemFor(item)
+            // A pack item can be equipped when it's a weapon or armour, or its effects apply while equipped/attuned.
+            const packEquippable = !!packItem && (!!packItem.weapon || !!packItem.armor || packItem.effectsWhen !== 'carried')
             return (
               <HoverDetailCard
                 key={item.id}
                 title={compendium?.name ?? magicItem?.name ?? (item.name || 'Untitled Item')}
                 subtitle={compendium?.category ?? (magicItem ? `${magicItem.category} · ${magicItem.rarity}` : item.category)}
                 fields={compendium ? equipmentDetailFields(compendium) : magicItem ? [] : customItemFields(item)}
-                description={compendium?.description ?? magicItem?.description ?? item.notes}
+                description={compendium?.description ?? magicItem?.description ?? packItem?.description ?? item.notes}
               >
                 <EntryCard
                   name={<EntryCardTitle value={compendium?.name ?? magicItem?.name ?? item.name} />}
@@ -221,11 +241,13 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                       <span className="gb-badge">{compendium.category}</span>
                     ) : magicItem ? (
                       <span className="gb-badge gb-badge--accent">{magicItem.rarity}</span>
+                    ) : packItem ? (
+                      <span className="gb-badge gb-badge--accent">{packItem.rarity ?? packItem.category}</span>
                     ) : item.category ? (
                       <span className="gb-badge">{item.category}</span>
                     ) : undefined
                   }
-                  onEdit={compendium || magicItem ? undefined : () => openEditForm(item)}
+                  onEdit={compendium || magicItem || packItem ? undefined : () => openEditForm(item)}
                   onRemove={() => patch({ equipment: draft.equipment.filter((i) => i.id !== item.id) })}
                 >
                   <Field label="Qty">
@@ -254,6 +276,16 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                           ? 'Equipped armor/shields feed into your AC'
                           : 'Equipped weapons show up as attacks on the Combat tab'
                       }
+                    >
+                      {item.equipped ? 'Equipped' : 'Equip'}
+                    </Button>
+                  )}
+                  {packEquippable && (
+                    <Button
+                      variant={item.equipped ? 'primary' : 'secondary'}
+                      onClick={() => updateItem(item.id, { equipped: !item.equipped })}
+                      style={{ fontSize: 11, padding: '3px 8px' }}
+                      title="Equipped items apply their effects, attacks and AC"
                     >
                       {item.equipped ? 'Equipped' : 'Equip'}
                     </Button>
@@ -297,6 +329,17 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
             buttonLabel="+ Add Magic Item"
             searchPlaceholder="Search SRD magic items…"
           />
+          {packItems.length > 0 && (
+            <CompendiumPicker
+              search={(q) => packItems.filter((i) => i.def.name.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 30)}
+              getLabel={(i: (typeof packItems)[number]) => i.def.name}
+              getSublabel={(i: (typeof packItems)[number]) => [i.def.category, i.def.rarity].filter(Boolean).join(' · ')}
+              onPick={addPackItem}
+              onAddCustom={openCreateForm}
+              buttonLabel="+ Add Homebrew Item"
+              searchPlaceholder="Search pack items…"
+            />
+          )}
         </div>
       </div>
     </div>

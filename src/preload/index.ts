@@ -133,7 +133,8 @@ const api: AppApi = {
     list: () => ipcRenderer.invoke('packs:list'),
     import: () => ipcRenderer.invoke('packs:import'),
     exportPack: (packId) => ipcRenderer.invoke('packs:export', packId),
-    remove: (packId) => ipcRenderer.invoke('packs:remove', packId)
+    remove: (packId) => ipcRenderer.invoke('packs:remove', packId),
+    save: (pack, previousId) => ipcRenderer.invoke('packs:save', pack, previousId)
   },
   campaignPacks: {
     list: (campaignId, sessionId) => ipcRenderer.invoke('campaignPacks:list', campaignId, sessionId),

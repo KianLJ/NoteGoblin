@@ -193,6 +193,9 @@ export interface PackImportResult {
   failed: Array<{ fileName: string; issues: PackIssue[] }>
 }
 
+/** What saving a pack from the Homebrew Workshop did — refused (with its errors) or stored (with any warnings). */
+export type PackSaveResult = { saved: true; pack: ContentPack; warnings: PackIssue[] } | { saved: false; issues: PackIssue[] }
+
 /** Fired whenever any participant (DM or a fellow player) mutates notes/folders in a campaign — listeners just re-fetch rather than diffing a pushed payload. */
 export interface CampaignChangeEvent {
   sessionId: string
@@ -398,6 +401,13 @@ export interface AppApi {
     /** Opens a save dialog; resolves false if cancelled. */
     exportPack: (packId: string) => Promise<ApiResult<boolean>>
     remove: (packId: string) => Promise<ApiResult<void>>
+    /**
+     * Validates and stores a pack edited in the Homebrew Workshop (a new one
+     * or an update to a library pack). `previousId`, when the pack's id was
+     * changed, is the id it's stored under now — that row is replaced. A
+     * pack with errors isn't stored. Campaign copies never change here.
+     */
+    save: (pack: unknown, previousId?: string) => Promise<ApiResult<PackSaveResult>>
   }
   // The packs a campaign uses. Every member can list them (a player's goes
   // to the DM over the session); enable/disable are DM-only and local to the

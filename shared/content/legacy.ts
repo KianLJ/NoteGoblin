@@ -323,7 +323,7 @@ export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBui
     // Native picks (v2 sheets, the new choices UI, homebrew) override whatever the legacy fields say for the same choice.
     choices: { ...adapter.choices, ...(sheet.choices ?? {}) },
     equipment: sheet.equipment.flatMap((e) => {
-      const itemId = e.compendiumId ?? e.magicItemId
+      const itemId = e.packItemId ?? e.compendiumId ?? e.magicItemId
       return itemId ? [{ key: e.id, itemId: registry.get('items', itemId)?.fullId ?? itemId, equipped: !!e.equipped, quantity: e.quantity }] : []
     }),
     activeToggles: [...sheet.activeBuffs],

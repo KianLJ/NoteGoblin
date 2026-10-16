@@ -1229,6 +1229,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   })
 
+  ipcMain.handle('packs:save', (_event, input: unknown, previousId?: string) => {
+    const identity = getCurrentIdentity()
+    if (!identity) return { ok: false, error: 'Log in first.' }
+    const others = packLibrary.list(identity.id).map((p) => p.pack)
+    const id = input && typeof input === 'object' && 'id' in input ? (input as { id: unknown }).id : undefined
+    const read = readPackFile(JSON.stringify(input), others.filter((p) => p.id !== id && p.id !== previousId))
+    if (!read.ok) return { ok: true, data: { saved: false, issues: read.issues } }
+    if (read.pack.id !== previousId && others.some((p) => p.id === read.pack.id)) {
+      return { ok: true, data: { saved: false, issues: [{ severity: 'error', path: 'id', message: `Your library already has a pack with the id "${read.pack.id}".` }] } }
+    }
+    packLibrary.save(identity.id, read.pack)
+    if (previousId && previousId !== read.pack.id) packLibrary.remove(identity.id, previousId)
+    return { ok: true, data: { saved: true, pack: read.pack, warnings: read.issues } }
+  })
+
   ipcMain.handle('packs:remove', (_event, packId: string) => {
     const identity = getCurrentIdentity()
     if (!identity) return { ok: false, error: 'Log in first.' }
