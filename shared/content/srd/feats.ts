@@ -16,7 +16,9 @@ type FeatInput = NonNullable<ContentPackInput['feats']>[number]
 const AUTOMATED_FEAT_NOTES: Record<string, { replacesNotes: number[]; effects: Effect[] }> = {
   // +1 AC only while wearing body armour (computeArmorClassFromEquipment already applied it; its note just repeated it).
   defense: { replacesNotes: [0], effects: [{ when: BODY_ARMOR, do: { kind: 'modify', target: 'ac', op: 'add', value: '1' } }] },
-  archery: { replacesNotes: [0], effects: [{ do: { kind: 'modify', target: 'attack.bonus', op: 'add', value: '2', appliesTo: { kinds: ['weapon'], range: 'ranged' } } }] }
+  archery: { replacesNotes: [0], effects: [{ do: { kind: 'modify', target: 'attack.bonus', op: 'add', value: '2', appliesTo: { kinds: ['weapon'], range: 'ranged' } } }] },
+  // Initiative Proficiency; the Initiative Swap note stays.
+  alert: { replacesNotes: [0], effects: [{ do: { kind: 'modify', target: 'initiative', op: 'add', value: '@prof' } }] }
 }
 
 /** The ASI feat's own pick: +2 to one score or +1 to two (legacy kind: 'ability' slots). */

@@ -217,11 +217,10 @@ exports[`SRD pack parity > alert feat 1`] = `
   ],
   "cantripCap": null,
   "hitDice": "4d8",
-  "initiative": 2,
+  "initiative": 4,
   "level": 4,
   "maxHp": 31,
   "notes": [
-    "Alert: When you roll Initiative, you can add your Proficiency Bonus to the roll.",
     "Alert: Immediately after you roll Initiative, you can swap your Initiative with a willing ally in the same combat (unless either of you is Incapacitated).",
   ],
   "passivePerception": 11,
