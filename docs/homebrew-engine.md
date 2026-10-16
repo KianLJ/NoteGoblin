@@ -450,3 +450,51 @@ Notes for 4b (generic choices UI, with dual-write):
   will be shadowed by the native one — acceptable for the dual-write
   window; drop the mirroring (and then the legacy fields) in a later
   release once old clients have auto-updated.
+
+## Phase 4b — status
+
+Done: the Features tab, the level-up popup and the species prompt on
+Overview render every choice generically from the engine — no class,
+feat or species is special-cased any more.
+
+- `src/renderer/src/features/player/ChoiceCards.tsx`: `ChoiceCard` (pick
+  chips, searchable picker, prerequisites shown but not selectable,
+  repeats, freeform, nested choices underneath), `ChoiceList`, and
+  `useChoiceEditor`, which saves through `choicePatch`.
+- `shared/content/legacyMirror.ts`: `choicePatch(sheet, derived, choice,
+  picks)` writes native picks (dropping picks nested under anything
+  removed) and, for SRD choices, mirrors them into the legacy fields in
+  exactly the old choosers' shapes — ASI/feat slots (incl. Magic Initiate's
+  spells), subclass options, Metamagic (one choice per granting level),
+  invocations, Mystic Arcanum / Spell Mastery / Signature Spells / Magical
+  Secrets (incl. its free spells), level-0 origin slots and the lineage.
+  Records for class levels the character no longer has are untouched. A
+  round-trip test re-mirrors every pick of all 172 test characters and
+  checks the legacy fields come back identical.
+- Engine: `DerivedChoice` gained `sourceKey`, `parentKey`, `level`,
+  `classId`, `className` (level carried down through nested picks).
+- The Spells tab lists engine-granted spells (Circle Spells, lineage
+  spells, homebrew grants) that aren't stored on the sheet, marked
+  "Granted" and not removable there.
+- Deleted: the class-specific choosers (Fighting Style, named-option,
+  Favored Enemy, subclass-option, Circle Spells grant, Magical Secrets,
+  lineage-spell grant), the per-class branches in FeaturesTab /
+  LevelUpPopup, and ten legacy helpers with no callers left.
+
+What users will notice:
+
+- ASIs are two steps: pick "Ability Score Improvement" (or a feat) at the
+  slot, then the two +1s (the same ability twice = +2).
+- Circle Spells and lineage spells appear automatically instead of behind
+  a "grant" button; the Feats section is gone (each feat shows on the card
+  of the choice that picked it).
+- 2014 Favored Enemy/Terrain picks show read-only under "Other Picks".
+
+Still legacy: character creation (`CharacterCreationWizard` with
+`AsiSlotChooser` / `OriginFeatChooser`, writing legacy fields the adapter
+reads), the subclass pick (by name on the class entry), and the Divine
+Smite card (spending a spell slot isn't an engine concept yet). Skillful
+picks are native-only, so older clients don't show them. The SRD pack is
+still generated from `dnd5e.ts` / `compendium.ts` at import, so most legacy
+helpers stay until the pack is stored as data. Next: phase 5 (pack storage
+and sync).

@@ -502,19 +502,6 @@ export const CLASSES: Class[] = [
 ]
 
 /**
- * Under 2014 rules each class named its subclass category ("Primal Path",
- * "Divine Domain", etc.) and CLASS_LEVEL_FEATURES had a matching named row
- * FeaturesTab.tsx needed to exclude from the plain curated-feature list.
- * SRD 5.2.1 dropped the per-class naming — every class just calls it
- * "Subclass" — and CLASS_LEVEL_FEATURES no longer has a subclass-choice row
- * at all (the interactive picker is gated purely on Class.subclassLevel).
- * Kept as an empty map (rather than removed) so FeaturesTab.tsx's existing
- * `SUBCLASS_CHOICE_FEATURE_NAME[cls.id] ?? 'Subclass'` lookups keep working
- * unchanged, always falling through to the generic label now.
- */
-export const SUBCLASS_CHOICE_FEATURE_NAME: Record<string, string> = {}
-
-/**
  * SRD 5.2.1 dropped the 2014-style unique background feature (Shelter of
  * the Faithful, Criminal Contact, etc.) — a background instead grants three
  * named ability scores (increase one by 2 and another by 1, or all three by
@@ -978,16 +965,6 @@ export const FAVORED_TERRAIN_OPTIONS: NamedOption[] = [
   { name: 'Underdark', description: naturalExplorerDescription('Underdark') }
 ]
 
-/** Favored Enemy is picked at 1st level, then again at 6th ("Favored Enemy & Explorer Improvement") — same shape as asiSlotLevelsUpToLevel/fightingStyleSlotLevelsUpToLevel. */
-export function favoredEnemySlotLevelsUpToLevel(level: number): number[] {
-  return [1, 6].filter((l) => level >= l)
-}
-
-/** Natural Explorer's favored terrain is picked at 1st, 6th, and 10th level. */
-export function favoredTerrainSlotLevelsUpToLevel(level: number): number[] {
-  return [1, 6, 10].filter((l) => level >= l)
-}
-
 export interface NamedOption {
   name: string
   description: string
@@ -1004,19 +981,6 @@ export const METAMAGIC_OPTIONS: NamedOption[] = [
   { name: 'Subtle Spell', description: 'When you cast a spell, cast it without any somatic or verbal components. Costs 1 sorcery point.' },
   { name: 'Twinned Spell', description: 'When you cast a spell that targets only one creature and doesn’t have a range of Self, target a second creature in range with the same spell (spell slot level twice, minus one, sorcery points if it doesn’t already target multiple). Costs a number of sorcery points equal to the spell’s level (1 for a cantrip).' }
 ]
-
-/** Metamagic options known grows at 2nd, 10th, and 17th level under SRD 5.2.1 — 2 → 4 → 6 total (two more each time), never fewer, never a re-pick of ones already known. */
-export function metamagicSlotCountAtLevel(level: number): number {
-  if (level >= 17) return 6
-  if (level >= 10) return 4
-  if (level >= 2) return 2
-  return 0
-}
-
-/** Which class level unlocked the Nth Metamagic pick (0-indexed) — the first two both unlock at 2nd level, so this is purely for display ("Metamagic — Sorcerer 2"), not a dedup key the way an ASI slot's level is. */
-export function metamagicSlotUnlockLevel(pickIndex: number): number {
-  return pickIndex < 2 ? 2 : pickIndex < 4 ? 10 : 17
-}
 
 export interface EldritchInvocationOption extends NamedOption {
   /** Minimum warlock level required — 1, 2, 5, 7, 9, 12, or 15 under SRD 5.2.1. */
@@ -1865,11 +1829,6 @@ export function spellAttackBonus(
 ): number | null {
   if (!spellcastingAbility) return null
   return proficiencyBonus(classes) + abilityModifier(abilityScores[spellcastingAbility])
-}
-
-/** Base unarmored AC (10 + Dex mod) — there's no armor/equipment-AC-bonus system yet, so this is the whole formula for now. */
-export function computeArmorClass(abilityScores: AbilityScores): number {
-  return 10 + abilityModifier(abilityScores.dex)
 }
 
 export function computeInitiative(abilityScores: AbilityScores): number {

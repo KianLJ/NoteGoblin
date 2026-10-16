@@ -90,10 +90,7 @@ export interface CompendiumMagicItem {
 }
 
 export const SPELLS: CompendiumSpell[] = spellsData as CompendiumSpell[]
-export const CANTRIPS: CompendiumSpell[] = SPELLS.filter((s) => s.level === 0)
 export const EQUIPMENT: CompendiumEquipment[] = equipmentData as CompendiumEquipment[]
-export const WEAPONS: CompendiumEquipment[] = EQUIPMENT.filter((e) => e.category === 'Weapon')
-export const ARMOR: CompendiumEquipment[] = EQUIPMENT.filter((e) => e.category === 'Armor')
 export const MAGIC_ITEMS: CompendiumMagicItem[] = magicItemsData as CompendiumMagicItem[]
 
 /** One SRD subclass — the SRD only defines a single subclass per class (Berserker, Life, Champion, etc.), not the full official roster, since the rest is PHB/other-book content that isn't open. */
@@ -317,11 +314,6 @@ const BUFF_EFFECTS: Record<
   'barbarian-reckless-attack': {
     attackAdvantage: true
   }
-}
-
-/** Whether this class resource has an "activate for a buff" entry at all (see BUFF_EFFECTS) — gates whether FeaturesTab.tsx shows an Activate/End button on its card instead of just a uses/pool tracker. */
-export function isActivatableResource(resourceId: string): boolean {
-  return resourceId in BUFF_EFFECTS
 }
 
 /** The resource id's owning class's own level (e.g. barbarian level, for 'barbarian-rage') — resolved from CLASS_RESOURCES so BUFF_EFFECTS' level-scaled bonuses (Rage's damage ladder) read the right class, not just the highest/first one on a multiclass character. */
@@ -965,16 +957,6 @@ export const CIRCLE_OF_THE_LAND_SPELLS: Record<string, Record<number, string[]>>
   Polar: { 3: ['fog-cloud', 'hold-person', 'ray-of-frost'], 5: ['sleet-storm'], 7: ['ice-storm'], 9: ['cone-of-cold'] },
   Temperate: { 3: ['misty-step', 'shocking-grasp', 'sleep'], 5: ['lightning-bolt'], 7: ['freedom-of-movement'], 9: ['tree-stride'] },
   Tropical: { 3: ['acid-splash', 'web'], 5: ['stinking-cloud'], 7: ['polymorph'], 9: ['insect-plague'] }
-}
-
-/** Every circle-spell level threshold (3/5/7/9) reached at `level` for the given terrain, each with its two granted spell ids — used by FeaturesTab.tsx to know which "+ Add Circle Spells" prompts (or resolved chips) to show. */
-export function circleSpellLevelsUpToLevel(terrain: string, level: number): Array<{ level: number; spellIds: string[] }> {
-  const byLevel = CIRCLE_OF_THE_LAND_SPELLS[terrain]
-  if (!byLevel) return []
-  return Object.entries(byLevel)
-    .map(([lvl, spellIds]) => ({ level: Number(lvl), spellIds }))
-    .filter((entry) => entry.level <= level)
-    .sort((a, b) => a.level - b.level)
 }
 
 export function spellLevelLabel(level: number): string {

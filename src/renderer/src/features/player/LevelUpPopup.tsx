@@ -1,44 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import {
-  CLASSES,
-  CLASS_RESOURCES,
-  ELDRITCH_INVOCATIONS,
-  METAMAGIC_OPTIONS,
-  SUBCLASS_CHOICE_FEATURE_NAME,
-  abilityModifier,
-  asiSlotLevelsUpToLevel,
-  curatedFeaturesForLevelUp,
-  eldritchInvocationSlotCountAtLevel,
-  fightingStyleSlotLevelsUpToLevel,
-  metamagicSlotCountAtLevel,
-  metamagicSlotUnlockLevel,
-  subclassFightingStyleSlotLevelsUpToLevel,
-  type Ability,
-  type AsiSlotChoice,
-  type CharacterSheetData,
-  type SubclassFeatureChoice
-} from '@shared/dnd5e'
-import {
-  SPELLS,
-  buildAsiSlotResolutionPatch,
-  circleSpellLevelsUpToLevel,
-  getSpellById,
-  groupedSubclassFeaturesForLevelUp,
-  spellSlotsForClassLevel,
-  subclassesForClass
-} from '@shared/compendium'
-import { deriveSheet, effectiveScores } from '@shared/content/sheet'
+import type { CharacterSheetData } from '@shared/dnd5e'
+import type { DerivedChoice } from '@shared/content/engine'
+import { normalizeSheet } from '@shared/content/migrate'
+import { deriveSheet } from '@shared/content/sheet'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
-import {
-  AsiSlotChooser,
-  FightingStyleChooser,
-  NamedOptionChooser,
-  SubclassChooser,
-  SubclassFeatureOptionChooser
-} from './AsiChoosers'
-import { CircleSpellsGrant, MagicalSecretsChooser, MYSTIC_ARCANUM_LEVELS } from './characterSheetTabs/FeaturesTab'
+import { SubclassChooser } from './AsiChoosers'
+import { ChoiceCard, useChoiceEditor } from './ChoiceCards'
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th']
 
@@ -57,109 +26,91 @@ interface Slide {
   render: () => ReactNode
 }
 
+/** Total slots per spell level across every pool (Pact Magic included), as the sheet shows them. */
+function slotTotals(sheet: CharacterSheetData): Record<number, number> {
+  const totals: Record<number, number> = {}
+  for (const pool of Object.values(deriveSheet(sheet).derived.spellcasting.slots)) {
+    for (const [lvl, n] of Object.entries(pool)) totals[Number(lvl)] = (totals[Number(lvl)] ?? 0) + n
+  }
+  return totals
+}
+
 /**
  * A step-by-step recap of the class level(s) you just crossed, plus every
- * choice that grants — one slide at a time, Next/Back between them, instead
- * of dumping every curated feature, resource change, and open chooser into
- * one long scrolling list. The first slide (if there's anything to recap)
- * is a plain read-only summary; every slide after that is exactly one
- * decision — an Ability Score Improvement, a subclass pick, a Fighting
- * Style, Metamagic, whatever the class grants a choice for — reusing the
- * exact same chooser components FeaturesTab.tsx's permanent (never expires)
- * versions use, so resolving one here and resolving it later in Features
- * are the same action through the same onSave calls.
+ * choice that grants — one slide at a time, Next/Back between them. The
+ * first slide (if there's anything to recap) is a read-only summary of the
+ * new features, resources and spell slots; every slide after that is
+ * exactly one decision, rendered with the same generic ChoiceCard as the
+ * Features tab (so a homebrew class's choices work here too) — resolving
+ * one here and resolving it later in Features are the same action.
  *
  * Choice slides are computed from the character's *current* state (not a
  * from/to delta) — anything still unresolved for this class shows up,
  * including something left unresolved from an earlier level-up, so this
- * doubles as a "catch up on what you skipped" flow rather than a strictly
- * one-time recap. Resolving a slide updates the character, which shrinks
- * the recomputed slide list by exactly that one entry — the slide index
- * isn't touched, so the next still-open item naturally slides into view
- * without double-advancing. "Next" without resolving explicitly moves past
- * the current slide, and "Back" can return to it since nothing changed.
+ * doubles as a "catch up on what you skipped" flow. Resolving a slide
+ * updates the character, which shrinks the recomputed slide list by that
+ * one entry — the slide index isn't touched, so the next still-open item
+ * slides into view without double-advancing. A choice whose pick opens a
+ * nested choice (an ASI's ability scores) stays on its slide until that's
+ * done too.
  */
 export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave, onClose }: LevelUpPopupProps): JSX.Element | null {
   const [slideIndex, setSlideIndex] = useState(0)
+  const setPicks = useChoiceEditor(character, onSave)
 
-  const cls = CLASSES.find((c) => c.name.toLowerCase() === className.toLowerCase())
-  if (!cls) return null
-
-  const classIndex = character.classes.findIndex((c) => c.className.toLowerCase() === className.toLowerCase())
-  const classLevel = classIndex >= 0 ? character.classes[classIndex] : undefined
-  const level = classLevel?.level ?? toLevel
-
-  const subclassChoiceFeatureName = SUBCLASS_CHOICE_FEATURE_NAME[cls.id]
-  const isDivineSmiteClass = cls.id === 'paladin' && level >= 2
-  const isMetamagicClass = cls.id === 'sorcerer'
-  const isWarlockClass = cls.id === 'warlock'
-  const isWizardClass = cls.id === 'wizard'
-  const isBardClass = cls.id === 'bard'
-  const isDruidClass = cls.id === 'druid'
-
-  function resolveAsiSlot(entry: Omit<AsiSlotChoice, 'id'>): void {
-    onSave(buildAsiSlotResolutionPatch(character, entry))
-  }
+  const normalized = normalizeSheet(character)
+  const classIndex = normalized.classes.findIndex((c) => c.className.toLowerCase() === className.toLowerCase())
+  const classLevel = classIndex >= 0 ? normalized.classes[classIndex] : undefined
+  const { derived, registry } = deriveSheet(character)
+  const cls = classLevel?.classId ? registry.get('classes', classLevel.classId) : undefined
+  if (!classLevel || !cls) return null
+  const classId = cls.fullId
+  const subclassId = classLevel.subclassId
 
   function chooseSubclass(name: string): void {
-    if (classIndex < 0) return
     const nextClasses = character.classes.map((c, i) => (i === classIndex ? { ...c, subclass: name } : c))
     onSave({ classes: nextClasses })
   }
 
-  function resolveSubclassFeatureChoice(entry: Omit<SubclassFeatureChoice, 'id'>): void {
-    onSave({ subclassFeatureChoices: [...character.subclassFeatureChoices, { id: crypto.randomUUID(), ...entry }] })
-  }
-
   // ---- Recap (informational only, strictly this level-up's delta) ----
-  const curated = curatedFeaturesForLevelUp(className, fromLevel, toLevel).filter(
-    (f) =>
-      f.name !== 'Ability Score Improvement' &&
-      f.name !== 'Fighting Style' &&
-      f.name !== subclassChoiceFeatureName &&
-      !(isDivineSmiteClass && f.name === "Paladin's Smite") &&
-      !(isMetamagicClass && f.name === 'Metamagic') &&
-      !(isWarlockClass && f.name === 'Eldritch Invocations') &&
-      !(isWarlockClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
-      !(isWizardClass && f.name === 'Spell Mastery') &&
-      !(isWizardClass && f.name === 'Signature Spells') &&
-      !(isBardClass && f.name === 'Magical Secrets')
-  )
-  const subclassOptions = subclassesForClass(cls.id)
-  const chosenSubclass = classLevel?.subclass ? subclassOptions.find((s) => s.name === classLevel.subclass) : undefined
-  const newSubclassFeatures = chosenSubclass
-    ? groupedSubclassFeaturesForLevelUp(cls.id, chosenSubclass.id, fromLevel, toLevel).filter((g) => g.kind === 'single')
-    : []
-  const abilityMod = (a: Ability): number => abilityModifier(character.abilityScores[a])
-  const resourceChanges = (CLASS_RESOURCES[cls.id] ?? []).flatMap((def) => {
-    if (toLevel < def.minLevel) return []
-    const prevMax = fromLevel >= def.minLevel ? def.max(fromLevel, abilityMod) : 0
-    const nextMax = def.max(toLevel, abilityMod)
-    if (nextMax <= prevMax) return []
-    return [{ def, prevMax, nextMax, isNew: fromLevel < def.minLevel }]
-  })
-  const slotChanges = cls.spellcastingAbility
-    ? spellSlotsForClassLevel(cls.id, toLevel)
-        .map((count, i) => ({ level: i + 1, count, prevCount: spellSlotsForClassLevel(cls.id, fromLevel)[i] ?? 0 }))
-        .filter((s) => s.count > s.prevCount)
-    : []
+  const isOwn = (key: string): boolean => !key.includes('#') && (key.startsWith(`class:${classId}:`) || (!!subclassId && key.startsWith(`subclass:${subclassId}:`)))
+  const newFeatures = derived.features.filter((f) => isOwn(f.key) && f.level !== undefined && f.level > fromLevel && f.level <= toLevel)
+  const before: CharacterSheetData = { ...character, classes: character.classes.map((c, i) => (i === classIndex ? { ...c, level: fromLevel } : c)) }
+  const derivedBefore = deriveSheet(before).derived
+  const resourceChanges = derived.resources
+    .filter((r) => r.className === cls.def.name)
+    .flatMap((r) => {
+      const prev = derivedBefore.resources.find((x) => x.id === r.id)
+      if (prev && r.max <= prev.max) return []
+      return [{ resource: r, prevMax: prev?.max ?? 0, isNew: !prev }]
+    })
+  const slotsBefore = slotTotals(before)
+  const slotsNow = slotTotals(character)
+  const slotChanges = Object.entries(slotsNow)
+    .map(([lvl, count]) => ({ level: Number(lvl), count, prevCount: slotsBefore[Number(lvl)] ?? 0 }))
+    .filter((s) => s.count > s.prevCount)
+    .sort((a, b) => a.level - b.level)
 
-  const hasRecap = curated.length > 0 || newSubclassFeatures.length > 0 || resourceChanges.length > 0 || slotChanges.length > 0
+  const hasRecap = newFeatures.length > 0 || resourceChanges.length > 0 || slotChanges.length > 0
 
-  // ---- Choice slots (cumulative — every currently-unresolved choice for this class, not just newly unlocked ones) ----
+  // ---- Choices (cumulative — every currently-unresolved choice for this class, not just newly unlocked ones) ----
+  const needsPick = (c: DerivedChoice): boolean => c.remaining > 0 || derived.choices.some((n) => n.parentKey === c.key && needsPick(n))
+  const openChoices = derived.choices.filter((c) => !c.parentKey && c.classId === classId && needsPick(c))
+  const subclasses = registry.all('subclasses').filter((s) => s.def.classId === cls.def.id || s.def.classId === cls.fullId)
+  const subclassLabel = cls.def.subclassLabel ?? 'Subclass'
+
   const slides: Slide[] = []
-
   if (hasRecap) {
     slides.push({
       key: 'recap',
       render: () => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          {curated.length > 0 && (
+          {newFeatures.length > 0 && (
             <div>
-              <div className="gb-label">New Class Features</div>
+              <div className="gb-label">New Features</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {curated.map((f) => (
-                  <div key={`${f.level}:${f.name}`} className="gb-card" style={{ padding: 'var(--space-3)' }}>
+                {newFeatures.map((f) => (
+                  <div key={f.key} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: f.key.startsWith('subclass:') ? 'var(--accent)' : undefined }}>
                     <strong>
                       Lv {f.level} — {f.name}
                     </strong>
@@ -169,37 +120,22 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
               </div>
             </div>
           )}
-          {newSubclassFeatures.length > 0 && (
-            <div>
-              <div className="gb-label">New {classLevel?.subclass} Features</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {newSubclassFeatures.map((g) => {
-                  if (g.kind !== 'single') return null
-                  return (
-                    <div key={`${g.feature.level}:${g.feature.name}`} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: 'var(--accent)' }}>
-                      <strong>
-                        Lv {g.feature.level} — {g.feature.name}
-                      </strong>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{g.feature.desc}</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
           {resourceChanges.length > 0 && (
             <div>
               <div className="gb-label">Resources</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {resourceChanges.map(({ def, prevMax, nextMax, isNew }) => (
-                  <div key={def.id} className="gb-card" style={{ padding: 'var(--space-3)' }}>
-                    <strong>{def.name}</strong>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                      {isNew ? `New — ${nextMax} ${def.kind === 'uses' ? 'uses' : 'points'}` : `${prevMax} → ${nextMax} ${def.kind === 'uses' ? 'uses' : 'points'}`}
+                {resourceChanges.map(({ resource, prevMax, isNew }) => {
+                  const unit = resource.display === 'uses' ? 'uses' : 'points'
+                  return (
+                    <div key={resource.id} className="gb-card" style={{ padding: 'var(--space-3)' }}>
+                      <strong>{resource.name}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        {isNew ? `New — ${resource.max} ${unit}` : `${prevMax} → ${resource.max} ${unit}`}
+                      </div>
+                      {resource.description && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{resource.description}</div>}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{def.description}</div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -209,7 +145,7 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
               <div className="gb-card" style={{ padding: 'var(--space-3)', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                 {slotChanges.map((s) => (
                   <div key={s.level} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>{ORDINALS[s.level - 1]}:</strong> {s.prevCount} → {s.count}
+                    <strong style={{ color: 'var(--text-primary)' }}>{ORDINALS[s.level - 1] ?? `${s.level}th`}:</strong> {s.prevCount} → {s.count}
                   </div>
                 ))}
               </div>
@@ -220,298 +156,23 @@ export function LevelUpPopup({ character, className, fromLevel, toLevel, onSave,
     })
   }
 
-  // Subclass pick
-  if (level >= cls.subclassLevel && !classLevel?.subclass && subclassOptions.length > 0) {
+  if (classLevel.level >= cls.def.subclassLevel && !classLevel.subclass && subclasses.length > 0) {
     slides.push({
       key: 'subclass',
       render: () => (
         <SubclassChooser
           classLabel={className}
-          featureName={subclassChoiceFeatureName ?? 'Subclass'}
-          slotLevel={cls.subclassLevel}
-          options={subclassOptions}
+          featureName={subclassLabel}
+          slotLevel={cls.def.subclassLevel}
+          options={subclasses.map((s) => ({ id: s.def.id, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
           onChoose={chooseSubclass}
         />
       )
     })
   }
 
-  // Fighting Style (base + Champion's Additional Fighting Style)
-  const chosenFightingStyleFeatIds = character.asiSlotChoices
-    .filter((s) => s.className.toLowerCase() === className.toLowerCase() && s.kind === 'feat' && s.featId)
-    .map((s) => s.featId!)
-  const unresolvedFightingStyleLevels = fightingStyleSlotLevelsUpToLevel(className, level).filter(
-    (lvl) => !character.asiSlotChoices.some((s) => s.level === lvl && s.className.toLowerCase() === className.toLowerCase())
-  )
-  for (const lvl of unresolvedFightingStyleLevels) {
-    slides.push({
-      key: `fs:${lvl}`,
-      render: () => <FightingStyleChooser classLabel={className} level={lvl} onResolve={resolveAsiSlot} />
-    })
-  }
-  const unresolvedAdditionalFightingStyleLevels = subclassFightingStyleSlotLevelsUpToLevel(cls.id, chosenSubclass?.id, level).filter(
-    (lvl) => !character.asiSlotChoices.some((s) => s.level === lvl && s.className.toLowerCase() === className.toLowerCase())
-  )
-  for (const lvl of unresolvedAdditionalFightingStyleLevels) {
-    slides.push({
-      key: `fs-additional:${lvl}`,
-      render: () => <FightingStyleChooser classLabel={className} level={lvl} excludeFeatIds={chosenFightingStyleFeatIds} onResolve={resolveAsiSlot} />
-    })
-  }
-
-  // Generic subclass-feature choice groups (Dragon Ancestor, Circle of the Land's terrain, a Ranger archetype's sub-features, ...)
-  const unresolvedSubclassChoiceGroups = chosenSubclass
-    ? groupedSubclassFeaturesForLevelUp(cls.id, chosenSubclass.id, 0, level).filter(
-        (g): g is Extract<typeof g, { kind: 'choice' }> =>
-          g.kind === 'choice' &&
-          !character.subclassFeatureChoices.some(
-            (c) => c.level === g.level && c.className.toLowerCase() === className.toLowerCase() && c.featureName === g.baseName
-          )
-      )
-    : []
-  for (const g of unresolvedSubclassChoiceGroups) {
-    slides.push({
-      key: `scc:${g.level}:${g.baseName}`,
-      render: () => (
-        <SubclassFeatureOptionChooser
-          classLabel={className}
-          subclassLabel={classLevel?.subclass ?? ''}
-          level={g.level}
-          baseName={g.baseName}
-          intro={g.intro}
-          options={g.options}
-          onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: g.level, featureName: g.baseName, chosenName })}
-        />
-      )
-    })
-  }
-
-  // Circle of the Land's circle spells (Druid)
-  if (isDruidClass) {
-    const circleTerrainChoice = character.subclassFeatureChoices.find(
-      (c) => c.featureName === 'Circle of the Land' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    const circleTerrain = circleTerrainChoice?.chosenName.split(':')[1]?.trim()
-    const grantedCircleSpellLevels = character.subclassFeatureChoices
-      .filter((c) => c.featureName === 'Circle Spells' && c.className.toLowerCase() === className.toLowerCase())
-      .map((c) => c.level)
-    const ungrantedCircleSpellLevels = circleTerrain
-      ? circleSpellLevelsUpToLevel(circleTerrain, level).filter((entry) => !grantedCircleSpellLevels.includes(entry.level))
-      : []
-    for (const { level: lvl, spellIds } of ungrantedCircleSpellLevels) {
-      slides.push({
-        key: `circle-spells:${lvl}`,
-        render: () => (
-          <CircleSpellsGrant
-            classLabel={className}
-            terrain={circleTerrain ?? ''}
-            level={lvl}
-            spellIds={spellIds}
-            onGrant={() => {
-              const known = new Set(character.spells.map((s) => s.compendiumId).filter(Boolean))
-              const granted = spellIds
-                .filter((id) => !known.has(id))
-                .map((id) => getSpellById(id))
-                .filter((s): s is NonNullable<typeof s> => !!s)
-                .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action' as const, compendiumId: s.id, free: true }))
-              const names = spellIds.map((id) => getSpellById(id)?.name).filter((n): n is string => !!n)
-              onSave({
-                spells: [...character.spells, ...granted],
-                subclassFeatureChoices: [
-                  ...character.subclassFeatureChoices,
-                  { id: crypto.randomUUID(), className, level: lvl, featureName: 'Circle Spells', chosenName: names.join(', ') }
-                ]
-              })
-            }}
-          />
-        )
-      })
-    }
-  }
-
-  // Ability Score Improvement
-  const unresolvedAsiLevels = asiSlotLevelsUpToLevel(className, level).filter(
-    (lvl) => !character.asiSlotChoices.some((s) => s.level === lvl && s.className.toLowerCase() === className.toLowerCase())
-  )
-  for (const lvl of unresolvedAsiLevels) {
-    slides.push({
-      key: `asi:${lvl}`,
-      render: () => (
-        <AsiSlotChooser
-          classLabel={className}
-          level={lvl}
-          abilityScores={effectiveScores(deriveSheet(character).derived)}
-          onResolve={resolveAsiSlot}
-        />
-      )
-    })
-  }
-
-  // Sorcerer Metamagic
-  if (isMetamagicClass) {
-    const resolvedMetamagic = character.subclassFeatureChoices.filter(
-      (c) => c.featureName === 'Metamagic' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    const unresolvedMetamagicCount = Math.max(0, metamagicSlotCountAtLevel(level) - resolvedMetamagic.length)
-    for (let i = 0; i < unresolvedMetamagicCount; i++) {
-      const pickIndex = resolvedMetamagic.length + i
-      slides.push({
-        key: `metamagic:${pickIndex}`,
-        render: () => (
-          <NamedOptionChooser
-            classLabel={className}
-            level={metamagicSlotUnlockLevel(pickIndex)}
-            featureName="Metamagic"
-            options={METAMAGIC_OPTIONS}
-            excludeNames={resolvedMetamagic.map((c) => c.chosenName)}
-            onChoose={(chosenName) =>
-              resolveSubclassFeatureChoice({ className, level: metamagicSlotUnlockLevel(pickIndex), featureName: 'Metamagic', chosenName })
-            }
-          />
-        )
-      })
-    }
-  }
-
-  // Warlock Eldritch Invocations (which, under SRD 5.2.1, include Pact of
-  // the Blade/Chain/Tome as ordinary invocation choices — there's no
-  // separate Pact Boon feature/chooser anymore) / Mystic Arcanum
-  if (isWarlockClass) {
-    const resolvedInvocations = character.subclassFeatureChoices.filter(
-      (c) => c.featureName === 'Eldritch Invocation' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    const knownSpellIds = new Set(character.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
-    const availableInvocations = ELDRITCH_INVOCATIONS.filter(
-      (o) =>
-        o.level <= level &&
-        (!o.prereqInvocation || resolvedInvocations.some((r) => r.chosenName === o.prereqInvocation)) &&
-        (!o.prereqSpell || knownSpellIds.has(o.prereqSpell)) &&
-        !resolvedInvocations.some((r) => r.chosenName === o.name)
-    )
-    const unresolvedInvocationCount = Math.max(0, Math.min(eldritchInvocationSlotCountAtLevel(level) - resolvedInvocations.length, availableInvocations.length))
-    for (let i = 0; i < unresolvedInvocationCount; i++) {
-      slides.push({
-        key: `invocation:${resolvedInvocations.length + i}`,
-        render: () => (
-          <NamedOptionChooser
-            classLabel={className}
-            level={level}
-            featureName="Eldritch Invocation"
-            options={availableInvocations}
-            excludeNames={[]}
-            onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level, featureName: 'Eldritch Invocation', chosenName })}
-          />
-        )
-      })
-    }
-    const unresolvedMysticArcana = MYSTIC_ARCANUM_LEVELS.filter(
-      (m) =>
-        level >= m.charLevel &&
-        !character.subclassFeatureChoices.some((c) => c.featureName === m.featureName && c.className.toLowerCase() === className.toLowerCase())
-    )
-    for (const m of unresolvedMysticArcana) {
-      slides.push({
-        key: m.featureName,
-        render: () => (
-          <NamedOptionChooser
-            classLabel={className}
-            level={m.charLevel}
-            featureName={m.featureName}
-            options={SPELLS.filter((s) => s.level === m.spellLevel && s.classes.some((c) => c.toLowerCase() === className.toLowerCase())).map((s) => ({
-              name: s.name,
-              description: s.description
-            }))}
-            excludeNames={[]}
-            onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: m.charLevel, featureName: m.featureName, chosenName })}
-          />
-        )
-      })
-    }
-  }
-
-  // Wizard Spell Mastery / Signature Spells (pick from the wizard's own known spells)
-  if (isWizardClass) {
-    const knownSpellsByLevel = (lvl: number): { name: string; description: string }[] =>
-      character.spells.filter((s) => s.level === lvl).map((s) => ({ name: s.name, description: s.description }))
-    const resolvedSpellMastery = character.subclassFeatureChoices.filter(
-      (c) => c.featureName === 'Spell Mastery' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    if (level >= 18) {
-      const spellMasteryUnresolvedLevels = [1, 2].filter((lvl) => !resolvedSpellMastery.some((c) => knownSpellsByLevel(lvl).some((s) => s.name === c.chosenName)))
-      for (const lvl of spellMasteryUnresolvedLevels) {
-        slides.push({
-          key: `spell-mastery:${lvl}`,
-          render: () => (
-            <NamedOptionChooser
-              classLabel={className}
-              level={18}
-              featureName={`Spell Mastery (${lvl === 1 ? '1st' : '2nd'}-level spell)`}
-              options={knownSpellsByLevel(lvl)}
-              excludeNames={[]}
-              onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: 18, featureName: 'Spell Mastery', chosenName })}
-            />
-          )
-        })
-      }
-    }
-    const resolvedSignatureSpells = character.subclassFeatureChoices.filter(
-      (c) => c.featureName === 'Signature Spells' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    if (level >= 20) {
-      const unresolvedSignatureSpellsCount = Math.max(0, 2 - resolvedSignatureSpells.length)
-      for (let i = 0; i < unresolvedSignatureSpellsCount; i++) {
-        slides.push({
-          key: `signature-spell:${resolvedSignatureSpells.length + i}`,
-          render: () => (
-            <NamedOptionChooser
-              classLabel={className}
-              level={20}
-              featureName="Signature Spells"
-              options={knownSpellsByLevel(3).filter((s) => !resolvedSignatureSpells.some((r) => r.chosenName === s.name))}
-              excludeNames={[]}
-              onChoose={(chosenName) => resolveSubclassFeatureChoice({ className, level: 20, featureName: 'Signature Spells', chosenName })}
-            />
-          )
-        })
-      }
-    }
-  }
-
-  // Bard Magical Secrets
-  if (isBardClass) {
-    const resolvedMagicalSecrets = character.subclassFeatureChoices.filter(
-      (c) => c.featureName === 'Magical Secrets' && c.className.toLowerCase() === className.toLowerCase()
-    )
-    const magicalSecretsSlotLevels = level >= 10 ? [10, 10] : []
-    const unresolvedMagicalSecretsLevels = magicalSecretsSlotLevels.slice(resolvedMagicalSecrets.length)
-    const bardMaxSpellLevel = spellSlotsForClassLevel(cls.id, level).reduce((max, count, i) => (count > 0 ? i + 1 : max), 0)
-    unresolvedMagicalSecretsLevels.forEach((lvl, i) => {
-      slides.push({
-        key: `magical-secrets:${resolvedMagicalSecrets.length + i}`,
-        render: () => (
-          <MagicalSecretsChooser
-            classLabel={className}
-            level={lvl}
-            maxSpellLevel={bardMaxSpellLevel}
-            excludeSpellNames={resolvedMagicalSecrets.map((c) => c.chosenName)}
-            onChoose={(spellId) => {
-              const spell = getSpellById(spellId)
-              if (!spell) return
-              onSave({
-                spells: [
-                  ...character.spells,
-                  { id: crypto.randomUUID(), name: spell.name, level: spell.level, description: '', actionType: 'action', compendiumId: spell.id, free: true }
-                ],
-                subclassFeatureChoices: [
-                  ...character.subclassFeatureChoices,
-                  { id: crypto.randomUUID(), className, level: lvl, featureName: 'Magical Secrets', chosenName: spell.name }
-                ]
-              })
-            }}
-          />
-        )
-      })
-    })
+  for (const choice of openChoices) {
+    slides.push({ key: choice.key, render: () => <ChoiceCard choice={choice} all={derived.choices} onSetPicks={setPicks} /> })
   }
 
   const clampedIndex = Math.min(slideIndex, Math.max(0, slides.length - 1))

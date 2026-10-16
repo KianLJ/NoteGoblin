@@ -12,17 +12,15 @@ import {
   exhaustionEffectsDescription,
   formatModifier,
   hitDicePools,
-  lineageOptionsForRace,
   type Ability,
   type AbilityScores,
-  type AsiSlotChoice,
   type CharacterSheetData,
   type ClassLevel,
   type DeathSaves,
   type HitDicePool,
   type SkillName
 } from '@shared/dnd5e'
-import { FEATS, SPELLS, subclassesForClass } from '@shared/compendium'
+import { FEATS, subclassesForClass } from '@shared/compendium'
 import type { DerivedCharacter } from '@shared/content/engine'
 import { deriveSheet, effectiveScores, resourcesRefilledBy, skillModeOf, skillOf, skillProficiencyOf } from '@shared/content/sheet'
 import { useDerivedSheet } from '../useDerivedSheet'
@@ -34,7 +32,7 @@ import { useSheetRoller } from '../../dice/useSheetRoller'
 import { RollButton } from '../../dice/RollButton'
 import { CombatTab } from './CombatTab'
 import { playSfx } from '../../audio/soundEffects'
-import { OriginFeatChooser } from '../AsiChoosers'
+import { ChoiceList, useChoiceEditor } from '../ChoiceCards'
 import { AbilityIcon, ExhaustionIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
 
 interface OverviewDraft {
@@ -139,11 +137,10 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   /** Changing species via the dropdown actually changes derived stats (Speed, Racial Traits — see computeSpeed/FeaturesTab.tsx) since it's now a real match against RACES instead of a freeform string prone to typos. If the new species has its own trait-level choices, this also opens the inline prompt below the header instead of leaving them unset. */
   function handleRaceChange(newRace: { id: string; name: string } | null): void {
     patch({ race: newRace?.name ?? '' })
-    if (newRace && (newRace.id === 'human' || lineageOptionsForRace(newRace.id).length > 0)) {
-      setPendingRaceExtras(newRace.id)
-    } else {
-      setPendingRaceExtras(null)
-    }
+    // Any species whose traits grant a choice (Human's Skillful/Versatile, a lineage, a homebrew species' pick).
+    const species = newRace ? derivedSheet.registry.all('species').find((sp) => sp.def.name.toLowerCase() === newRace.name.toLowerCase()) : undefined
+    const hasChoices = !!species?.def.traits.some((t) => t.effects.some((e) => e.do.kind === 'grantChoice'))
+    setPendingRaceExtras(newRace && hasChoices ? newRace.name : null)
     // Leaving a lineage species behind means whatever it granted no longer
     // applies — clears the stored choice so FeaturesTab.tsx's lineage-spell
     // prompt stops appearing for a species the character no longer has.
@@ -169,7 +166,8 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   // ability score *input fields* still bind to the raw draft values — only
   // derived, read-only numbers use the engine's.
   const liveSheet = useMemo(() => ({ ...character, ...draft }), [character, draft])
-  const { derived } = useDerivedSheet(liveSheet)
+  const derivedSheet = useDerivedSheet(liveSheet)
+  const { derived } = derivedSheet
   const effScores = effectiveScores(derived)
   const notes = derived.notes
   const abilityCheckAdvantage = derived.checkModes
@@ -438,8 +436,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         {pendingRaceExtras && !readOnly && (
           <div style={{ flexBasis: '100%' }}>
             <RaceExtrasPrompt
-              raceId={pendingRaceExtras}
-              className={primary?.className ?? ''}
+              raceName={pendingRaceExtras}
               character={character}
               onSave={onSave}
               onDone={() => setPendingRaceExtras(null)}
@@ -1191,124 +1188,40 @@ function SubclassField({
 
 /**
  * Shown right after picking a species with its own trait-level choices via
- * the Race dropdown above (Human's Skillful/Versatile, or Elf/Gnome/
- * Tiefling's lineage) — same mechanics as CharacterCreationWizard.tsx's
- * equivalent step, just writing straight to the sheet via onSave instead of
- * building up a not-yet-created CharacterSheetData. Self-contained: reads
- * nothing from the wizard, owns its own picks until "Done" commits them.
+ * the Race dropdown above (Human's Skillful/Versatile, Elf/Gnome/Tiefling's
+ * lineage, or any homebrew species' choices) — the species' choices from
+ * the content engine as generic ChoiceCards, saved the same way as on the
+ * Features tab (which keeps showing them afterwards). Waits for the race
+ * change itself to save first, since the choices come from the saved sheet.
  */
 function RaceExtrasPrompt({
-  raceId,
-  className,
+  raceName,
   character,
   onSave,
   onDone
 }: {
-  raceId: string
-  className: string
+  raceName: string
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   onDone: () => void
 }): JSX.Element {
-  const isHuman = raceId === 'human'
-  const lineageOptions = lineageOptionsForRace(raceId)
-  const [skill, setSkill] = useState<SkillName | null>(null)
-  const [featChoice, setFeatChoice] = useState<Omit<AsiSlotChoice, 'id'> | null>(null)
-  const [lineageName, setLineageName] = useState<string | null>(null)
-  const [lineageAbility, setLineageAbility] = useState<Ability>('wis')
-  const lineage = lineageOptions.find((l) => l.name === lineageName) ?? null
-
-  const ready = isHuman ? !!skill && !!featChoice : lineageOptions.length > 0 ? !!lineage : true
-
-  function commit(): void {
-    const spellIds = [
-      ...(featChoice?.chosenSpellIds ?? []),
-      ...(lineage ? [lineage.cantripId, lineage.secondCantripId, lineage.alwaysPreparedSpellId].filter((id): id is string => !!id) : [])
-    ]
-    const grantedSpells = spellIds
-      .map((id) => SPELLS.find((s) => s.id === id))
-      .filter((s): s is NonNullable<typeof s> => !!s)
-      .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action' as const, compendiumId: s.id, free: true }))
-    const skillProficiencies = skill ? { ...character.skillProficiencies, [skill]: 'proficient' as const } : character.skillProficiencies
-    const asiSlotChoices = featChoice
-      ? [...character.asiSlotChoices, { id: crypto.randomUUID(), ...featChoice, className }]
-      : character.asiSlotChoices
-    onSave({
-      skillProficiencies,
-      asiSlotChoices,
-      spells: [...character.spells, ...grantedSpells],
-      spellcastingAbility: character.spellcastingAbility ?? (featChoice?.chosenAbility ?? (lineage ? lineageAbility : null)),
-      raceLineageChoice: lineage ? { raceId, lineageName: lineage.name, spellcastingAbility: lineageAbility } : character.raceLineageChoice
-    })
-    onDone()
-  }
+  const setPicks = useChoiceEditor(character, onSave)
+  const saved = character.race.trim().toLowerCase() === raceName.trim().toLowerCase()
+  const { derived } = deriveSheet(character)
+  const speciesChoices = derived.choices.filter((c) => c.sourceKey.startsWith('species:'))
 
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-        {isHuman ? 'Human grants a skill and an Origin feat — pick them below.' : 'This species has a lineage trait — pick one below.'}
+        {saved ? `${raceName} has choices to make — pick them below (they stay on the Features tab too).` : 'Saving…'}
       </div>
-      {isHuman && (
-        <>
-          <select className="gb-input" value={skill ?? ''} onChange={(e) => setSkill((e.target.value || null) as SkillName | null)} style={{ fontSize: 12 }}>
-            <option value="">Choose a skill (Skillful)…</option>
-            {SKILLS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.id}
-              </option>
-            ))}
-          </select>
-          <OriginFeatChooser label="Versatile" level={0} onResolve={setFeatChoice} />
-          {featChoice && (
-            <p style={{ fontSize: 12, color: 'var(--accent)', margin: 0 }}>Chosen: {FEATS.find((f) => f.id === featChoice.featId)?.name}</p>
-          )}
-        </>
-      )}
-      {lineageOptions.length > 0 && (
-        <>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {lineageOptions.map((l) => (
-              <ChoiceChip key={l.name} label={l.name} selected={lineageName === l.name} onClick={() => setLineageName(l.name)} title={l.description} />
-            ))}
-          </div>
-          {lineage && (
-            <select className="gb-input" value={lineageAbility} onChange={(e) => setLineageAbility(e.target.value as Ability)} style={{ fontSize: 12 }}>
-              {(['int', 'wis', 'cha'] as Ability[]).map((a) => (
-                <option key={a} value={a}>
-                  {a.toUpperCase()} spellcasting
-                </option>
-              ))}
-            </select>
-          )}
-        </>
-      )}
+      {saved && <ChoiceList choices={speciesChoices} all={derived.choices} onSetPicks={setPicks} />}
       <div>
-        <Button variant="primary" onClick={commit} disabled={!ready} style={{ fontSize: 12, padding: '4px 10px' }}>
+        <Button variant="primary" onClick={onDone} style={{ fontSize: 12, padding: '4px 10px' }}>
           Done
         </Button>
       </div>
     </div>
-  )
-}
-
-function ChoiceChip({ label, selected, onClick, title }: { label: string; selected: boolean; onClick: () => void; title?: string }): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      style={{
-        padding: '4px 10px',
-        borderRadius: 999,
-        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border-subtle)'}`,
-        background: selected ? 'var(--accent-subtle)' : 'transparent',
-        color: selected ? 'var(--accent-hover)' : 'var(--text-secondary)',
-        fontSize: 12,
-        cursor: 'pointer'
-      }}
-    >
-      {label}
-    </button>
   )
 }
 

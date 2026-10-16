@@ -96,7 +96,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   // merged on top. Slots come from each class's spellcasting progression — never hand-entered — and every pool
   // (Pact Magic included) is summed into one table, as before. Only levels that actually have slots show up at all.
   const liveSheet = useMemo(() => ({ ...character, ...draft }), [character, draft])
-  const { derived } = useDerivedSheet(liveSheet)
+  const { derived, registry } = useDerivedSheet(liveSheet)
   const slotTotals: Record<number, number> = {}
   for (const pool of Object.values(derived.spellcasting.slots)) {
     for (const [lvl, n] of Object.entries(pool)) slotTotals[Number(lvl)] = (slotTotals[Number(lvl)] ?? 0) + n
@@ -193,7 +193,36 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   const dc = derived.spellcasting.dc
   const casterAttackBonus = derived.spellcasting.attackBonus
 
-  const visibleSpells = draft.spells
+  // Spells the content engine grants on its own (Circle Spells, a lineage's spells, a homebrew feature) that aren't
+  // stored on the sheet — listed alongside the rest, but not removable here (remove what grants them instead).
+  const storedIds = new Set(draft.spells.map((s) => s.compendiumId).filter(Boolean))
+  const grantedSpells: Array<Spell & { grantedBy: string }> = []
+  for (const g of derived.spellcasting.granted) {
+    const isSrd = g.spellId.startsWith('srd-5.2.1:')
+    const localId = g.spellId.slice(g.spellId.indexOf(':') + 1)
+    const def = registry.get('spells', g.spellId)?.def
+    if (!def || (isSrd && storedIds.has(localId)) || grantedSpells.some((x) => x.id === `granted:${g.spellId}`)) continue
+    grantedSpells.push({
+      id: `granted:${g.spellId}`,
+      name: def.name,
+      level: def.level,
+      description: def.description,
+      school: def.school,
+      castingTime: def.castingTime,
+      range: def.range,
+      components: def.components,
+      duration: def.duration,
+      concentration: def.concentration,
+      ritual: def.ritual,
+      ...(def.higherLevel ? { higherLevel: def.higherLevel } : {}),
+      ...(isSrd ? { compendiumId: localId } : {}),
+      free: true,
+      grantedBy: g.source
+    })
+  }
+  const grantedBy = (spell: Spell): string | undefined => grantedSpells.find((g) => g.id === spell.id)?.grantedBy
+
+  const visibleSpells = [...draft.spells, ...grantedSpells]
     .filter(
       (s) =>
         (listSearch.trim() === '' || s.name.toLowerCase().includes(listSearch.trim().toLowerCase())) &&
@@ -354,13 +383,13 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
                 <EntryCard
                   name={<EntryCardTitle value={compendium?.name ?? spell.name} />}
                   badge={
-                    <span className="gb-badge gb-badge--accent">
+                    <span className="gb-badge gb-badge--accent" title={grantedBy(spell) ? `Granted by ${grantedBy(spell)}` : undefined}>
                       {spellLevelLabel(spell.level)}
-                      {spell.free ? ' · Free' : ''}
+                      {grantedBy(spell) ? ' · Granted' : spell.free ? ' · Free' : ''}
                     </span>
                   }
-                  onEdit={compendium ? undefined : () => openEditForm(spell)}
-                  onRemove={() => patch({ spells: draft.spells.filter((s) => s.id !== spell.id) })}
+                  onEdit={compendium || grantedBy(spell) ? undefined : () => openEditForm(spell)}
+                  onRemove={grantedBy(spell) ? undefined : () => patch({ spells: draft.spells.filter((s) => s.id !== spell.id) })}
                 >
                   {compendium?.attackType && casterAttackBonus !== null && <MiniStat label="Atk" value={formatModifier(casterAttackBonus)} />}
                   <span className="gb-badge" style={{ fontSize: 11 }}>

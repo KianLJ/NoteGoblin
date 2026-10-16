@@ -1,67 +1,17 @@
 import { useState, type CSSProperties } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import {
-  CLASSES,
-  ELDRITCH_INVOCATIONS,
-  FAVORED_ENEMY_OPTIONS,
-  FAVORED_TERRAIN_OPTIONS,
-  METAMAGIC_OPTIONS,
-  RACES,
-  RACE_TRAIT_DESCRIPTIONS,
-  SUBCLASS_CHOICE_FEATURE_NAME,
-  activeFeatIds,
-  asiSlotLevelsUpToLevel,
-  curatedFeaturesForLevelUp,
-  eldritchInvocationSlotCountAtLevel,
-  fightingStyleSlotLevelsUpToLevel,
-  lineageOptionsForRace,
-  metamagicSlotCountAtLevel,
-  metamagicSlotUnlockLevel,
-  sneakAttackDice,
-  subclassFightingStyleSlotLevelsUpToLevel,
-  totalLevel,
-  type AsiSlotChoice,
-  type CharacterSheetData,
-  type ClassLevel,
-  type Feature,
-  type Spell,
-  type SubclassFeatureChoice
-} from '@shared/dnd5e'
-import {
-  FEATS,
-  SPELLS,
-  buildAsiSlotResolutionPatch,
-  circleSpellLevelsUpToLevel,
-  getSpellById,
-  groupedSubclassFeaturesForLevelUp,
-  spellLevelLabel,
-  spellSlotsForClassLevel,
-  spellSlotsForClasses,
-  subclassesForClass,
-  type FeatEffect
-} from '@shared/compendium'
-import type { DerivedToggle } from '@shared/content/engine'
-import { deriveSheet, effectiveScores } from '@shared/content/sheet'
+import { sneakAttackDice, type CharacterSheetData, type ClassLevel, type Feature } from '@shared/dnd5e'
+import { spellSlotsForClasses } from '@shared/compendium'
+import type { DerivedChoice, DerivedToggle } from '@shared/content/engine'
+import { normalizeSheet } from '@shared/content/migrate'
+import { deriveSheet } from '@shared/content/sheet'
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { playAbilitySfx } from '../../audio/sfxBoardEngine'
-import {
-  AsiSlotChooser,
-  FightingStyleChooser,
-  NamedOptionChooser,
-  SubclassChooser,
-  SubclassFeatureOptionChooser
-} from '../AsiChoosers'
-
-/** Warlock Mystic Arcanum — one specific spell of each level, chosen once each at 11th/13th/15th/17th, castable once per long rest without a slot. featureName matches the curated CLASS_LEVEL_FEATURES entry exactly, so resolving one both marks that row done and drives the chip/chooser below. */
-export const MYSTIC_ARCANUM_LEVELS = [
-  { charLevel: 11, spellLevel: 6, featureName: 'Mystic Arcanum (6th level)' },
-  { charLevel: 13, spellLevel: 7, featureName: 'Mystic Arcanum (7th level)' },
-  { charLevel: 15, spellLevel: 8, featureName: 'Mystic Arcanum (8th level)' },
-  { charLevel: 17, spellLevel: 9, featureName: 'Mystic Arcanum (9th level)' }
-]
+import { SubclassChooser } from '../AsiChoosers'
+import { ChoiceList, useChoiceEditor } from '../ChoiceCards'
 
 interface ResourcesDraft {
   resourceUsed: Record<string, number>
@@ -85,47 +35,6 @@ const RECHARGE_LABEL: Record<string, string> = {
   dawn: 'Dawn',
   turn: 'Start of each turn',
   none: "Doesn't recharge"
-}
-
-function effectLabel(effect: FeatEffect): string {
-  switch (effect.kind) {
-    case 'abilityScore':
-      return `+${effect.amount} ${effect.ability.toUpperCase()}`
-    case 'abilityScoreChoice':
-      return `+${effect.amount} ${effect.options.map((a) => a.toUpperCase()).join('/')} (chosen)`
-    case 'skillProficiency':
-      return `Proficient: ${effect.skill}`
-    case 'savingThrowProficiency':
-      return `Proficient save: ${effect.ability.toUpperCase()}`
-    case 'speed':
-      return `${effect.amount >= 0 ? '+' : ''}${effect.amount} ft. speed`
-    case 'note':
-      return ''
-    case 'skillAdvantage':
-      return `Advantage: ${effect.skill}`
-    case 'skillDisadvantage':
-      return `Disadvantage: ${effect.skill}`
-    case 'abilityCheckAdvantage':
-      return `Advantage: ${effect.ability.toUpperCase()} checks`
-    case 'abilityCheckDisadvantage':
-      return `Disadvantage: ${effect.ability.toUpperCase()} checks`
-    case 'savingThrowAdvantage':
-      return `Advantage: ${effect.ability.toUpperCase()} saves`
-    case 'savingThrowDisadvantage':
-      return `Disadvantage: ${effect.ability.toUpperCase()} saves`
-    case 'attackAdvantage':
-      return 'Advantage: attack rolls'
-    case 'attackDisadvantage':
-      return 'Disadvantage: attack rolls'
-    case 'initiativeAdvantage':
-      return 'Advantage: Initiative'
-    case 'initiativeDisadvantage':
-      return 'Disadvantage: Initiative'
-    case 'armorClass':
-      return `${effect.amount >= 0 ? '+' : ''}${effect.amount} AC`
-    case 'spellChoice':
-      return `${effect.cantripCount} cantrips + ${effect.spellCount} level-${effect.spellLevel} spell (${effect.classes.join('/')})`
-  }
 }
 
 /** A compact, always-hoverable chip — the one visual language every card in this tab shares, whether it's a class resource's name, a racial trait, a curated class feature, a feat, or a resolved ASI slot. Hovering shows the full text; the chip itself never does. */
@@ -198,20 +107,14 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
   // Resources (and the toggles that spend them) come from the content engine — see shared/content/sheet.ts.
   const { derived } = useDerivedSheet(character)
   const resources = derived.resources
-  const activeFeats = activeFeatIds(character.classes, character.asiSlotChoices)
-  const feats = activeFeats.map((id) => FEATS.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f)
-  const race = RACES.find((r) => r.name.toLowerCase() === character.race.trim().toLowerCase())
-  const lineageOption = character.raceLineageChoice
-    ? lineageOptionsForRace(character.raceLineageChoice.raceId).find((l) => l.name === character.raceLineageChoice!.lineageName)
-    : undefined
-  const charLevel = totalLevel(character.classes)
-  const knownCompendiumSpellIds = new Set(character.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
-  const unresolvedLineageSpellIds = lineageOption
-    ? [
-        lineageOption.level3SpellId && charLevel >= 3 ? lineageOption.level3SpellId : null,
-        lineageOption.level5SpellId && charLevel >= 5 ? lineageOption.level5SpellId : null
-      ].filter((id): id is string => !!id && !knownCompendiumSpellIds.has(id))
-    : []
+  const normalized = normalizeSheet(character)
+  const setPicks = useChoiceEditor(character, onSave)
+  // Species traits and background features (top-level only — picks show on their choice's card).
+  const originFeatures = derived.features.filter((f) => /^(species|background):/.test(f.key) && !f.key.includes('#'))
+  const originChoices = derived.choices.filter((c) => /^(species|background):/.test(c.sourceKey))
+  const originLabel = [character.race, character.background].filter((x) => x.trim()).join(', ')
+  // Picks kept from older sheets with nowhere else to go (2014 Favored Enemy/Terrain) — shown, not editable.
+  const otherChoices = derived.choices.filter((c) => c.sourceKey.startsWith('custom:'))
 
   function setUsed(id: string, used: number, max: number): void {
     setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
@@ -235,33 +138,12 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
     setFeatureDraft((prev) => ({ features: prev.features.map((f) => (f.id === id ? { ...f, ...fields } : f)) }))
   }
 
-  function resolveAsiSlot(entry: Omit<AsiSlotChoice, 'id'>): void {
-    onSave(buildAsiSlotResolutionPatch(character, entry))
-  }
-
-  function removeAsiSlot(id: string): void {
-    onSave({ asiSlotChoices: character.asiSlotChoices.filter((s) => s.id !== id) })
-  }
-
   function chooseSubclass(classIndex: number, subclassName: string): void {
     const nextClasses = character.classes.map((c, i) => (i === classIndex ? { ...c, subclass: subclassName } : c))
     onSave({ classes: nextClasses })
   }
 
-  function resolveSubclassFeatureChoice(entry: Omit<SubclassFeatureChoice, 'id'>): void {
-    onSave({ subclassFeatureChoices: [...character.subclassFeatureChoices, { id: crypto.randomUUID(), ...entry }] })
-  }
-
-  function removeSubclassFeatureChoice(id: string): void {
-    onSave({ subclassFeatureChoices: character.subclassFeatureChoices.filter((c) => c.id !== id) })
-  }
-
-  const hasAnyContent =
-    resources.length > 0 ||
-    feats.length > 0 ||
-    (race?.traits.length ?? 0) > 0 ||
-    character.classes.length > 0 ||
-    featureDraft.features.length > 0
+  const hasAnyContent = resources.length > 0 || originFeatures.length > 0 || character.classes.length > 0 || featureDraft.features.length > 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
@@ -322,39 +204,17 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
         </div>
       )}
 
-      {race && race.traits.length > 0 && (
+      {(originFeatures.length > 0 || originChoices.length > 0) && (
         <div>
-          <div className="gb-label">Racial Traits — {race.name}</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {race.traits.map((trait) => (
-              <InfoChip key={trait} title={trait} subtitle={race.name} description={RACE_TRAIT_DESCRIPTIONS[trait] ?? 'No description available.'} />
-            ))}
-          </div>
-          {lineageOption && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-              Lineage: {lineageOption.name}
-              {unresolvedLineageSpellIds.length === 0 && lineageOption.level5SpellId && knownCompendiumSpellIds.has(lineageOption.level5SpellId)
-                ? ' (fully unlocked)'
-                : ''}
-            </p>
+          <div className="gb-label">Species &amp; Background{originLabel ? ` — ${originLabel}` : ''}</div>
+          {originFeatures.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: originChoices.length ? 6 : 0 }}>
+              {originFeatures.map((f) => (
+                <InfoChip key={f.key} title={f.name} subtitle={f.key.startsWith('species:') ? character.race : character.background} description={f.description || 'No description available.'} />
+              ))}
+            </div>
           )}
-          {unresolvedLineageSpellIds.map((spellId) => (
-            <LineageSpellGrant
-              key={spellId}
-              spellId={spellId}
-              readOnly={readOnly}
-              onGrant={() => {
-                const spell = getSpellById(spellId)
-                if (!spell) return
-                onSave({
-                  spells: [
-                    ...character.spells,
-                    { id: crypto.randomUUID(), name: spell.name, level: spell.level, description: '', actionType: 'action', compendiumId: spell.id, free: true }
-                  ]
-                })
-              }}
-            />
-          ))}
+          <ChoiceList choices={originChoices} all={derived.choices} readOnly={readOnly} onSetPicks={setPicks} />
         </div>
       )}
 
@@ -363,47 +223,20 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
           key={index}
           classLevel={classLevel}
           classIndex={index}
+          classId={normalized.classes[index]?.classId}
+          subclassId={normalized.classes[index]?.subclassId}
           character={character}
           onSave={onSave}
           readOnly={readOnly}
-          onResolveAsi={resolveAsiSlot}
+          onSetPicks={setPicks}
           onChooseSubclass={chooseSubclass}
-          onResolveSubclassFeatureChoice={resolveSubclassFeatureChoice}
-          onRemoveSubclassFeatureChoice={removeSubclassFeatureChoice}
         />
       ))}
 
-      {feats.length > 0 && (
+      {otherChoices.length > 0 && (
         <div>
-          <div className="gb-label">Feats</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {feats.map((feat) => {
-              const badges = (feat.effects ?? []).filter((e) => e.kind !== 'note')
-              const fields = badges.map((e) => ({ label: 'Effect', value: effectLabel(e) }))
-              if (feat.prerequisite) fields.unshift({ label: 'Prerequisite', value: feat.prerequisite })
-              const slot = character.asiSlotChoices.find((s) => s.kind === 'feat' && s.featId === feat.id)
-              // Level-0 feat slots are granted once at character creation (the
-              // background's Origin feat, or Human's bonus feat) and never
-              // reappear as an "unresolved" chooser the way a real ASI-level
-              // feat pick does — those only re-offer their chooser for slots
-              // tied to an actual class level (see unresolvedAsiLevels below,
-              // driven by asiSlotLevelsUpToLevel). Removing one of these would
-              // be permanent with no way to get it back, so they aren't
-              // removable at all; only an actual leveled ASI/feat pick is.
-              const removable = slot && slot.level > 0
-              return (
-                <InfoChip
-                  key={feat.id}
-                  title={feat.name}
-                  subtitle={feat.category}
-                  fields={fields}
-                  description={feat.desc}
-                  accent
-                  onRemove={!readOnly && removable ? () => removeAsiSlot(slot.id) : undefined}
-                />
-              )
-            })}
-          </div>
+          <div className="gb-label">Other Picks</div>
+          <ChoiceList choices={otherChoices} all={derived.choices} readOnly onSetPicks={setPicks} />
         </div>
       )}
 
@@ -470,344 +303,79 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
 }
 
 /**
- * Everything one class contributes — its curated feature table (minus the
- * ASI/subclass-choice rows, handled specially below), its subclass pick
- * (inline chooser once unresolved, else a compact card), its subclass's own
- * feature table once chosen (grouped so a feature the SRD writes as several
- * named options, like Draconic Bloodline's dragon ancestor, becomes one
- * inline chooser instead of showing every option as if the character had
- * them all), and every unresolved ASI slot up to the class's current level.
- * A *resolved* ASI slot isn't shown here at all — see the ability score
- * hover card in Overview instead, which is where that bump now shows up.
+ * Everything one class contributes, straight from the content engine: the
+ * class's and its subclass's features up to the class's level as hover
+ * chips, and every choice they grant (ASIs and feats, Fighting Styles,
+ * Metamagic, invocations, spell picks, subclass options — or a homebrew
+ * class's own) as generic ChoiceCards. Nothing here knows which class it's
+ * showing. The subclass itself is still picked by name on the class entry
+ * (SubclassChooser), and Divine Smite keeps its own card since spending a
+ * spell slot isn't something the engine models yet.
  */
 function ClassFeatureSection({
   classLevel,
   classIndex,
+  classId,
+  subclassId,
   character,
   onSave,
   readOnly,
-  onResolveAsi,
-  onChooseSubclass,
-  onResolveSubclassFeatureChoice,
-  onRemoveSubclassFeatureChoice
+  onSetPicks,
+  onChooseSubclass
 }: {
   classLevel: ClassLevel
   classIndex: number
+  /** The class's content-pack id (from normalizeSheet) — undefined for a custom class name. */
+  classId?: string
+  subclassId?: string
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
-  onResolveAsi: (entry: Omit<AsiSlotChoice, 'id'>) => void
+  onSetPicks: (choice: DerivedChoice, picks: string[]) => void
   onChooseSubclass: (classIndex: number, subclassName: string) => void
-  onResolveSubclassFeatureChoice: (entry: Omit<SubclassFeatureChoice, 'id'>) => void
-  onRemoveSubclassFeatureChoice: (id: string) => void
 }): JSX.Element | null {
-  const cls = CLASSES.find((c) => c.name.toLowerCase() === classLevel.className.trim().toLowerCase())
-  if (!cls || !classLevel.className.trim()) return null
+  const { derived, registry } = deriveSheet(character)
+  if (!classLevel.className.trim()) return null
+  const cls = classId ? registry.get('classes', classId) : undefined
+  const subclasses = cls ? registry.all('subclasses').filter((s) => s.def.classId === cls.def.id || s.def.classId === cls.fullId) : []
+  const subclass = subclassId ? registry.get('subclasses', subclassId) : undefined
 
-  const subclassChoiceFeatureName = SUBCLASS_CHOICE_FEATURE_NAME[cls.id]
-  const isDivineSmiteClass = cls.id === 'paladin' && classLevel.level >= 2
-  const isMetamagicClass = cls.id === 'sorcerer'
-  const isWarlockClass = cls.id === 'warlock'
-  const isWizardClass = cls.id === 'wizard'
-  const isBardClass = cls.id === 'bard'
-  const curated = curatedFeaturesForLevelUp(classLevel.className, 0, classLevel.level).filter(
-    (f) =>
-      f.name !== 'Ability Score Improvement' &&
-      f.name !== 'Fighting Style' &&
-      f.name !== subclassChoiceFeatureName &&
-      !(isDivineSmiteClass && f.name === "Paladin's Smite") &&
-      !(isMetamagicClass && f.name === 'Metamagic') &&
-      !(isWarlockClass && f.name === 'Eldritch Invocations') &&
-      !(isWarlockClass && MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === f.name)) &&
-      !(isWizardClass && f.name === 'Spell Mastery') &&
-      !(isWizardClass && f.name === 'Signature Spells') &&
-      !(isBardClass && f.name === 'Magical Secrets')
-  )
-  const resolvedMetamagic = isMetamagicClass
-    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Metamagic' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    : []
-  const unresolvedMetamagicCount = isMetamagicClass ? Math.max(0, metamagicSlotCountAtLevel(classLevel.level) - resolvedMetamagic.length) : 0
-  const resolvedInvocations = isWarlockClass
-    ? character.subclassFeatureChoices.filter(
-        (c) => c.featureName === 'Eldritch Invocation' && c.className.toLowerCase() === classLevel.className.toLowerCase()
-      )
-    : []
-  const knownSpellIds = new Set(character.spells.map((s) => s.compendiumId).filter((id): id is string => !!id))
-  const availableInvocations = isWarlockClass
-    ? ELDRITCH_INVOCATIONS.filter(
-        (o) =>
-          o.level <= classLevel.level &&
-          (!o.prereqInvocation || resolvedInvocations.some((r) => r.chosenName === o.prereqInvocation)) &&
-          (!o.prereqSpell || knownSpellIds.has(o.prereqSpell)) &&
-          !resolvedInvocations.some((r) => r.chosenName === o.name)
-      )
-    : []
-  const unresolvedInvocationCount = isWarlockClass
-    ? Math.max(0, Math.min(eldritchInvocationSlotCountAtLevel(classLevel.level) - resolvedInvocations.length, availableInvocations.length))
-    : 0
-  const unresolvedMysticArcana = isWarlockClass
-    ? MYSTIC_ARCANUM_LEVELS.filter(
-        (m) =>
-          classLevel.level >= m.charLevel &&
-          !character.subclassFeatureChoices.some(
-            (c) => c.featureName === m.featureName && c.className.toLowerCase() === classLevel.className.toLowerCase()
-          )
-      )
-    : []
-  const resolvedMysticArcana = isWarlockClass
-    ? character.subclassFeatureChoices.filter(
-        (c) => MYSTIC_ARCANUM_LEVELS.some((m) => m.featureName === c.featureName) && c.className.toLowerCase() === classLevel.className.toLowerCase()
-      )
-    : []
-  // Spell Mastery/Signature Spells pick from the wizard's OWN known spells (not the full compendium) — a spell has
-  // to actually be in the spellbook before it can be designated "always castable without a slot."
-  const knownSpellsByLevel = (lvl: number): { name: string; description: string }[] =>
-    character.spells.filter((s) => s.level === lvl).map((s) => ({ name: s.name, description: s.description }))
-  const resolvedSpellMastery = isWizardClass
-    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Spell Mastery' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    : []
-  const spellMasteryUnresolvedLevels = isWizardClass && classLevel.level >= 18 ? [1, 2].filter((lvl) => !resolvedSpellMastery.some((c) => knownSpellsByLevel(lvl).some((s) => s.name === c.chosenName))) : []
-  const resolvedSignatureSpells = isWizardClass
-    ? character.subclassFeatureChoices.filter(
-        (c) => c.featureName === 'Signature Spells' && c.className.toLowerCase() === classLevel.className.toLowerCase()
-      )
-    : []
-  const unresolvedSignatureSpellsCount = isWizardClass && classLevel.level >= 20 ? Math.max(0, 2 - resolvedSignatureSpells.length) : 0
-
-  // Bard Magical Secrets — under SRD 5.2.1 this is a single grant of 2
-  // spells of any level you can cast (any class list) at 10th level, not
-  // 2014's repeated grant at 14th and 18th; they don't count against your
-  // normal spells known (RAW), so granted picks are marked `free`, same
-  // treatment as Magic Initiate's/Circle Spells' grants.
-  const resolvedMagicalSecrets = isBardClass
-    ? character.subclassFeatureChoices.filter((c) => c.featureName === 'Magical Secrets' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    : []
-  // Both picks unlock at 10th level — the level each still-open pick unlocked at, in order.
-  const magicalSecretsSlotLevels = isBardClass ? (classLevel.level >= 10 ? [10, 10] : []) : []
-  const unresolvedMagicalSecretsLevels = magicalSecretsSlotLevels.slice(resolvedMagicalSecrets.length)
-  const bardMaxSpellLevel = isBardClass
-    ? spellSlotsForClassLevel(cls.id, classLevel.level).reduce((max, count, i) => (count > 0 ? i + 1 : max), 0)
-    : 0
-  const subclassOptions = subclassesForClass(cls.id)
-  const chosenSubclass = subclassOptions.find((s) => s.name === classLevel.subclass)
-  const groupedSubclassFeatures =
-    chosenSubclass && classLevel.subclass ? groupedSubclassFeaturesForLevelUp(cls.id, chosenSubclass.id, 0, classLevel.level) : []
-  const asiLevels = asiSlotLevelsUpToLevel(classLevel.className, classLevel.level)
-  const unresolvedAsiLevels = asiLevels.filter(
-    (level) => !character.asiSlotChoices.some((s) => s.level === level && s.className.toLowerCase() === classLevel.className.toLowerCase())
-  )
-  const fightingStyleLevels = fightingStyleSlotLevelsUpToLevel(classLevel.className, classLevel.level)
-  const unresolvedFightingStyleLevels = fightingStyleLevels.filter(
-    (level) => !character.asiSlotChoices.some((s) => s.level === level && s.className.toLowerCase() === classLevel.className.toLowerCase())
-  )
-  const chosenFightingStyleFeatIds = character.asiSlotChoices
-    .filter((s) => s.className.toLowerCase() === classLevel.className.toLowerCase() && s.kind === 'feat' && s.featId)
-    .map((s) => s.featId!)
-    .filter((id) => FEATS.find((f) => f.id === id)?.category === 'Fighting Style')
-  const additionalFightingStyleLevels = subclassFightingStyleSlotLevelsUpToLevel(cls.id, chosenSubclass?.id, classLevel.level)
-  const unresolvedAdditionalFightingStyleLevels = additionalFightingStyleLevels.filter(
-    (level) => !character.asiSlotChoices.some((s) => s.level === level && s.className.toLowerCase() === classLevel.className.toLowerCase())
-  )
-
-  // SRD 5.2.1's Ranger no longer has a Favored Enemy creature-type pick or a
-  // Favored Terrain pick at all (see CLASS_LEVEL_FEATURES's ranger entry) —
-  // these are read-only now, kept only so a character who picked one under
-  // the old 2014 rules still sees what they chose instead of it vanishing.
-  const resolvedFavoredEnemies = character.subclassFeatureChoices.filter(
-    (c) => c.featureName === 'Favored Enemy' && c.className.toLowerCase() === classLevel.className.toLowerCase()
-  )
-  const resolvedFavoredTerrains = character.subclassFeatureChoices.filter(
-    (c) => c.featureName === 'Favored Terrain' && c.className.toLowerCase() === classLevel.className.toLowerCase()
-  )
-
-  const isDruidClass = cls.id === 'druid'
-  const circleTerrainChoice = isDruidClass
-    ? character.subclassFeatureChoices.find((c) => c.featureName === 'Circle of the Land' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    : undefined
-  const circleTerrain = circleTerrainChoice?.chosenName.split(':')[1]?.trim()
-  const circleSpellLevels = circleTerrain ? circleSpellLevelsUpToLevel(circleTerrain, classLevel.level) : []
-  const grantedCircleSpellLevels = character.subclassFeatureChoices
-    .filter((c) => c.featureName === 'Circle Spells' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-    .map((c) => c.level)
-  const ungrantedCircleSpellLevels = circleSpellLevels.filter((entry) => !grantedCircleSpellLevels.includes(entry.level))
-
+  const isOwnFeature = (key: string): boolean =>
+    !key.includes('#') && ((!!classId && key.startsWith(`class:${classId}:`)) || (!!subclassId && key.startsWith(`subclass:${subclassId}:`)))
+  const features = derived.features.filter((f) => isOwnFeature(f.key))
+  const choices = derived.choices.filter((c) => !!classId && c.classId === classId)
   const customFeatures = character.customClassFeatures.filter(
     (f) => f.className.toLowerCase() === classLevel.className.toLowerCase() && f.level <= classLevel.level
   )
+  const subclassLevel = cls?.def.subclassLevel ?? Infinity
+  const subclassLabel = cls?.def.subclassLabel ?? 'Subclass'
+  const isDivineSmiteClass = cls?.fullId === 'srd-5.2.1:paladin' && classLevel.level >= 2
+  const needsSubclass = classLevel.level >= subclassLevel && !classLevel.subclass && subclasses.length > 0
 
-  const nothingYet =
-    curated.length === 0 &&
-    groupedSubclassFeatures.length === 0 &&
-    unresolvedAsiLevels.length === 0 &&
-    unresolvedFightingStyleLevels.length === 0 &&
-    customFeatures.length === 0 &&
-    resolvedMetamagic.length === 0 &&
-    unresolvedMetamagicCount === 0 &&
-    resolvedInvocations.length === 0 &&
-    unresolvedInvocationCount === 0 &&
-    unresolvedMysticArcana.length === 0 &&
-    resolvedMysticArcana.length === 0 &&
-    spellMasteryUnresolvedLevels.length === 0 &&
-    resolvedSpellMastery.length === 0 &&
-    unresolvedSignatureSpellsCount === 0 &&
-    resolvedSignatureSpells.length === 0 &&
-    unresolvedAdditionalFightingStyleLevels.length === 0 &&
-    resolvedFavoredEnemies.length === 0 &&
-    resolvedFavoredTerrains.length === 0 &&
-    ungrantedCircleSpellLevels.length === 0 &&
-    grantedCircleSpellLevels.length === 0 &&
-    resolvedMagicalSecrets.length === 0 &&
-    unresolvedMagicalSecretsLevels.length === 0 &&
-    !(classLevel.level >= cls.subclassLevel)
-
-  if (nothingYet) return null
+  if (features.length === 0 && choices.length === 0 && customFeatures.length === 0 && !needsSubclass && !classLevel.subclass) return null
 
   return (
     <div>
-      <div className="gb-label">
-        {classLevel.className} Features
-      </div>
+      <div className="gb-label">{classLevel.className} Features</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {curated.map((f) => (
+          {features.map((f) => (
             <InfoChip
-              key={`${f.level}:${f.name}`}
+              key={f.key}
               title={f.name === 'Sneak Attack' ? `Sneak Attack (${sneakAttackDice(classLevel.level)})` : f.name}
-              subtitle={`${classLevel.className} ${f.level}`}
+              subtitle={`${f.key.startsWith('subclass:') ? (subclass?.def.name ?? classLevel.subclass) : classLevel.className}${f.level !== undefined ? ` ${f.level}` : ''}`}
               description={f.description}
+              accent={f.key.startsWith('subclass:')}
             />
           ))}
-          {groupedSubclassFeatures
-            .filter((g) => g.kind === 'single')
-            .map((g) => {
-              const f = g.kind === 'single' ? g.feature : null
-              if (!f) return null
-              return <InfoChip key={`sc:${f.level}:${f.name}`} title={f.name} subtitle={`${classLevel.subclass} ${f.level}`} description={f.desc} accent />
-            })}
-          {groupedSubclassFeatures
-            .filter((g) => g.kind === 'choice')
-            .map((g) => {
-              if (g.kind !== 'choice') return null
-              const resolved = character.subclassFeatureChoices.find(
-                (c) => c.level === g.level && c.className.toLowerCase() === classLevel.className.toLowerCase() && c.featureName === g.baseName
-              )
-              if (!resolved) return null
-              const option = g.options.find((o) => o.name === resolved.chosenName)
-              return (
-                <InfoChip
-                  key={`scc:${g.level}:${g.baseName}`}
-                  title={`${g.baseName}: ${option?.label ?? resolved.chosenName}`}
-                  subtitle={`${classLevel.subclass} ${g.level}`}
-                  description={option?.desc ?? resolved.chosenName}
-                  accent
-                  onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(resolved.id)}
-                />
-              )
-            })}
-          {resolvedMetamagic.map((choice) => {
-            const option = METAMAGIC_OPTIONS.find((o) => o.name === choice.chosenName)
-            return (
-              <InfoChip
-                key={choice.id}
-                title={choice.chosenName}
-                subtitle={`Metamagic — ${classLevel.className} ${choice.level}`}
-                description={option?.description ?? ''}
-                accent
-                onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
-              />
-            )
-          })}
-          {resolvedInvocations.map((choice) => {
-            const option = ELDRITCH_INVOCATIONS.find((o) => o.name === choice.chosenName)
-            return (
-              <InfoChip
-                key={choice.id}
-                title={choice.chosenName}
-                subtitle={`Eldritch Invocation — ${classLevel.className} ${choice.level}`}
-                description={option?.description ?? ''}
-                accent
-                onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
-              />
-            )
-          })}
-          {resolvedMysticArcana.map((choice) => (
-            <InfoChip
-              key={choice.id}
-              title={choice.chosenName}
-              subtitle={`${choice.featureName} — ${classLevel.className} ${choice.level}`}
-              description={SPELLS.find((s) => s.name === choice.chosenName)?.description ?? ''}
-              accent
-              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
-            />
-          ))}
-          {[...resolvedSpellMastery, ...resolvedSignatureSpells].map((choice) => (
-            <InfoChip
-              key={choice.id}
-              title={choice.chosenName}
-              subtitle={`${choice.featureName} — ${classLevel.className} ${choice.level}`}
-              description={character.spells.find((s) => s.name === choice.chosenName)?.description ?? ''}
-              accent
-              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
-            />
-          ))}
-          {resolvedFavoredEnemies.map((choice) => (
-            <InfoChip
-              key={choice.id}
-              title={choice.chosenName}
-              subtitle={`Favored Enemy — ${classLevel.className} ${choice.level}`}
-              description={
-                (choice.chosenName.startsWith('Humanoids')
-                  ? FAVORED_ENEMY_OPTIONS.find((o) => o.name.startsWith('Humanoids'))
-                  : FAVORED_ENEMY_OPTIONS.find((o) => o.name === choice.chosenName)
-                )?.description ?? ''
-              }
-              accent
-              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
-            />
-          ))}
-          {resolvedFavoredTerrains.map((choice) => (
-            <InfoChip
-              key={choice.id}
-              title={choice.chosenName}
-              subtitle={`Favored Terrain — ${classLevel.className} ${choice.level}`}
-              description={FAVORED_TERRAIN_OPTIONS.find((o) => o.name === choice.chosenName)?.description ?? ''}
-              accent
-              onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
-            />
-          ))}
-          {isDruidClass &&
-            character.subclassFeatureChoices
-              .filter((c) => c.featureName === 'Circle Spells' && c.className.toLowerCase() === classLevel.className.toLowerCase())
-              .map((choice) => (
-                <InfoChip
-                  key={choice.id}
-                  title={`Circle Spells (${classLevel.subclass} ${choice.level})`}
-                  subtitle="Always prepared"
-                  description={choice.chosenName}
-                  accent
-                />
-              ))}
-          {resolvedMagicalSecrets.map((choice) => {
-            const compendium = SPELLS.find((s) => s.name === choice.chosenName)
-            return (
-              <InfoChip
-                key={choice.id}
-                title={choice.chosenName}
-                subtitle={`Magical Secrets — ${classLevel.className} ${choice.level}`}
-                description={compendium?.description ?? ''}
-                accent
-                onRemove={readOnly ? undefined : () => onRemoveSubclassFeatureChoice(choice.id)}
-              />
-            )
-          })}
           {customFeatures.map((f) => (
             <InfoChip key={f.id} title={f.name} subtitle={`${classLevel.className} ${f.level} (custom)`} description={f.description} />
           ))}
-          {classLevel.level >= cls.subclassLevel && classLevel.subclass && (
+          {classLevel.subclass && classLevel.level >= subclassLevel && (
             <InfoChip
-              title={classLevel.subclass}
-              subtitle={`${subclassChoiceFeatureName ?? 'Subclass'} — ${classLevel.className} ${cls.subclassLevel}`}
-              description={chosenSubclass?.flavor ?? `Your ${classLevel.className.toLowerCase()} subclass.`}
+              title={subclass?.def.name ?? classLevel.subclass}
+              subtitle={`${subclassLabel} — ${classLevel.className} ${subclassLevel}`}
+              description={subclass?.def.description || `Your ${classLevel.className.toLowerCase()} subclass.`}
               accent
             />
           )}
@@ -815,205 +383,18 @@ function ClassFeatureSection({
 
         {isDivineSmiteClass && <DivineSmiteCard character={character} onSave={onSave} readOnly={readOnly} />}
 
-        {classLevel.level >= cls.subclassLevel && !classLevel.subclass && subclassOptions.length > 0 && (
+        {needsSubclass && (
           <SubclassChooser
             classLabel={classLevel.className}
-            featureName={subclassChoiceFeatureName ?? 'Subclass'}
-            slotLevel={cls.subclassLevel}
-            options={subclassOptions}
+            featureName={subclassLabel}
+            slotLevel={subclassLevel}
+            options={subclasses.map((s) => ({ id: s.def.id, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
             readOnly={readOnly}
             onChoose={(name) => onChooseSubclass(classIndex, name)}
           />
         )}
 
-        {groupedSubclassFeatures
-          .filter((g) => g.kind === 'choice')
-          .map((g) => {
-            if (g.kind !== 'choice') return null
-            const resolved = character.subclassFeatureChoices.some(
-              (c) => c.level === g.level && c.className.toLowerCase() === classLevel.className.toLowerCase() && c.featureName === g.baseName
-            )
-            if (resolved) return null
-            return (
-              <SubclassFeatureOptionChooser
-                key={`scc-chooser:${g.level}:${g.baseName}`}
-                classLabel={classLevel.className}
-                subclassLabel={classLevel.subclass ?? ''}
-                level={g.level}
-                baseName={g.baseName}
-                intro={g.intro}
-                options={g.options}
-                readOnly={readOnly}
-                onChoose={(chosenName) =>
-                  onResolveSubclassFeatureChoice({ className: classLevel.className, level: g.level, featureName: g.baseName, chosenName })
-                }
-              />
-            )
-          })}
-
-        {unresolvedFightingStyleLevels.map((level) => (
-          <FightingStyleChooser
-            key={`fs:${level}`}
-            classLabel={classLevel.className}
-            level={level}
-            readOnly={readOnly}
-            onResolve={(entry) => onResolveAsi(entry)}
-          />
-        ))}
-
-        {unresolvedAdditionalFightingStyleLevels.map((level) => (
-          <FightingStyleChooser
-            key={`fs-additional:${level}`}
-            classLabel={classLevel.className}
-            level={level}
-            excludeFeatIds={chosenFightingStyleFeatIds}
-            readOnly={readOnly}
-            onResolve={(entry) => onResolveAsi(entry)}
-          />
-        ))}
-
-        {ungrantedCircleSpellLevels.map(({ level, spellIds }) => (
-          <CircleSpellsGrant
-            key={`circle-spells:${level}`}
-            classLabel={classLevel.className}
-            terrain={circleTerrain ?? ''}
-            level={level}
-            spellIds={spellIds}
-            readOnly={readOnly}
-            onGrant={() => {
-              const known = new Set(character.spells.map((s) => s.compendiumId).filter(Boolean))
-              const granted: Spell[] = spellIds
-                .filter((id) => !known.has(id))
-                .map((id) => getSpellById(id))
-                .filter((s): s is NonNullable<typeof s> => !!s)
-                .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action', compendiumId: s.id, free: true }))
-              const names = spellIds.map((id) => getSpellById(id)?.name).filter((n): n is string => !!n)
-              onSave({
-                spells: [...character.spells, ...granted],
-                subclassFeatureChoices: [
-                  ...character.subclassFeatureChoices,
-                  { id: crypto.randomUUID(), className: classLevel.className, level, featureName: 'Circle Spells', chosenName: names.join(', ') }
-                ]
-              })
-            }}
-          />
-        ))}
-
-        {unresolvedMagicalSecretsLevels.map((level, i) => (
-          <MagicalSecretsChooser
-            key={`magical-secrets:${resolvedMagicalSecrets.length + i}`}
-            classLabel={classLevel.className}
-            level={level}
-            maxSpellLevel={bardMaxSpellLevel}
-            excludeSpellNames={resolvedMagicalSecrets.map((c) => c.chosenName)}
-            readOnly={readOnly}
-            onChoose={(spellId) => {
-              const spell = getSpellById(spellId)
-              if (!spell) return
-              onSave({
-                spells: [
-                  ...character.spells,
-                  { id: crypto.randomUUID(), name: spell.name, level: spell.level, description: '', actionType: 'action', compendiumId: spell.id, free: true }
-                ],
-                subclassFeatureChoices: [
-                  ...character.subclassFeatureChoices,
-                  { id: crypto.randomUUID(), className: classLevel.className, level, featureName: 'Magical Secrets', chosenName: spell.name }
-                ]
-              })
-            }}
-          />
-        ))}
-
-        {unresolvedAsiLevels.map((level) => (
-          <AsiSlotChooser
-            key={`asi:${level}`}
-            classLabel={classLevel.className}
-            level={level}
-            abilityScores={effectiveScores(deriveSheet(character).derived)}
-            readOnly={readOnly}
-            onResolve={(entry) => onResolveAsi(entry)}
-          />
-        ))}
-
-        {Array.from({ length: unresolvedMetamagicCount }).map((_, i) => (
-          <NamedOptionChooser
-            key={`metamagic:${resolvedMetamagic.length + i}`}
-            classLabel={classLevel.className}
-            level={metamagicSlotUnlockLevel(resolvedMetamagic.length + i)}
-            featureName="Metamagic"
-            options={METAMAGIC_OPTIONS}
-            excludeNames={resolvedMetamagic.map((c) => c.chosenName)}
-            readOnly={readOnly}
-            onChoose={(chosenName) =>
-              onResolveSubclassFeatureChoice({
-                className: classLevel.className,
-                level: metamagicSlotUnlockLevel(resolvedMetamagic.length + i),
-                featureName: 'Metamagic',
-                chosenName
-              })
-            }
-          />
-        ))}
-
-        {Array.from({ length: unresolvedInvocationCount }).map((_, i) => (
-          <NamedOptionChooser
-            key={`invocation:${resolvedInvocations.length + i}`}
-            classLabel={classLevel.className}
-            level={classLevel.level}
-            featureName="Eldritch Invocation"
-            options={availableInvocations}
-            excludeNames={[]}
-            readOnly={readOnly}
-            onChoose={(chosenName) =>
-              onResolveSubclassFeatureChoice({ className: classLevel.className, level: classLevel.level, featureName: 'Eldritch Invocation', chosenName })
-            }
-          />
-        ))}
-
-        {unresolvedMysticArcana.map((m) => (
-          <NamedOptionChooser
-            key={m.featureName}
-            classLabel={classLevel.className}
-            level={m.charLevel}
-            featureName={m.featureName}
-            options={SPELLS.filter((s) => s.level === m.spellLevel && s.classes.some((c) => c.toLowerCase() === classLevel.className.toLowerCase())).map(
-              (s) => ({ name: s.name, description: s.description })
-            )}
-            excludeNames={[]}
-            readOnly={readOnly}
-            onChoose={(chosenName) =>
-              onResolveSubclassFeatureChoice({ className: classLevel.className, level: m.charLevel, featureName: m.featureName, chosenName })
-            }
-          />
-        ))}
-
-        {spellMasteryUnresolvedLevels.map((lvl) => (
-          <NamedOptionChooser
-            key={`spell-mastery:${lvl}`}
-            classLabel={classLevel.className}
-            level={18}
-            featureName={`Spell Mastery (${lvl === 1 ? '1st' : '2nd'}-level spell)`}
-            options={knownSpellsByLevel(lvl)}
-            excludeNames={[]}
-            readOnly={readOnly}
-            onChoose={(chosenName) => onResolveSubclassFeatureChoice({ className: classLevel.className, level: 18, featureName: 'Spell Mastery', chosenName })}
-          />
-        ))}
-
-        {Array.from({ length: unresolvedSignatureSpellsCount }).map((_, i) => (
-          <NamedOptionChooser
-            key={`signature-spell:${resolvedSignatureSpells.length + i}`}
-            classLabel={classLevel.className}
-            level={20}
-            featureName="Signature Spells"
-            options={knownSpellsByLevel(3).filter((s) => !resolvedSignatureSpells.some((r) => r.chosenName === s.name))}
-            excludeNames={[]}
-            readOnly={readOnly}
-            onChoose={(chosenName) =>
-              onResolveSubclassFeatureChoice({ className: classLevel.className, level: 20, featureName: 'Signature Spells', chosenName })
-            }
-          />
-        ))}
+        <ChoiceList choices={choices} all={derived.choices} readOnly={readOnly} onSetPicks={onSetPicks} />
       </div>
     </div>
   )
@@ -1102,105 +483,6 @@ export function DivineSmiteCard({
         </>
       )}
       {lastCast && <p style={{ fontSize: 11, color: 'var(--accent)', margin: '6px 0 0' }}>{lastCast}</p>}
-    </div>
-  )
-}
-
-/** Circle of the Land's "circle spells" aren't a choice (the two spells for a given terrain/level are fixed) — just a one-click grant once the terrain is known and the level threshold is reached, matching how a real player would just add them to their prepared list. */
-export function CircleSpellsGrant({
-  classLabel,
-  terrain,
-  level,
-  spellIds,
-  readOnly,
-  onGrant
-}: {
-  classLabel: string
-  terrain: string
-  level: number
-  spellIds: string[]
-  readOnly?: boolean
-  onGrant: () => void
-}): JSX.Element {
-  const names = spellIds.map((id) => SPELLS.find((s) => s.id === id)?.name ?? id)
-  return (
-    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
-      <strong>
-        Circle Spells — {classLabel} {level}
-      </strong>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
-        Your {terrain} circle grants {names.join(' and ')}, always prepared, at no cost against your normal spells known.
-      </div>
-      <Button variant="primary" onClick={onGrant} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
-        + Add to Spells
-      </Button>
-    </div>
-  )
-}
-
-/** Elf's Elven Lineage / Tiefling's Fiendish Legacy grant an always-prepared spell once the character reaches total level 3 or 5 (see FeaturesTab's unresolvedLineageSpellIds) — a one-click grant, same pattern as CircleSpellsGrant, since there's no player choice involved (the lineage already fixed which spell). */
-function LineageSpellGrant({ spellId, readOnly, onGrant }: { spellId: string; readOnly?: boolean; onGrant: () => void }): JSX.Element {
-  const spell = SPELLS.find((s) => s.id === spellId)
-  return (
-    <div className="gb-card" style={{ padding: 'var(--space-3)', marginTop: 6 }}>
-      <strong>Lineage Spell</strong>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
-        Your lineage grants {spell?.name ?? spellId}, always prepared, castable once per Long Rest without a slot — at no cost against your normal
-        spells known.
-      </div>
-      <Button variant="primary" onClick={onGrant} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
-        + Add to Spells
-      </Button>
-    </div>
-  )
-}
-
-/** Bard Magical Secrets — unlike Mystic Arcanum/Spell Mastery (which pick from spells the character already knows), this learns a brand-new spell from ANY class's list, so it needs its own picker over the full compendium rather than reusing NamedOptionChooser's fixed name/description list. */
-export function MagicalSecretsChooser({
-  classLabel,
-  level,
-  maxSpellLevel,
-  excludeSpellNames,
-  readOnly,
-  onChoose
-}: {
-  classLabel: string
-  level: number
-  maxSpellLevel: number
-  excludeSpellNames: string[]
-  readOnly?: boolean
-  onChoose: (spellId: string) => void
-}): JSX.Element {
-  const options = SPELLS.filter((s) => s.level <= maxSpellLevel && !excludeSpellNames.includes(s.name))
-  const [spellId, setSpellId] = useState(options[0]?.id ?? '')
-  const selected = options.find((s) => s.id === spellId)
-
-  return (
-    <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
-      <strong>
-        Magical Secrets — {classLabel} {level}
-      </strong>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>
-        Learn a spell of any level you can cast from any class's list — it doesn't count against your normal spells known.
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <select className="gb-input" value={spellId} onChange={(e) => setSpellId(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
-          {options.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} ({spellLevelLabel(s.level)})
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="primary"
-          onClick={() => spellId && onChoose(spellId)}
-          disabled={readOnly || !spellId}
-          style={{ flexShrink: 0, fontSize: 12, padding: '4px 10px' }}
-        >
-          Choose
-        </Button>
-      </div>
-      {selected && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selected.description}</p>}
     </div>
   )
 }

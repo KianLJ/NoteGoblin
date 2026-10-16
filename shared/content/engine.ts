@@ -176,6 +176,15 @@ export interface DerivedChoice {
   allowRepeats: boolean
   freeform: boolean
   options: DerivedChoiceOption[]
+  /** Key of the source that granted it (a class feature, species trait, picked feat…). */
+  sourceKey: string
+  /** Set when the choice hangs off another choice's pick (an ASI feat's ability scores) — that choice's key. */
+  parentKey?: string
+  /** Level of the class/subclass feature it came from, when it came from one. */
+  level?: number
+  /** The class it came from, when a class or subclass feature granted it. */
+  classId?: string
+  className?: string
 }
 
 export interface DerivedSpellcastingSource {
@@ -250,6 +259,8 @@ interface Source {
   name: string
   packId: string
   classCtx?: ClassContext
+  /** The class/subclass level of the feature this ultimately came from (carried down through picks), for "what did this level unlock". */
+  level?: number
   /** "Rage", "Darkvision"… shown on the sheet's Features list. */
   feature?: { description: string; level?: number }
 }
@@ -386,7 +397,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   }
 
   function collectToggle(toggle: ToggleDef, parent: Source, gates: Condition[]): void {
-    const source: Source = { key: `toggle:${toggle.id}`, name: toggle.name, packId: parent.packId, classCtx: parent.classCtx }
+    const source: Source = { key: `toggle:${toggle.id}`, name: toggle.name, packId: parent.packId, classCtx: parent.classCtx, level: parent.level }
     collectEffects(toggle.effects, source, [...gates, { kind: 'toggle', toggleId: toggle.id }])
   }
 
@@ -399,7 +410,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       const n = seen.get(pick) ?? 0
       seen.set(pick, n + 1)
       const pickKey = choiceKeys.pick(key, pick, n)
-      const pickSource: Source = { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx }
+      const pickSource: Source = { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx, level: parent.level }
       collectEffects(choice.onPick ? substitutePick(choice.onPick, pick) : [], pickSource, gates)
       collectPickedOption(choice, pick, pickKey, parent, gates)
     }
@@ -411,7 +422,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       const feat = registry.get('feats', pick, parent.packId)
       if (!feat) return warn(`Picked feat "${pick}" isn't in any enabled pack.`, pickKey)
       entryIds.add(feat.fullId)
-      const source: Source = { key: pickKey, name: feat.def.name, packId: feat.packId, classCtx: parent.classCtx, feature: { description: feat.def.description } }
+      const source: Source = { key: pickKey, name: feat.def.name, packId: feat.packId, classCtx: parent.classCtx, level: parent.level, feature: { description: feat.def.description } }
       addFeature(source, gates)
       collectEffects(feat.def.effects, source, gates)
     } else if (from.kind === 'optionList') {
@@ -420,7 +431,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       const option = list.def.options.find((o) => o.id === pick)
       if (!option) return warn(`"${pick}" isn't an option in ${list.def.name}.`, pickKey)
       entryIds.add(`${list.fullId}/${option.id}`)
-      const source: Source = { key: pickKey, name: option.name, packId: list.packId, classCtx: parent.classCtx, feature: { description: option.description } }
+      const source: Source = { key: pickKey, name: option.name, packId: list.packId, classCtx: parent.classCtx, level: parent.level, feature: { description: option.description } }
       addFeature(source, gates)
       collectEffects(option.effects, source, gates)
     } else if (from.kind === 'spells') {
@@ -429,7 +440,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       effects.push({
         action: { kind: 'grantSpells', spellIds: [spell.fullId], alwaysPrepared: false, free: true },
         gates,
-        source: { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx }
+        source: { key: pickKey, name: choice.label, packId: parent.packId, classCtx: parent.classCtx, level: parent.level }
       })
     }
   }
@@ -442,7 +453,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     classCtx?: ClassContext,
     level?: number
   ): void {
-    const source: Source = { key, name: def.name, packId, classCtx, feature: { description: def.description ?? '', level } }
+    const source: Source = { key, name: def.name, packId, classCtx, level, feature: { description: def.description ?? '', level } }
     addFeature(source, gates)
     collectEffects(def.effects, source, gates)
   }
@@ -1267,7 +1278,11 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       remaining: Math.max(0, count - picks.length),
       allowRepeats: !!choice.allowRepeats,
       freeform,
-      options
+      options,
+      sourceKey: source.key,
+      ...(source.key.includes('#') ? { parentKey: source.key.slice(0, source.key.lastIndexOf('/')) } : {}),
+      ...(source.level !== undefined ? { level: source.level } : {}),
+      ...(source.classCtx ? { classId: classes[source.classCtx.index].reg.fullId, className: classes[source.classCtx.index].reg.def.name } : {})
     })
   }
 
