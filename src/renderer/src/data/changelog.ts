@@ -7,6 +7,22 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.0',
+    title: 'Homebrew: content packs and the Homebrew Workshop',
+    highlights: [
+      'New Homebrew Workshop — the hammer button next to DM and Player mode — for making your own content packs: classes, subclasses, species, backgrounds, feats, spells, items, creatures and more, with forms for everything, a level-table grid for classes, and a starter shortcut for whatever you want to make first',
+      'Effects are added by saying what they should do ("a bonus to a number", "a pool of points", "+1 to an ability of their choice"…), formulas show what they work out to and read back in plain English, problems are explained in plain words with a Fix button where there\'s an obvious fix, and a test character beside the editor highlights what each change does',
+      'Simple mode keeps the Workshop uncluttered; tick Advanced for every option and the JSON views. A short tour walks you through it the first time',
+      'Content packs: import and export .ngpack.json files, and the DM enables packs per campaign from the new Content Packs button — players get them automatically, even offline. The DM pushes updates and chooses which pack wins when two rename the same thing',
+      'Homebrew works across the character sheet: pack classes, species and backgrounds in the creator and level-ups, pack skills, stats and counters on the Overview, actions where you choose how many points to spend, temporary points, short-rest recovery, toggles, companions and summons with their own HP and attacks, damage reduction, pack conditions and currencies, and renamed terms (like "Spell Slots" or an ability) throughout',
+      'The Codex has a Homebrew section for everything in your packs, pack spells and items can be added from the Spells and Inventory tabs, and creatures can live in packs — "Save to Bestiary" now saves into your own My Creatures pack, and creatures saved on this device can be moved into it',
+      'Choices are simpler: each card shows what you picked and a Choose / Change button, and the full list opens in its own window with search and each option\'s description. Ability score increases are a single row of six +/− buttons',
+      'New Damage and Heal buttons on the hit point box — damage comes off temporary HP first — and levelling down now lowers your HP too',
+      'A Randomize button for ability scores in the character creator, and icons throughout the app instead of emoji',
+      'Fixed a feat that can only be taken once (like Magic Initiate) being picked twice — once from a background and again from Human Versatile'
+    ]
+  },
+  {
     version: '0.5.16',
     title: 'Simpler choices and level-ups',
     highlights: [
