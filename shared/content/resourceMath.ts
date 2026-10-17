@@ -9,6 +9,14 @@ export interface ResourceState {
   resourceTemp: Record<string, number>
 }
 
+/** The temp map with this resource's temporary points set — the entry goes away entirely once they're all spent. */
+function withTemp(temps: Record<string, number>, id: string, n: number): Record<string, number> {
+  const next = { ...temps }
+  if (n > 0) next[id] = n
+  else delete next[id]
+  return next
+}
+
 /** Points left in a resource, temporary ones included. */
 export function resourceRemaining(resource: DerivedResource, state: ResourceState): number {
   const used = Math.min(state.resourceUsed[resource.id] ?? 0, resource.max)
@@ -24,7 +32,7 @@ export function spendResource(resource: DerivedResource, state: ResourceState, a
   const used = Math.min(state.resourceUsed[resource.id] ?? 0, resource.max) + (amount - fromTemp)
   return {
     resourceUsed: { ...state.resourceUsed, [resource.id]: used },
-    resourceTemp: { ...state.resourceTemp, [resource.id]: temp - fromTemp }
+    resourceTemp: withTemp(state.resourceTemp, resource.id, temp - fromTemp)
   }
 }
 
@@ -61,7 +69,7 @@ export function applyRestores(
     if (!resource) continue
     const amount = Math.max(0, r.value ?? rollAmount(r.amount, random))
     if (r.temporary) {
-      next = { ...next, resourceTemp: { ...next.resourceTemp, [r.resourceId]: Math.max(0, next.resourceTemp[r.resourceId] ?? 0) + amount } }
+      next = { ...next, resourceTemp: withTemp(next.resourceTemp, r.resourceId, Math.max(0, next.resourceTemp[r.resourceId] ?? 0) + amount) }
     } else {
       const used = Math.min(next.resourceUsed[r.resourceId] ?? 0, resource.max)
       next = { ...next, resourceUsed: { ...next.resourceUsed, [r.resourceId]: Math.max(0, used - amount) } }
@@ -79,7 +87,24 @@ export function restResources(kind: 'short' | 'long', resources: DerivedResource
     if (refills) resourceUsed[r.id] = 0
     else if (kind === 'short' && r.shortRestRegain) resourceUsed[r.id] = Math.max(0, (resourceUsed[r.id] ?? 0) - r.shortRestRegain)
   }
-  const resourceTemp: Record<string, number> = {}
-  for (const id of Object.keys(state.resourceTemp)) resourceTemp[id] = 0
-  return { resourceUsed, resourceTemp }
+  // Any rest clears temporary points.
+  return { resourceUsed, resourceTemp: {} }
+}
+
+/** Gives back up to `amount` spent points (never above the maximum; temporary points are untouched). */
+export function restoreResource(resource: DerivedResource, state: ResourceState, amount: number): ResourceState {
+  const used = Math.min(state.resourceUsed[resource.id] ?? 0, resource.max)
+  return { ...state, resourceUsed: { ...state.resourceUsed, [resource.id]: Math.max(0, used - Math.max(0, amount)) } }
+}
+
+/** Sets how many regular points are used (a uses-box click), leaving temporary points as they are. */
+export function setResourceUsed(resource: DerivedResource, state: ResourceState, used: number): ResourceState {
+  return { ...state, resourceUsed: { ...state.resourceUsed, [resource.id]: Math.max(0, Math.min(resource.max, used)) } }
+}
+
+/** Removes `amount` temporary points (all of them when omitted). */
+export function removeTempPoints(resource: DerivedResource, state: ResourceState, amount?: number): ResourceState {
+  const temp = Math.max(0, state.resourceTemp[resource.id] ?? 0)
+  const next = amount === undefined ? 0 : Math.max(0, temp - amount)
+  return { ...state, resourceTemp: withTemp(state.resourceTemp, resource.id, next) }
 }

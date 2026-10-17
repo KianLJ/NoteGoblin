@@ -1,8 +1,9 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { sneakAttackDice, type CharacterSheetData, type ClassLevel, type Feature } from '@shared/dnd5e'
 import { spellSlotsForClasses } from '@shared/compendium'
-import type { DerivedChoice, DerivedToggle } from '@shared/content/engine'
+import type { DerivedChoice, DerivedResource, DerivedToggle } from '@shared/content/engine'
+import { removeTempPoints, resourceRemaining, restoreResource, setResourceUsed, spendResource, type ResourceState } from '@shared/content/resourceMath'
 import { deriveSheet, normalizeForActivePacks } from '@shared/content/sheet'
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
@@ -15,6 +16,7 @@ import { XIcon } from '../../../ui/icons'
 
 interface ResourcesDraft {
   resourceUsed: Record<string, number>
+  resourceTemp: Record<string, number>
 }
 
 interface FeaturesDraft {
@@ -98,7 +100,7 @@ function InfoChip({
  */
 export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: FeaturesTabProps): JSX.Element {
   const [resourceDraft, setResourceDraft] = useAutosaveDraft<ResourcesDraft>(
-    { resourceUsed: character.resourceUsed },
+    { resourceUsed: character.resourceUsed, resourceTemp: character.resourceTemp ?? {} },
     onSave,
     readOnly
   )
@@ -116,20 +118,24 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
   // Picks kept from older sheets with nowhere else to go (2014 Favored Enemy/Terrain) — shown, not editable.
   const otherChoices = derived.choices.filter((c) => c.sourceKey.startsWith('custom:'))
 
-  function setUsed(id: string, used: number, max: number): void {
-    setResourceDraft((prev) => ({ resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
+  function commitResources(state: ResourceState): void {
+    setResourceDraft(() => ({ resourceUsed: state.resourceUsed, resourceTemp: state.resourceTemp }))
   }
 
   /** Activating spends the toggle's cost from this resource (so Rage's uses tracker and its "active" state never drift apart) — deactivating never refunds it, matching how raging doesn't give the use back when it ends. Plays (and, at the table, broadcasts) the toggle's own sound cue on activation only — see playAbilitySfx. */
-  function toggleBuff(toggle: DerivedToggle, currentUsed: number, max: number): void {
+  function toggleBuff(toggle: DerivedToggle, resource: DerivedResource): void {
     if (readOnly) return
     if (character.activeBuffs.includes(toggle.id)) {
       onSave({ activeBuffs: character.activeBuffs.filter((id) => id !== toggle.id) })
       return
     }
     const cost = toggle.cost?.amount ?? 0
-    if (max - currentUsed < cost) return
-    if (cost) setUsed(toggle.cost!.resourceId, currentUsed + cost, max)
+    if (cost) {
+      // Temporary points are spent first, like any other spend.
+      const next = spendResource(resource, resourceDraft, cost)
+      if (!next) return
+      commitResources(next)
+    }
     playAbilitySfx(toggle.name, sessionId)
     onSave({ activeBuffs: [...character.activeBuffs, toggle.id] })
   }
@@ -155,8 +161,7 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
             {resources.map((r) => {
-              const used = Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)
-              const remaining = r.max - used
+              const remaining = resourceRemaining(r, resourceDraft)
               const toggle = derived.toggles.find((t) => t.cost?.resourceId === r.id)
               const active = !!toggle && character.activeBuffs.includes(toggle.id)
               const cost = toggle?.cost?.amount ?? 0
@@ -179,16 +184,12 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
                       Recharges: {RECHARGE_LABEL[r.recharge] ?? r.recharge}
                     </p>
 
-                    {r.display === 'uses' ? (
-                      <UsesTracker max={r.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={(n) => setUsed(r.id, n, r.max)} />
-                    ) : (
-                      <PoolTracker max={r.max} used={used} remaining={remaining} readOnly={readOnly} onSetUsed={(n) => setUsed(r.id, n, r.max)} />
-                    )}
+                    <ResourceTracker resource={r} state={resourceDraft} readOnly={readOnly} onChange={commitResources} />
 
                     {toggle && (
                       <Button
                         variant={active ? 'secondary' : 'primary'}
-                        onClick={() => toggleBuff(toggle, used, r.max)}
+                        onClick={() => toggleBuff(toggle, r)}
                         disabled={readOnly || (!active && remaining < cost)}
                         style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 10px' }}
                         title={active ? `End ${toggle.name} — its bonuses stop applying immediately` : `Activate ${toggle.name} — applies its bonuses across the sheet until you end it`}
@@ -504,24 +505,87 @@ export function DivineSmiteCard({
   )
 }
 
-export function UsesTracker({
+/**
+ * A resource's tracker with temporary points counted in: boxes for a
+ * "uses" resource (temporary points are extra dashed boxes after them), or
+ * a number with Spend / Restore for a pool. Spending always takes
+ * temporary points first; Restore only gives back spent regular points;
+ * temporary points can be cleared with the X on their badge. Every change
+ * comes back as a whole new state through onChange.
+ */
+export function ResourceTracker({
+  resource,
+  state,
+  readOnly,
+  onChange
+}: {
+  resource: DerivedResource
+  state: ResourceState
+  readOnly?: boolean
+  onChange: (state: ResourceState) => void
+}): JSX.Element {
+  const used = Math.min(state.resourceUsed[resource.id] ?? 0, resource.max)
+  const temp = Math.max(0, state.resourceTemp[resource.id] ?? 0)
+  const tempBadge =
+    temp > 0 ? (
+      <span className="gb-badge gb-badge--accent" style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }} title="Temporary points: spent first, gone on a rest">
+        +{temp} temp
+        {!readOnly && (
+          <button type="button" onClick={() => onChange(removeTempPoints(resource, state))} title="Remove the temporary points" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'inline-flex' }}>
+            <XIcon size={9} />
+          </button>
+        )}
+      </span>
+    ) : null
+  return resource.display === 'uses' ? (
+    <UsesTracker
+      max={resource.max}
+      used={used}
+      temp={temp}
+      readOnly={readOnly}
+      onSetUsed={(n) => onChange(setResourceUsed(resource, state, n))}
+      onSpendTemp={() => onChange(removeTempPoints(resource, state, 1))}
+      badge={tempBadge}
+    />
+  ) : (
+    <PoolTracker
+      max={resource.max}
+      used={used}
+      temp={temp}
+      readOnly={readOnly}
+      onSpend={(n) => {
+        const next = spendResource(resource, state, n)
+        if (next) onChange(next)
+      }}
+      onRestore={(n) => onChange(restoreResource(resource, state, n))}
+      badge={tempBadge}
+    />
+  )
+}
+
+function UsesTracker({
   max,
   used,
-  remaining,
+  temp,
   readOnly,
-  onSetUsed
+  onSetUsed,
+  onSpendTemp,
+  badge
 }: {
   max: number
   used: number
-  remaining: number
+  temp: number
   readOnly?: boolean
   onSetUsed: (used: number) => void
+  onSpendTemp: () => void
+  badge: ReactNode
 }): JSX.Element {
   // A rage-at-20 style "unlimited" max renders as a plain counter instead
   // of 99 individual pips, which would just be noise.
   if (max > 20) {
     return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Unlimited</span>
   }
+  const box = { width: 16, height: 16, borderRadius: 3, padding: 0, cursor: readOnly ? 'default' : 'pointer' } as const
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
@@ -530,75 +594,65 @@ export function UsesTracker({
             key={i}
             type="button"
             disabled={readOnly}
-            onClick={() => onSetUsed(i < used ? i : i + 1)}
-            title={i < used ? 'Used' : 'Available'}
-            style={{
-              width: 16,
-              height: 16,
-              border: '1.5px solid var(--border-strong)',
-              borderRadius: 3,
-              background: i < used ? 'transparent' : 'var(--accent)',
-              cursor: readOnly ? 'default' : 'pointer',
-              padding: 0
-            }}
+            onClick={() => (i >= used && temp > 0 ? onSpendTemp() : onSetUsed(i < used ? i : i + 1))}
+            title={i < used ? 'Used' : temp > 0 ? 'Available — using one spends a temporary point first' : 'Available'}
+            style={{ ...box, border: '1.5px solid var(--border-strong)', background: i < used ? 'transparent' : 'var(--accent)' }}
           />
+        ))}
+        {Array.from({ length: Math.min(temp, 20) }, (_, i) => (
+          <button key={`t${i}`} type="button" disabled={readOnly} onClick={onSpendTemp} title="Temporary — click to spend" style={{ ...box, border: '1.5px dashed var(--accent)', background: 'var(--accent-subtle)' }} />
         ))}
       </div>
       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        {remaining} / {max}
+        {max - used + temp} / {max}
       </span>
+      {badge}
     </div>
   )
 }
 
-export function PoolTracker({
+function PoolTracker({
   max,
   used,
-  remaining,
+  temp,
   readOnly,
-  onSetUsed
+  onSpend,
+  onRestore,
+  badge
 }: {
   max: number
   used: number
-  remaining: number
+  temp: number
   readOnly?: boolean
-  onSetUsed: (used: number) => void
+  onSpend: (amount: number) => void
+  onRestore: (amount: number) => void
+  badge: ReactNode
 }): JSX.Element {
   const [amount, setAmount] = useState(1)
+  const available = max - used + temp
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)', minWidth: 56 }}>
-        {remaining} / {max}
-      </span>
-      <input
-        type="number"
-        min={1}
-        max={max}
-        className="gb-input"
-        value={amount}
-        disabled={readOnly}
-        onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 1))}
-        style={{ width: 52, fontSize: 12 }}
-      />
-      <button
-        type="button"
-        disabled={readOnly || remaining < amount}
-        onClick={() => onSetUsed(used + amount)}
-        className="gb-btn gb-btn--secondary"
-        style={spendButtonStyle}
-      >
-        Spend
-      </button>
-      <button
-        type="button"
-        disabled={readOnly || used <= 0}
-        onClick={() => onSetUsed(Math.max(0, used - amount))}
-        className="gb-btn gb-btn--secondary"
-        style={spendButtonStyle}
-        title="Restore this many points"
-      >
-        Restore
-      </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)', minWidth: 56 }} title={temp ? `${max - used} regular + ${temp} temporary` : undefined}>
+          {available} / {max}
+        </span>
+        <input
+          type="number"
+          min={1}
+          className="gb-input"
+          value={amount}
+          disabled={readOnly}
+          onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 1))}
+          style={{ width: 52, fontSize: 12 }}
+        />
+        <button type="button" disabled={readOnly || available < amount} onClick={() => onSpend(amount)} className="gb-btn gb-btn--secondary" style={spendButtonStyle} title="Spend this many (temporary points first)">
+          Spend
+        </button>
+        <button type="button" disabled={readOnly || used <= 0} onClick={() => onRestore(amount)} className="gb-btn gb-btn--secondary" style={spendButtonStyle} title="Restore this many spent points">
+          Restore
+        </button>
+      </div>
+      {badge}
     </div>
   )
 }

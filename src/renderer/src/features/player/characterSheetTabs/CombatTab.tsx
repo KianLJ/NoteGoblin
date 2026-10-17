@@ -29,7 +29,7 @@ import { useTerms } from '../../content/terms'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import { SpellsTab } from './SpellsTab'
-import { DivineSmiteCard, FeaturesTab, PoolTracker, UsesTracker } from './FeaturesTab'
+import { DivineSmiteCard, FeaturesTab, ResourceTracker } from './FeaturesTab'
 import type { DetailField } from '../CompendiumDetailModal'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { EntryCard, EntryCardTitle } from '../EntryCard'
@@ -166,10 +166,6 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
 
   function patch(fields: Partial<CombatDraft>): void {
     setDraft((prev) => ({ ...prev, ...fields }))
-  }
-
-  function setResourceUsed(id: string, used: number, max: number): void {
-    setResourceDraft((prev) => ({ ...prev, resourceUsed: { ...prev.resourceUsed, [id]: Math.max(0, Math.min(used, max)) } }))
   }
 
   function commitResources(state: ResourceState): void {
@@ -676,11 +672,10 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                     key={r.id}
                     resource={r}
                     toggle={toggle}
-                    used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)}
-                    temp={resourceDraft.resourceTemp[r.id] ?? 0}
+                    state={resourceDraft}
                     active={!!toggle && character.activeBuffs.includes(toggle.id)}
                     readOnly={readOnly}
-                    onSetUsed={(n) => setResourceUsed(r.id, n, r.max)}
+                    onChange={commitResources}
                     onToggle={() => toggle && toggleBuff(toggle)}
                   />
                 )
@@ -702,11 +697,10 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                     key={r.id}
                     resource={r}
                     toggle={toggle}
-                    used={Math.min(resourceDraft.resourceUsed[r.id] ?? 0, r.max)}
-                    temp={resourceDraft.resourceTemp[r.id] ?? 0}
+                    state={resourceDraft}
                     active={!!toggle && character.activeBuffs.includes(toggle.id)}
                     readOnly={readOnly}
-                    onSetUsed={(n) => setResourceUsed(r.id, n, r.max)}
+                    onChange={commitResources}
                     onToggle={() => toggle && toggleBuff(toggle)}
                   />
                 )
@@ -939,25 +933,23 @@ function CompanionCard({
 function ResourceCard({
   resource,
   toggle,
-  used,
-  temp,
+  state,
   active,
   readOnly,
-  onSetUsed,
+  onChange,
   onToggle
 }: {
   resource: DerivedResource
   /** The toggle that spends this resource (Rage), if any — gives the card its Activate/End button. */
   toggle?: DerivedToggle
-  used: number
-  /** Temporary points on top of the max. */
-  temp: number
+  /** Used and temporary points (this tab's draft). */
+  state: ResourceState
   active: boolean
   readOnly?: boolean
-  onSetUsed: (used: number) => void
+  onChange: (state: ResourceState) => void
   onToggle: () => void
 }): JSX.Element {
-  const remaining = resource.max - used + temp
+  const remaining = resourceRemaining(resource, state)
   const cost = toggle?.cost?.amount ?? 0
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
@@ -969,21 +961,12 @@ function ResourceCard({
               Active
             </span>
           )}
-          {temp > 0 && (
-            <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }} title="Temporary points, spent first and lost on a rest">
-              +{temp} temp
-            </span>
-          )}
           <span className="gb-badge" style={{ fontSize: 10 }}>
             {resource.className ?? resource.source}
           </span>
         </div>
       </HoverDetailCard>
-      {resource.display === 'uses' ? (
-        <UsesTracker max={resource.max} used={used} remaining={resource.max - used} readOnly={readOnly} onSetUsed={onSetUsed} />
-      ) : (
-        <PoolTracker max={resource.max} used={used} remaining={resource.max - used} readOnly={readOnly} onSetUsed={onSetUsed} />
-      )}
+      <ResourceTracker resource={resource} state={state} readOnly={readOnly} onChange={onChange} />
       {resource.shortRestRegain ? (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Short rest: regain {resource.shortRestRegain}</div>
       ) : null}

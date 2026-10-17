@@ -37,6 +37,7 @@ import { playSfx } from '../../audio/soundEffects'
 import { ChoiceList, useChoiceEditor } from '../ChoiceCards'
 import { usePickerContent } from '../../content/pickerContent'
 import { AbilityIcon, ExhaustionIcon, HeartIcon, InitiativeIcon, MoonIcon, PencilIcon, ShieldIcon, SpeedIcon, StarIcon, SunIcon } from './icons'
+import { applyDamage, applyHealing, hpAfterMaxChange } from '@shared/hitPoints'
 
 interface OverviewDraft {
   race: string
@@ -177,7 +178,6 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   const derivedSheet = useDerivedSheet(liveSheet)
   const { derived } = derivedSheet
   const effScores = effectiveScores(derived)
-  const notes = derived.notes
   const abilityCheckAdvantage = derived.checkModes
   const initiativeAdvantage = derived.initiativeMode
   const maxHp = derived.maxHp
@@ -197,10 +197,12 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     const nextClasses = draft.classes.map((c, i) => (i === index ? { ...c, ...fields } : c))
     const updates: Partial<OverviewDraft> = { classes: nextClasses }
 
-    if (fields.level !== undefined && fields.level > prev.level) {
-      const prevMax = maxHp
+    // Any change that moves max HP (a level up, a level down, a different class) moves current HP with it.
+    if (fields.level !== undefined || fields.className !== undefined) {
       const newMax = maxHpWith({ classes: nextClasses })
-      updates.currentHp = draft.currentHp + (newMax - prevMax)
+      if (newMax !== maxHp) updates.currentHp = hpAfterMaxChange(draft.currentHp, maxHp, newMax)
+    }
+    if (fields.level !== undefined && fields.level > prev.level) {
       playSfx('levelUp')
       onLevelUp?.(prev.className || fields.className || '', prev.level, fields.level)
     }
@@ -213,7 +215,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
     const prevMax = maxHp
     const nextScores = { ...draft.abilityScores, [ability]: value }
     const newMax = maxHpWith({ abilityScores: nextScores })
-    patch({ abilityScores: nextScores, currentHp: Math.max(0, draft.currentHp + (newMax - prevMax)) })
+    patch({ abilityScores: nextScores, currentHp: hpAfterMaxChange(draft.currentHp, prevMax, newMax) })
   }
 
   /** Every active bonus currently bumping one ability score — an ASI slot's flat increase, or a feat's fixed/chosen ability bonus — used both for the little hover tag on each ability card and for the removable list shown in edit mode. Removing one here deletes the underlying asiSlotChoices record (same effect as removing it from Features), since that record is the only place this bump lives. */
@@ -656,9 +658,10 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
               className="gb-input"
               style={{ width: 40, textAlign: 'center', fontSize: 11, padding: '1px 4px' }}
               value={draft.tempHp}
-              onChange={(e) => patch({ tempHp: Number(e.target.value) })}
+              onChange={(e) => patch({ tempHp: Math.max(0, Number(e.target.value) || 0) })}
             />
           </div>
+          {!readOnly && <DamageHealControl onDamage={(n) => patch(applyDamage(draft, n))} onHeal={(n) => patch(applyHealing(draft, n, maxHp))} />}
         </div>
 
         {draft.currentHp <= 0 && (
@@ -693,10 +696,11 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         <Divider />
 
         <ResistancesSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} />
-
-        <PackTraitsSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} />
         </div>
       </div>
+
+      {/* What the content packs add (ability aliases, counters, stats, conditions…) — its own row, each in its own card. */}
+      <PackTraitsSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} />
 
       {additionalClasses.length > 0 && (
         <div>
@@ -763,7 +767,10 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                   />
                   <button
                     type="button"
-                    onClick={() => patch({ classes: draft.classes.filter((_, idx) => idx !== i) })}
+                    onClick={() => {
+                      const nextClasses = draft.classes.filter((_, idx) => idx !== i)
+                      patch({ classes: nextClasses, currentHp: hpAfterMaxChange(draft.currentHp, maxHp, maxHpWith({ classes: nextClasses })) })
+                    }}
                     style={removeBtnStyle}
                   >
                     <XIcon size={12} />
@@ -783,20 +790,6 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
       >
         + Add Class (Multiclass)
       </button>
-
-      {notes.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {notes.map((n, i) => (
-            <div
-              key={i}
-              className="gb-card"
-              style={{ padding: 'var(--space-2) var(--space-3)', borderColor: 'var(--accent)', fontSize: 12 }}
-            >
-              <strong style={{ color: 'var(--accent-hover)' }}>{n.source}.</strong> {n.text}
-            </div>
-          ))}
-        </div>
-      )}
 
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -1392,6 +1385,41 @@ function DeathSaveRow({ label, count, onChange }: { label: string; count: number
     </div>
   )
 }
+
+/** An amount with Damage and Heal: damage comes off temporary HP first, healing stops at max HP. */
+function DamageHealControl({ onDamage, onHeal }: { onDamage: (n: number) => void; onHeal: (n: number) => void }): JSX.Element {
+  const [amount, setAmount] = useState('')
+  const n = Number(amount)
+  const valid = Number.isFinite(n) && n > 0
+  const act = (fn: (n: number) => void): void => {
+    if (!valid) return
+    fn(n)
+    setAmount('')
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }}>
+      <input
+        type="number"
+        min={1}
+        className="gb-input"
+        placeholder="0"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && act(onDamage)}
+        style={{ width: 44, textAlign: 'center', fontSize: 11, padding: '1px 4px' }}
+        aria-label="Damage or healing amount"
+      />
+      <button type="button" className="gb-btn gb-btn--secondary" disabled={!valid} onClick={() => act(onDamage)} style={hpButtonStyle} title="Take this much damage (temporary HP first)">
+        Damage
+      </button>
+      <button type="button" className="gb-btn gb-btn--secondary" disabled={!valid} onClick={() => act(onHeal)} style={hpButtonStyle} title="Heal this much (up to max HP)">
+        Heal
+      </button>
+    </div>
+  )
+}
+
+const hpButtonStyle: CSSProperties = { fontSize: 10, padding: '2px 6px' }
 
 function Divider(): JSX.Element {
   return <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-subtle)' }} />
