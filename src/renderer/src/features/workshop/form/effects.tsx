@@ -1,11 +1,17 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import type { AbilityId } from '@shared/content/schema'
+import { slugify } from '@shared/content/workshop'
 import { AttackFilterEditor, OptionalCondition } from './conditions'
 import {
   ABILITIES,
   AbilityChips,
   AbilitySelect,
   AddButton,
+  Advanced,
+  FormContext,
+  ScopeContext,
+  TargetPicker,
+  useAdvanced,
   Check,
   Field,
   FormulaInput,
@@ -167,16 +173,109 @@ export function effectSummary(effect: Obj): string {
   return effect.when ? `${text} (conditional)` : text
 }
 
-/** A list of effects. */
+interface Recipe {
+  id: string
+  label: string
+  hint: string
+  group: string
+  make: () => Obj
+  advanced?: boolean
+}
+
+/**
+ * What people usually want an effect to do, in plain words — each one
+ * starts a ready-filled effect that only needs its blanks filled in. The
+ * full Kind list is still there on the effect itself.
+ */
+const RECIPES: Recipe[] = [
+  { id: 'bonus', group: 'Numbers', label: 'A bonus to a number', hint: 'AC, HP, speed, a skill, a save, an ability score…', make: () => ({ do: { kind: 'modify', target: 'ac', op: 'add', value: '1' } }) },
+  { id: 'ac', group: 'Numbers', label: 'A new way to work out AC', hint: 'Like Unarmored Defense: 10 + DEX + CON', make: () => ({ do: { kind: 'acFormula', label: 'Unarmored Defense', formula: '10 + @dex.mod + @con.mod' } }) },
+  { id: 'proficiency', group: 'Numbers', label: 'Proficiency or expertise', hint: 'A skill, a save, armor, weapons, a tool or language', make: () => ({ do: { kind: 'proficiency', category: 'skill', value: '' } }) },
+  { id: 'advantage', group: 'Numbers', label: 'Advantage or disadvantage', hint: 'On attacks, a skill, a save, initiative…', make: () => ({ do: { kind: 'rollMode', target: 'attack', mode: 'advantage' } }) },
+  { id: 'resistance', group: 'Defence', label: 'Resistance or immunity to damage', hint: 'Half (or no) damage of one type', make: () => ({ do: { kind: 'damageRelation', damageType: 'fire', relation: 'resistance' } }) },
+  { id: 'reduction', group: 'Defence', label: 'Take less damage from each hit', hint: 'A flat amount off every hit', make: () => ({ do: { kind: 'damageReduction', amount: '@prof' } }) },
+  { id: 'conditionImmunity', group: 'Defence', label: "Can't be given a condition", hint: 'Charmed, frightened, poisoned…', make: () => ({ do: { kind: 'conditionImmunity', conditionId: 'charmed' } }) },
+  { id: 'extraDamage', group: 'Attacks', label: 'Extra damage on hits', hint: '+1d6 fire on every attack, or only some', make: () => ({ do: { kind: 'extraDamage', damage: '1d6', damageType: 'fire' } }) },
+  { id: 'attack', group: 'Attacks', label: 'A natural weapon or new attack', hint: 'Claws, a bite, a tail sweep', make: () => ({ do: { kind: 'grantAttack', attack: { id: '', name: '', range: 'melee', abilities: ['str'], damage: '1d6', damageType: 'slashing' } } }) },
+  { id: 'resource', group: 'Abilities', label: 'A pool of points or limited uses', hint: 'Ki points, Rage uses, a mana pool — refills on a rest', make: () => ({ do: { kind: 'grantResource', resource: { id: '', name: '', max: '@prof', recharge: 'long', display: 'uses' } } }) },
+  { id: 'action', group: 'Abilities', label: 'Something the character can do', hint: 'An action, bonus action or reaction — can cost points, roll, deal damage or heal', make: () => ({ do: { kind: 'grantAction', action: { id: '', name: '', actionType: 'action' } } }) },
+  { id: 'toggle', group: 'Abilities', label: 'Something to switch on', hint: 'A stance, rage, aura or transformation with its own bonuses', make: () => ({ do: { kind: 'grantToggle', toggle: { id: '', name: '', effects: [] } } }) },
+  { id: 'spells', group: 'Abilities', label: 'Always know some spells', hint: 'Spells granted for free', make: () => ({ do: { kind: 'grantSpells', spellIds: [] } }) },
+  { id: 'companion', group: 'Abilities', label: 'A companion or summon', hint: 'A familiar, beast companion or summoned spirit with its own stats', make: () => ({ do: { kind: 'grantCompanion', companion: { id: '', name: '', ac: '12 + @prof', hp: '5 * @level' } } }) },
+  { id: 'spellcasting', group: 'Abilities', label: 'Spellcasting', hint: 'Make the class cast spells', advanced: true, make: () => ({ do: { kind: 'spellcasting', config: { ability: 'int' } } }) },
+  { id: 'chooseOption', group: 'Choices', label: 'Pick one from a list', hint: 'Fighting styles, invocations — options you write in an option list', make: () => ({ do: { kind: 'grantChoice', choice: { id: '', label: '', from: { kind: 'optionList', listId: '' } } } }) },
+  {
+    id: 'chooseAbility',
+    group: 'Choices',
+    label: '+1 to an ability of their choice',
+    hint: 'The player picks which',
+    make: () => ({ do: { kind: 'grantChoice', choice: { id: 'ability-increase', label: 'Ability Score Increase', from: { kind: 'abilities' }, onPick: [{ do: { kind: 'modify', target: 'ability.$pick.score', op: 'add', value: '1' } }] } } })
+  },
+  {
+    id: 'chooseSkill',
+    group: 'Choices',
+    label: 'Proficiency in a skill of their choice',
+    hint: 'The player picks which',
+    make: () => ({ do: { kind: 'grantChoice', choice: { id: 'skill', label: 'Skill Proficiency', from: { kind: 'skills' }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick' } }] } } })
+  },
+  { id: 'chooseFeat', group: 'Choices', label: 'Pick a feat', hint: 'From a category of feats', make: () => ({ do: { kind: 'grantChoice', choice: { id: 'feat', label: 'Feat', from: { kind: 'feats', categories: ['General'] } } } }) },
+  { id: 'chooseArchetype', group: 'Choices', label: 'Pick an archetype', hint: 'A bloodline, patron or tradition (by tag)', make: () => ({ do: { kind: 'grantChoice', choice: { id: 'archetype', label: '', from: { kind: 'archetypes', tags: [] } } } }) },
+  { id: 'note', group: 'Other', label: 'A reminder on the sheet', hint: "For a rule the sheet can't calculate", make: () => ({ do: { kind: 'note', text: '' } }) }
+]
+
+/** "+ Effect": a menu of recipes, grouped. */
+function RecipeMenu({ label, onPick }: { label: string; onPick: (effect: Obj) => void }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const advanced = useAdvanced()
+  const recipes = RECIPES.filter((r) => advanced || !r.advanced)
+  const groups = [...new Set(recipes.map((r) => r.group))]
+  if (!open) return <AddButton onClick={() => setOpen(true)}>{label}</AddButton>
+  return (
+    <div className="gb-card" style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 8, borderColor: 'var(--accent)' }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <strong style={{ flex: 1, fontSize: 12 }}>What should it do?</strong>
+        <RowActions label="menu" onRemove={() => setOpen(false)} />
+      </div>
+      {groups.map((g) => (
+        <div key={g}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{g}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 6 }}>
+            {recipes
+              .filter((r) => r.group === g)
+              .map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="gb-card"
+                  onClick={() => {
+                    onPick(r.make())
+                    setOpen(false)
+                  }}
+                  style={{ padding: '6px 8px', textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{r.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.hint}</div>
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** A list of effects. New ones are added from a recipe menu and open straight away. */
 export function EffectsEditor({ value, onChange, addLabel = 'Effect', hint }: { value: Obj[]; onChange: (v: Obj[]) => void; addLabel?: string; hint?: string }): JSX.Element {
+  const [justAdded, setJustAdded] = useState<number | null>(null)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {hint && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{hint}</span>}
+      {value.length === 0 && !hint && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No effects yet — it shows on the sheet with its description only.</span>}
       {value.map((effect, i) => (
         <Group
-          key={i}
+          key={`${i}:${justAdded === i ? 'new' : 'old'}`}
           collapsible
-          defaultOpen={false}
+          defaultOpen={justAdded === i}
           title={<span style={{ fontWeight: 400 }}>{effectSummary(effect)}</span>}
           actions={
             <RowActions
@@ -190,7 +289,13 @@ export function EffectsEditor({ value, onChange, addLabel = 'Effect', hint }: { 
           <EffectEditor value={effect} onChange={(v) => onChange(value.map((x, j) => (j === i ? v : x)))} />
         </Group>
       ))}
-      <AddButton onClick={() => onChange([...value, { do: blankAction('modify') }])}>{addLabel}</AddButton>
+      <RecipeMenu
+        label={addLabel}
+        onPick={(effect) => {
+          onChange([...value, effect])
+          setJustAdded(value.length)
+        }}
+      />
     </div>
   )
 }
@@ -211,20 +316,25 @@ export function EffectEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
 }
 
 function ActionBody({ kind, value, onChange }: { kind: EffectKind; value: Obj; onChange: (v: Obj) => void }): JSX.Element | null {
+  const { stats, rolls } = useContext(FormContext)
+  const advanced = useAdvanced()
+  const skillChoices = stats.filter((s) => s.group === 'Skills').map((s) => ({ ...s, value: s.value.slice('skill.'.length) }))
   const set = (key: string, v: unknown): void => onChange(withKey(value, key, v))
   const req = (key: string, v: unknown): void => onChange(withRequired(value, key, v))
   const appliesTo = (
-    <Group title="Only for some attacks" collapsible defaultOpen={!!value.appliesTo}>
-      <AttackFilterEditor value={value.appliesTo as Obj | undefined} onChange={(v) => set('appliesTo', v)} />
-    </Group>
+    <Advanced>
+      <Group title="Only for some attacks" collapsible defaultOpen={!!value.appliesTo}>
+        <AttackFilterEditor value={value.appliesTo as Obj | undefined} onChange={(v) => set('appliesTo', v)} />
+      </Group>
+    </Advanced>
   )
   switch (kind) {
     case 'modify':
       return (
         <>
           <Grid min={160}>
-            <Field label="Number" hint="ac, hp.max, speed.walk, ability.str.score, skill.<id>, stat.<id>…">
-              <TextInput value={str(value.target)} onChange={(v) => req('target', v)} list="stats" mono />
+            <Field label="Number">
+              <TargetPicker value={str(value.target)} onChange={(v) => req('target', v)} choices={stats} placeholder="e.g. stat.output, resource.ki.max" />
             </Field>
             <Field label="How">
               <Select
@@ -244,7 +354,11 @@ function ActionBody({ kind, value, onChange }: { kind: EffectKind; value: Obj; o
               <FormulaInput value={str(value.value)} onChange={(v) => req('value', v)} />
             </Field>
           </Grid>
-          {str(value.target).startsWith('ability.') && <Check checked={!!value.uncapped} onChange={(v) => set('uncapped', v || undefined)} label="Can go above the ability cap" />}
+          {str(value.target).startsWith('ability.') && (
+            <Advanced>
+              <Check checked={!!value.uncapped} onChange={(v) => set('uncapped', v || undefined)} label="Can go above the ability cap" />
+            </Advanced>
+          )}
           {str(value.target).startsWith('attack.') && appliesTo}
         </>
       )
@@ -270,8 +384,14 @@ function ActionBody({ kind, value, onChange }: { kind: EffectKind; value: Obj; o
               options={['skill', 'save', 'weapon', 'armor', 'tool', 'language'].map((c) => ({ value: c as 'skill', label: c }))}
             />
           </Field>
-          <Field label={category === 'save' ? 'Ability' : 'Which'} hint={'"$pick" inside a choice\'s on-pick effects'}>
-            <TextInput value={str(value.value)} onChange={(v) => req('value', v)} list={category === 'skill' ? 'skills' : category === 'save' ? 'abilities' : undefined} />
+          <Field label={category === 'save' ? 'Ability' : 'Which'} hint={advanced ? '"$pick" inside a choice\'s on-pick effects' : undefined}>
+            {category === 'skill' ? (
+              <TargetPicker value={str(value.value)} onChange={(v) => req('value', v)} choices={skillChoices} placeholder="skill id, or $pick" />
+            ) : category === 'save' ? (
+              <TargetPicker value={str(value.value)} onChange={(v) => req('value', v)} choices={ABILITIES.map((a) => ({ value: a.id, label: a.label, group: 'Abilities' }))} placeholder="$pick" />
+            ) : (
+              <TextInput value={str(value.value)} onChange={(v) => req('value', v)} placeholder={category === 'weapon' ? 'martial, longsword…' : category === 'armor' ? 'light, medium, heavy, shield' : category === 'language' ? 'Elvish' : "thieves' tools"} />
+            )}
           </Field>
           {(category === 'skill' || category === 'save') && (
             <Field label="Level">
@@ -293,8 +413,8 @@ function ActionBody({ kind, value, onChange }: { kind: EffectKind; value: Obj; o
       return (
         <>
           <Grid min={160}>
-            <Field label="On" hint="attack, initiative, deathSave, check:str, save:dex, skill:stealth">
-              <TextInput value={str(value.target)} onChange={(v) => req('target', v)} list="rollTargets" mono />
+            <Field label="On">
+              <TargetPicker value={str(value.target)} onChange={(v) => req('target', v)} choices={rolls} placeholder="e.g. skill:stealth" />
             </Field>
             <Field label="Mode">
               <Select value={str(value.mode) as 'advantage'} onChange={(v) => req('mode', v || 'advantage')} options={[{ value: 'advantage', label: 'Advantage' }, { value: 'disadvantage', label: 'Disadvantage' }]} />
@@ -408,7 +528,15 @@ function NameIdDescription({ value, onChange, nameKey = 'name' }: { value: Obj; 
   return (
     <>
       <Field label={nameKey === 'label' ? 'Label' : 'Name'}>
-        <TextInput value={str(value[nameKey])} onChange={(v) => onChange(withRequired(value, nameKey, v))} />
+        <TextInput
+          value={str(value[nameKey])}
+          onChange={(v) => {
+            // The id follows the name until someone sets it by hand.
+            const id = str(value.id)
+            const follows = !id || id === slugify(str(value[nameKey]))
+            onChange({ ...withRequired(value, nameKey, v), ...(follows && v.trim() ? { id: slugify(v) } : {}) })
+          }}
+        />
       </Field>
       <Field label="Id">
         <IdInput value={str(value.id)} onChange={(v) => onChange(withRequired(value, 'id', v))} fromName={str(value[nameKey])} />
@@ -471,24 +599,37 @@ export function ResourceEditor({ value, onChange }: { value: Obj; onChange: (v: 
           />
         )}
       </Field>
-      <Field label="Regains" hint="Empty = all of it">
-        <FormulaInput value={str(value.regain)} onChange={(v) => set('regain', v)} />
-      </Field>
+      <Advanced>
+        <Field label="Regains" hint="Empty = all of it">
+          <FormulaInput value={str(value.regain)} onChange={(v) => set('regain', v)} />
+        </Field>
+      </Advanced>
       <Field label="Short rest gives back" hint="For long-rest pools">
         <FormulaInput value={str(value.shortRestRegain)} onChange={(v) => set('shortRestRegain', v)} />
       </Field>
       <Field label="Shown as">
         <Select value={str(value.display) as 'uses'} onChange={(v) => set('display', v || undefined)} none="Uses (boxes)" options={[{ value: 'pool', label: 'Pool (number)' }]} />
       </Field>
-      <Field label="Used as">
-        <TextInput value={str(value.actionType)} onChange={(v) => set('actionType', v)} list="actionTypes" placeholder="action, bonus, reaction…" />
-      </Field>
+      <Advanced>
+        <Field label="Used as">
+          <TextInput value={str(value.actionType)} onChange={(v) => set('actionType', v)} list="actionTypes" placeholder="action, bonus, reaction…" />
+        </Field>
+      </Advanced>
       <Description value={value} onChange={onChange} />
     </Grid>
   )
 }
 
 export function ActionEditor({ value, onChange }: { value: Obj; onChange: (v: Obj) => void }): JSX.Element {
+  const outer = useContext(ScopeContext)
+  return (
+    <ScopeContext.Provider value={{ ...outer, spend: !!value.spend }}>
+      <ActionFields value={value} onChange={onChange} />
+    </ScopeContext.Provider>
+  )
+}
+
+function ActionFields({ value, onChange }: { value: Obj; onChange: (v: Obj) => void }): JSX.Element {
   const set = (key: string, v: unknown): void => onChange(withKey(value, key, v))
   const spend = value.spend ? obj(value.spend) : undefined
   const restores = arr<Obj>(value.restores)
@@ -504,9 +645,11 @@ export function ActionEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
         <Field label="Takes">
           <TextInput value={str(value.actionType)} onChange={(v) => onChange(withRequired(value, 'actionType', v))} list="actionTypes" placeholder="action, bonus, reaction…" />
         </Field>
-        <Field label="Turns on toggle">
-          <TextInput value={str(value.activatesToggle)} onChange={(v) => set('activatesToggle', v)} list="toggles" />
-        </Field>
+        <Advanced>
+          <Field label="Turns on toggle">
+            <TextInput value={str(value.activatesToggle)} onChange={(v) => set('activatesToggle', v)} list="toggles" />
+          </Field>
+        </Advanced>
         <Description value={value} onChange={onChange} />
       </Grid>
       <CostEditor label="Costs a fixed amount" value={value.cost} onChange={(v) => set('cost', v)} />
@@ -537,11 +680,12 @@ export function ActionEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
         {formula('healing', 'Healing', true)}
         {formula('tempHp', 'Temporary HP', true)}
         {formula('range', 'Range (ft)')}
-        {formula('area', 'Area (ft)')}
+        <Advanced>{formula('area', 'Area (ft)')}</Advanced>
         <Field label="Duration">
           <TextInput value={str(value.duration)} onChange={(v) => set('duration', v)} placeholder="1 minute" />
         </Field>
       </Grid>
+      <Advanced>
       <Group title="Restores resource points" collapsible defaultOpen={restores.length > 0}>
         {restores.map((r, i) => (
           <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
@@ -561,6 +705,7 @@ export function ActionEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
         ))}
         <AddButton onClick={() => set('restores', [...restores, { resourceId: '', amount: '1' }])}>Restore</AddButton>
       </Group>
+      </Advanced>
     </div>
   )
 }
@@ -602,10 +747,12 @@ export function AttackEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
         <TextInput value={str(value.damageType)} onChange={(v) => onChange(withRequired(value, 'damageType', v))} list="damageTypes" />
       </Field>
       <Check checked={value.addAbilityToDamage !== false} onChange={(v) => set('addAbilityToDamage', v ? undefined : false)} label="Add the ability modifier to damage" />
-      <Check checked={value.proficient !== false} onChange={(v) => set('proficient', v ? undefined : false)} label="Proficient" />
-      <Field label="Replaces attack">
-        <TextInput value={str(value.replaces)} onChange={(v) => set('replaces', v)} placeholder="unarmed-strike" />
-      </Field>
+      <Advanced>
+        <Check checked={value.proficient !== false} onChange={(v) => set('proficient', v ? undefined : false)} label="Proficient" />
+        <Field label="Replaces attack">
+          <TextInput value={str(value.replaces)} onChange={(v) => set('replaces', v)} placeholder="unarmed-strike" />
+        </Field>
+      </Advanced>
       <Field label="Takes">
         <TextInput value={str(value.actionType)} onChange={(v) => set('actionType', v)} list="actionTypes" placeholder="action" />
       </Field>
@@ -638,14 +785,18 @@ export function ChoiceEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
         <Field label="Picks" hint="Empty = 1">
           <FormulaInput value={str(value.count)} onChange={(v) => set('count', v)} placeholder="1" />
         </Field>
-        <Field label="Point budget" hint="Point-buy: options cost points instead">
-          <FormulaInput value={str(value.budget)} onChange={(v) => set('budget', v)} placeholder="none" />
-        </Field>
+        <Advanced>
+          <Field label="Point budget" hint="Point-buy: options cost points instead">
+            <FormulaInput value={str(value.budget)} onChange={(v) => set('budget', v)} placeholder="none" />
+          </Field>
+        </Advanced>
         <Check checked={!!value.allowRepeats} onChange={(v) => set('allowRepeats', v || undefined)} label="The same option can be picked more than once" />
         {!!value.allowRepeats && (
-          <Field label="At most this many times">
-            <NumberInput value={num(value.maxRepeats)} onChange={(v) => set('maxRepeats', v)} min={1} />
-          </Field>
+          <Advanced>
+            <Field label="At most this many times">
+              <NumberInput value={num(value.maxRepeats)} onChange={(v) => set('maxRepeats', v)} min={1} />
+            </Field>
+          </Advanced>
         )}
       </Grid>
       <Group title="Options come from">
@@ -756,9 +907,11 @@ export function CompanionEditor({ value, onChange }: { value: Obj; onChange: (v:
         <Field label="Speed">
           <TextInput value={str(value.speed)} onChange={(v) => set('speed', v)} placeholder="40 ft" />
         </Field>
-        <Field label="Extra states" hint="Besides summoned / dismissed / defeated">
-          <TagsInput value={arr<string>(value.states)} onChange={(v) => set('states', v)} />
-        </Field>
+        <Advanced>
+          <Field label="Extra states" hint="Besides summoned / dismissed / defeated">
+            <TagsInput value={arr<string>(value.states)} onChange={(v) => set('states', v)} />
+          </Field>
+        </Advanced>
         <Description value={value} onChange={onChange} />
       </Grid>
       <Group title="Ability scores" collapsible defaultOpen={false}>

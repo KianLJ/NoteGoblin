@@ -7,7 +7,11 @@ import { buildRegistry, type Registry } from '@shared/content/registry'
 import { deriveCharacter } from '@shared/content/engine'
 import {
   WORKSHOP_SECTIONS,
+  nameLookup,
+  copyEntry,
   packsForTesting,
+  rollTargetChoices,
+  statChoices,
   suggestionLists,
   addEntry,
   bumpVersion,
@@ -19,16 +23,22 @@ import {
   replaceEntry,
   type PackDraft
 } from '@shared/content/workshop'
+import { explainIssue } from '@shared/content/issueText'
 import { Button } from '../../ui/Button'
+import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { ConfirmButton } from '../../ui/ConfirmButton'
-import { PlusIcon } from '../../ui/icons'
+import { PlusIcon, XIcon } from '../../ui/icons'
 import { JsonEditor } from './JsonEditor'
 import { TestCharacterPanel, buildFromSetup, defaultTestSetup, setupLabel, type TestSetup } from './TestCharacterPanel'
+import { TestSummary } from './TestSummary'
 import { FormContext, Suggestions, type WorkshopFormContext } from './form/fields'
 import { EntryForm } from './form/entries'
 import { TerminologyForm, VocabularyForm } from './form/vocabulary'
 
 type View = 'form' | 'json'
+const SIDE_KEY = 'gb-workshop-test-panel-collapsed'
+const SIDE_WIDTH_KEY = 'gb-workshop-test-panel-width'
+const ADVANCED_KEY = 'gb-workshop-advanced'
 
 type Tab = 'overview' | 'entries' | 'vocabulary' | 'test' | 'json'
 const TABS: Array<{ id: Tab; label: string }> = [
@@ -99,13 +109,33 @@ export function PackEditor({
   const registry: Registry | null = useMemo(() => (lastValid ? buildRegistry([srdPack(), ...packsForTesting(lastValid, others)]) : null), [lastValid, others])
   const baseRegistry = useMemo(() => buildRegistry([srdPack(), ...others]), [others])
   const [setup, setSetup] = useState<TestSetup | null>(null)
-  const [view, setView] = useState<View>('form')
+  const [viewChoice, setView] = useState<View>('form')
+  // Simple mode (the default) hides rarely needed fields and the JSON views; remembered on this device.
+  const [advanced, setAdvancedState] = useState(() => {
+    try {
+      return localStorage.getItem(ADVANCED_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const setAdvanced = (on: boolean): void => {
+    setAdvancedState(on)
+    try {
+      localStorage.setItem(ADVANCED_KEY, on ? '1' : '0')
+    } catch {
+      /* per-device convenience only */
+    }
+    if (!on && tab === 'json') setTab('overview')
+  }
+  const view: View = advanced ? viewChoice : 'form'
 
   // Formula previews evaluate against the test character — as the class being edited, when it's a class or subclass.
   const selectedEntry = selected ? entriesOf(settled, selected.kind)[selected.index] : undefined
   const formContext: WorkshopFormContext = useMemo(() => {
-    const lists = suggestionLists(registry ?? baseRegistry, settled)
-    if (!registry || !lastValid) return { previewLabel: '', lists }
+    const reg = registry ?? baseRegistry
+    const lists = suggestionLists(reg, settled)
+    const pickers = { stats: statChoices(reg, settled), rolls: rollTargetChoices(reg), names: nameLookup(reg, settled) }
+    if (!registry || !lastValid) return { previewLabel: '', lists, advanced, ...pickers }
     let s = setup ?? defaultTestSetup(registry, lastValid.id)
     if (selected?.kind === 'classes' && selectedEntry) {
       const cls = registry.get('classes', `${lastValid.id}:${String(selectedEntry.id ?? '')}`)
@@ -116,8 +146,8 @@ export function PackEditor({
       if (sub && cls) s = { ...s, classId: cls.fullId, subclassId: sub.fullId, level: Math.max(s.level, cls.def.subclassLevel) }
     }
     const derived = deriveCharacter(buildFromSetup(s, registry), registry, { keepEvaluator: true })
-    return { evaluate: derived.evaluate, previewLabel: setupLabel(s, registry), lists }
-  }, [registry, baseRegistry, lastValid, settled, setup, selected, selectedEntry])
+    return { evaluate: derived.evaluate, previewLabel: setupLabel(s, registry), lists, advanced, ...pickers }
+  }, [registry, baseRegistry, lastValid, settled, setup, selected, selectedEntry, advanced])
 
   async function save(): Promise<void> {
     setBusy(true)
@@ -183,7 +213,7 @@ export function PackEditor({
       {message && <div style={{ padding: '4px var(--space-5) 0', fontSize: 12, color: message.kind === 'error' ? 'var(--danger)' : 'var(--accent)' }}>{message.text}</div>}
 
       <div style={{ display: 'flex', gap: 'var(--space-2)', padding: '0 var(--space-5)', marginTop: 'var(--space-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-        {TABS.map((t) => (
+        {TABS.filter((t) => advanced || t.id !== 'json').map((t) => (
           <button
             key={t.id}
             type="button"
@@ -202,19 +232,52 @@ export function PackEditor({
             {t.label}
           </button>
         ))}
+        <label style={{ marginLeft: 'auto', alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }} title="Advanced shows every field, plus the JSON views">
+          <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />
+          Advanced
+        </label>
       </div>
 
       <FormContext.Provider value={formContext}>
       <Suggestions />
       <div style={{ flex: 1, minHeight: 0, overflow: tab === 'entries' ? 'hidden' : 'auto', padding: tab === 'entries' ? 0 : 'var(--space-4) var(--space-5)' }}>
-        {tab === 'overview' && <Overview draft={draft} others={library.filter((p) => p.id !== storedId)} issues={issues} onSet={set} onOpenIssue={openIssue} onOpenSection={(kind) => {
-          setSelected(entriesOf(draft, kind).length ? { kind, index: 0 } : null)
-          setTab('entries')
-        }} />}
-        {tab === 'entries' && <Entries draft={draft} issues={issues} selected={selected} onSelect={setSelected} onChange={onChange} view={view} onView={setView} />}
+        {tab === 'overview' && (
+          <Overview
+            draft={draft}
+            others={library.filter((p) => p.id !== storedId)}
+            issues={issues}
+            onSet={set}
+            onOpenIssue={openIssue}
+            onOpenSection={(kind) => {
+              setSelected(entriesOf(draft, kind).length ? { kind, index: 0 } : null)
+              setTab('entries')
+            }}
+            onFix={onChange}
+            onAdd={(kind) => {
+              const result = addEntry(draft, kind)
+              onChange(result.draft)
+              setSelected({ kind, index: result.index })
+              setTab('entries')
+            }}
+          />
+        )}
+        {tab === 'entries' && (
+          <Entries
+            draft={draft}
+            issues={issues}
+            selected={selected}
+            onSelect={setSelected}
+            onChange={onChange}
+            view={view}
+            onView={advanced ? setView : undefined}
+            sources={registry ?? baseRegistry}
+            advanced={advanced}
+            side={<TestSummary registry={registry} packId={String(lastValid?.id ?? draft.id)} setup={setup} onSetup={setSetup} hasErrors={errors.length > 0} />}
+          />
+        )}
         {tab === 'vocabulary' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <ViewToggle view={view} onView={setView} />
+            {advanced && <ViewToggle view={view} onView={setView} />}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 'var(--space-4)', alignItems: 'start' }}>
               <Panel title="Vocabulary" hint="Skills, custom stats, counters, ability aliases, damage types, conditions, senses, action types, weapon properties, spell schools and currencies this pack adds.">
                 {view === 'form' ? (
@@ -222,7 +285,7 @@ export function PackEditor({
                 ) : (
                   <JsonEditor value={draft.vocabulary ?? {}} onChange={(v) => set({ vocabulary: v as PackDraft['vocabulary'] })} minHeight={420} />
                 )}
-                <IssueList issues={issues.filter((i) => i.path.startsWith('vocabulary'))} />
+                <IssueList issues={issues.filter((i) => i.path.startsWith('vocabulary'))} draft={draft} onFix={onChange} />
               </Panel>
               <Panel title="Terminology" hint="Renames shown in the app — the rules don't change.">
                 {view === 'form' ? (
@@ -230,7 +293,7 @@ export function PackEditor({
                 ) : (
                   <JsonEditor value={draft.terminology ?? {}} onChange={(v) => set({ terminology: v as PackDraft['terminology'] })} minHeight={420} />
                 )}
-                <IssueList issues={issues.filter((i) => i.path.startsWith('terminology'))} />
+                <IssueList issues={issues.filter((i) => i.path.startsWith('terminology'))} draft={draft} onFix={onChange} />
               </Panel>
             </div>
           </div>
@@ -239,7 +302,7 @@ export function PackEditor({
         {tab === 'json' && (
           <Panel title="The whole pack" hint="Everything above, as one JSON document — paste a pack in here, or make sweeping edits.">
             <JsonEditor value={draft} onChange={(v) => v && typeof v === 'object' && onChange(v as PackDraft)} minHeight={560} />
-            <IssueList issues={issues} onOpen={openIssue} />
+            <IssueList issues={issues} draft={draft} onFix={onChange} onOpen={openIssue} />
           </Panel>
         )}
       </div>
@@ -260,7 +323,9 @@ function Overview({
   issues,
   onSet,
   onOpenIssue,
-  onOpenSection
+  onOpenSection,
+  onAdd,
+  onFix
 }: {
   draft: PackDraft
   others: ContentPack[]
@@ -268,8 +333,11 @@ function Overview({
   onSet: (fields: Partial<PackDraft>) => void
   onOpenIssue: (issue: PackIssue) => void
   onOpenSection: (kind: EntryKind) => void
+  onAdd: (kind: EntryKind) => void
+  onFix: (draft: PackDraft) => void
 }): JSX.Element {
   const dependsOn = draft.dependsOn ?? []
+  const empty = WORKSHOP_SECTIONS.every((s) => entriesOf(draft, s.kind).length === 0)
   const toggleDep = (id: string): void => onSet({ dependsOn: dependsOn.includes(id) ? dependsOn.filter((d) => d !== id) : [...dependsOn, id] })
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-4)', alignItems: 'start' }}>
@@ -321,12 +389,24 @@ function Overview({
       </Panel>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        {empty && (
+          <Panel title="Start with…" hint="Pick what to make first. You can add anything else later from the Entries tab.">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
+              {STARTERS.map((st) => (
+                <button key={st.kind} type="button" className="gb-card" onClick={() => onAdd(st.kind)} style={{ padding: '8px 10px', textAlign: 'left', cursor: 'pointer' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{st.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{st.hint}</div>
+                </button>
+              ))}
+            </div>
+          </Panel>
+        )}
         <Panel title="Contents">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6 }}>
             {WORKSHOP_SECTIONS.map((s) => {
               const count = entriesOf(draft, s.kind).length
               return (
-                <button key={s.kind} type="button" className="gb-card" onClick={() => onOpenSection(s.kind)} style={{ padding: '6px 10px', textAlign: 'left', cursor: 'pointer', opacity: count ? 1 : 0.6 }}>
+                <button key={s.kind} type="button" className="gb-card" onClick={() => onOpenSection(s.kind)} title={s.description} style={{ padding: '6px 10px', textAlign: 'left', cursor: 'pointer', opacity: count ? 1 : 0.6 }}>
                   <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>{count}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.label}</div>
                 </button>
@@ -335,7 +415,7 @@ function Overview({
           </div>
         </Panel>
         <Panel title="Problems">
-          {issues.length === 0 ? <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>None — this pack validates.</p> : <IssueList issues={issues} onOpen={onOpenIssue} />}
+          {issues.length === 0 ? <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>None — this pack is ready to save.</p> : <IssueList issues={issues} draft={draft} onFix={onFix} onOpen={onOpenIssue} />}
         </Panel>
       </div>
     </div>
@@ -374,7 +454,10 @@ function Entries({
   onSelect,
   onChange,
   view,
-  onView
+  onView,
+  sources,
+  advanced,
+  side
 }: {
   draft: PackDraft
   issues: PackIssue[]
@@ -382,9 +465,16 @@ function Entries({
   onSelect: (s: { kind: EntryKind; index: number } | null) => void
   onChange: (draft: PackDraft) => void
   view: View
-  onView: (v: View) => void
+  /** Absent in Simple mode — there's only the form. */
+  onView?: (v: View) => void
+  /** Everything that can be copied from: the SRD, the library packs this one can see, and this pack. */
+  sources: Registry
+  advanced: boolean
+  /** The test character summary, shown beside the editor. */
+  side: ReactNode
 }): JSX.Element {
   const [filter, setFilter] = useState('')
+  const [adding, setAdding] = useState<EntryKind | null>(null)
   const entry = selected ? entriesOf(draft, selected.kind)[selected.index] : undefined
   const q = filter.trim().toLowerCase()
   const section = selected ? WORKSHOP_SECTIONS.find((s) => s.kind === selected.kind) : undefined
@@ -393,6 +483,14 @@ function Entries({
     const result = addEntry(draft, kind)
     onChange(result.draft)
     onSelect({ kind, index: result.index })
+    setAdding(null)
+  }
+
+  function copy(kind: EntryKind, source: { def: unknown; fullId: string; packId: string }, asOverride: boolean): void {
+    const result = copyEntry(draft, kind, source, asOverride)
+    onChange(result.draft)
+    onSelect({ kind, index: result.index })
+    setAdding(null)
   }
 
   return (
@@ -409,13 +507,25 @@ function Entries({
             return (
               <div key={s.kind} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px' }}>
-                  <span className="gb-label" style={{ margin: 0, flex: 1, fontSize: 11 }}>
+                  <span className="gb-label" style={{ margin: 0, flex: 1, fontSize: 11 }} title={s.description}>
                     {s.label} <span style={{ color: 'var(--text-muted)' }}>{list.length || ''}</span>
                   </span>
-                  <button type="button" onClick={() => add(s.kind)} title={`Add a ${s.singular}`} style={iconButton}>
+                  <button type="button" onClick={() => setAdding(adding === s.kind ? null : s.kind)} title={`Add a ${s.singular}`} style={iconButton}>
                     <PlusIcon size={12} />
                   </button>
                 </div>
+                {adding === s.kind && (
+                  <AddEntryPanel
+                    singular={s.singular}
+                    description={s.description}
+                    candidates={sources.all(s.kind).filter((e) => e.packId !== String(draft.id))}
+                    packName={(id) => (id === SRD_PACK_ID ? 'SRD' : (sources.packs.find((p) => p.id === id)?.name ?? id))}
+                    advanced={advanced}
+                    onBlank={() => add(s.kind)}
+                    onCopy={(source, asOverride) => copy(s.kind, source, asOverride)}
+                    onClose={() => setAdding(null)}
+                  />
+                )}
                 {shown.map(({ e, index }) => {
                   const active = selected?.kind === s.kind && selected.index === index
                   const own = issuesForEntry(issues, s.kind, index)
@@ -460,8 +570,9 @@ function Entries({
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                   {section.singular} · {String(draft.id)}:{String(entry.id ?? '')}
                 </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, maxWidth: 640 }}>{section.description}</div>
               </div>
-              <ViewToggle view={view} onView={onView} />
+              {onView && <ViewToggle view={view} onView={onView} />}
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -485,7 +596,7 @@ function Entries({
                 }}
               />
             </div>
-            <IssueList issues={issuesForEntry(issues, selected.kind, selected.index)} />
+            <IssueList issues={issuesOfEntry(issues, selected.kind, selected.index)} draft={draft} onFix={onChange} withinEntry />
             {view === 'form' ? (
               <EntryForm
                 key={`${selected.kind}:${selected.index}`}
@@ -504,33 +615,145 @@ function Entries({
             )}
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Pick an entry on the left, or add one with the plus button next to a section. Each entry has a form and a JSON view; formulas show what they work out to for the test character.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Pick an entry on the left, or add one with the plus button next to a section. Formulas show what they work out to for the test character on the right.</p>
         )}
       </div>
+
+      {/* The test character: drag its left edge to resize, or fold it away with its tab; both remembered on this device. */}
+      <ResizableSidebar handleSide="left" defaultWidth={260} minWidth={200} maxWidth={560} collapseStorageKey={SIDE_KEY} widthStorageKey={SIDE_WIDTH_KEY}>
+        <aside style={{ height: '100%', borderLeft: '1px solid var(--border-subtle)', padding: 'var(--space-3)', overflowY: 'auto', boxSizing: 'border-box' }}>
+          <div className="gb-label" style={{ margin: '0 0 8px' }}>
+            Test character
+          </div>
+          {side}
+        </aside>
+      </ResizableSidebar>
     </div>
   )
 }
 
-function IssueList({ issues, onOpen }: { issues: PackIssue[]; onOpen?: (issue: PackIssue) => void }): JSX.Element | null {
+/** Adding an entry: start blank, or from a copy of any SRD or library entry of that kind (or, in Advanced mode, replace one outright). */
+function AddEntryPanel({
+  singular,
+  description,
+  candidates,
+  packName,
+  advanced,
+  onBlank,
+  onCopy,
+  onClose
+}: {
+  singular: string
+  description: string
+  candidates: Array<{ def: unknown; fullId: string; packId: string }>
+  packName: (id: string) => string
+  advanced: boolean
+  onBlank: () => void
+  onCopy: (source: { def: unknown; fullId: string; packId: string }, asOverride: boolean) => void
+  onClose: () => void
+}): JSX.Element {
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const nameOf = (c: { def: unknown }): string => String((c.def as { name?: unknown }).name ?? '')
+  const shown = candidates
+    .filter((c) => !q || nameOf(c).toLowerCase().includes(q))
+    .sort((a, b) => nameOf(a).localeCompare(nameOf(b)))
+    .slice(0, 40)
+  return (
+    <div className="gb-card" style={{ margin: '4px 4px 6px', padding: 6, display: 'flex', flexDirection: 'column', gap: 4, borderColor: 'var(--accent)' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{description}</div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <Button variant="primary" onClick={onBlank} style={{ fontSize: 11, padding: '3px 8px', flex: 1 }}>
+          Blank {singular}
+        </Button>
+        <button type="button" onClick={onClose} title="Close" style={iconButton}>
+          <XIcon size={11} />
+        </button>
+      </div>
+      {candidates.length > 0 && (
+        <>
+          <input className="gb-input" placeholder={`…or copy one (${candidates.length})`} value={query} onChange={(e) => setQuery(e.target.value)} style={{ fontSize: 11, padding: '3px 6px' }} autoFocus />
+          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            {shown.map((c) => (
+              <div key={c.fullId} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '2px 0' }}>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.fullId}>
+                  {nameOf(c)} <span style={{ color: 'var(--text-muted)' }}>· {packName(c.packId)}</span>
+                </span>
+                <button type="button" className="gb-btn gb-btn--secondary" onClick={() => onCopy(c, false)} style={{ fontSize: 10, padding: '1px 6px' }} title="A copy to change as you like">
+                  Copy
+                </button>
+                {advanced && (
+                  <button type="button" className="gb-btn gb-btn--ghost" onClick={() => onCopy(c, true)} style={{ fontSize: 10, padding: '1px 6px' }} title="Replace the original wherever it's used (an override)">
+                    Replace
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** Problems in plain English (explainIssue), errors first, each with its place, and a Fix button where there's an obvious fix. */
+function IssueList({
+  issues,
+  draft,
+  onFix,
+  onOpen,
+  withinEntry
+}: {
+  issues: PackIssue[]
+  draft: PackDraft
+  /** Applies a fix to the draft. */
+  onFix?: (next: PackDraft) => void
+  /** Jumps to where the problem is. */
+  onOpen?: (issue: PackIssue) => void
+  /** The reader is already looking at that entry — leave out its name. */
+  withinEntry?: boolean
+}): JSX.Element | null {
   if (issues.length === 0) return null
   const sorted = [...issues].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1))
   return (
-    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {sorted.slice(0, 60).map((issue, i) => (
-        <li key={i} style={{ color: issue.severity === 'error' ? 'var(--danger)' : 'var(--text-secondary)' }}>
-          {onOpen ? (
-            <button type="button" onClick={() => onOpen(issue)} style={{ background: 'none', border: 'none', padding: 0, color: 'inherit', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-              {issue.path && <code style={{ fontSize: 11 }}>{issue.path}</code>} {issue.message}
-            </button>
-          ) : (
-            <>
-              {issue.path && <code style={{ fontSize: 11 }}>{issue.path}</code>} {issue.message}
-            </>
-          )}
-        </li>
-      ))}
-      {sorted.length > 60 && <li style={{ color: 'var(--text-muted)' }}>…and {sorted.length - 60} more</li>}
-    </ul>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {sorted.slice(0, 60).map((issue, i) => {
+        const e = explainIssue(issue, draft, withinEntry)
+        return (
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              fontSize: 12,
+              padding: '4px 8px',
+              borderLeft: `3px solid ${issue.severity === 'error' ? 'var(--danger)' : 'var(--warning, #d4a017)'}`,
+              background: 'var(--bg-sunken)',
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {e.where &&
+                (onOpen ? (
+                  <button type="button" onClick={() => onOpen({ ...issue, path: e.path })} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-primary)', cursor: 'pointer', font: 'inherit', fontWeight: 700, textAlign: 'left' }}>
+                    {e.where}
+                  </button>
+                ) : (
+                  <strong>{e.where}</strong>
+                ))}
+              <div style={{ color: 'var(--text-secondary)' }}>{e.message}</div>
+            </div>
+            {e.fix && onFix && (
+              <button type="button" className="gb-btn gb-btn--secondary" onClick={() => onFix(e.fix!.apply(draft))} style={{ fontSize: 11, padding: '2px 8px', flexShrink: 0 }}>
+                {e.fix.label}
+              </button>
+            )}
+          </div>
+        )
+      })}
+      {sorted.length > 60 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>…and {sorted.length - 60} more</div>}
+    </div>
   )
 }
 
@@ -557,6 +780,24 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     </div>
   )
 }
+
+/** The empty pack's "Start with…" shortcuts, simplest first. */
+/** The issues inside one entry, paths kept whole (so their fixes address the draft). */
+const issuesOfEntry = (issues: PackIssue[], kind: EntryKind, index: number): PackIssue[] => {
+  const prefix = `${kind}[${index}]`
+  return issues.filter((i) => i.path === prefix || i.path.startsWith(`${prefix}.`) || i.path.startsWith(`${prefix}[`))
+}
+
+const STARTERS: Array<{ kind: EntryKind; label: string; hint: string }> = [
+  { kind: 'feats', label: 'A feat', hint: 'A bonus, a proficiency, a new ability' },
+  { kind: 'spells', label: 'A spell', hint: 'Damage, healing, an ongoing buff' },
+  { kind: 'items', label: 'An item', hint: 'A weapon, armor or magic item' },
+  { kind: 'species', label: 'A species', hint: 'Speed, size and traits' },
+  { kind: 'backgrounds', label: 'A background', hint: 'Features from a past life' },
+  { kind: 'classes', label: 'A class', hint: 'Hit points, a level table, features' },
+  { kind: 'archetypes', label: 'An archetype', hint: 'A bloodline or patron any class can take' },
+  { kind: 'monsters', label: 'A creature', hint: 'A statblock for the DM' }
+]
 
 const smallButton = { fontSize: 12, padding: '4px 10px' } as const
 const checkStyle = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 } as const

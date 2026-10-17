@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { deriveCharacter, type CharacterBuild } from '@shared/content/engine'
 import { parsePack } from '@shared/content/validate'
 import type { ContentPack } from '@shared/content/schema'
-import { core, jjk } from './packs'
+import { core, frontier } from './packs'
 
 const SCORES = { str: 16, dex: 12, con: 14, int: 10, wis: 13, cha: 8 }
 
@@ -275,57 +275,57 @@ describe('core 5e rules as pack data', () => {
 })
 
 describe('homebrew pack built on core', () => {
-  const TECHNIQUE = 'class:jjk:jujutsu-sorcerer:innate-technique#technique'
-  const SHIKIGAMI = `${TECHNIQUE}/ten-shadows#shikigami`
+  const BLOODLINE = 'class:frontier:channeler:bloodline#technique'
+  const SPIRIT_BEASTS = `${BLOODLINE}/beast-blood#spirit-beasts`
   const sorcerer = (level: number, extra: Partial<CharacterBuild> = {}) =>
-    derive({ speciesId: 'human', classes: [{ classId: 'jujutsu-sorcerer', level }], abilityScores: { ...SCORES, cha: 16, wis: 14 }, ...extra }, [core, jjk])
+    derive({ speciesId: 'human', classes: [{ classId: 'channeler', level }], abilityScores: { ...SCORES, cha: 16, wis: 14 }, ...extra }, [core, frontier])
 
   it('derives a homebrew resource and action from its own class table', () => {
     const d = sorcerer(5)
     expect(errors(d)).toEqual([])
-    expect(d.resources).toEqual([expect.objectContaining({ id: 'cursed-energy', max: 15, display: 'pool', recharge: 'short' })])
+    expect(d.resources).toEqual([expect.objectContaining({ id: 'mana', max: 15, display: 'pool', recharge: 'short' })])
     expect(d.actions).toEqual([
-      expect.objectContaining({ id: 'cursed-strike', actionType: 'technique', attackBonus: 6, damage: '2d8 + 3', damageType: 'Cursed', cost: { resourceId: 'cursed-energy', amount: 2 } })
+      expect.objectContaining({ id: 'arcane-strike', actionType: 'technique', attackBonus: 6, damage: '2d8 + 3', damageType: 'Arcane', cost: { resourceId: 'mana', amount: 2 } })
     ])
   })
 
   it('computes a custom stat and lets a toggle modify it', () => {
-    expect(sorcerer(5).stats.output).toEqual({ name: 'Cursed Energy Output', value: 6, display: true })
-    const domain = sorcerer(5, { activeToggles: ['domain-expansion'] })
+    expect(sorcerer(5).stats.output).toEqual({ name: 'Channel Power', value: 6, display: true })
+    const domain = sorcerer(5, { activeToggles: ['overchannel'] })
     expect(domain.stats.output.value).toBe(11)
     expect(domain.armorClass).toBe(13)
     expect(domain.attackMode).toBe('advantage')
-    expect(domain.toggles.find((t) => t.id === 'domain-expansion')).toMatchObject({ active: true, cost: { resourceId: 'cursed-energy', amount: 5 } })
+    expect(domain.toggles.find((t) => t.id === 'overchannel')).toMatchObject({ active: true, cost: { resourceId: 'mana', amount: 5 } })
   })
 
   it('applies a picked option-list entry, gated by its prerequisite', () => {
-    expect(sorcerer(1, { choices: { [TECHNIQUE]: ['limitless'] } }).armorClass).toBe(12)
+    expect(sorcerer(1, { choices: { [BLOODLINE]: ['storm-blood'] } }).armorClass).toBe(12)
     const weak = sorcerer(1, { abilityScores: { ...SCORES, cha: 10 } })
-    expect(weak.choices.find((c) => c.key === TECHNIQUE)!.options.find((o) => o.id === 'limitless')!.available).toBe(false)
+    expect(weak.choices.find((c) => c.key === BLOODLINE)!.options.find((o) => o.id === 'storm-blood')!.available).toBe(false)
   })
 
   it('follows a pick into a nested choice whose count is a formula', () => {
-    const d = sorcerer(5, { choices: { [TECHNIQUE]: ['ten-shadows'], [SHIKIGAMI]: ['divine-dogs', 'nue'] } })
-    expect(d.choices.find((c) => c.key === SHIKIGAMI)).toMatchObject({ count: 2, remaining: 0 })
+    const d = sorcerer(5, { choices: { [BLOODLINE]: ['beast-blood'], [SPIRIT_BEASTS]: ['spirit-wolves', 'spirit-hawk'] } })
+    expect(d.choices.find((c) => c.key === SPIRIT_BEASTS)).toMatchObject({ count: 2, remaining: 0 })
     expect(d.skills.perception).toMatchObject({ proficiency: 'expertise', bonus: 2 + 3 * 2 })
     expect(d.speeds).toEqual({ walk: 30, fly: 30 })
-    expect(d.features.map((f) => f.name)).toEqual(expect.arrayContaining(['Ten Shadows', 'Divine Dogs', 'Nue']))
+    expect(d.features.map((f) => f.name)).toEqual(expect.arrayContaining(['Beast Blood', 'Spirit Wolves', 'Spirit Hawk']))
   })
 
   it('adds vocabulary and merges terminology', () => {
-    expect(sorcerer(1).skills['cursed-sense']).toMatchObject({ name: 'Cursed Sense', ability: 'wis', bonus: 2 })
+    expect(sorcerer(1).skills['arcane-sense']).toMatchObject({ name: 'Arcane Sense', ability: 'wis', bonus: 2 })
   })
 
   it('uses core feats for its ASI, minus the ones it hides', () => {
-    const asi = sorcerer(4).choices.find((c) => c.key === 'class:jjk:jujutsu-sorcerer:asi-4#feat')!
+    const asi = sorcerer(4).choices.find((c) => c.key === 'class:frontier:channeler:asi-4#feat')!
     expect(asi.options.map((o) => o.id)).toEqual(expect.arrayContaining(['core:ability-score-improvement', 'core:alert']))
     expect(asi.options.map((o) => o.id)).not.toContain('core:tough')
   })
 
-  it('overrides a core item for everyone, and adds typed extra damage from a cursed tool', () => {
-    const d = sorcerer(1, { equipment: equip('longsword', 'playful-cloud') })
+  it('overrides a core item for everyone, and adds typed extra damage from a arcane focus', () => {
+    const d = sorcerer(1, { equipment: equip('longsword', 'storm-staff') })
     expect(d.attacks.find((a) => a.name === 'Longsword')!.damage).toBe('1d10 + 3')
-    expect(d.attacks.find((a) => a.name === 'Playful Cloud')).toMatchObject({ damage: '3d6 + 3', extraDamage: [{ damage: '1d6', damageType: 'Cursed', source: 'Playful Cloud' }] })
+    expect(d.attacks.find((a) => a.name === 'Storm Staff')).toMatchObject({ damage: '3d6 + 3', extraDamage: [{ damage: '1d6', damageType: 'Arcane', source: 'Storm Staff' }] })
   })
 })
 

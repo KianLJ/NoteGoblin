@@ -260,7 +260,7 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
 /**
  * The full 1–20 progression for a class from a content pack (homebrew), read
  * straight from the pack: each level's class and subclass features with
- * their descriptions, the class table's columns (Cursed Energy, Technique
+ * their descriptions, the class table's columns (Mana, Channel
  * Die…), proficiency bonus, spell slots if it casts, and whatever was picked
  * at that level (with Change to clear it). Falls back to the custom-feature
  * hint for a class name no enabled pack knows.
@@ -290,7 +290,7 @@ function PackClassTable({
   const columns = [...cls.def.columns, ...(sub?.def.columns ?? [])]
   const slotRows = cls.def.spellcasting?.slots?.rows ?? sub?.def.spellcasting?.slots?.rows ?? []
   const choices = derived.choices.filter((ch) => ch.classId === cls.fullId && !ch.parentKey && ch.picks.length > 0)
-  // Archetypes (an innate technique, a bloodline) this class granted — their features and columns join the table at their own levels.
+  // Archetypes (a bloodline, a patron) this class granted — their features and columns join the table at their own levels.
   const archetypes = derived.archetypes.flatMap((a) => {
     const reg = a.classId === cls.fullId ? registry.get('archetypes', a.id) : undefined
     return reg ? [{ ...a, def: reg.def }] : []

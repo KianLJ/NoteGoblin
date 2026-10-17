@@ -344,7 +344,7 @@ function ClassFeatureSection({
   const isOwnFeature = (key: string): boolean =>
     !key.includes('#') && ((!!classId && key.startsWith(`class:${classId}:`)) || (!!subclassId && key.startsWith(`subclass:${subclassId}:`)))
   const features = derived.features.filter((f) => isOwnFeature(f.key))
-  // An archetype this class granted (an innate technique, a bloodline): its unlocked features, under its own heading.
+  // An archetype this class granted (a bloodline, a patron): its unlocked features, under its own heading.
   const archetypes = derived.archetypes
     .filter((a) => !!classId && a.classId === classId)
     .map((a) => ({ ...a, features: derived.features.filter((f) => f.archetypeId === a.id && f.level !== undefined) }))

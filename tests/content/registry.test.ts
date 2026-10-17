@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRegistry } from '@shared/content/registry'
 import { parsePack, validatePack } from '@shared/content/validate'
-import { core, coreInput, jjk } from './packs'
+import { core, coreInput, frontier } from './packs'
 
 const other = parsePack({
   formatVersion: 1,
@@ -12,36 +12,36 @@ const other = parsePack({
 
 describe('registry', () => {
   it('orders packs by dependency regardless of enable order', () => {
-    expect(buildRegistry([jjk, core]).packs.map((p) => p.id)).toEqual(['core', 'jjk'])
+    expect(buildRegistry([frontier, core]).packs.map((p) => p.id)).toEqual(['core', 'frontier'])
   })
 
   it('warns about a missing dependency but keeps the pack', () => {
-    const r = buildRegistry([jjk])
-    expect(r.diagnostics.map((d) => d.message)).toContain('Pack "Jujutsu Codex" needs pack "core", which isn\'t enabled.')
-    expect(r.get('classes', 'jujutsu-sorcerer')?.fullId).toBe('jjk:jujutsu-sorcerer')
+    const r = buildRegistry([frontier])
+    expect(r.diagnostics.map((d) => d.message)).toContain('Pack "Arcane Frontier" needs pack "core", which isn\'t enabled.')
+    expect(r.get('classes', 'channeler')?.fullId).toBe('frontier:channeler')
   })
 
   it('applies overrides under the original id and hides entries', () => {
-    const r = buildRegistry([core, jjk])
+    const r = buildRegistry([core, frontier])
     const longsword = r.get('items', 'longsword')!
-    expect(longsword).toMatchObject({ fullId: 'core:longsword', packId: 'jjk' })
+    expect(longsword).toMatchObject({ fullId: 'core:longsword', packId: 'frontier' })
     expect(longsword.def.weapon?.damage).toBe('1d10')
     expect(r.get('feats', 'tough')).toBeUndefined()
     expect(r.all('items').filter((i) => i.def.name === 'Longsword')).toHaveLength(1)
   })
 
   it('resolves local ids against the referring pack and its dependencies first', () => {
-    const r = buildRegistry([core, jjk, other])
-    expect(r.get('items', 'dagger', 'jjk')?.fullId).toBe('core:dagger')
+    const r = buildRegistry([core, frontier, other])
+    expect(r.get('items', 'dagger', 'frontier')?.fullId).toBe('core:dagger')
     expect(r.get('items', 'dagger', 'other')?.fullId).toBe('other:dagger')
     expect(r.get('items', 'dagger')?.fullId).toBe('other:dagger')
     expect(r.get('items', 'core:dagger')?.def.name).toBe('Dagger')
   })
 
   it('merges vocabulary and lets later packs win terminology', () => {
-    const r = buildRegistry([core, jjk])
-    expect(r.vocabulary.skills.map((s) => s.id)).toEqual(['athletics', 'stealth', 'perception', 'arcana', 'cursed-sense'])
-    expect(r.terminology.spellSlots).toBe('Technique Slots')
+    const r = buildRegistry([core, frontier])
+    expect(r.vocabulary.skills.map((s) => s.id)).toEqual(['athletics', 'stealth', 'perception', 'arcana', 'arcane-sense'])
+    expect(r.terminology.spellSlots).toBe('Mana Wells')
   })
 })
 

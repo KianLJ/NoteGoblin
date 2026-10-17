@@ -298,7 +298,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
   }
 
   const pb = derived.proficiencyBonus
-  // The 18 SRD skills in their usual order, then any skill a content pack adds (Cursed Sense…) — proficiency for
+  // The 18 SRD skills in their usual order, then any skill a content pack adds (Arcane Sense…) — proficiency for
   // those is stored by display name like any other skill.
   const skillRows: { id: SkillName; ability: Ability }[] = [
     ...SKILLS,

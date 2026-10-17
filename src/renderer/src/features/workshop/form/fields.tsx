@@ -1,8 +1,9 @@
 import { createContext, useContext, useState, type CSSProperties, type ReactNode } from 'react'
 import { formulaSyntaxError } from '@shared/content/formula'
+import { describeFormula, type NameLookup } from '@shared/content/formulaText'
 import type { FormulaProbe, ProbeResult } from '@shared/content/engine'
 import type { AbilityId } from '@shared/content/schema'
-import { slugify } from '@shared/content/workshop'
+import { slugify, type TargetChoice } from '@shared/content/workshop'
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XIcon } from '../../../ui/icons'
 
 // Building blocks for the Workshop's form editors. Every editor works on
@@ -44,18 +45,38 @@ export const ABILITIES: Array<{ id: AbilityId; label: string }> = [
 export interface WorkshopFormContext {
   /** Evaluates a formula against the preview character; undefined while there's no valid pack to preview with. */
   evaluate?: (probe: FormulaProbe) => ProbeResult
-  /** "Jujutsu Sorcerer 5" — who the preview numbers are for. */
+  /** "Channeler 5" — who the preview numbers are for. */
   previewLabel: string
-  /** Where datalist ids point (see Suggestions in WorkshopForm.tsx). */
+  /** Where datalist ids point (see Suggestions). */
   lists: Record<string, string[]>
+  /** Advanced mode: every field. Simple mode (the default) hides what most packs never need. */
+  advanced: boolean
+  /** What "Change a number" and "Advantage / disadvantage" can target, named and grouped (statChoices / rollTargetChoices). */
+  stats: TargetChoice[]
+  rolls: TargetChoice[]
+  /** Names for the plain-English formula readback. */
+  names: NameLookup
 }
 
-export const FormContext = createContext<WorkshopFormContext>({ previewLabel: '', lists: {} })
+export const FormContext = createContext<WorkshopFormContext>({ previewLabel: '', lists: {}, advanced: false, stats: [], rolls: [], names: () => undefined })
+
+export function useAdvanced(): boolean {
+  return useContext(FormContext).advanced
+}
+
+/** Renders its children only in Advanced mode. */
+export function Advanced({ children }: { children: ReactNode }): JSX.Element | null {
+  return useAdvanced() ? <>{children}</> : null
+}
 
 /** Where a formula sits — inside a class feature (@classLevel, @table) or an archetype (@archetypeLevel). Nested editors inherit it. */
 export interface FormulaScope {
   inClass?: boolean
   archetypeId?: string
+  /** The table columns @table can read here, for the formula chips. */
+  columns?: Array<{ id: string; label: string }>
+  /** Inside an action with a variable spend — offers @spent. */
+  spend?: boolean
 }
 export const ScopeContext = createContext<FormulaScope>({})
 
@@ -326,7 +347,51 @@ export function AbilitySelect({ value, onChange, none }: { value: string; onChan
   return <Select value={value as AbilityId | ''} onChange={onChange} none={none} options={ABILITIES.map((a) => ({ value: a.id, label: a.label }))} />
 }
 
-/** An id field with a button that fills it from a name ("Cursed Strike" → "cursed-strike"). */
+const OTHER = '__other'
+
+/**
+ * Picks a target by name from grouped choices ("Armor Class", "Stealth",
+ * "Mana maximum") instead of typing its path. "Something else…"
+ * (or a value that isn't listed) switches to a plain text field.
+ */
+export function TargetPicker({ value, onChange, choices, placeholder }: { value: string; onChange: (v: string) => void; choices: TargetChoice[]; placeholder?: string }): JSX.Element {
+  const listed = choices.some((c) => c.value === value)
+  const [other, setOther] = useState(!listed && value !== '')
+  const groups = [...new Set(choices.map((c) => c.group))]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <select
+        className="gb-input"
+        value={other || (!listed && value) ? OTHER : value}
+        onChange={(e) => {
+          if (e.target.value === OTHER) setOther(true)
+          else {
+            setOther(false)
+            onChange(e.target.value)
+          }
+        }}
+        style={{ fontSize: 12, padding: '4px 6px', minWidth: 0 }}
+      >
+        {!value && !other && <option value="">Choose…</option>}
+        {groups.map((g) => (
+          <optgroup key={g} label={g}>
+            {choices
+              .filter((c) => c.group === g)
+              .map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+          </optgroup>
+        ))}
+        <option value={OTHER}>Something else…</option>
+      </select>
+      {(other || (!listed && value !== '')) && <TextInput value={value} onChange={onChange} placeholder={placeholder} mono />}
+    </div>
+  )
+}
+
+/** An id field with a button that fills it from a name ("Arcane Strike" → "arcane-strike"). */
 export function IdInput({ value, onChange, fromName }: { value: string; onChange: (v: string) => void; fromName?: string }): JSX.Element {
   const suggested = fromName ? slugify(fromName) : ''
   return (
@@ -343,14 +408,32 @@ export function IdInput({ value, onChange, fromName }: { value: string; onChange
 
 /**
  * A formula with a syntax check and a live preview of what it works out to
- * for the Workshop's preview character ("= 7 for Jujutsu Sorcerer 5") —
+ * for the Workshop's preview character ("= 7 for Channeler 5") —
  * dice formulas show their dice. The references it can use are listed on
  * hover of the help mark.
  */
 export function FormulaInput({ value, onChange, placeholder, dice }: { value: string; onChange: (v: string) => void; placeholder?: string; dice?: boolean }): JSX.Element {
-  const { evaluate, previewLabel } = useContext(FormContext)
-  const scope = useContext(ScopeContext)
+  const { evaluate, previewLabel, names, stats } = useContext(FormContext)
+  const { columns, spend, ...scope } = useContext(ScopeContext)
+  const [focused, setFocused] = useState(false)
   const syntax = value.trim() ? formulaSyntaxError(value) : null
+  const reading = syntax ? null : describeFormula(value, names)
+  // Chips insert a reference at the end, joined with " + " unless the formula ends in an operator or "(".
+  const insert = (ref: string): void => {
+    const t = value.trimEnd()
+    onChange(!t ? ref : /[-+*/(,?:]$/.test(t) ? `${t} ${ref}` : `${t} + ${ref}`)
+  }
+  const chips: Array<{ label: string; ref: string }> = [
+    { label: 'Level', ref: '@level' },
+    { label: 'Proficiency', ref: '@prof' },
+    ...(scope.inClass !== false ? [{ label: 'Class level', ref: '@classLevel' }] : []),
+    ...(scope.archetypeId ? [{ label: 'Archetype level', ref: '@archetypeLevel' }] : []),
+    ...(spend ? [{ label: 'Amount spent', ref: '@spent' }] : []),
+    ...ABILITIES.map((a) => ({ label: `${a.label} mod`, ref: `@${a.id}.mod` })),
+    ...(columns ?? []).filter((c) => c.id).map((c) => ({ label: c.label || c.id, ref: `@table.${c.id}` })),
+    ...stats.filter((s) => s.group === 'This pack').map((s) => ({ label: s.label.replace(' (score)', ' mod'), ref: `@${s.value.replace(/\.score$/, '.mod')}` })),
+    ...(dice ? [{ label: '1d6', ref: '1d6' }] : [])
+  ]
   let preview: ReactNode = null
   if (value.trim() && !syntax && evaluate) {
     // Feats and options picked under a class read @classLevel too, so class context is the default; species and backgrounds turn it off.
@@ -367,11 +450,34 @@ export function FormulaInput({ value, onChange, placeholder, dice }: { value: st
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-        <TextInput value={value} onChange={onChange} placeholder={placeholder ?? (dice ? 'e.g. 2d6 + @str.mod' : 'e.g. @prof + @wis.mod')} mono style={{ flex: 1, borderColor: syntax ? 'var(--danger)' : undefined }} />
+        <span style={{ flex: 1, display: 'flex', minWidth: 0 }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
+          <TextInput value={value} onChange={onChange} placeholder={placeholder ?? (dice ? 'e.g. 2d6 + @str.mod' : 'e.g. @prof + @wis.mod')} mono style={{ flex: 1, borderColor: syntax ? 'var(--danger)' : undefined }} />
+        </span>
         <span title={FORMULA_HELP} style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'help', padding: '0 2px' }}>
           ?
         </span>
       </div>
+      {focused && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {chips.map((c) => (
+            <button
+              key={c.ref}
+              type="button"
+              className="gb-badge"
+              // mousedown, not click: the field keeps focus (and the chips stay open) while the formula is built.
+              onMouseDown={(e) => {
+                e.preventDefault()
+                insert(c.ref)
+              }}
+              title={c.ref}
+              style={{ fontSize: 10, cursor: 'pointer', border: 'none' }}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {reading && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{reading}</span>}
       {(syntax || preview) && <span style={{ fontSize: 11, color: syntax ? 'var(--danger)' : undefined }}>{syntax ?? preview}</span>}
     </div>
   )

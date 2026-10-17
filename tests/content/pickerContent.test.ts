@@ -15,18 +15,18 @@ describe('picker content', () => {
   })
 
   it('adds the active packs’ classes after the SRD, adapted for the pickers', () => {
-    const read = readPackFile(readFileSync('docs/examples/jujutsu-codex.ngpack.json', 'utf8'))
+    const read = readPackFile(readFileSync('docs/examples/arcane-frontier.ngpack.json', 'utf8'))
     if (!read.ok) throw new Error('example pack should import')
     setActivePacks([read.pack])
     const picker = buildPickerContent()
     expect(picker.classes.slice(0, CLASSES.length)).toEqual(CLASSES)
     expect(picker.classes.at(-1)).toEqual({
-      id: 'jujutsu-codex:jujutsu-sorcerer',
-      name: 'Jujutsu Sorcerer',
+      id: 'arcane-frontier:channeler',
+      name: 'Channeler',
       hitDie: 10,
       primaryAbility: [],
       savingThrowProficiencies: ['con', 'cha'],
-      skillChoice: { choose: 2, from: ['Cursed Sense', 'Perception'] },
+      skillChoice: { choose: 2, from: ['Arcane Sense', 'Perception'] },
       spellcastingAbility: null,
       subclassLevel: 3
     })

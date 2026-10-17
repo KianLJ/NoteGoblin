@@ -91,7 +91,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
   const [lineageAbility, setLineageAbility] = useState<Ability>('wis')
   const [classId, setClassId] = useState<string | null>(null)
   const [chosenSkills, setChosenSkills] = useState<SkillName[]>([])
-  // Picks for the chosen class's own level-1 choices (a Fighting Style, a homebrew Innate Technique…), keyed like
+  // Picks for the chosen class's own level-1 choices (a Fighting Style, a homebrew Bloodline…), keyed like
   // sheet.choices. Applied through choicePatch at creation, so SRD ones are mirrored into the legacy fields too.
   const [classChoices, setClassChoices] = useState<Record<string, string[]>>({})
   const [backgroundId, setBackgroundId] = useState<string | null>(null)

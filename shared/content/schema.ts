@@ -3,7 +3,7 @@
 // exact same definitions both type the engine (via z.infer) and validate a
 // pack imported from a file someone else made. See docs/homebrew-engine.md.
 //
-// Ids inside a pack are local ("cursed-energy"); the registry namespaces
+// Ids inside a pack are local ("mana"); the registry namespaces
 // them as "<packId>:<localId>" so packs never collide. A reference to
 // another entry may use either form — see registry.ts's resolve().
 
@@ -125,7 +125,7 @@ export type AttackDef = z.infer<typeof attackDefSchema>
 
 /**
  * A variable amount the player chooses to spend when using an action ("spend
- * Cursed Energy up to your modifier", "spend any number of ki points") —
+ * Mana up to your modifier", "spend any number of ki points") —
  * every formula on the action can read the chosen amount as @spent, so
  * damage, range, area and DC can scale with it.
  */
@@ -210,7 +210,7 @@ export const optionSourceSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('abilities'), abilities: z.array(abilitySchema).optional() }),
   z.object({ kind: z.literal('skills'), skillIds: z.array(idSchema).optional() }),
-  /** Archetypes (leveled feature sets — an innate technique, a bloodline, a patron any class can take), filtered by tag or id. */
+  /** Archetypes (leveled feature sets — a bloodline, a patron, a tradition any class can take), filtered by tag or id. */
   z.object({ kind: z.literal('archetypes'), tags: z.array(z.string()).optional(), archetypeIds: z.array(idSchema).optional() }),
   /** Free text the player types (e.g. a language or a favoured enemy). */
   z.object({ kind: z.literal('freeform') })
@@ -394,7 +394,7 @@ export type EffectActionShape =
 
 /**
  * A creature that comes with a feature — a beast companion, a familiar, a
- * summoned shikigami. Its numbers are formulas over its owner (@level,
+ * summoned spirit-beasts. Its numbers are formulas over its owner (@level,
  * @prof, @classLevel, the owner's modifiers…) plus its own ability scores
  * as @self.<ability>.score / @self.<ability>.mod, so it scales as the
  * owner levels. The sheet tracks each one's state and current HP.
@@ -423,7 +423,7 @@ export const companionDefSchema = z.object({
   traits: z.array(z.object({ name: nameSchema, description: z.string() })).optional(),
   /** What summoning it costs, if anything. */
   summonCost: costSchema.optional(),
-  /** States the sheet offers besides the built-in summoned / dismissed / defeated (e.g. "Totality", "Untamed"). */
+  /** States the sheet offers besides the built-in summoned / dismissed / defeated (e.g. "Enraged", "Untamed"). */
   states: z.array(z.string()).optional()
 })
 export type CompanionDef = z.infer<typeof companionDefSchema>
@@ -439,7 +439,7 @@ export const featureDefSchema = z.object({
 })
 export type FeatureDef = z.infer<typeof featureDefSchema>
 
-/** One class-table column (Rages, Martial Arts die, Cursed Energy…) — values[classLevel - 1]. Readable in formulas as @table.<id> (owning class) or @class.<classId>.table.<id>. */
+/** One class-table column (Rages, Martial Arts die, Mana…) — values[classLevel - 1]. Readable in formulas as @table.<id> (owning class) or @class.<classId>.table.<id>. */
 export const tableColumnSchema = z.object({
   id: idSchema,
   label: nameSchema,
@@ -476,7 +476,7 @@ export const classDefSchema = z.object({
   /** 'never': a character with this class can't take levels in any other (and vice versa). */
   multiclass: z.enum(['allowed', 'never']).default('allowed'),
   subclassLevel: z.number().int().min(1).default(3),
-  /** Shown in place of "Subclass" for this class — e.g. "Cursed Lineage". */
+  /** Shown in place of "Subclass" for this class — e.g. "Order". */
   subclassLabel: z.string().optional(),
   columns: z.array(tableColumnSchema).default([]),
   levels: z.array(levelEntrySchema).default([]),
@@ -519,7 +519,7 @@ export const featDefSchema = z.object({
 export type FeatDef = z.infer<typeof featDefSchema>
 
 /**
- * A leveled feature set that isn't tied to one class — an innate technique,
+ * A leveled feature set that isn't tied to one class — a bloodline,
  * a bloodline, a patron or pact several classes can take, a prestige path.
  * Granted by a choice (`from: { kind: 'archetypes' }`) on any class,
  * species, background or feat; its features unlock by `levelBasis`:
@@ -553,7 +553,7 @@ export const optionDefSchema = z.object({
 })
 export type OptionDef = z.infer<typeof optionDefSchema>
 
-/** A named pool of pickable options (Metamagic, Eldritch Invocations, Cursed Techniques, Binding Vows…). */
+/** A named pool of pickable options (Metamagic, Eldritch Invocations, Spirit Bonds, Rune Marks…). */
 export const optionListDefSchema = z.object({
   ...entryBase,
   options: z.array(optionDefSchema)
@@ -642,12 +642,12 @@ export const vocabularySchema = z.object({
     )
     .default([]),
   currencies: z.array(z.object({ id: idSchema, name: nameSchema, valueInBase: z.number().positive() })).default([]),
-  /** Custom numeric stats ("Cursed Energy Output", "Sanity") — read as @stat.<id>, targetable as stat.<id>. */
+  /** Custom numeric stats ("Channel Power", "Sanity") — read as @stat.<id>, targetable as stat.<id>. */
   stats: z.array(z.object({ id: idSchema, name: nameSchema, base: formulaSchema.default('0'), display: z.boolean().default(true) })).default([]),
   actionTypes: z.array(z.object({ id: idSchema, name: nameSchema })).default([]),
   weaponProperties: z.array(z.object({ id: idSchema, name: nameSchema, description: z.string().default('') })).default([]),
   spellSchools: z.array(z.object({ id: idSchema, name: nameSchema })).default([]),
-  /** Numbers the player or DM keeps on the sheet (Breakthroughs, Renown, Corruption…) — read as @counter.<id>, usable in prerequisites. */
+  /** Numbers the player or DM keeps on the sheet (Renown, Corruption, Favour…) — read as @counter.<id>, usable in prerequisites. */
   counters: z
     .array(
       z.object({
@@ -661,8 +661,8 @@ export const vocabularySchema = z.object({
     )
     .default([]),
   /**
-   * A named ability the player points at one of the six ("your Cursed
-   * Energy ability is Wisdom or Charisma"). Formulas read @alias.<id>.mod /
+   * A named ability the player points at one of the six ("your channelling
+   * ability is Wisdom or Charisma"). Formulas read @alias.<id>.mod /
    * .score; effects can target alias.<id>.score (it raises the chosen
    * ability). Until picked, the first option (or `default`) is used.
    */

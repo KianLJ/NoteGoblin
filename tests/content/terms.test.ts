@@ -15,12 +15,12 @@ const pack = (input: Partial<ContentPackInput> & { id: string }): ContentPack =>
 
 describe('terminology', () => {
   it('renames, falls back, and shortens ability names', () => {
-    const terms = termsFor({ spellSlots: 'Technique Slots', 'ability.cha': 'Cursed Energy Control', 'ability.cha.short': 'CE', 'ability.wis': 'Insight' })
-    expect(terms.t('spellSlots')).toBe('Technique Slots')
+    const terms = termsFor({ spellSlots: 'Mana Wells', 'ability.cha': 'Presence', 'ability.cha.short': 'CE', 'ability.wis': 'Insight' })
+    expect(terms.t('spellSlots')).toBe('Mana Wells')
     expect(terms.t('hitDice')).toBe(TERM_DEFAULTS.hitDice)
     expect(terms.t('species', 'Race')).toBe('Race')
     expect(terms.t('nothing.here')).toBe('nothing.here')
-    expect(terms.ability('cha')).toBe('Cursed Energy Control')
+    expect(terms.ability('cha')).toBe('Presence')
     expect(terms.abilityShort('cha')).toBe('CE')
     expect(terms.abilityShort('wis')).toBe('Ins')
     expect(terms.ability('str', 'Strength')).toBe('Strength')
@@ -28,15 +28,15 @@ describe('terminology', () => {
 
   it('reports concepts more than one pack renames, the later pack winning', () => {
     const conflicts = terminologyConflicts([
-      { id: 'a', name: 'A', terminology: { spellSlots: 'Technique Slots', subclass: 'Lineage' } },
-      { id: 'b', name: 'B', terminology: { spellSlots: 'Mana Wells', subclass: 'Lineage' } }
+      { id: 'a', name: 'A', terminology: { spellSlots: 'Mana Wells', subclass: 'Lineage' } },
+      { id: 'b', name: 'B', terminology: { spellSlots: 'Rune Slots', subclass: 'Lineage' } }
     ])
     expect(conflicts).toEqual([
       {
         key: 'spellSlots',
         packs: [
-          { id: 'a', name: 'A', label: 'Technique Slots' },
-          { id: 'b', name: 'B', label: 'Mana Wells' }
+          { id: 'a', name: 'A', label: 'Mana Wells' },
+          { id: 'b', name: 'B', label: 'Rune Slots' }
         ],
         winner: 'b'
       }
@@ -44,10 +44,10 @@ describe('terminology', () => {
   })
 
   it('follows load order in the registry', () => {
-    const a = pack({ id: 'a', terminology: { spellSlots: 'Technique Slots' } })
-    const b = pack({ id: 'b', terminology: { spellSlots: 'Mana Wells' } })
-    expect(buildRegistry([srdPack(), a, b]).terminology.spellSlots).toBe('Mana Wells')
-    expect(buildRegistry([srdPack(), b, a]).terminology.spellSlots).toBe('Technique Slots')
+    const a = pack({ id: 'a', terminology: { spellSlots: 'Mana Wells' } })
+    const b = pack({ id: 'b', terminology: { spellSlots: 'Rune Slots' } })
+    expect(buildRegistry([srdPack(), a, b]).terminology.spellSlots).toBe('Rune Slots')
+    expect(buildRegistry([srdPack(), b, a]).terminology.spellSlots).toBe('Mana Wells')
   })
 })
 
@@ -55,14 +55,14 @@ describe('pack conditions on the sheet', () => {
   it('applies an active pack condition’s effects', () => {
     const p = pack({
       id: 'cond',
-      vocabulary: { conditions: [{ id: 'cursed', name: 'Cursed', maxLevel: 3, effects: [{ do: { kind: 'modify', target: 'ac', op: 'add', value: '-@condition.cursed.level' } }] }] }
+      vocabulary: { conditions: [{ id: 'arcane', name: 'Arcane', maxLevel: 3, effects: [{ do: { kind: 'modify', target: 'ac', op: 'add', value: '-@condition.arcane.level' } }] }] }
     })
-    const sheet = { ...emptyCharacterSheet(), activeConditions: [{ id: 'cursed', level: 2 }] }
+    const sheet = { ...emptyCharacterSheet(), activeConditions: [{ id: 'arcane', level: 2 }] }
     const { build } = legacySheetToBuild(sheet, { packs: [srdPack(), p] })
-    expect(build.conditions).toEqual([{ id: 'cursed', level: 2 }])
+    expect(build.conditions).toEqual([{ id: 'arcane', level: 2 }])
     const plain = deriveCharacter(legacySheetToBuild(emptyCharacterSheet(), { packs: [srdPack(), p] }).build, [srdPack(), p])
-    const cursed = deriveCharacter(build, [srdPack(), p])
-    expect(cursed.armorClass).toBe(plain.armorClass - 2)
+    const arcane = deriveCharacter(build, [srdPack(), p])
+    expect(arcane.armorClass).toBe(plain.armorClass - 2)
   })
 })
 

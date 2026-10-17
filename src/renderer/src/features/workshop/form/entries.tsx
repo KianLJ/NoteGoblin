@@ -7,6 +7,7 @@ import {
   AbilityChips,
   AbilitySelect,
   AddButton,
+  Advanced,
   Check,
   Field,
   FormulaInput,
@@ -60,6 +61,8 @@ export function EntryForm({ kind, value, packId, onChange }: { kind: EntryKind; 
 
 type FormProps = { value: Obj; onChange: (v: Obj) => void }
 
+const columnsOf = (value: Obj): Array<{ id: string; label: string }> => arr<Obj>(value.columns).map((c) => ({ id: str(c.id), label: str(c.label) }))
+
 /** Name, id, description, and the override / source citation every entry has. */
 function Basics({ value, onChange, children }: FormProps & { children?: ReactNode }): JSX.Element {
   return (
@@ -71,12 +74,14 @@ function Basics({ value, onChange, children }: FormProps & { children?: ReactNod
         <IdInput value={str(value.id)} onChange={(v) => onChange(withRequired(value, 'id', v))} fromName={str(value.name)} />
       </Field>
       {children}
-      <Field label="Source" hint='A citation, e.g. "JJK 5e p. 42"'>
-        <TextInput value={str(value.source)} onChange={(v) => onChange(withKey(value, 'source', v))} />
-      </Field>
-      <Field label="Replaces (override)" hint="An entry from a pack this builds on — this one takes its place and id.">
-        <TextInput value={str(value.overrides)} onChange={(v) => onChange(withKey(value, 'overrides', v))} mono />
-      </Field>
+      <Advanced>
+        <Field label="Source" hint='A citation, e.g. "Homebrew Guide p. 42"'>
+          <TextInput value={str(value.source)} onChange={(v) => onChange(withKey(value, 'source', v))} />
+        </Field>
+        <Field label="Replaces (override)" hint="An entry from a pack this builds on — this one takes its place and id.">
+          <TextInput value={str(value.overrides)} onChange={(v) => onChange(withKey(value, 'overrides', v))} mono />
+        </Field>
+      </Advanced>
       <Field label="Description" wide>
         <TextArea value={str(value.description)} onChange={(v) => onChange(withKey(value, 'description', v))} rows={3} />
       </Field>
@@ -110,7 +115,7 @@ function ClassForm({ value, onChange }: FormProps): JSX.Element {
   const set = (key: string, v: unknown): void => onChange(withKey(value, key, v))
   const skillChoice = value.skillChoice ? obj(value.skillChoice) : undefined
   return (
-    <ScopeContext.Provider value={{ inClass: true }}>
+    <ScopeContext.Provider value={{ inClass: true, columns: columnsOf(value) }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <Basics value={value} onChange={onChange} />
         <Group title="Hit points and proficiencies">
@@ -122,12 +127,14 @@ function ClassForm({ value, onChange }: FormProps): JSX.Element {
                 options={['4', '6', '8', '10', '12', '20'].map((d) => ({ value: d as '8', label: `d${d}` }))}
               />
             </Field>
-            <Field label="HP at level 1" hint="Empty = the full hit die (+ CON)">
-              <FormulaInput value={str(value.hpFirstLevel)} onChange={(v) => set('hpFirstLevel', v)} />
-            </Field>
-            <Field label="HP per later level" hint="Empty = the die's average (+ CON)">
-              <FormulaInput value={str(value.hpPerLevel)} onChange={(v) => set('hpPerLevel', v)} />
-            </Field>
+            <Advanced>
+              <Field label="HP at level 1" hint="Empty = the full hit die (+ CON)">
+                <FormulaInput value={str(value.hpFirstLevel)} onChange={(v) => set('hpFirstLevel', v)} />
+              </Field>
+              <Field label="HP per later level" hint="Empty = the die's average (+ CON)">
+                <FormulaInput value={str(value.hpPerLevel)} onChange={(v) => set('hpPerLevel', v)} />
+              </Field>
+            </Advanced>
             <Field label="Primary abilities">
               <AbilityChips value={arr<AbilityId>(value.primaryAbilities)} onChange={(v) => set('primaryAbilities', v)} />
             </Field>
@@ -173,11 +180,15 @@ function ClassForm({ value, onChange }: FormProps): JSX.Element {
             <Field label="Multiclassing">
               <Select value={(str(value.multiclass) || 'allowed') as 'allowed'} onChange={(v) => set('multiclass', v === 'never' ? 'never' : undefined)} options={[{ value: 'allowed', label: 'Allowed' }, { value: 'never', label: 'Never' }]} />
             </Field>
-            <Field label="Proficiencies when multiclassed into" hint='"armor:light", "weapon:martial", "tool:…"'>
-              <TagsInput value={arr<string>(value.multiclassProficiencies)} onChange={(v) => set('multiclassProficiencies', v)} />
-            </Field>
+            <Advanced>
+              <Field label="Proficiencies when multiclassed into" hint='"armor:light", "weapon:martial", "tool:…"'>
+                <TagsInput value={arr<string>(value.multiclassProficiencies)} onChange={(v) => set('multiclassProficiencies', v)} />
+              </Field>
+            </Advanced>
           </Grid>
-          <OptionalCondition label="Multiclass prerequisite" value={value.multiclassPrerequisite} onChange={(v) => set('multiclassPrerequisite', v)} />
+          <Advanced>
+            <OptionalCondition label="Multiclass prerequisite" value={value.multiclassPrerequisite} onChange={(v) => set('multiclassPrerequisite', v)} />
+          </Advanced>
         </Group>
         <OptionalSpellcasting value={value} onChange={onChange} />
         <Progression value={value} onChange={onChange} showProficiency />
@@ -188,7 +199,7 @@ function ClassForm({ value, onChange }: FormProps): JSX.Element {
 
 function SubclassForm({ value, onChange }: FormProps): JSX.Element {
   return (
-    <ScopeContext.Provider value={{ inClass: true }}>
+    <ScopeContext.Provider value={{ inClass: true, columns: columnsOf(value) }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <Basics value={value} onChange={onChange}>
           <Field label="Class">
@@ -206,7 +217,7 @@ function ArchetypeForm({ value, packId, onChange }: FormProps & { packId: string
   const set = (key: string, v: unknown): void => onChange(withKey(value, key, v))
   const outer = useContext(ScopeContext)
   return (
-    <ScopeContext.Provider value={{ ...outer, inClass: true, archetypeId: `${packId}:${str(value.id)}` }}>
+    <ScopeContext.Provider value={{ ...outer, inClass: true, archetypeId: `${packId}:${str(value.id)}`, columns: columnsOf(value) }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         <Basics value={value} onChange={onChange}>
           <Field label="Tags" hint="Choices offer archetypes by tag">
@@ -455,7 +466,8 @@ function ItemForm({ value, onChange }: FormProps): JSX.Element {
           <NumberInput value={num(value.weight)} onChange={(v) => set('weight', v)} min={0} />
         </Field>
         <Check checked={!!value.requiresAttunement} onChange={(v) => set('requiresAttunement', v || undefined)} label="Requires attunement" />
-        <Field label="Effects apply when">
+        <Advanced>
+          <Field label="Effects apply when">
           <Select
             value={(str(value.effectsWhen) || 'equipped') as 'equipped'}
             onChange={(v) => set('effectsWhen', v === 'equipped' ? undefined : v)}
@@ -465,7 +477,8 @@ function ItemForm({ value, onChange }: FormProps): JSX.Element {
               { value: 'carried', label: 'Carried' }
             ]}
           />
-        </Field>
+          </Field>
+        </Advanced>
       </Basics>
       <Group title={<Check checked={!!weapon} onChange={(v) => set('weapon', v ? { category: 'simple', range: 'melee', damage: '1d6', damageType: 'bludgeoning' } : undefined)} label="Weapon" />}>
         {weapon && (
@@ -482,9 +495,11 @@ function ItemForm({ value, onChange }: FormProps): JSX.Element {
             <Field label="Damage type">
               <TextInput value={str(weapon.damageType)} onChange={(v) => setWeapon('damageType', v, true)} list="damageTypes" />
             </Field>
-            <Field label="Versatile damage">
-              <FormulaInput value={str(weapon.versatileDamage)} onChange={(v) => setWeapon('versatileDamage', v)} dice />
-            </Field>
+            <Advanced>
+              <Field label="Versatile damage">
+                <FormulaInput value={str(weapon.versatileDamage)} onChange={(v) => setWeapon('versatileDamage', v)} dice />
+              </Field>
+            </Advanced>
             <Field label="Properties">
               <TagsInput value={arr<string>(weapon.properties)} onChange={(v) => setWeapon('properties', v)} list="weaponProperties" />
             </Field>
@@ -494,9 +509,11 @@ function ItemForm({ value, onChange }: FormProps): JSX.Element {
             <Field label="Long range (ft)">
               <NumberInput value={num(weapon.longRange)} onChange={(v) => setWeapon('longRange', v)} min={0} />
             </Field>
-            <Field label="Mastery">
-              <TextInput value={str(weapon.mastery)} onChange={(v) => setWeapon('mastery', v)} />
-            </Field>
+            <Advanced>
+              <Field label="Mastery">
+                <TextInput value={str(weapon.mastery)} onChange={(v) => setWeapon('mastery', v)} />
+              </Field>
+            </Advanced>
           </Grid>
         )}
       </Group>

@@ -22,7 +22,7 @@ const hexboundInput: ContentPackInput = {
   author: 'Test',
   dependsOn: [SRD_PACK_ID],
   classes: [{ id: 'hexblade', name: 'Hexblade', hitDie: 10, saves: ['wis', 'cha'] }],
-  feats: [{ id: 'cursed-blood', name: 'Cursed Blood', effects: [{ do: { kind: 'modify', target: 'hp.max', op: 'add', value: '@level' } }] }]
+  feats: [{ id: 'arcane-blood', name: 'Arcane Blood', effects: [{ do: { kind: 'modify', target: 'hp.max', op: 'add', value: '@level' } }] }]
 }
 const addonInput: ContentPackInput = {
   formatVersion: 1,

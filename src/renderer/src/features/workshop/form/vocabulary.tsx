@@ -16,6 +16,7 @@ import {
   TextArea,
   TextInput,
   arr,
+  useAdvanced,
   num,
   str,
   withKey,
@@ -34,6 +35,8 @@ type Column =
   | { key: string; label: string; type: 'effects' }
 
 interface ListSpec {
+  /** Only shown in Advanced mode. */
+  advanced?: boolean
   key: string
   title: string
   hint: string
@@ -48,23 +51,24 @@ const description: Column = { key: 'description', label: 'Description', type: 't
 
 const LISTS: ListSpec[] = [
   { key: 'skills', title: 'Skills', singular: 'skill', hint: 'Appear in every sheet\'s skills list; @skill.<id> in formulas.', columns: [name, id, { key: 'ability', label: 'Ability', type: 'ability', required: true }], blank: { id: '', name: '', ability: 'wis' } },
-  { key: 'stats', title: 'Custom stats', singular: 'stat', hint: 'Numbers like "Cursed Energy Output" — @stat.<id>, changeable by effects.', columns: [name, id, { key: 'base', label: 'Base value', type: 'formula', placeholder: '0' }, { key: 'display', label: 'Show on the sheet', type: 'check', defaultOn: true }], blank: { id: '', name: '', base: '0' } },
-  { key: 'counters', title: 'Counters', singular: 'counter', hint: 'Kept on the sheet by the player or DM (Breakthroughs, Renown) — @counter.<id>.', columns: [name, id, { key: 'min', label: 'Minimum', type: 'number' }, { key: 'max', label: 'Maximum', type: 'formula', placeholder: 'none' }, { key: 'default', label: 'Starts at', type: 'number' }, description], blank: { id: '', name: '' } },
-  { key: 'abilityAliases', title: 'Ability aliases', singular: 'alias', hint: '"Your Cursed Energy ability is Wisdom or Charisma" — @alias.<id>.mod.', columns: [name, id, { key: 'options', label: 'Can be', type: 'abilities' }, { key: 'default', label: 'Until picked', type: 'ability' }, description], blank: { id: '', name: '', options: ['wis', 'cha'] } },
+  { key: 'stats', title: 'Custom stats', singular: 'stat', hint: 'Numbers like "Sanity" or "Arcane Power" — @stat.<id>, changeable by effects.', columns: [name, id, { key: 'base', label: 'Base value', type: 'formula', placeholder: '0' }, { key: 'display', label: 'Show on the sheet', type: 'check', defaultOn: true }], blank: { id: '', name: '', base: '0' } },
+  { key: 'counters', title: 'Counters', singular: 'counter', hint: 'Kept on the sheet by the player or DM (Renown, Corruption) — @counter.<id>.', columns: [name, id, { key: 'min', label: 'Minimum', type: 'number' }, { key: 'max', label: 'Maximum', type: 'formula', placeholder: 'none' }, { key: 'default', label: 'Starts at', type: 'number' }, description], blank: { id: '', name: '' } },
+  { key: 'abilityAliases', title: 'Ability aliases', singular: 'alias', hint: '"Your channelling ability is Wisdom or Charisma" — @alias.<id>.mod.', columns: [name, id, { key: 'options', label: 'Can be', type: 'abilities' }, { key: 'default', label: 'Until picked', type: 'ability' }, description], blank: { id: '', name: '', options: ['wis', 'cha'] } },
   { key: 'damageTypes', title: 'Damage types', singular: 'damage type', hint: '', columns: [name, id], blank: { id: '', name: '' } },
   { key: 'conditions', title: 'Conditions', singular: 'condition', hint: 'Applied from the sheet; their effects apply while they do.', columns: [name, id, { key: 'maxLevel', label: 'Levels (like exhaustion)', type: 'number' }, description, { key: 'effects', label: 'Effects', type: 'effects' }], blank: { id: '', name: '', effects: [] } },
-  { key: 'senses', title: 'Senses', singular: 'sense', hint: 'Beyond darkvision, blindsight, tremorsense and truesight — the range is the stat sense.<id>.', columns: [name, id], blank: { id: '', name: '' } },
-  { key: 'actionTypes', title: 'Action types', singular: 'action type', hint: 'Besides action / bonus / reaction / free.', columns: [name, id], blank: { id: '', name: '' } },
-  { key: 'weaponProperties', title: 'Weapon properties', singular: 'property', hint: '', columns: [name, id, description], blank: { id: '', name: '' } },
-  { key: 'spellSchools', title: 'Spell schools', singular: 'school', hint: '', columns: [name, id], blank: { id: '', name: '' } },
-  { key: 'currencies', title: 'Currencies', singular: 'currency', hint: 'valueInBase: how many of the base coin one is worth.', columns: [name, id, { key: 'valueInBase', label: 'Worth (base coins)', type: 'number', required: true }], blank: { id: '', name: '', valueInBase: 1 } }
+  { advanced: true, key: 'senses', title: 'Senses', singular: 'sense', hint: 'Beyond darkvision, blindsight, tremorsense and truesight — the range is the stat sense.<id>.', columns: [name, id], blank: { id: '', name: '' } },
+  { advanced: true, key: 'actionTypes', title: 'Action types', singular: 'action type', hint: 'Besides action / bonus / reaction / free.', columns: [name, id], blank: { id: '', name: '' } },
+  { advanced: true, key: 'weaponProperties', title: 'Weapon properties', singular: 'property', hint: '', columns: [name, id, description], blank: { id: '', name: '' } },
+  { advanced: true, key: 'spellSchools', title: 'Spell schools', singular: 'school', hint: '', columns: [name, id], blank: { id: '', name: '' } },
+  { advanced: true, key: 'currencies', title: 'Currencies', singular: 'currency', hint: 'valueInBase: how many of the base coin one is worth.', columns: [name, id, { key: 'valueInBase', label: 'Worth (base coins)', type: 'number', required: true }], blank: { id: '', name: '', valueInBase: 1 } }
 ]
 
 /** The pack's vocabulary — every list as rows of fields. */
 export function VocabularyForm({ value, onChange }: { value: Obj; onChange: (v: Obj) => void }): JSX.Element {
+  const advanced = useAdvanced()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      {LISTS.map((spec) => {
+      {LISTS.filter((spec) => advanced || !spec.advanced || arr(value[spec.key]).length > 0).map((spec) => {
         const rows = arr<Obj>(value[spec.key])
         const setRows = (next: Obj[]): void => onChange(withKey(value, spec.key, next))
         return (
@@ -182,7 +186,7 @@ export function TerminologyForm({ value, onChange }: { value: Obj; onChange: (v:
         </div>
       ))}
       <AddButton onClick={() => setEntries([...entries, [TERM_KEYS.find((k) => !(k in value)) ?? '', '']])}>Rename</AddButton>
-      {entries.length === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{`Nothing renamed. E.g. "spellSlots" → "Technique Slots", "ability.cha" → "Cursed Energy Control".`}</span>}
+      {entries.length === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{`Nothing renamed. E.g. "spellSlots" → "Mana Wells", "ability.cha" → "Presence".`}</span>}
     </div>
   )
 }

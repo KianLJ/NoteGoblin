@@ -85,7 +85,7 @@ function actionTypeLabel(id: string | undefined, registry: Registry): string | u
   return registry.vocabulary.actionTypes.find((t) => t.id === id)?.name ?? id
 }
 
-/** "1d8 +3", "2d6 + 1d4 +5", "4" — the attack's main damage roll as the content engine computed it (ability modifier and untyped bonuses like Rage already folded in), plus any separately-typed extra damage ("+ 1d6 Cursed"). */
+/** "1d8 +3", "2d6 + 1d4 +5", "4" — the attack's main damage roll as the content engine computed it (ability modifier and untyped bonuses like Rage already folded in), plus any separately-typed extra damage ("+ 1d6 Arcane"). */
 function derivedDamageDisplay(attack: DerivedAttack): string {
   const dice = attack.damageDice.dice.map((d) => `${d.count}d${d.sides}`).join(' + ')
   const main = dice ? (attack.damageDice.flat ? `${dice} ${formatModifier(attack.damageDice.flat)}` : dice) : String(attack.damageDice.flat)
@@ -142,7 +142,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   const terms = useTerms()
   // Attacks, resources, toggles, actions and spell DC/attack all come from
   // the content engine (see shared/content/sheet.ts) — so a feat, item or
-  // active buff that changes an attack (Rage, Archery, a homebrew cursed
+  // active buff that changes an attack (Rage, Archery, a homebrew arcane
   // tool) is already folded into what's shown here.
   const derivedSheet = useDerivedSheet(character)
   const { derived, registry } = derivedSheet
@@ -213,7 +213,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
     onSave({ companionStates: { ...character.companionStates, [companion.id]: { ...prev, ...fields } } })
   }
 
-  /** Turns a toggle (Rage, Reckless Attack, a homebrew Domain Expansion) on or off. Turning one on spends its cost from its resource, if it has one (never refunded on end), and is blocked if there isn't enough left — same semantics as FeaturesTab.tsx's toggleBuff, duplicated here since this tab keeps its own resourceUsed autosave draft. Plays (and, at the table, broadcasts) the toggle's sound cue — see playAbilitySfx — only on activation, never when turning it back off. */
+  /** Turns a toggle (Rage, Reckless Attack, a homebrew Overchannel) on or off. Turning one on spends its cost from its resource, if it has one (never refunded on end), and is blocked if there isn't enough left — same semantics as FeaturesTab.tsx's toggleBuff, duplicated here since this tab keeps its own resourceUsed autosave draft. Plays (and, at the table, broadcasts) the toggle's sound cue — see playAbilitySfx — only on activation, never when turning it back off. */
   function toggleBuff(toggle: DerivedToggle): void {
     if (readOnly) return
     if (character.activeBuffs.includes(toggle.id)) {
@@ -763,7 +763,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   )
 }
 
-/** A named ability, usually spending charges from a resource (Turn Undead ⟶ Channel Divinity, Flurry of Blows ⟶ Ki, a homebrew Cursed Strike ⟶ Cursed Energy) — granted by a feature via the content engine. A "Use" button plus a remaining-charges readout, and the action's own roll numbers when it has any. A variable-spend action ("spend up to your modifier in Cursed Energy") gets an amount picker, and its numbers follow the amount. `remaining` is null for an action with no fixed cost. */
+/** A named ability, usually spending charges from a resource (Turn Undead ⟶ Channel Divinity, Flurry of Blows ⟶ Ki, a homebrew Arcane Strike ⟶ Mana) — granted by a feature via the content engine. A "Use" button plus a remaining-charges readout, and the action's own roll numbers when it has any. A variable-spend action ("spend up to your modifier in Mana") gets an amount picker, and its numbers follow the amount. `remaining` is null for an action with no fixed cost. */
 function ResourceActionCard({
   action,
   actionLabel,

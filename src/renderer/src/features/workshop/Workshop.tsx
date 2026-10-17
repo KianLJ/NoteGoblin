@@ -7,6 +7,7 @@ import { Button } from '../../ui/Button'
 import { ImportSummary } from '../content/ContentPacksModal'
 import { notifyPackLibraryChanged, useLibraryPacks } from '../content/usePacks'
 import { PackEditor } from './PackEditor'
+import { WorkshopTour, tourPending } from './WorkshopTour'
 
 /** An open pack's edits — kept per pack while the Workshop is open, so switching packs never loses anything. */
 interface OpenDraft {
@@ -30,6 +31,7 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<PackImportResult | null>(null)
+  const [touring, setTouring] = useState(tourPending)
 
   useEffect(() => {
     if (!selectedId && packs.length) setSelectedId(packs[0].pack.id)
@@ -70,7 +72,8 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
   const takenIds = packs.map((p) => p.pack.id)
 
   return (
-    <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+    <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+      {touring && <WorkshopTour onClose={() => setTouring(false)} />}
       <aside
         style={{
           width: 260,
@@ -92,6 +95,9 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
           </Button>
           <Button variant="secondary" disabled={busy} onClick={importPacks} style={smallButton}>
             Import…
+          </Button>
+          <Button variant="ghost" onClick={() => setTouring(true)} style={smallButton} title="A short tour of the Workshop">
+            Tour
           </Button>
         </div>
         {error && <div style={{ margin: '0 var(--space-4) var(--space-2)', fontSize: 12, color: 'var(--danger)' }}>{error}</div>}
@@ -170,11 +176,31 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
               setSelectedId(null)
             }}
           />
+        ) : library.packs && packs.length === 0 ? (
+          <div style={{ margin: 'auto', maxWidth: 560, padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 22 }}>Make your first pack</h2>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+              A pack holds homebrew — classes, feats, spells, items, creatures — that character sheets calculate with. Make one here, test it, then enable it for a campaign from Content Packs.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+              <StartCard title="Start from scratch" hint="An empty pack built on the SRD" disabled={busy} onClick={() => saveNew(newPackDraft('My Homebrew', authorName, takenIds))} />
+              <StartCard title="Import a file" hint="A .ngpack.json someone shared" disabled={busy} onClick={importPacks} />
+            </div>
+          </div>
         ) : (
           <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{library.packs ? 'Pick a pack on the left, or start a new one.' : 'Loading your library…'}</div>
         )}
       </section>
     </div>
+  )
+}
+
+function StartCard({ title, hint, disabled, onClick }: { title: string; hint: string; disabled?: boolean; onClick: () => void }): JSX.Element {
+  return (
+    <button type="button" className="gb-card" disabled={disabled} onClick={onClick} style={{ padding: 'var(--space-3)', textAlign: 'left', cursor: disabled ? 'default' : 'pointer' }}>
+      <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{hint}</div>
+    </button>
   )
 }
 

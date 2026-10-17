@@ -1,7 +1,7 @@
 # Homebrew content engine — design
 
-Goal: anyone can enter an entire third-party/homebrew book (e.g. a JJK-themed
-5e supplement) — classes, subclasses, species, backgrounds, feats, spells,
+Goal: anyone can enter an entire third-party/homebrew book (e.g. a fan-made
+5e setting supplement) — classes, subclasses, species, backgrounds, feats, spells,
 items, monsters, class resources, toggles and new rules vocabulary — and have
 it work on the character sheet exactly as well as SRD content does:
 calculations, level-up, choices, actions, resources, the Codex, and sync.
@@ -39,7 +39,7 @@ interface ContentPack {
   id: string                 // 'srd-5.2.1', or uuid for user packs
   name: string; version: string; author: string; description?: string
   builtIn?: boolean          // SRD — read-only, always available
-  dependsOn?: string[]       // e.g. JJK pack extends srd-5.2.1
+  dependsOn?: string[]       // e.g. homebrew pack extends srd-5.2.1
   terminology?: TerminologyOverrides
   vocabulary?: Vocabulary    // new skills, damage types, conditions, currencies, stats
   classes: ClassDef[]; subclasses: SubclassDef[]
@@ -47,7 +47,7 @@ interface ContentPack {
   feats: FeatDef[]; spells: SpellDef[]
   items: ItemDef[]           // mundane + magic + weapons + armor unified
   monsters: MonsterDef[]
-  optionLists: OptionListDef[]  // Metamagic, Invocations, Fighting Styles, "Cursed Techniques"…
+  optionLists: OptionListDef[]  // Metamagic, Invocations, Fighting Styles, "Arcane Techniques"…
 }
 ```
 
@@ -130,7 +130,7 @@ class's table), `@class.<id>.table.<column>`, `@resource.<id>.max|used|remaining
 (`@ac`, `@skill.stealth`, `@save.dex`, `@speed.fly`…).
 
 Example: Rage uses → `@table.rageUses[@class.barbarian.level]`;
-Cursed Energy pool → `@class.jujutsu.level * 2 + @wis.mod`.
+Mana pool → `@class.channeler.level * 2 + @wis.mod`.
 
 The formula editor shows a live preview against the current character and
 validates references as you type.
@@ -142,8 +142,8 @@ interface ClassDef {
   id; name; hitDie; primaryAbility; saves; skillChoice
   armorProficiencies; weaponProficiencies; toolProficiencies
   startingEquipment; multiclassRequirements?
-  subclassLevel: number; subclassLabel: string        // "Cursed Lineage"
-  columns: TableColumnDef[]                            // class table columns (Martial Arts die, Rages, Cursed Energy…)
+  subclassLevel: number; subclassLabel: string        // "Order"
+  columns: TableColumnDef[]                            // class table columns (Martial Arts die, Rages, Mana…)
   levels: { level: number; features: FeatureDef[] }[]  // 1–20
   spellcasting?: SpellcastingDef
 }
@@ -169,7 +169,7 @@ interface ChoiceDef  { id; label; count: Formula; from: OptionSource; prerequisi
 - **Action**: name, action economy (action / bonus / reaction / free /
   custom pack-defined), cost (resource + amount formula), roll (attack or
   save DC formula + damage dice), effects applied while active, duration.
-- **Toggle**: an on/off state (Rage, Reckless Attack, Domain Expansion) whose
+- **Toggle**: an on/off state (Rage, Reckless Attack, Overchannel) whose
   effects apply via the `toggle active` condition.
 
 ## 6. Items and spells
@@ -255,7 +255,7 @@ Built: `shared/content/` — `schema.ts` (zod pack format), `formula.ts`
 (parser/evaluator), `registry.ts` (pack merge), `engine.ts`
 (`deriveCharacter`), `validate.ts` (import validation). Tests in
 `tests/content/` use two fixture packs: a trimmed 5e core written purely as
-pack data, and a JJK-style pack on top of it. `tests/regression/` snapshots
+pack data, and a homebrew-style pack on top of it. `tests/regression/` snapshots
 what the sheet shows today for 166 SRD characters (`legacyDerive.ts`
 mirrors OverviewTab/CombatTab/SpellsTab).
 
@@ -546,15 +546,15 @@ the Homebrew Workshop.
 
 ## Engine additions — universal pack features
 
-Added so a full third-party book (the JJK 5e test case) converts without
+Added so a full third-party book converts without
 special cases. Everything below is generic pack data; nothing is keyed to
 one pack. Tests: `tests/content/engineAdditions.test.ts`,
 `tests/content/resourceMath.test.ts`.
 
 - **Archetypes** (`pack.archetypes`, entry kind `archetypes`) — leveled
   feature sets any class, species, background or feat can grant through a
-  choice `from: { kind: 'archetypes', tags?, archetypeIds? }` (innate
-  techniques, bloodlines, cross-class patrons). `levelBasis`:
+  choice `from: { kind: 'archetypes', tags?, archetypeIds? }` (bloodlines,
+  magical traditions, cross-class patrons). `levelBasis`:
   `grantingClass` (default), `highestClass` or `character`. `unique`
   (default true) blocks taking the same one twice. Inside one,
   `@archetypeLevel` is its level and `@table.<col>` reads its own columns;
@@ -730,3 +730,43 @@ Done: monsters in packs.
 Not yet: monster effects (resistances and attacks as engine effects, so
 an encounter could derive numbers the way sheets do) — statblocks stay
 text.
+
+## Workshop ease of use
+
+Done: making the Workshop approachable without losing any power.
+
+- **Simple / Advanced** — an Advanced checkbox in the editor's tab bar
+  (remembered per device). Simple, the default, hides rarely needed
+  fields (overrides, source citations, multiclass rules, HP formulas,
+  attack filters, point-buy budgets, conditional recharge, uncapped
+  scores, restores, rarely used vocabulary lists) and the JSON views.
+  `Advanced` / `useAdvanced` in `form/fields.tsx`.
+- **Target pickers** — "Change a number" and "Advantage / disadvantage"
+  pick their target by name from grouped lists (`statChoices`,
+  `rollTargetChoices`), with "Something else…" for a raw path; skill
+  proficiencies pick the skill by name.
+- **Effect recipes** — "+ Effect" asks what it should do (a bonus, a new
+  AC formula, a resistance, a pool of points, an action, a toggle, "+1 to
+  an ability of their choice", a skill of their choice, a feat, an
+  archetype…) and adds a pre-filled effect, opened. Names fill in ids
+  until an id is set by hand.
+- **Formulas** — clicking into a formula shows chips (Level, Proficiency,
+  Class level, ability mods, the entry's table columns, the pack's stats,
+  @spent in variable-spend actions) and the formula is read back in plain
+  English (`shared/content/formulaText.ts`, `nameLookup`).
+- **Copy from…** — adding an entry offers Blank, or a copy of any SRD or
+  library entry of that kind (`copyEntry`); Advanced adds "Replace" (an
+  override). Copying from a library pack adds it to `dependsOn`.
+- **Starters** — an empty pack's Overview has "Start with…" shortcuts;
+  an empty library offers Start from scratch and Import. The example pack
+  (`docs/examples/arcane-frontier.ngpack.json`) stays in the repo as a
+  reference and test fixture; it isn't bundled into the app.
+- **Problems in plain English** — `shared/content/issueText.ts`
+  (`explainIssue`): where the problem is ("Class “Warden” · level 3,
+  “Aura”, effect 1"), what's wrong in words, and a Fix button for the
+  obvious ones (an id from the name, a cleaned-up id, a duplicate id).
+- **Test character beside the editor** — `TestSummary`: class, level, the
+  key numbers, resources and actions, with whatever the last edit changed
+  highlighted; collapsible, remembered per device.
+- **Tour** — a nine-step first-run walkthrough (`WorkshopTour`), replayed
+  from the Tour button.

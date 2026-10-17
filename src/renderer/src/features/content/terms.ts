@@ -5,7 +5,7 @@ import { useActivePackRegistry } from './pickerContent'
 
 /**
  * The active packs' renames (terminology), for labels — `t('spellSlots',
- * 'Spell Slots')` shows "Technique Slots" when a pack renames it, and the
+ * 'Spell Slots')` shows "Mana Wells" when a pack renames it, and the
  * fallback otherwise. Also the six abilities under their (possibly renamed)
  * names. Mechanics never change; only what the UI calls things.
  */

@@ -1,6 +1,6 @@
 // The terminology layer (docs/homebrew-engine.md §7): packs rename core
-// concepts — "Spell Slots" → "Technique Slots", Charisma → "Cursed Energy
-// Control" — and every label the UI shows goes through t(). Renames never
+// concepts — "Spell Slots" → "Mana Wells", Charisma → "Presence"
+// — and every label the UI shows goes through t(). Renames never
 // change a rule.
 
 import type { Terminology } from './schema'

@@ -13,8 +13,8 @@ const ABILITY_LABEL: Record<string, string> = { str: 'Strength', dex: 'Dexterity
 /**
  * Everything the enabled packs add to a character that has no fixed place
  * on the 5e sheet, each in its own headed card on a row of its own under
- * the Overview header: ability aliases ("Cursed Energy ability" — pick one
- * of its abilities), counters the player keeps (Breakthroughs), custom
+ * the Overview header: ability aliases ("Channelling ability" — pick one
+ * of its abilities), counters the player keeps (Renown), custom
  * stats and senses, conditions, and combat numbers that only show when
  * something changes them (crit range, extra reactions, attacks per action,
  * damage reduction), plus reminders: rules text from feats and features the

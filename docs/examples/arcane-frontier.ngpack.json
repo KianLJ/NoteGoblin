@@ -1,32 +1,32 @@
 {
   "formatVersion": 1,
-  "id": "jujutsu-codex",
-  "name": "Jujutsu Codex",
+  "id": "arcane-frontier",
+  "name": "Arcane Frontier",
   "version": "0.3.0",
   "author": "NoteGoblin example",
-  "description": "An example homebrew pack: the Jujutsu Sorcerer class with Cursed Energy, Innate Techniques (Limitless, Ten Shadows), Domain Expansion, cursed tools and a Cursed Energy Output stat.",
+  "description": "An example homebrew pack: the Channeler class with a Mana pool, two bloodlines (Storm Blood and Beast Blood), point-buy Physical Training, an Overchannel toggle, a spirit-wolf companion and a storm staff.",
   "builtIn": false,
   "dependsOn": [
     "srd-5.2.1"
   ],
   "hides": [],
   "terminology": {
-    "spellSlots": "Technique Slots",
-    "ability.cha": "Cursed Energy Control",
-    "subclass": "Cursed Lineage"
+    "spellSlots": "Mana Wells",
+    "ability.cha": "Presence",
+    "subclass": "Order"
   },
   "vocabulary": {
     "skills": [
       {
-        "id": "cursed-sense",
-        "name": "Cursed Sense",
+        "id": "arcane-sense",
+        "name": "Arcane Sense",
         "ability": "wis"
       }
     ],
     "damageTypes": [
       {
-        "id": "cursed",
-        "name": "Cursed"
+        "id": "arcane",
+        "name": "Arcane"
       }
     ],
     "conditions": [],
@@ -34,7 +34,7 @@
     "stats": [
       {
         "id": "output",
-        "name": "Cursed Energy Output",
+        "name": "Channel Power",
         "base": "@alias.ce.mod + @prof",
         "display": true
       }
@@ -42,7 +42,7 @@
     "actionTypes": [
       {
         "id": "technique",
-        "name": "Technique"
+        "name": "Channel"
       }
     ],
     "weaponProperties": [],
@@ -50,8 +50,8 @@
     "abilityAliases": [
       {
         "id": "ce",
-        "name": "Cursed Energy ability",
-        "description": "The ability your Cursed Energy flows from — Wisdom (control) or Charisma (raw force). Everything that says \"Cursed Energy modifier\" uses it.",
+        "name": "Channelling ability",
+        "description": "The ability your magic flows from: Wisdom (focus) or Charisma (force of will). Everything that says \"channelling modifier\" uses it.",
         "options": [
           "wis",
           "cha"
@@ -61,9 +61,9 @@
     ],
     "counters": [
       {
-        "id": "breakthroughs",
-        "name": "Breakthroughs",
-        "description": "Moments your understanding of jujutsu leaps forward, awarded by the DM. Each one raises your Cursed Energy ability by 1 (up to 5).",
+        "id": "renown",
+        "name": "Renown",
+        "description": "Deeds the world has noticed, awarded by the DM. Each point raises your channelling ability by 1 (up to 5).",
         "min": 0,
         "max": "5",
         "default": 0
@@ -72,9 +72,9 @@
   },
   "classes": [
     {
-      "id": "jujutsu-sorcerer",
-      "name": "Jujutsu Sorcerer",
-      "description": "Sorcerers who wield Cursed Energy — the power of negative emotion — through innate techniques, and who can one day expand their own domain.",
+      "id": "channeler",
+      "name": "Channeler",
+      "description": "Arcanists who draw raw Mana through their bodies and shape it by will, born with a bloodline that grows stronger as they do.",
       "hitDie": 10,
       "primaryAbilities": [],
       "saves": [
@@ -84,7 +84,7 @@
       "skillChoice": {
         "count": 2,
         "from": [
-          "cursed-sense",
+          "arcane-sense",
           "perception"
         ]
       },
@@ -95,11 +95,11 @@
       ],
       "toolProficiencies": [],
       "subclassLevel": 3,
-      "subclassLabel": "Cursed Lineage",
+      "subclassLabel": "Order",
       "columns": [
         {
-          "id": "cursedEnergy",
-          "label": "Cursed Energy",
+          "id": "manaPool",
+          "label": "Mana",
           "values": [
             4,
             6,
@@ -124,8 +124,8 @@
           ]
         },
         {
-          "id": "techniqueDie",
-          "label": "Technique Die",
+          "id": "channelDie",
+          "label": "Channel Die",
           "values": [
             6,
             6,
@@ -155,21 +155,21 @@
           "level": 1,
           "features": [
             {
-              "id": "cursed-energy",
-              "name": "Cursed Energy",
-              "description": "Negative emotion condensed into usable power. You have a pool of Cursed Energy (the class table, plus your Cursed Energy modifier). It refills on a Long Rest; a Short Rest gives back half your Jujutsu Sorcerer level (rounded down, minimum 1). Cursed Strike: as an action, channel 2 Cursed Energy into a strike — proficiency + Cursed Energy modifier to hit, Technique Die twice + your modifier in Cursed damage. Cursed Energy Burst: as an action, release any amount of Cursed Energy up to your Cursed Energy modifier — a 30-foot line (+5 feet per point) dealing one Technique Die per point (Dexterity save halves). Focus (once per Short Rest, bonus action): steady your breathing to gain temporary Cursed Energy equal to your proficiency bonus.",
+              "id": "mana",
+              "name": "Mana",
+              "description": "You have a pool of Mana (the class table, plus your channelling modifier). It refills on a Long Rest; a Short Rest gives back half your Channeler level (rounded down, minimum 1). Arcane Strike: as an action, channel 2 Mana into a strike: proficiency + channelling modifier to hit, Channel Die twice + your modifier in Arcane damage. Mana Burst: as an action, release any amount of Mana up to your channelling modifier as a 30-foot line (+5 feet per point), dealing one Channel Die per point (Dexterity save halves). Focus (once per Short Rest, bonus action): steady yourself to gain temporary Mana equal to your proficiency bonus.",
               "effects": [
                 {
                   "do": {
                     "kind": "grantResource",
                     "resource": {
-                      "id": "cursed-energy",
-                      "name": "Cursed Energy",
-                      "max": "@table.cursedEnergy + @alias.ce.mod",
+                      "id": "mana",
+                      "name": "Mana",
+                      "max": "@table.manaPool + @alias.ce.mod",
                       "recharge": "long",
                       "shortRestRegain": "max(1, floor(@classLevel / 2))",
                       "display": "pool",
-                      "description": "Fuels your techniques. Refills on a Long Rest; a Short Rest gives some back."
+                      "description": "Fuels your channelling. Refills on a Long Rest; a Short Rest gives some back."
                     }
                   }
                 },
@@ -183,7 +183,7 @@
                       "recharge": "short",
                       "display": "uses",
                       "actionType": "bonus",
-                      "description": "Gain temporary Cursed Energy equal to your proficiency bonus."
+                      "description": "Gain temporary Mana equal to your proficiency bonus."
                     }
                   }
                 },
@@ -191,17 +191,17 @@
                   "do": {
                     "kind": "grantAction",
                     "action": {
-                      "id": "cursed-strike",
-                      "name": "Cursed Strike",
+                      "id": "arcane-strike",
+                      "name": "Arcane Strike",
                       "actionType": "technique",
                       "cost": {
-                        "resourceId": "cursed-energy",
+                        "resourceId": "mana",
                         "amount": "2"
                       },
                       "attackBonus": "@prof + @alias.ce.mod",
-                      "damage": "2d@table.techniqueDie + @alias.ce.mod",
-                      "damageType": "Cursed",
-                      "description": "Spend 2 Cursed Energy: proficiency + Cursed Energy modifier to hit, Technique Die x2 + modifier Cursed damage."
+                      "damage": "2d@table.channelDie + @alias.ce.mod",
+                      "damageType": "Arcane",
+                      "description": "Spend 2 Mana: proficiency + channelling modifier to hit, Channel Die x2 + modifier Arcane damage."
                     }
                   }
                 },
@@ -209,20 +209,20 @@
                   "do": {
                     "kind": "grantAction",
                     "action": {
-                      "id": "cursed-burst",
-                      "name": "Cursed Energy Burst",
+                      "id": "mana-burst",
+                      "name": "Mana Burst",
                       "actionType": "technique",
                       "spend": {
-                        "resourceId": "cursed-energy",
+                        "resourceId": "mana",
                         "min": "1",
                         "max": "max(1, @alias.ce.mod)"
                       },
                       "saveDc": "8 + @prof + @alias.ce.mod",
                       "saveAbility": "dex",
-                      "damage": "(@spent)d@table.techniqueDie",
-                      "damageType": "Cursed",
+                      "damage": "(@spent)d@table.channelDie",
+                      "damageType": "Arcane",
                       "range": "30 + 5 * @spent",
-                      "description": "Release any amount of Cursed Energy up to your modifier as a line: one Technique Die of Cursed damage per point, Dexterity save for half."
+                      "description": "Release any amount of Mana up to your modifier as a line: one Channel Die of Arcane damage per point, Dexterity save for half."
                     }
                   }
                 },
@@ -239,12 +239,12 @@
                       },
                       "restores": [
                         {
-                          "resourceId": "cursed-energy",
+                          "resourceId": "mana",
                           "amount": "@prof",
                           "temporary": true
                         }
                       ],
-                      "description": "Gain temporary Cursed Energy equal to your proficiency bonus (spent first, gone on a rest)."
+                      "description": "Gain temporary Mana equal to your proficiency bonus (spent first, gone on a rest)."
                     }
                   }
                 },
@@ -253,26 +253,26 @@
                     "kind": "modify",
                     "target": "alias.ce.score",
                     "op": "add",
-                    "value": "@counter.breakthroughs"
+                    "value": "@counter.renown"
                   }
                 }
               ]
             },
             {
-              "id": "innate-technique",
-              "name": "Innate Technique",
-              "description": "You were born with a cursed technique — a unique way your Cursed Energy manifests. It grows with your highest class level: Limitless (requires a Cursed Energy ability of 16) or Ten Shadows.",
+              "id": "bloodline",
+              "name": "Bloodline",
+              "description": "You were born with a bloodline, a strain of old magic that shapes how your Mana behaves. It grows with your highest class level: Storm Blood (requires a channelling ability of 16) or Beast Blood.",
               "effects": [
                 {
                   "do": {
                     "kind": "grantChoice",
                     "choice": {
                       "id": "technique",
-                      "label": "Innate Technique",
+                      "label": "Bloodline",
                       "from": {
                         "kind": "archetypes",
                         "tags": [
-                          "innate-technique"
+                          "bloodline"
                         ]
                       }
                     }
@@ -286,16 +286,16 @@
           "level": 2,
           "features": [
             {
-              "id": "body-improvements",
-              "name": "Body Improvements",
-              "description": "Cursed Energy hardens your body. You have points equal to your Jujutsu Sorcerer level to spend on improvements (at most one Toughness improvement).",
+              "id": "physical-training",
+              "name": "Physical Training",
+              "description": "Hard training toughens your body. You have points equal to your Channeler level to spend on improvements (at most one Toughness improvement).",
               "effects": [
                 {
                   "do": {
                     "kind": "grantChoice",
                     "choice": {
                       "id": "improvements",
-                      "label": "Body Improvements",
+                      "label": "Physical Training",
                       "budget": "@classLevel",
                       "allowRepeats": true,
                       "groups": [
@@ -307,7 +307,7 @@
                       ],
                       "from": {
                         "kind": "optionList",
-                        "listId": "body-improvements"
+                        "listId": "physical-training"
                       }
                     }
                   }
@@ -320,19 +320,19 @@
           "level": 3,
           "features": [
             {
-              "id": "domain-expansion",
-              "name": "Domain Expansion",
-              "description": "The pinnacle of jujutsu: you manifest your inner world around you. As an action, spend 5 Cursed Energy to expand your domain. While it lasts you gain +2 AC, advantage on attack rolls, and your Cursed Energy Output rises by your Jujutsu Sorcerer level. It ends when you choose to end it.",
+              "id": "overchannel",
+              "name": "Overchannel",
+              "description": "You pour everything you have into the moment. As an action, spend 5 Mana to overchannel: while it lasts you gain +2 AC, advantage on attack rolls, and your Channel Power rises by your Channeler level. It ends when you choose to end it.",
               "effects": [
                 {
                   "do": {
                     "kind": "grantToggle",
                     "toggle": {
-                      "id": "domain-expansion",
-                      "name": "Domain Expansion",
+                      "id": "overchannel",
+                      "name": "Overchannel",
                       "actionType": "action",
                       "cost": {
-                        "resourceId": "cursed-energy",
+                        "resourceId": "mana",
                         "amount": "5"
                       },
                       "effects": [
@@ -360,7 +360,7 @@
                           }
                         }
                       ],
-                      "description": "Spend 5 Cursed Energy to expand your domain: +2 AC, advantage on attack rolls, and +your Jujutsu Sorcerer level to Cursed Energy Output until it ends."
+                      "description": "Spend 5 Mana to overchannel: +2 AC, advantage on attack rolls, and +your Channeler level to Channel Power until it ends."
                     }
                   }
                 }
@@ -399,9 +399,9 @@
           "level": 5,
           "features": [
             {
-              "id": "black-flash",
-              "name": "Black Flash",
-              "description": "When Cursed Energy meets a blow within a millionth of a second, space distorts. Your attacks score a critical hit on a 19 or 20, and you have one extra reaction each round.",
+              "id": "perfect-strike",
+              "name": "Perfect Strike",
+              "description": "You strike at the exact moment your Mana peaks. Your attacks score a critical hit on a 19 or 20, and you have one extra reaction each round.",
               "effects": [
                 {
                   "do": {
@@ -436,7 +436,7 @@
     {
       "id": "heavy-longsword",
       "name": "Longsword",
-      "description": "In this setting, longswords are heavier blades — they deal 1d10 slashing damage.",
+      "description": "In this setting, longswords are heavier blades: they deal 1d10 slashing damage.",
       "overrides": "srd-5.2.1:longsword",
       "category": "Weapon",
       "requiresAttunement": false,
@@ -451,10 +451,10 @@
       "effects": []
     },
     {
-      "id": "playful-cloud",
-      "name": "Playful Cloud",
-      "description": "A three-section staff, a special-grade cursed tool. Its strikes deal an extra 1d6 Cursed damage.",
-      "category": "Cursed Tool",
+      "id": "storm-staff",
+      "name": "Storm Staff",
+      "description": "A staff carved from lightning-struck oak. Its strikes deal an extra 1d6 Arcane damage.",
+      "category": "Arcane Focus",
       "requiresAttunement": false,
       "weapon": {
         "category": "martial",
@@ -469,11 +469,11 @@
           "do": {
             "kind": "extraDamage",
             "damage": "1d6",
-            "damageType": "Cursed",
+            "damageType": "Arcane",
             "appliesTo": {
               "item": {
                 "itemIds": [
-                  "playful-cloud"
+                  "storm-staff"
                 ]
               }
             }
@@ -485,14 +485,14 @@
   "monsters": [],
   "optionLists": [
     {
-      "id": "shikigami",
-      "name": "Shikigami",
-      "description": "Shadow creatures a Ten Shadows user can summon.",
+      "id": "spirit-beasts",
+      "name": "Spirit Beasts",
+      "description": "Spirit animals a Beast Blood channeler can call.",
       "options": [
         {
-          "id": "divine-dogs",
-          "name": "Divine Dogs",
-          "description": "A pair of shadow hounds that track by scent. You gain expertise in Perception, and can summon them (2 Cursed Energy) to fight beside you.",
+          "id": "spirit-wolves",
+          "name": "Spirit Wolves",
+          "description": "A pair of spectral wolves that track by scent. You gain expertise in Perception, and can call them (2 Mana) to fight beside you.",
           "effects": [
             {
               "do": {
@@ -506,10 +506,10 @@
               "do": {
                 "kind": "grantCompanion",
                 "companion": {
-                  "id": "divine-dogs",
-                  "name": "Divine Dogs",
+                  "id": "spirit-wolves",
+                  "name": "Spirit Wolves",
                   "size": "Medium",
-                  "creatureType": "Shikigami",
+                  "creatureType": "Spirit",
                   "speed": "40 ft",
                   "ac": "12 + @prof",
                   "hp": "4 * @level + @self.con.mod",
@@ -537,11 +537,11 @@
                     }
                   ],
                   "summonCost": {
-                    "resourceId": "cursed-energy",
+                    "resourceId": "mana",
                     "amount": "2"
                   },
                   "states": [
-                    "Totality"
+                    "Enraged"
                   ]
                 }
               }
@@ -549,9 +549,9 @@
           ]
         },
         {
-          "id": "nue",
-          "name": "Nue",
-          "description": "A great owl-like shikigami you can ride. You gain a flying speed of 30 feet.",
+          "id": "spirit-hawk",
+          "name": "Spirit Hawk",
+          "description": "A great spectral hawk you can ride. You gain a flying speed of 30 feet.",
           "effects": [
             {
               "do": {
@@ -566,8 +566,8 @@
       ]
     },
     {
-      "id": "body-improvements",
-      "name": "Body Improvements",
+      "id": "physical-training",
+      "name": "Physical Training",
       "description": "Point-buy physical upgrades.",
       "options": [
         {
@@ -628,11 +628,11 @@
   ],
   "archetypes": [
     {
-      "id": "limitless",
-      "name": "Limitless",
-      "description": "Infinity surrounds you, slowing anything that approaches. Prerequisite: Cursed Energy ability 16 or higher.",
+      "id": "storm-blood",
+      "name": "Storm Blood",
+      "description": "Storm magic runs in your veins, crackling around you. Prerequisite: channelling ability 16 or higher.",
       "tags": [
-        "innate-technique"
+        "bloodline"
       ],
       "levelBasis": "highestClass",
       "prerequisite": {
@@ -641,8 +641,8 @@
       },
       "columns": [
         {
-          "id": "blueRange",
-          "label": "Blue Range",
+          "id": "pullRange",
+          "label": "Pull Range",
           "values": [
             0,
             0,
@@ -672,9 +672,9 @@
           "level": 1,
           "features": [
             {
-              "id": "infinity",
-              "name": "Infinity",
-              "description": "You add half your Cursed Energy modifier (rounded down) to your Armor Class.",
+              "id": "storm-ward",
+              "name": "Storm Ward",
+              "description": "A crackling ward surrounds you. You add half your channelling modifier (rounded down) to your Armor Class.",
               "effects": [
                 {
                   "do": {
@@ -692,19 +692,19 @@
           "level": 6,
           "features": [
             {
-              "id": "blue",
-              "name": "Lapse: Blue",
-              "description": "Spend Cursed Energy to pull everything toward a point within range (the Blue Range column): creatures in a 10-foot radius per point make a Strength save or are pulled to the centre and take one Technique Die of force damage per point.",
+              "id": "thunder",
+              "name": "Thunder Pull",
+              "description": "Spend Mana to pull everything toward a point within range (the Pull Range column): creatures in a 10-foot radius per point make a Strength save or are pulled to the centre and take one Channel Die of force damage per point.",
               "effects": [
                 {
                   "do": {
                     "kind": "grantAction",
                     "action": {
-                      "id": "lapse-blue",
-                      "name": "Lapse: Blue",
+                      "id": "thunder-pull",
+                      "name": "Thunder Pull",
                       "actionType": "technique",
                       "spend": {
-                        "resourceId": "cursed-energy",
+                        "resourceId": "mana",
                         "min": "1",
                         "max": "@alias.ce.mod + 1"
                       },
@@ -712,7 +712,7 @@
                       "saveAbility": "str",
                       "damage": "(@spent)d6",
                       "damageType": "force",
-                      "range": "@table.blueRange",
+                      "range": "@table.pullRange",
                       "area": "10 * @spent"
                     }
                   }
@@ -724,11 +724,11 @@
       ]
     },
     {
-      "id": "ten-shadows",
-      "name": "Ten Shadows",
-      "description": "Your shadow is a gateway for shikigami. You start with one and learn another at 4th level and every 4 levels after.",
+      "id": "beast-blood",
+      "name": "Beast Blood",
+      "description": "You can call spirit animals to your side. You start with one and learn another at 4th level and every 4 levels after.",
       "tags": [
-        "innate-technique"
+        "bloodline"
       ],
       "levelBasis": "highestClass",
       "levels": [
@@ -736,20 +736,20 @@
           "level": 1,
           "features": [
             {
-              "id": "shadow-summoning",
-              "name": "Shadow Summoning",
-              "description": "Your shadow is a gateway for shikigami. You start with one and learn another at 4th level and every 4 levels after.",
+              "id": "beast-calling",
+              "name": "Beast Calling",
+              "description": "You can call spirit animals to your side. You start with one and learn another at 4th level and every 4 levels after.",
               "effects": [
                 {
                   "do": {
                     "kind": "grantChoice",
                     "choice": {
-                      "id": "shikigami",
-                      "label": "Shikigami",
+                      "id": "spirit-beasts",
+                      "label": "Spirit Beasts",
                       "count": "floor(@archetypeLevel / 4) + 1",
                       "from": {
                         "kind": "optionList",
-                        "listId": "shikigami"
+                        "listId": "spirit-beasts"
                       }
                     }
                   }

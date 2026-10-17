@@ -52,7 +52,7 @@ export function buildFromSetup(s: TestSetup, registry: Registry): CharacterBuild
   }
 }
 
-/** "Jujutsu Sorcerer 5" — who a setup is. */
+/** "Channeler 5" — who a setup is. */
 export function setupLabel(s: TestSetup, registry: Registry): string {
   const cls = registry.get('classes', s.classId)
   return cls ? `${cls.def.name} ${s.level}` : `level ${s.level}`

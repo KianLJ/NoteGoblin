@@ -1,6 +1,6 @@
 // Two small packs that exercise the engine end to end: a trimmed 5e core
 // written entirely as pack data (no special cases — the same shapes the
-// SRD pack will use in phase 2), and a JJK-flavoured homebrew pack built on
+// SRD pack will use in phase 2), and a homebrew-flavoured homebrew pack built on
 // top of it with custom stats, resources, toggles, nested choices, an
 // override and a hide.
 
@@ -313,107 +313,107 @@ export const coreInput: ContentPackInput = {
   ]
 }
 
-export const jjkInput: ContentPackInput = {
+export const frontierInput: ContentPackInput = {
   formatVersion: 1,
-  id: 'jjk',
-  name: 'Jujutsu Codex',
+  id: 'frontier',
+  name: 'Arcane Frontier',
   author: 'Test',
   dependsOn: ['core'],
   hides: ['core:tough'],
-  terminology: { spellSlots: 'Technique Slots', 'ability.cha': 'Cursed Energy Control', subclass: 'Cursed Lineage' },
+  terminology: { spellSlots: 'Mana Wells', 'ability.cha': 'Presence', subclass: 'Order' },
   vocabulary: {
-    skills: [{ id: 'cursed-sense', name: 'Cursed Sense', ability: 'wis' }],
-    damageTypes: [{ id: 'cursed', name: 'Cursed' }],
-    stats: [{ id: 'output', name: 'Cursed Energy Output', base: '@cha.mod + @prof' }],
+    skills: [{ id: 'arcane-sense', name: 'Arcane Sense', ability: 'wis' }],
+    damageTypes: [{ id: 'arcane', name: 'Arcane' }],
+    stats: [{ id: 'output', name: 'Channel Power', base: '@cha.mod + @prof' }],
     actionTypes: [{ id: 'technique', name: 'Technique' }]
   },
   optionLists: [
     {
-      id: 'innate-techniques',
-      name: 'Innate Techniques',
+      id: 'bloodlines',
+      name: 'Bloodlines',
       options: [
         {
-          id: 'limitless',
-          name: 'Limitless',
+          id: 'storm-blood',
+          name: 'Storm Blood',
           prerequisite: { kind: 'formula', formula: '@cha.score >= 16' },
           effects: [{ do: { kind: 'modify', target: 'ac', op: 'add', value: 'floor(@cha.mod / 2)' } }]
         },
         {
-          id: 'ten-shadows',
-          name: 'Ten Shadows',
+          id: 'beast-blood',
+          name: 'Beast Blood',
           effects: [
-            { do: { kind: 'grantChoice', choice: { id: 'shikigami', label: 'Shikigami', count: 'floor(@classLevel / 4) + 1', from: { kind: 'optionList', listId: 'shikigami' } } } }
+            { do: { kind: 'grantChoice', choice: { id: 'spirit-beasts', label: 'Spirit Beasts', count: 'floor(@classLevel / 4) + 1', from: { kind: 'optionList', listId: 'spirit-beasts' } } } }
           ]
         }
       ]
     },
     {
-      id: 'shikigami',
-      name: 'Shikigami',
+      id: 'spirit-beasts',
+      name: 'Spirit Beasts',
       options: [
-        { id: 'divine-dogs', name: 'Divine Dogs', effects: [{ do: { kind: 'proficiency', category: 'skill', value: 'perception', level: 'expertise' } }] },
-        { id: 'nue', name: 'Nue', effects: [{ do: { kind: 'modify', target: 'speed.fly', op: 'set', value: '30' } }] }
+        { id: 'spirit-wolves', name: 'Spirit Wolves', effects: [{ do: { kind: 'proficiency', category: 'skill', value: 'perception', level: 'expertise' } }] },
+        { id: 'spirit-hawk', name: 'Spirit Hawk', effects: [{ do: { kind: 'modify', target: 'speed.fly', op: 'set', value: '30' } }] }
       ]
     }
   ],
   items: [
     { id: 'heavy-longsword', overrides: 'core:longsword', name: 'Longsword', category: 'Weapon', weapon: { category: 'martial', range: 'melee', damage: '1d10', damageType: 'Slashing' } },
     {
-      id: 'playful-cloud',
-      name: 'Playful Cloud',
-      category: 'Cursed Tool',
+      id: 'storm-staff',
+      name: 'Storm Staff',
+      category: 'Arcane Focus',
       weapon: { category: 'martial', range: 'melee', damage: '3d6', damageType: 'Bludgeoning' },
-      effects: [{ do: { kind: 'extraDamage', damage: '1d6', damageType: 'Cursed', appliesTo: { item: { itemIds: ['playful-cloud'] } } } }]
+      effects: [{ do: { kind: 'extraDamage', damage: '1d6', damageType: 'Arcane', appliesTo: { item: { itemIds: ['storm-staff'] } } } }]
     }
   ],
   classes: [
     {
-      id: 'jujutsu-sorcerer',
-      name: 'Jujutsu Sorcerer',
+      id: 'channeler',
+      name: 'Channeler',
       hitDie: 10,
       saves: ['con', 'cha'],
       weaponProficiencies: ['simple', 'martial'],
-      skillChoice: { count: 2, from: ['cursed-sense', 'perception'] },
-      subclassLabel: 'Cursed Lineage',
+      skillChoice: { count: 2, from: ['arcane-sense', 'perception'] },
+      subclassLabel: 'Order',
       columns: [
-        { id: 'cursedEnergy', label: 'Cursed Energy', values: range(20, (l) => l * 2 + 2) },
-        { id: 'techniqueDie', label: 'Technique Die', values: range(20, (l) => (l >= 11 ? 10 : l >= 5 ? 8 : 6)) }
+        { id: 'manaPool', label: 'Mana', values: range(20, (l) => l * 2 + 2) },
+        { id: 'channelDie', label: 'Channel Die', values: range(20, (l) => (l >= 11 ? 10 : l >= 5 ? 8 : 6)) }
       ],
       levels: [
         {
           level: 1,
           features: [
             {
-              id: 'cursed-energy',
-              name: 'Cursed Energy',
+              id: 'mana',
+              name: 'Mana',
               effects: [
-                { do: { kind: 'grantResource', resource: { id: 'cursed-energy', name: 'Cursed Energy', max: '@table.cursedEnergy + @cha.mod', recharge: 'short', display: 'pool' } } },
+                { do: { kind: 'grantResource', resource: { id: 'mana', name: 'Mana', max: '@table.manaPool + @cha.mod', recharge: 'short', display: 'pool' } } },
                 {
                   do: {
                     kind: 'grantAction',
-                    action: { id: 'cursed-strike', name: 'Cursed Strike', actionType: 'technique', cost: { resourceId: 'cursed-energy', amount: '2' }, attackBonus: '@prof + @cha.mod', damage: '2d@table.techniqueDie + @cha.mod', damageType: 'Cursed' }
+                    action: { id: 'arcane-strike', name: 'Arcane Strike', actionType: 'technique', cost: { resourceId: 'mana', amount: '2' }, attackBonus: '@prof + @cha.mod', damage: '2d@table.channelDie + @cha.mod', damageType: 'Arcane' }
                   }
                 }
               ]
             },
-            { id: 'innate-technique', name: 'Innate Technique', effects: [{ do: { kind: 'grantChoice', choice: { id: 'technique', label: 'Innate Technique', from: { kind: 'optionList', listId: 'innate-techniques' } } } }] }
+            { id: 'bloodline', name: 'Bloodline', effects: [{ do: { kind: 'grantChoice', choice: { id: 'technique', label: 'Bloodline', from: { kind: 'optionList', listId: 'bloodlines' } } } }] }
           ]
         },
         {
           level: 3,
           features: [
             {
-              id: 'domain-expansion',
-              name: 'Domain Expansion',
+              id: 'overchannel',
+              name: 'Overchannel',
               effects: [
                 {
                   do: {
                     kind: 'grantToggle',
                     toggle: {
-                      id: 'domain-expansion',
-                      name: 'Domain Expansion',
+                      id: 'overchannel',
+                      name: 'Overchannel',
                       actionType: 'action',
-                      cost: { resourceId: 'cursed-energy', amount: '5' },
+                      cost: { resourceId: 'mana', amount: '5' },
                       effects: [
                         { do: { kind: 'modify', target: 'ac', op: 'add', value: '2' } },
                         { do: { kind: 'rollMode', target: 'attack', mode: 'advantage' } },
@@ -433,4 +433,4 @@ export const jjkInput: ContentPackInput = {
 }
 
 export const core: ContentPack = parsePack(coreInput)
-export const jjk: ContentPack = parsePack(jjkInput, [core])
+export const frontier: ContentPack = parsePack(frontierInput, [core])

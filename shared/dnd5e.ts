@@ -1497,7 +1497,7 @@ export interface EquipmentItem {
   compendiumId?: string
   /** Links back to a shared/compendium.ts magic item entry (Potion of Healing, Ring of Protection, etc.) — a separate id space/lookup from compendiumId since magic items are a different SRD list (rarity/category, no weight/cost) from mundane equipment. */
   magicItemId?: string
-  /** Links to a content pack's item by full id ("my-pack:cursed-tool") — its rules (attacks, AC, effects) come from the pack through the content engine. */
+  /** Links to a content pack's item by full id ("my-pack:arcane-focus") — its rules (attacks, AC, effects) come from the pack through the content engine. */
   packItemId?: string
 }
 
@@ -1632,9 +1632,9 @@ export interface CharacterSheetData {
   activeConditions?: { id: string; level?: number }[]
   /** Amounts of pack-defined currencies (vocabulary.currencies beyond cp/sp/ep/gp/pp), by currency id. */
   packCurrency?: Record<string, number>
-  /** Values of the enabled packs' counters (Breakthroughs, Renown…), by counter id. */
+  /** Values of the enabled packs' counters (Renown, Corruption…), by counter id. */
   counters?: Record<string, number>
-  /** Which ability each pack-defined ability alias points at ("Cursed Energy ability: Wisdom"), by alias id. */
+  /** Which ability each pack-defined ability alias points at ("Channelling ability: Wisdom"), by alias id. */
   abilityAliases?: Record<string, 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>
   /** Temporary points sitting on top of a resource's maximum, by resource id — spent before regular uses, gone on a rest. */
   resourceTemp?: Record<string, number>

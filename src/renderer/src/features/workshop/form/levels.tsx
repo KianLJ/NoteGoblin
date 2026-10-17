@@ -72,7 +72,7 @@ function FeatureEditor({ value, onChange }: { value: Obj; onChange: (v: Obj) => 
 
 /**
  * A class / subclass / archetype progression as a grid: one row per level,
- * the table columns (Rages, Martial Arts die, Cursed Energy…) as editable
+ * the table columns (Rages, Martial Arts die, Mana…) as editable
  * cells, and each level's features. Clicking a level opens its features
  * underneath.
  */

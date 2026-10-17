@@ -45,7 +45,7 @@ export function writePackFile(pack: ContentPack): string {
   return `${JSON.stringify(pack, null, 2)}\n`
 }
 
-/** A file name for exporting a pack: "Jujutsu Codex 1.2.0.ngpack.json". */
+/** A file name for exporting a pack: "Arcane Frontier 1.2.0.ngpack.json". */
 export function packFileName(pack: Pick<ContentPack, 'name' | 'version'>): string {
   const safe = `${pack.name} ${pack.version}`.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim()
   return `${safe || 'content-pack'}${PACK_FILE_EXTENSION}`

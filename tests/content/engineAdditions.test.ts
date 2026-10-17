@@ -17,14 +17,14 @@ const homebrewInput: ContentPackInput = {
   name: 'Additions',
   dependsOn: ['core'],
   vocabulary: {
-    counters: [{ id: 'breakthroughs', name: 'Breakthroughs', max: '3' }],
-    abilityAliases: [{ id: 'ce', name: 'Cursed Energy ability', options: ['wis', 'cha'] }],
-    senses: [{ id: 'cursed-sight', name: 'Cursed Sight' }]
+    counters: [{ id: 'renown', name: 'Renown', max: '3' }],
+    abilityAliases: [{ id: 'ce', name: 'Channelling ability', options: ['wis', 'cha'] }],
+    senses: [{ id: 'arcane-sight', name: 'Arcane Sight' }]
   },
   optionLists: [
     {
       id: 'body',
-      name: 'Body Improvements',
+      name: 'Physical Training',
       options: [
         { id: 'tough', name: 'Tough Skin', cost: '2', group: 'defence', effects: [{ do: { kind: 'modify', target: 'ac', op: 'add', value: '1' } }] },
         { id: 'quick', name: 'Quick Feet', cost: '1', group: 'speed', effects: [{ do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '5' } }] },
@@ -35,7 +35,7 @@ const homebrewInput: ContentPackInput = {
   archetypes: [
     {
       id: 'blood',
-      name: 'Blood Manipulation',
+      name: 'Blood Magic',
       tags: ['innate'],
       levelBasis: 'highestClass',
       columns: [{ id: 'blood-dice', label: 'Blood Dice', values: [1, 1, 2, 2, 2, 3] }],
@@ -65,16 +65,16 @@ const homebrewInput: ContentPackInput = {
             }
           ]
         },
-        { level: 3, features: [{ id: 'flowing', name: 'Flowing Red Scale' }] },
+        { level: 3, features: [{ id: 'flowing', name: 'Red Tide' }] },
         { level: 6, features: [{ id: 'convergence', name: 'Convergence' }] }
       ]
     },
-    { id: 'shadows', name: 'Ten Shadows', tags: ['innate'] }
+    { id: 'shadows', name: 'Beast Blood', tags: ['innate'] }
   ],
   classes: [
     {
       id: 'sorcerer',
-      name: 'Jujutsu Sorcerer',
+      name: 'Channeler',
       hitDie: 8,
       saves: ['wis', 'cha'],
       multiclass: 'never',
@@ -84,9 +84,9 @@ const homebrewInput: ContentPackInput = {
           features: [
             {
               id: 'ce-pool',
-              name: 'Cursed Energy',
+              name: 'Mana',
               effects: [
-                { do: { kind: 'grantResource', resource: { id: 'ce', name: 'Cursed Energy', max: '@classLevel * 2', recharge: 'long', shortRestRegain: 'floor(@classLevel / 2)', display: 'pool' } } },
+                { do: { kind: 'grantResource', resource: { id: 'ce', name: 'Mana', max: '@classLevel * 2', recharge: 'long', shortRestRegain: 'floor(@classLevel / 2)', display: 'pool' } } },
                 {
                   do: {
                     kind: 'grantAction',
@@ -95,17 +95,17 @@ const homebrewInput: ContentPackInput = {
                 }
               ]
             },
-            { id: 'technique', name: 'Innate Technique', effects: [{ do: { kind: 'grantChoice', choice: { id: 'pick', label: 'Innate Technique', from: { kind: 'archetypes', tags: ['innate'] } } } }] },
+            { id: 'technique', name: 'Bloodline', effects: [{ do: { kind: 'grantChoice', choice: { id: 'pick', label: 'Bloodline', from: { kind: 'archetypes', tags: ['innate'] } } } }] },
             {
               id: 'body',
-              name: 'Body Improvements',
+              name: 'Physical Training',
               effects: [
                 {
                   do: {
                     kind: 'grantChoice',
                     choice: {
                       id: 'improvements',
-                      label: 'Body Improvements',
+                      label: 'Physical Training',
                       budget: '@classLevel',
                       allowRepeats: true,
                       groups: [{ id: 'defence', label: 'Defence', max: '1' }],
@@ -123,26 +123,26 @@ const homebrewInput: ContentPackInput = {
                 { do: { kind: 'modify', target: 'crit.threshold', op: 'add', value: '-1' } },
                 { do: { kind: 'modify', target: 'reactions', op: 'add', value: '1' } },
                 { do: { kind: 'modify', target: 'attacks.perAction', op: 'set', value: '1 + (@highestClassLevel >= 5)' } },
-                { do: { kind: 'modify', target: 'sense.cursed-sight', op: 'set', value: '60' } },
-                { do: { kind: 'modify', target: 'alias.ce.score', op: 'add', value: '@counter.breakthroughs' } }
+                { do: { kind: 'modify', target: 'sense.arcane-sight', op: 'set', value: '60' } },
+                { do: { kind: 'modify', target: 'alias.ce.score', op: 'add', value: '@counter.renown' } }
               ]
             },
             {
-              id: 'shikigami',
-              name: 'Shikigami',
+              id: 'spirit-beasts',
+              name: 'Spirit Beasts',
               effects: [
                 {
                   do: {
                     kind: 'grantCompanion',
                     companion: {
                       id: 'dog',
-                      name: 'Divine Dog',
+                      name: 'Spirit Wolf',
                       ac: '12 + @prof',
                       hp: '5 * @classLevel + @self.con.mod',
                       abilities: { str: '14', con: '12 + floor(@classLevel / 2)' },
                       attacks: [{ name: 'Bite', bonus: '@self.str.mod + @prof', damage: '1d6 + @self.str.mod', damageType: 'piercing' }],
                       summonCost: { resourceId: 'ce', amount: '2' },
-                      states: ['Totality']
+                      states: ['Enraged']
                     }
                   }
                 }
@@ -169,9 +169,9 @@ describe('archetypes', () => {
   it('unlocks features by the chosen level basis and reads its own table', () => {
     const d = derive({ choices: { [TECH]: ['hb:blood'] } })
     expect(errors(d)).toEqual([])
-    expect(d.archetypes).toEqual([expect.objectContaining({ id: 'hb:blood', level: 4, choiceKey: TECH, className: 'Jujutsu Sorcerer' })])
+    expect(d.archetypes).toEqual([expect.objectContaining({ id: 'hb:blood', level: 4, choiceKey: TECH, className: 'Channeler' })])
     const names = d.features.filter((f) => f.archetypeId === 'hb:blood').map((f) => f.name)
-    expect(names).toEqual(['Blood Manipulation', 'Piercing Blood', 'Flowing Red Scale'])
+    expect(names).toEqual(['Blood Magic', 'Piercing Blood', 'Red Tide'])
     // Level 4 → blood dice 2; at the minimum spend of 1: 3d8.
     expect(d.actions.find((a) => a.id === 'piercing-blood')!.damage).toBe('3d8')
   })
@@ -223,16 +223,16 @@ describe('point-buy choices', () => {
   it('warns when over budget or over a group cap', () => {
     const d = derive({ choices: { [BODY]: ['tough', 'hard', 'tough'] } })
     const messages = d.diagnostics.map((x) => x.message)
-    expect(messages).toContain('Body Improvements: the picks cost 5 but only 4 points are available.')
-    expect(messages).toContain('Body Improvements: 3 picks from Defence, but the limit is 1.')
+    expect(messages).toContain('Physical Training: the picks cost 5 but only 4 points are available.')
+    expect(messages).toContain('Physical Training: 3 picks from Defence, but the limit is 1.')
   })
 })
 
 describe('counters, aliases and new stats', () => {
   it('reads counters (clamped) and points aliases at the chosen ability', () => {
-    const d = derive({ counters: { breakthroughs: 9 }, abilityAliases: { ce: 'cha' } })
-    expect(d.counters).toEqual([{ id: 'breakthroughs', name: 'Breakthroughs', description: '', value: 3, min: 0, max: 3 }])
-    // cha 8 + 3 breakthroughs through the alias.
+    const d = derive({ counters: { renown: 9 }, abilityAliases: { ce: 'cha' } })
+    expect(d.counters).toEqual([{ id: 'renown', name: 'Renown', description: '', value: 3, min: 0, max: 3 }])
+    // cha 8 + 3 renown through the alias.
     expect(d.abilities.cha.score).toBe(11)
     expect(d.abilities.wis.score).toBe(15)
     expect(d.abilityAliases).toEqual([expect.objectContaining({ id: 'ce', ability: 'cha', chosen: true })])
@@ -245,23 +245,23 @@ describe('counters, aliases and new stats', () => {
     expect(d.critThreshold).toBe(19)
     expect(d.reactions).toBe(2)
     expect(d.attacksPerAction).toBe(2)
-    expect(d.senses).toEqual({ 'cursed-sight': { name: 'Cursed Sight', range: 60 } })
+    expect(d.senses).toEqual({ 'arcane-sight': { name: 'Arcane Sight', range: 60 } })
   })
 
   it('warns when a never-multiclass class is combined with another', () => {
     const d = derive({ classes: [{ classId: 'sorcerer', level: 2 }, { classId: 'core:fighter', level: 1 }] })
-    expect(d.diagnostics.map((x) => x.message)).toContain("Jujutsu Sorcerer can't be multiclassed — a character with it can't take levels in another class.")
+    expect(d.diagnostics.map((x) => x.message)).toContain("Channeler can't be multiclassed — a character with it can't take levels in another class.")
   })
 })
 
 describe('companions', () => {
   it('scales with the owner and tracks state and HP', () => {
-    const d = derive({ companions: { dog: { state: 'Totality', currentHp: 7 } } })
+    const d = derive({ companions: { dog: { state: 'Enraged', currentHp: 7 } } })
     expect(errors(d)).toEqual([])
     const dog = d.companions[0]
     // con 12 + 2 = 14 (+2); hp 5*4 + 2.
-    expect(dog).toEqual(expect.objectContaining({ id: 'dog', ac: 14, maxHp: 22, currentHp: 7, state: 'Totality', summonCost: { resourceId: 'ce', amount: 2 } }))
-    expect(dog.states).toEqual(['summoned', 'dismissed', 'defeated', 'Totality'])
+    expect(dog).toEqual(expect.objectContaining({ id: 'dog', ac: 14, maxHp: 22, currentHp: 7, state: 'Enraged', summonCost: { resourceId: 'ce', amount: 2 } }))
+    expect(dog.states).toEqual(['summoned', 'dismissed', 'defeated', 'Enraged'])
     expect(dog.attacks).toEqual([{ name: 'Bite', bonus: 4, damage: '1d6 + 2', damageType: 'piercing' }])
     expect(derive({}).companions[0].state).toBe('dismissed')
   })
@@ -276,23 +276,23 @@ describe('validation', () => {
   })
 })
 
-describe('example JJK pack', () => {
-  it('imports and derives a Limitless sorcerer without errors', async () => {
+describe('example homebrew pack', () => {
+  it('imports and derives a Storm Blood sorcerer without errors', async () => {
     const { readFileSync } = await import('node:fs')
     const { readPackFile } = await import('@shared/content/packFiles')
     const { srdPack } = await import('@shared/content/srd')
-    const read = readPackFile(readFileSync('docs/examples/jujutsu-codex.ngpack.json', 'utf8'))
+    const read = readPackFile(readFileSync('docs/examples/arcane-frontier.ngpack.json', 'utf8'))
     if (!read.ok) throw new Error('example pack should import')
     const d = deriveCharacter(
       {
         abilityScores: { ...SCORES, cha: 16 },
-        classes: [{ classId: 'jujutsu-codex:jujutsu-sorcerer', level: 6 }],
-        choices: { 'class:jujutsu-codex:jujutsu-sorcerer:innate-technique#technique': ['limitless'] }
+        classes: [{ classId: 'arcane-frontier:channeler', level: 6 }],
+        choices: { 'class:arcane-frontier:channeler:bloodline#technique': ['storm-blood'] }
       },
       [srdPack(), read.pack]
     )
     expect(d.diagnostics.filter((x) => x.severity === 'error')).toEqual([])
-    expect(d.actions.map((a) => a.id)).toEqual(expect.arrayContaining(['cursed-burst', 'focus-breath', 'lapse-blue']))
+    expect(d.actions.map((a) => a.id)).toEqual(expect.arrayContaining(['mana-burst', 'focus-breath', 'thunder-pull']))
     expect(d.critThreshold).toBe(19)
   })
 })

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { DerivedResource } from '@shared/content/engine'
 import { applyRestores, removeTempPoints, resourceRemaining, restResources, restoreResource, rollAmount, setResourceUsed, spendResource } from '@shared/content/resourceMath'
 
-const ce: DerivedResource = { id: 'ce', name: 'Cursed Energy', description: '', max: 8, used: 0, recharge: 'long', display: 'pool', source: 'x', shortRestRegain: 2 }
+const ce: DerivedResource = { id: 'ce', name: 'Mana', description: '', max: 8, used: 0, recharge: 'long', display: 'pool', source: 'x', shortRestRegain: 2 }
 const ki: DerivedResource = { ...ce, id: 'ki', name: 'Ki', recharge: 'short', shortRestRegain: undefined }
 
 describe('resource math', () => {

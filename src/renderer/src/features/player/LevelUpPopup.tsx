@@ -83,7 +83,7 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
 
   // ---- Recap (informational only, strictly this level-up's delta) ----
   const isOwn = (key: string): boolean => !key.includes('#') && (key.startsWith(`class:${classId}:`) || (!!subclassId && key.startsWith(`subclass:${subclassId}:`)))
-  // Archetype features (an innate technique this class granted) count too — they unlock with the class's level.
+  // Archetype features (a bloodline this class granted) count too — they unlock with the class's level.
   const isOwnArchetype = (f: (typeof derived.features)[number]): boolean => !!f.archetypeId && f.classId === classId && f.key.includes(':', f.key.lastIndexOf('/'))
   const newFeatures = derived.features.filter((f) => (isOwn(f.key) || isOwnArchetype(f)) && f.level !== undefined && f.level > fromLevel && f.level <= toLevel)
   const before: CharacterSheetData = { ...character, classes: character.classes.map((c, i) => (i === classIndex ? { ...c, level: fromLevel } : c)) }
