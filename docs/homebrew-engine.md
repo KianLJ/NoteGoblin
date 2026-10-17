@@ -770,3 +770,58 @@ Done: making the Workshop approachable without losing any power.
   highlighted; collapsible, remembered per device.
 - **Tour** — a nine-step first-run walkthrough (`WorkshopTour`), replayed
   from the Tour button.
+
+## Guided "Make something" — stage 1
+
+Done: a front door for players who just want one custom thing, with no
+engine words.
+
+- **Home** — the Workshop opens on "What do you want to make?" (magic
+  item, weapon, armour or shield, spell, feat, species, monster) plus
+  everything in your packs a guided form can open, by pack; "Make
+  something" in the sidebar returns to it. `guided/MakeHome.tsx`.
+- **Which pack** — new things go to My Homebrew (`my-homebrew`, created
+  on the first save) unless "Save to" picks another library pack; the
+  last pick is remembered per device. Reopened things stay in their own
+  pack. A DM still enables a pack per campaign from Content Packs (pack
+  monsters show in the Codex straight away). Saving is blocked while the
+  target pack has unsaved full-editor changes.
+- **Answers, not effects** — `shared/content/guided.ts` turns D&D-worded
+  answers (rarity, "+1 to attack and damage", base AC and armour type,
+  damage dice and "+1d6 per slot level", "+1 to Constitution or
+  Charisma", a checklist of 17 common benefits) into pack entries
+  (`answersToEntry`), and reads entries back (`entryToAnswers`). Anything
+  the form can't show — a conditional effect, a kind the checklist
+  doesn't offer, a source citation, a non-level feat prerequisite — is
+  kept as it is (`extras`, `mergeIntoEntry`), so reopening a thing never
+  loses full-editor work. Spell upcasting is
+  `(N + (@slotLevel - L) * K)dS`; cantrips scale with
+  `(N * (1 + floor((@level + 1) / 6)))dS`. Healing can add the new
+  `@spell.mod` (the spellcasting ability's modifier).
+- **Preview and Try it** — `guided/GuidedEditor.tsx`: a live Codex card
+  (`HomebrewDetail`, now shared with the Codex), "On the character
+  sheet" lines (`describeAnswers`), problems in plain words, and a test
+  character of any class and level showing what changed
+  (`describeChanges`: "Armor Class: 12 → 13", "New attack — Flame
+  Tongue: +7 to hit…"). Spells show their DC or attack bonus and damage
+  at each slot level (`spellRolls`).
+- **Open in full editor** — opens My Homebrew's full editor on that
+  entry. The full editor's own wording is plainer too: Contents,
+  New rules terms (vocabulary), Rename things (terminology), Pick lists
+  (option lists). The tour now starts the first time the full editor
+  opens, not on the home screen.
+- **Guided monsters** — `shared/content/guidedMonster.ts`: size, CR,
+  scores, hit dice, speeds, senses, proficient saves and skills, damage
+  and condition lists, and traits / actions / bonus actions / reactions /
+  legendary and lair actions, each an attack (to-hit and average damage
+  worked out from CR and the ability), a saving throw (DC worked out
+  likewise) or plain words. It writes statblock text in the SRD
+  bestiary's wording and reads it back; a line it can't rebuild exactly
+  is kept as written ("Lines kept as written", with "Work it out
+  instead"). Every SRD statblock round-trips unchanged (tested).
+- **Monsters** — statblocks gained `initiative` ("+2 (12)"; the
+  initiative tracker rolls with its bonus, else the Dex modifier),
+  `bonus_actions` and `lair_actions`, in the parser, the renderer, the
+  Workshop's monster form and the pack-writing prompt.
+
+Stage 2: backgrounds and subclasses, then classes.

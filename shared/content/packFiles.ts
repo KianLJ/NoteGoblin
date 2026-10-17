@@ -109,7 +109,7 @@ export function describePackContents(pack: ContentPack): string {
     ['spells', 'spell', 'spells'],
     ['items', 'item', 'items'],
     ['monsters', 'monster', 'monsters'],
-    ['optionLists', 'option list', 'option lists'],
+    ['optionLists', 'pick list', 'pick lists'],
     ['archetypes', 'archetype', 'archetypes']
   ]
   const counts = packSummary(pack).counts

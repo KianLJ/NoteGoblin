@@ -7,16 +7,16 @@ const TOUR_KEY = 'gb-workshop-tour-done'
 
 const STEPS: Array<{ title: string; body: string }> = [
   {
-    title: 'Welcome to the Workshop',
-    body: 'Here you make homebrew packs: classes, feats, spells, items and creatures that character sheets calculate with. This takes a minute; you can replay it from the Tour button.'
+    title: 'Welcome to the full editor',
+    body: 'Here you build whole homebrew packs: classes, subclasses, feats, spells, items and creatures that character sheets calculate with. For a single item, spell or feat, “Make something” (top left) is quicker. This takes a minute; you can replay it from the Tour button.'
   },
-  { title: 'Your packs', body: 'Your packs are listed on the left. Start a new one, or import a pack file someone shared with you.' },
+  { title: 'Your packs', body: 'Your packs are listed on the left — My Homebrew holds what you made with “Make something”. Start a new one, or import a pack file someone shared with you.' },
   {
     title: 'Overview',
     body: 'A pack’s name, version and what it builds on. An empty pack offers “Start with…” shortcuts, and Problems lists anything to fix in plain words, often with a Fix button.'
   },
   {
-    title: 'Entries',
+    title: 'Contents',
     body: 'Every class, feat, spell and item in the pack. The plus next to a section adds one — blank, or copied from the SRD or another pack so you start from something that works.'
   },
   {

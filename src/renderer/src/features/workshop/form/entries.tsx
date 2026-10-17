@@ -548,6 +548,7 @@ const STAT_FIELDS: Array<[string, string, string]> = [
   ['type', 'Type', 'beast'],
   ['alignment', 'Alignment', 'unaligned'],
   ['ac', 'Armor Class', '13 (natural armor)'],
+  ['initiative', 'Initiative', '+2 (12)'],
   ['hp', 'Hit Points', '22 (4d8 + 4)'],
   ['speed', 'Speed', '30 ft., climb 20 ft.'],
   ['cr', 'Challenge', '1/2']
@@ -565,8 +566,10 @@ const DETAIL_FIELDS: Array<[string, string]> = [
 const BLOCKS: Array<[string, string, string]> = [
   ['traits', 'Traits', 'Trait'],
   ['actions', 'Actions', 'Action'],
+  ['bonus_actions', 'Bonus actions', 'Bonus action'],
   ['reactions', 'Reactions', 'Reaction'],
-  ['legendary_actions', 'Legendary actions', 'Legendary action']
+  ['legendary_actions', 'Legendary actions', 'Legendary action'],
+  ['lair_actions', 'Lair actions', 'Lair action']
 ]
 
 /** A creature as a statblock — the same shape a ```statblock note block and the SRD bestiary use — with a live preview. */
@@ -643,7 +646,7 @@ function MonsterForm({ value, onChange }: FormProps): JSX.Element {
   )
 }
 
-/** The statblock fields of a monster entry (strings and the four entry lists), for the renderer. */
+/** The statblock fields of a monster entry (strings and the entry lists), for the renderer. */
 function toStatblock(value: Obj): StatblockData {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value)) if (typeof v === 'string') out[k] = v

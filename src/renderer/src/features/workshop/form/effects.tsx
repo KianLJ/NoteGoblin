@@ -203,7 +203,7 @@ const RECIPES: Recipe[] = [
   { id: 'spells', group: 'Abilities', label: 'Always know some spells', hint: 'Spells granted for free', make: () => ({ do: { kind: 'grantSpells', spellIds: [] } }) },
   { id: 'companion', group: 'Abilities', label: 'A companion or summon', hint: 'A familiar, beast companion or summoned spirit with its own stats', make: () => ({ do: { kind: 'grantCompanion', companion: { id: '', name: '', ac: '12 + @prof', hp: '5 * @level' } } }) },
   { id: 'spellcasting', group: 'Abilities', label: 'Spellcasting', hint: 'Make the class cast spells', advanced: true, make: () => ({ do: { kind: 'spellcasting', config: { ability: 'int' } } }) },
-  { id: 'chooseOption', group: 'Choices', label: 'Pick one from a list', hint: 'Fighting styles, invocations — options you write in an option list', make: () => ({ do: { kind: 'grantChoice', choice: { id: '', label: '', from: { kind: 'optionList', listId: '' } } } }) },
+  { id: 'chooseOption', group: 'Choices', label: 'Pick one from a list', hint: 'Fighting styles, invocations — options you write in a pick list', make: () => ({ do: { kind: 'grantChoice', choice: { id: '', label: '', from: { kind: 'optionList', listId: '' } } } }) },
   {
     id: 'chooseAbility',
     group: 'Choices',
@@ -762,7 +762,7 @@ export function AttackEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
 }
 
 const SOURCE_KINDS = [
-  { value: 'optionList', label: 'An option list' },
+  { value: 'optionList', label: 'A pick list' },
   { value: 'feats', label: 'Feats' },
   { value: 'spells', label: 'Spells' },
   { value: 'abilities', label: 'Abilities' },
@@ -802,7 +802,7 @@ export function ChoiceEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
       <Group title="Options come from">
         <Select value={kind as 'optionList'} onChange={(k) => k && setFrom({ kind: k, ...(k === 'optionList' ? { listId: '' } : {}) })} options={SOURCE_KINDS.map((k) => ({ value: k.value, label: k.label }))} />
         {kind === 'optionList' && (
-          <Field label="Option list">
+          <Field label="Pick list">
             <TextInput value={str(from.listId)} onChange={(v) => setFrom(withRequired(from, 'listId', v))} list="optionLists" />
           </Field>
         )}

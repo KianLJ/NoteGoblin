@@ -43,8 +43,8 @@ const ADVANCED_KEY = 'gb-workshop-advanced'
 type Tab = 'overview' | 'entries' | 'vocabulary' | 'test' | 'json'
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
-  { id: 'entries', label: 'Entries' },
-  { id: 'vocabulary', label: 'Vocabulary & terms' },
+  { id: 'entries', label: 'Contents' },
+  { id: 'vocabulary', label: 'New rules terms' },
   { id: 'test', label: 'Test character' },
   { id: 'json', label: 'Raw JSON' }
 ]
@@ -75,7 +75,8 @@ export function PackEditor({
   onSaved,
   onDiscard,
   onDuplicate,
-  onRemoved
+  onRemoved,
+  focus
 }: {
   draft: PackDraft
   storedId: string
@@ -87,9 +88,12 @@ export function PackEditor({
   onDiscard: () => void
   onDuplicate: () => void
   onRemoved: () => void
+  /** Open straight on this entry (from a guided form's "Open in full editor"). */
+  focus?: { kind: EntryKind; id: string }
 }): JSX.Element {
-  const [tab, setTab] = useState<Tab>('overview')
-  const [selected, setSelected] = useState<{ kind: EntryKind; index: number } | null>(null)
+  const focusIndex = focus ? entriesOf(draft, focus.kind).findIndex((e) => e.id === focus.id) : -1
+  const [tab, setTab] = useState<Tab>(focus && focusIndex >= 0 ? 'entries' : 'overview')
+  const [selected, setSelected] = useState<{ kind: EntryKind; index: number } | null>(focus && focusIndex >= 0 ? { kind: focus.kind, index: focusIndex } : null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null)
 
@@ -279,7 +283,7 @@ export function PackEditor({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {advanced && <ViewToggle view={view} onView={setView} />}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 'var(--space-4)', alignItems: 'start' }}>
-              <Panel title="Vocabulary" hint="Skills, custom stats, counters, ability aliases, damage types, conditions, senses, action types, weapon properties, spell schools and currencies this pack adds.">
+              <Panel title="New rules terms" hint="New skills, damage types, conditions, senses and other rules words this pack adds, so its classes, feats and items can use them. Also custom numbers (stats and counters), action types, weapon properties, spell schools and currencies.">
                 {view === 'form' ? (
                   <VocabularyForm value={(draft.vocabulary ?? {}) as Record<string, unknown>} onChange={(v) => set({ vocabulary: v as PackDraft['vocabulary'] })} />
                 ) : (
@@ -287,7 +291,7 @@ export function PackEditor({
                 )}
                 <IssueList issues={issues.filter((i) => i.path.startsWith('vocabulary'))} draft={draft} onFix={onChange} />
               </Panel>
-              <Panel title="Terminology" hint="Renames shown in the app — the rules don't change.">
+              <Panel title="Rename things" hint="Change what the app calls things — Spell slots to Mana, Strength to Might. The rules stay the same.">
                 {view === 'form' ? (
                   <TerminologyForm value={(draft.terminology ?? {}) as Record<string, unknown>} onChange={(v) => set({ terminology: v as PackDraft['terminology'] })} />
                 ) : (
@@ -390,7 +394,7 @@ function Overview({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {empty && (
-          <Panel title="Start with…" hint="Pick what to make first. You can add anything else later from the Entries tab.">
+          <Panel title="Start with…" hint="Pick what to make first. You can add anything else later from the Contents tab.">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }}>
               {STARTERS.map((st) => (
                 <button key={st.kind} type="button" className="gb-card" onClick={() => onAdd(st.kind)} style={{ padding: '8px 10px', textAlign: 'left', cursor: 'pointer' }}>
@@ -475,6 +479,16 @@ function Entries({
 }): JSX.Element {
   const [filter, setFilter] = useState('')
   const [adding, setAdding] = useState<EntryKind | null>(null)
+  // Sections the author folded away. Long ones start folded so a big pack's list stays short; the open entry's section and a filter always show.
+  const [folded, setFolded] = useState<Set<EntryKind>>(() => new Set(WORKSHOP_SECTIONS.filter((s) => entriesOf(draft, s.kind).length > FOLD_OVER).map((s) => s.kind)))
+  const toggleFold = (kind: EntryKind): void =>
+    setFolded((prev) => {
+      const next = new Set(prev)
+      if (next.has(kind)) next.delete(kind)
+      else next.add(kind)
+      return next
+    })
+  const allFolded = WORKSHOP_SECTIONS.every((s) => folded.has(s.kind) || entriesOf(draft, s.kind).length === 0)
   const entry = selected ? entriesOf(draft, selected.kind)[selected.index] : undefined
   const q = filter.trim().toLowerCase()
   const section = selected ? WORKSHOP_SECTIONS.find((s) => s.kind === selected.kind) : undefined
@@ -498,18 +512,36 @@ function Entries({
       <div style={{ width: 250, flexShrink: 0, borderRight: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: 'var(--space-3)' }}>
           <input className="gb-input" placeholder="Filter entries…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: '100%', fontSize: 12 }} />
+          <button
+            type="button"
+            onClick={() => setFolded(allFolded ? new Set() : new Set(WORKSHOP_SECTIONS.map((s) => s.kind)))}
+            style={{ ...plainButton, fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}
+          >
+            {allFolded ? 'Expand all' : 'Collapse all'}
+          </button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 var(--space-2) var(--space-3)' }}>
           {WORKSHOP_SECTIONS.map((s) => {
             const list = entriesOf(draft, s.kind)
             const shown = list.map((e, index) => ({ e, index })).filter(({ e }) => !q || String(e.name ?? e.id ?? '').toLowerCase().includes(q))
             if (q && shown.length === 0) return null
+            const open = !!q || selected?.kind === s.kind || !folded.has(s.kind)
             return (
               <div key={s.kind} style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px' }}>
-                  <span className="gb-label" style={{ margin: 0, flex: 1, fontSize: 11 }} title={s.description}>
+                  <button
+                    type="button"
+                    className="gb-label"
+                    onClick={() => list.length && toggleFold(s.kind)}
+                    aria-expanded={open}
+                    title={s.description}
+                    style={{ ...plainButton, margin: 0, flex: 1, fontSize: 11, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4, cursor: list.length ? 'pointer' : 'default' }}
+                  >
+                    <span style={{ display: 'inline-flex', width: 10, transform: open && list.length ? 'rotate(90deg)' : 'none', transition: 'transform 120ms', visibility: list.length ? 'visible' : 'hidden' }}>
+                      <ChevronRight />
+                    </span>
                     {s.label} <span style={{ color: 'var(--text-muted)' }}>{list.length || ''}</span>
-                  </span>
+                  </button>
                   <button type="button" onClick={() => setAdding(adding === s.kind ? null : s.kind)} title={`Add a ${s.singular}`} style={iconButton}>
                     <PlusIcon size={12} />
                   </button>
@@ -526,7 +558,7 @@ function Entries({
                     onClose={() => setAdding(null)}
                   />
                 )}
-                {shown.map(({ e, index }) => {
+                {open && shown.map(({ e, index }) => {
                   const active = selected?.kind === s.kind && selected.index === index
                   const own = issuesForEntry(issues, s.kind, index)
                   const hasError = own.some((i) => i.severity === 'error')
@@ -802,3 +834,15 @@ const STARTERS: Array<{ kind: EntryKind; label: string; hint: string }> = [
 const smallButton = { fontSize: 12, padding: '4px 10px' } as const
 const checkStyle = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 } as const
 const iconButton = { background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2, display: 'inline-flex' } as const
+const plainButton = { background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, font: 'inherit' } as const
+
+/** Sections with more entries than this start folded in the Contents list. */
+const FOLD_OVER = 12
+
+function ChevronRight(): JSX.Element {
+  return (
+    <svg width={9} height={9} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 3l5 5-5 5" />
+    </svg>
+  )
+}

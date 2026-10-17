@@ -194,7 +194,7 @@ class PackChecker {
       for (const id of from.archetypeIds ?? []) if (!this.registry.get('archetypes', id, this.pack.id)) this.error(`${path}.from.archetypeIds`, `No archetype "${id}".`)
     }
     if (from.kind === 'optionList' && !this.registry.get('optionLists', from.listId, this.pack.id)) {
-      this.error(`${path}.from.listId`, `No option list "${from.listId}" in this pack or its dependencies.`)
+      this.error(`${path}.from.listId`, `No pick list "${from.listId}" in this pack or its dependencies.`)
     }
     if (from.kind === 'spells') this.formula(`${path}.from.maxLevel`, from.maxLevel)
     if (from.kind === 'feats') {

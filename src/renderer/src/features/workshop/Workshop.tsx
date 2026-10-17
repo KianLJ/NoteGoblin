@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import type { PackImportResult } from '@shared/ipc'
 import type { ContentPack } from '@shared/content/schema'
+import { blankAnswers, entryKindOf, entryToAnswers, type GuidedAnswers, type GuidedKind } from '@shared/content/guided'
 import { describePackContents } from '@shared/content/packFiles'
+import type { EntryKind } from '@shared/content/registry'
 import { duplicatePackDraft, newPackDraft, type PackDraft } from '@shared/content/workshop'
 import { Button } from '../../ui/Button'
 import { ImportSummary } from '../content/ContentPacksModal'
 import { notifyPackLibraryChanged, useLibraryPacks } from '../content/usePacks'
+import { GuidedEditor, defaultGuidedPack } from './guided/GuidedEditor'
+import { MakeHome } from './guided/MakeHome'
 import { PackEditor } from './PackEditor'
 import { WorkshopTour, tourPending } from './WorkshopTour'
 
@@ -17,11 +21,15 @@ interface OpenDraft {
   dirty: boolean
 }
 
+/** What the right-hand side shows: "What do you want to make?", a guided form, or a pack's full editor. */
+type View = { mode: 'home' } | { mode: 'guided'; answers: GuidedAnswers; originalId: string | null; packId: string; key: number } | { mode: 'pack'; focus?: { kind: EntryKind; id: string }; key: number }
+
 /**
- * The Homebrew Workshop: your pack library on the left, the selected pack's
- * editor on the right. Everything here edits your library only — a
- * campaign keeps the copy it enabled until the DM updates it from the
- * Content Packs window.
+ * The Homebrew Workshop: your pack library on the left; on the right,
+ * "What do you want to make?" (guided forms that save into the My
+ * Homebrew pack) or the selected pack's full editor. Everything here edits
+ * your library only — a campaign keeps the copy it enabled until the DM
+ * updates it from the Content Packs window.
  */
 export function Workshop({ authorName }: { authorName: string }): JSX.Element {
   const library = useLibraryPacks()
@@ -31,7 +39,21 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<PackImportResult | null>(null)
-  const [touring, setTouring] = useState(tourPending)
+  const [touring, setTouring] = useState(false)
+  const [view, setView] = useState<View>({ mode: 'home' })
+
+  // The tour is about the full editor, so it starts the first time that opens.
+  useEffect(() => {
+    if (view.mode === 'pack' && tourPending()) setTouring(true)
+  }, [view.mode])
+
+  const openPack = (id: string | null, focus?: { kind: EntryKind; id: string }): void => {
+    if (id) setSelectedId(id)
+    setView({ mode: 'pack', focus, key: Date.now() })
+  }
+  const makeNew = (kind: GuidedKind): void => setView({ mode: 'guided', answers: blankAnswers(kind, 'new'), originalId: null, packId: defaultGuidedPack(packs.map((p) => p.pack)), key: Date.now() })
+  const openGuided = (kind: GuidedKind, entry: Record<string, unknown>, packId: string): void =>
+    setView({ mode: 'guided', answers: entryToAnswers(kind, entry), originalId: String(entry.id ?? ''), packId, key: Date.now() })
 
   useEffect(() => {
     if (!selectedId && packs.length) setSelectedId(packs[0].pack.id)
@@ -52,7 +74,7 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
     if (!result.ok) return setError(result.error)
     if (!result.data.saved) return setError(result.data.issues.map((i) => i.message).join(' '))
     notifyPackLibraryChanged()
-    setSelectedId(result.data.pack.id)
+    openPack(result.data.pack.id)
   }
 
   async function importPacks(): Promise<void> {
@@ -65,7 +87,7 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
     setImportResult(result.data)
     if (result.data.imported.length) {
       notifyPackLibraryChanged()
-      setSelectedId(result.data.imported[0].pack.id)
+      openPack(result.data.imported[0].pack.id)
     }
   }
 
@@ -89,8 +111,14 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
           <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>Homebrew Workshop</h2>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Make and edit content packs. Campaigns pick up changes when the DM updates the pack.</p>
         </div>
+        <div style={{ padding: '0 var(--space-4) var(--space-3)' }}>
+          <Button variant={view.mode === 'pack' ? 'secondary' : 'primary'} onClick={() => setView({ mode: 'home' })} style={{ ...smallButton, width: '100%' }} title="Make an item, weapon, armour, spell, feat, species or monster with a guided form">
+            Make something
+          </Button>
+        </div>
+        <div style={{ padding: '0 var(--space-4) 4px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Packs</div>
         <div style={{ display: 'flex', gap: 6, padding: '0 var(--space-4) var(--space-3)' }}>
-          <Button variant="primary" disabled={busy} onClick={() => saveNew(newPackDraft('New Pack', authorName, takenIds))} style={smallButton}>
+          <Button variant="secondary" disabled={busy} onClick={() => saveNew(newPackDraft('New Pack', authorName, takenIds))} style={smallButton}>
             New pack
           </Button>
           <Button variant="secondary" disabled={busy} onClick={importPacks} style={smallButton}>
@@ -110,12 +138,12 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
           {library.packs && packs.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '0 var(--space-2)' }}>No packs yet — start a new one or import a file.</p>}
           {packs.map(({ pack }) => {
             const draft = open[pack.id]
-            const active = pack.id === selectedId
+            const active = view.mode === 'pack' && pack.id === selectedId
             return (
               <button
                 key={pack.id}
                 type="button"
-                onClick={() => setSelectedId(pack.id)}
+                onClick={() => openPack(pack.id)}
                 style={{
                   textAlign: 'left',
                   border: 'none',
@@ -141,9 +169,43 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
       </aside>
 
       <section style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {current ? (
+        {view.mode === 'home' ? (
+          <MakeHome library={packs.map((p) => p.pack)} onMake={makeNew} onOpen={openGuided} onFullEditor={() => openPack(selectedId ?? packs[0]?.pack.id ?? null)} onImport={importPacks} busy={busy} />
+        ) : view.mode === 'guided' ? (
+          <GuidedEditor
+            key={view.key}
+            initial={view.answers}
+            originalId={view.originalId}
+            packId={view.packId}
+            library={packs.map((p) => p.pack)}
+            authorName={authorName}
+            dirtyPacks={Object.values(open)
+              .filter((o) => o.dirty)
+              .map((o) => o.storedId)}
+            onSaved={(pack) => {
+              setOpen((prev) => {
+                const next = { ...prev }
+                delete next[pack.id]
+                return next
+              })
+              notifyPackLibraryChanged()
+            }}
+            onDeleted={(pack) => {
+              setOpen((prev) => {
+                const next = { ...prev }
+                delete next[pack.id]
+                return next
+              })
+              notifyPackLibraryChanged()
+              setView({ mode: 'home' })
+            }}
+            onOpenFull={(packId, entryId) => openPack(packId, entryId ? { kind: entryKindOf(view.answers.kind), id: entryId } : undefined)}
+            onBack={() => setView({ mode: 'home' })}
+          />
+        ) : current ? (
           <PackEditor
-            key={current.storedId}
+            key={`${current.storedId}:${view.key}`}
+            focus={view.focus}
             draft={current.draft}
             storedId={current.storedId}
             dirty={current.dirty}

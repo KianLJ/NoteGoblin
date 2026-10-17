@@ -1,7 +1,8 @@
 // Content-pack monsters (docs/homebrew-engine.md, phase 8): a monster entry
 // is a statblock (the shape a ```statblock note block and the SRD bestiary
-// use — name, size, type, ac, hp, speed, the six scores as text, cr, and
-// traits / actions / reactions / legendary_actions lists) plus an id.
+// use — name, size, type, ac, initiative, hp, speed, the six scores as
+// text, cr, and traits / actions / bonus_actions / reactions /
+// legendary_actions / lair_actions lists) plus an id.
 
 import { xpForCr } from '../encounter'
 import type { Registry } from './registry'
@@ -19,8 +20,10 @@ export interface PackMonsterRecord {
   xp: number
   traits: Array<{ name: string; desc: string }>
   actions: Array<{ name: string; desc: string }>
+  bonus_actions: Array<{ name: string; desc: string }>
   reactions: Array<{ name: string; desc: string }>
   legendary_actions: Array<{ name: string; desc: string }>
+  lair_actions: Array<{ name: string; desc: string }>
   packId: string
   packName: string
   fullId: string
@@ -55,8 +58,10 @@ export function packMonsterRecords(registry: Registry, packs: ContentPack[]): Pa
         xp: xpForCr(cr),
         traits: entries(def.traits),
         actions: entries(def.actions),
+        bonus_actions: entries(def.bonus_actions),
         reactions: entries(def.reactions),
         legendary_actions: entries(def.legendary_actions),
+        lair_actions: entries(def.lair_actions),
         packId: m.packId,
         packName: packs.find((p) => p.id === m.packId)?.name ?? m.packId,
         fullId: m.fullId

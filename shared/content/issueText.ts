@@ -57,7 +57,7 @@ const FIELD_NAMES: Record<string, string> = {
   damage: 'the damage',
   damageType: 'the damage type',
   resourceId: 'the resource',
-  listId: 'the option list',
+  listId: 'the pick list',
   actionType: 'what it takes (action, bonus…)',
   ability: 'the ability',
   ac: 'the Armor Class',
@@ -134,7 +134,7 @@ export function explainIssue(issue: PackIssue, draft: PackDraft, withinEntry = f
   const parent = path.slice(0, -1)
   const current = getAt(draft, path)
   const entryName = entry ? String(entry.name ?? entry.id ?? '(unnamed)') : ''
-  const where = [entry && !withinEntry ? `${capital(section!.singular)} “${entryName}”` : section ? '' : issue.path.startsWith('vocabulary') ? 'Vocabulary' : issue.path ? 'Pack details' : '', entry ? partsInWords(entry, rest) : '']
+  const where = [entry && !withinEntry ? `${capital(section!.singular)} “${entryName}”` : section ? '' : issue.path.startsWith('vocabulary') ? 'New rules terms' : issue.path.startsWith('terminology') ? 'Rename things' : issue.path ? 'Pack details' : '', entry ? partsInWords(entry, rest) : '']
     .filter(Boolean)
     .join(' · ')
   const out: ExplainedIssue = { severity: issue.severity, where, message: messageFor(issue, key, current), path: issue.path }

@@ -51,6 +51,7 @@ function refText(path: string[], name: NameLookup): string {
   if (head === 'hp' && a === 'current') return 'your current HP'
   if (head === 'spell' && a === 'dc') return 'your spell save DC'
   if (head === 'spell' && a === 'attack') return 'your spell attack bonus'
+  if (head === 'spell' && a === 'mod') return 'your spellcasting modifier'
   if (head === 'skill' && a) return `your ${n('skill', a)} bonus`
   if (head === 'save' && ABILITY[a]) return `your ${ABILITY[a]} save`
   if (head === 'speed' && a) return `your ${a === 'walk' ? 'walking' : a} speed`

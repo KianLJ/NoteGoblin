@@ -26,9 +26,9 @@ export const WORKSHOP_SECTIONS: Array<{ kind: EntryKind; label: string; singular
   { kind: 'feats', label: 'Feats', singular: 'feat', description: 'A special ability taken at an Ability Score Improvement or from a background, like Alert or Tough.' },
   {
     kind: 'optionLists',
-    label: 'Option lists',
-    singular: 'option list',
-    description: 'A list of options a choice picks from, like Fighting Styles or Metamagic. Each option can have its own effects and point cost.'
+    label: 'Pick lists',
+    singular: 'pick list',
+    description: 'A list of options a player picks from, like Fighting Styles or Metamagic. Each option can have its own effects and point cost.'
   },
   { kind: 'spells', label: 'Spells', singular: 'spell', description: 'A spell characters can learn or be granted, with its casting details, damage or healing, and any ongoing effects.' },
   { kind: 'items', label: 'Items', singular: 'item', description: 'Equipment: weapons, armor and magic items. Equipped (or attuned) items apply their effects to the sheet.' },
@@ -139,8 +139,10 @@ export function entryTemplate(kind: EntryKind, draft: PackDraft): Record<string,
         cr: '1/4',
         traits: [],
         actions: [{ name: 'Claw', desc: 'Melee Weapon Attack: +2 to hit, reach 5 ft., one target. Hit: 3 (1d6) slashing damage.' }],
+        bonus_actions: [],
         reactions: [],
-        legendary_actions: []
+        legendary_actions: [],
+        lair_actions: []
       }
   }
 }

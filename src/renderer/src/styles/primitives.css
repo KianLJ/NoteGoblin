@@ -475,3 +475,8 @@
   margin: 6px 0;
   cursor: text;
 }
+
+/* A clickable list row that lights up on hover (the Workshop's "Things you've made"). */
+.gb-hover-row:hover {
+  background: var(--bg-surface-raised);
+}

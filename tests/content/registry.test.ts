@@ -82,7 +82,7 @@ describe('validatePack', () => {
     expect(result.issues).toEqual([
       { severity: 'error', path: 'subclasses[0].classId', message: 'No class "nobody" in this pack or its dependencies.' },
       { severity: 'error', path: 'feats[0].effects[0].do.value', message: 'Formula ended early (at character 4)' },
-      { severity: 'error', path: 'feats[0].effects[1].do.choice.from.listId', message: 'No option list "missing" in this pack or its dependencies.' },
+      { severity: 'error', path: 'feats[0].effects[1].do.choice.from.listId', message: 'No pick list "missing" in this pack or its dependencies.' },
       { severity: 'warning', path: 'feats[0].effects[2].do.toggle.cost.resourceId', message: 'No resource "mana" is granted anywhere in this pack.' }
     ])
   })

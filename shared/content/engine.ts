@@ -593,7 +593,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       collectEffects(feat.def.effects, source, gates)
     } else if (from.kind === 'optionList') {
       const list = registry.get('optionLists', from.listId, parent.packId)
-      if (!list) return warn(`Option list "${from.listId}" isn't in any enabled pack.`, pickKey)
+      if (!list) return warn(`Pick list "${from.listId}" isn't in any enabled pack.`, pickKey)
       const option = list.def.options.find((o) => o.id === pick)
       if (!option) return warn(`"${pick}" isn't an option in ${list.def.name}.`, pickKey)
       entryIds.add(`${list.fullId}/${option.id}`)
@@ -833,10 +833,12 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       case 'carry':
         return a === 'capacity' && parts.length === 2 ? () => stat('ability.str.score') * 15 : undefined
       case 'spell': {
-        if (parts.length !== 2 || (a !== 'dc' && a !== 'attack')) return undefined
+        if (parts.length !== 2 || (a !== 'dc' && a !== 'attack' && a !== 'mod')) return undefined
         return () => {
           const ability = characterSpellAbility()
           if (!ability) return null
+          // @spell.mod: the spellcasting ability's modifier (a healing spell's "+ your spellcasting modifier").
+          if (a === 'mod') return stat(`ability.${ability}.mod`)
           const base = stat('prof') + stat(`ability.${ability}.mod`)
           return a === 'dc' ? 8 + base : base
         }
@@ -1676,7 +1678,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       case 'optionList': {
         const list = registry.get('optionLists', from.listId, source.packId)
         if (!list) {
-          warn(`${choice.label}: option list "${from.listId}" isn't in any enabled pack.`, source.key)
+          warn(`${choice.label}: pick list "${from.listId}" isn't in any enabled pack.`, source.key)
           return []
         }
         return list.def.options.map((o: OptionDef) => ({

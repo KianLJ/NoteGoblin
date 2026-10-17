@@ -101,6 +101,9 @@ function monsterToCombatant(monster: BestiaryMonster): Combatant {
 
 /** A monster statblock's Dex is a raw score string (e.g. "14"), not a modifier — same shape OverviewTab parses for players' own ability scores, just from `StatblockData` instead of a `CharacterSheet`. Missing/unparseable Dex falls back to a flat 10 (the modifier-0 baseline) rather than blocking the roll. */
 function monsterDexModifier(monster: BestiaryMonster | undefined): number {
+  // A statblock with its own initiative line ("+5 (15)") rolls with that; otherwise the Dex modifier.
+  const own = monster?.initiative ? /^\s*([+-]?\d+)/.exec(monster.initiative) : null
+  if (own) return Number(own[1])
   const score = monster?.dex ? Number(monster.dex) : NaN
   return abilityModifier(Number.isFinite(score) ? score : 10)
 }

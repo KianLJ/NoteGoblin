@@ -26,6 +26,8 @@ export interface StatblockData {
   type?: string
   alignment?: string
   ac?: string
+  /** The 2024 statblock's initiative line, e.g. "+2 (12)" — its bonus is what the initiative tracker rolls with (else the Dex modifier). */
+  initiative?: string
   hp?: string
   speed?: string
   str?: string
@@ -45,11 +47,14 @@ export interface StatblockData {
   condition_immunities?: string
   traits: StatblockEntry[]
   actions: StatblockEntry[]
+  /** Optional: older statblocks (and the bundled SRD bestiary) don't have them. */
+  bonus_actions?: StatblockEntry[]
   reactions: StatblockEntry[]
   legendary_actions: StatblockEntry[]
+  lair_actions?: StatblockEntry[]
 }
 
-const LIST_KEYS = ['traits', 'actions', 'reactions', 'legendary_actions'] as const
+const LIST_KEYS = ['traits', 'actions', 'bonus_actions', 'reactions', 'legendary_actions', 'lair_actions'] as const
 type ListKey = (typeof LIST_KEYS)[number]
 
 const SCALAR_KEYS = new Set([
@@ -58,6 +63,7 @@ const SCALAR_KEYS = new Set([
   'type',
   'alignment',
   'ac',
+  'initiative',
   'hp',
   'speed',
   'str',
@@ -82,13 +88,13 @@ function isListKey(key: string): key is ListKey {
 }
 
 export function parseStatblock(text: string): StatblockData {
-  const data: StatblockData = { traits: [], actions: [], reactions: [], legendary_actions: [] }
+  const data: StatblockData = { traits: [], actions: [], bonus_actions: [], reactions: [], legendary_actions: [], lair_actions: [] }
   let currentListKey: ListKey | null = null
   let currentItem: { name: string; desc: string } | null = null
 
   function flushItem(): void {
     if (currentListKey && currentItem && currentItem.name) {
-      data[currentListKey].push({ name: currentItem.name, desc: currentItem.desc })
+      ;(data[currentListKey] ??= []).push({ name: currentItem.name, desc: currentItem.desc })
     }
     currentItem = null
   }
@@ -135,7 +141,7 @@ export function statblockToFencedBlock(data: StatblockData): string {
     if (value) lines.push(`${key}: ${value}`)
   }
   for (const key of LIST_KEYS) {
-    const entries = data[key]
+    const entries = data[key] ?? []
     if (entries.length === 0) continue
     lines.push(`${key}:`)
     for (const entry of entries) {
@@ -167,8 +173,8 @@ function metaLine(label: string, value: string | undefined): string {
   return `<div class="gb-statblock-line"><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</div>`
 }
 
-function entrySection(title: string, entries: StatblockEntry[]): string {
-  if (entries.length === 0) return ''
+function entrySection(title: string, entries: StatblockEntry[] | undefined): string {
+  if (!entries || entries.length === 0) return ''
   const rows = entries
     .map(
       (e) =>
@@ -205,6 +211,7 @@ export function renderStatblockHtml(data: StatblockData, showSaveButton = true):
     subtitleParts ? `<div class="gb-statblock-subtitle">${escapeHtml(subtitleParts)}</div>` : '',
     '<hr class="gb-statblock-rule" />',
     metaLine('Armor Class', data.ac),
+    metaLine('Initiative', data.initiative),
     metaLine('Hit Points', data.hp),
     metaLine('Speed', data.speed),
     '<hr class="gb-statblock-rule" />',
@@ -221,8 +228,10 @@ export function renderStatblockHtml(data: StatblockData, showSaveButton = true):
     metaLine('Challenge', data.cr),
     entrySection('Traits', data.traits),
     entrySection('Actions', data.actions),
+    entrySection('Bonus Actions', data.bonus_actions),
     entrySection('Reactions', data.reactions),
     entrySection('Legendary Actions', data.legendary_actions),
+    entrySection('Lair Actions', data.lair_actions),
     '</div>'
   ].join('')
 }
