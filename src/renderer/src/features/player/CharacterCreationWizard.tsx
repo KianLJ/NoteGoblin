@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { deriveSheet, normalizeForActivePacks } from '@shared/content/sheet'
 import { choicePatch } from '@shared/content/legacyMirror'
 import type { DerivedChoice } from '@shared/content/engine'
-import { ChoiceList } from './ChoiceCards'
+import { ChoiceList, PickField } from './ChoiceCards'
 import { usePickerContent } from '../content/pickerContent'
 import { useTerms } from '../content/terms'
 import { Modal } from '../../ui/Modal'
@@ -195,6 +195,8 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
   }, {} as AbilityScores)
 
   const backgroundFeat = background ? FEATS.find((f) => f.id === background.featId) : undefined
+  // The Human Versatile feat (picked a step earlier) can't be the background's own feat unless that feat is repeatable.
+  const duplicateOriginFeat = !!backgroundFeat && !backgroundFeat.repeatable && humanFeatChoice?.featId === backgroundFeat.id
   const backgroundFeatSpellChoice = backgroundFeat?.effects?.find(
     (e): e is Extract<FeatEffect, { kind: 'spellChoice' }> => e.kind === 'spellChoice'
   )
@@ -220,6 +222,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
     if (step === 3) {
       return (
         backgroundId !== null &&
+        !duplicateOriginFeat &&
         (backgroundAsiMode === 'even' || (backgroundFocusAbility !== null && backgroundSecondaryAbility !== null)) &&
         backgroundFeatSpellChoiceReady
       )
@@ -506,7 +509,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                       ))}
                     </select>
                   </div>
-                  <OriginFeatChooser label="Versatile" level={0} onResolve={setHumanFeatChoice} />
+                  <OriginFeatChooser label="Versatile" level={0} onResolve={setHumanFeatChoice} taken={backgroundFeat && !backgroundFeat.repeatable ? [{ id: backgroundFeat.id, why: `Your ${background?.name} background already gives this` }] : []} />
                 </Section>
               )}
 
@@ -678,49 +681,43 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                 </Section>
               )}
 
+              {duplicateOriginFeat && (
+                <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', borderColor: 'var(--danger)', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  This background gives {backgroundFeat?.name}, which you already picked for Human Versatile, and it can only be taken once. Go back to {stepTitles[1]} and pick a different Versatile feat, or choose another background.
+                </div>
+              )}
+
               {backgroundFeatSpellChoice && (
                 <Section title={`${backgroundFeat?.name} — choose 2 cantrips and 1 level 1 spell`}>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <select className="gb-input" value={featSpellAbility} onChange={(e) => setFeatSpellAbility(e.target.value as Ability)} style={{ fontSize: 12 }}>
-                      {backgroundFeatSpellChoice.classes.map((c) => {
-                        const cls2 = CLASSES.find((k) => k.name === c)
-                        const a = cls2?.spellcastingAbility ?? 'int'
-                        return (
-                          <option key={c} value={a}>
-                            {c} (uses {a.toUpperCase()})
-                          </option>
-                        )
-                      })}
-                    </select>
-                    <select className="gb-input" value={featCantripAId} onChange={(e) => setFeatCantripAId(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
-                      <option value="">Cantrip 1…</option>
-                      {grantableCantrips.map((s) => (
-                        <option key={s.id} value={s.id} disabled={s.id === featCantripBId}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select className="gb-input" value={featCantripBId} onChange={(e) => setFeatCantripBId(e.target.value)} style={{ fontSize: 12, flex: 1 }}>
-                      <option value="">Cantrip 2…</option>
-                      {grantableCantrips.map((s) => (
-                        <option key={s.id} value={s.id} disabled={s.id === featCantripAId}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="gb-input"
-                      value={featLeveledSpellId}
-                      onChange={(e) => setFeatLeveledSpellId(e.target.value)}
-                      style={{ fontSize: 12, flex: 1 }}
-                    >
-                      <option value="">Level 1 spell…</option>
-                      {grantableLeveledSpells.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Spellcasting ability</div>
+                    <PickField
+                      title="Spellcasting ability"
+                      options={backgroundFeatSpellChoice.classes.map((c) => {
+                        const a = CLASSES.find((k) => k.name === c)?.spellcastingAbility ?? 'int'
+                        return { id: a, name: `${c} (${a.toUpperCase()})` }
+                      }).filter((o, i, all) => all.findIndex((x) => x.id === o.id) === i)}
+                      selected={[featSpellAbility]}
+                      onChange={(ids) => ids[0] && setFeatSpellAbility(ids[0] as Ability)}
+                    />
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Two cantrips ({[featCantripAId, featCantripBId].filter(Boolean).length}/2)</div>
+                    <PickField
+                      title="Two cantrips"
+                      options={grantableCantrips.map((sp) => ({ id: sp.id, name: sp.name, description: sp.description }))}
+                      selected={[featCantripAId, featCantripBId].filter(Boolean)}
+                      max={2}
+                      onChange={(ids) => {
+                        setFeatCantripAId(ids[0] ?? '')
+                        setFeatCantripBId(ids[1] ?? '')
+                      }}
+                    />
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>A level 1 spell</div>
+                    <PickField
+                      title="A level 1 spell"
+                      options={grantableLeveledSpells.map((sp) => ({ id: sp.id, name: sp.name, description: sp.description }))}
+                      selected={featLeveledSpellId ? [featLeveledSpellId] : []}
+                      onChange={(ids) => setFeatLeveledSpellId(ids[0] ?? '')}
+                    />
                   </div>
                 </Section>
               )}

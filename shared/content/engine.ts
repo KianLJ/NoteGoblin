@@ -536,6 +536,8 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
   const choiceInstances: Array<{ key: string; choice: ChoiceDef; source: Source; gates: Condition[] }> = []
   /** Archetype full id → the pick key that granted it. */
   const archetypesTaken = new Map<string, string>()
+  /** Feat full id → the choice keys that picked it (a feat that isn't repeatable can only be taken once). */
+  const featsTaken = new Map<string, string[]>()
   const archetypeList: DerivedArchetype[] = []
 
   function collectEffects(list: Effect[] | undefined, source: Source, gates: Condition[]): void {
@@ -585,6 +587,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       const feat = registry.get('feats', pick, parent.packId)
       if (!feat) return warn(`Picked feat "${pick}" isn't in any enabled pack.`, pickKey)
       entryIds.add(feat.fullId)
+      featsTaken.set(feat.fullId, [...(featsTaken.get(feat.fullId) ?? []), pickKey.slice(0, pickKey.lastIndexOf('/'))])
       const source: Source = { key: pickKey, name: feat.def.name, packId: feat.packId, classCtx: parent.classCtx, archetype: parent.archetype, level: parent.level, feature: { description: feat.def.description } }
       addFeature(source, gates)
       collectEffects(feat.def.effects, source, gates)
@@ -1620,6 +1623,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
         const option = options.find((o) => sameId(o.id, p))
         if (!option) warn(`${choice.label}: "${p}" isn't one of the options.`, key)
         else if (!option.available) warn(`${choice.label}: "${option.name}" doesn't meet its prerequisite.`, key)
+        else if (option.blocked === 'Already taken') warn(`${choice.label}: "${option.name}" is already taken from another source, and it can only be taken once.`, key)
       }
       for (const [p, n] of counts) {
         if (n > 1 && !choice.allowRepeats) warn(`${choice.label}: "${p}" is picked more than once.`, key)
@@ -1686,10 +1690,21 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       }
       case 'feats': {
         const categories = from.categories?.map((c) => c.toLowerCase())
+        // A fixed grant (a background's own feat) always offers its feat; an open choice locks a non-repeatable feat already taken elsewhere.
+        const open = !from.featIds
         return registry
           .all('feats')
           .filter((f) => (!categories || categories.includes(f.def.category.toLowerCase())) && (!from.featIds || from.featIds.some((id) => sameId(id, f.fullId))))
-          .map((f) => ({ id: f.fullId, name: f.def.name, description: f.def.description, available: available((f.def as FeatDef).prerequisite) }))
+          .map((f) => {
+            const takenElsewhere = open && !(f.def as FeatDef).repeatable && (featsTaken.get(f.fullId) ?? []).some((k) => k !== key)
+            return {
+              id: f.fullId,
+              name: f.def.name,
+              description: f.def.description,
+              available: available((f.def as FeatDef).prerequisite),
+              ...(takenElsewhere ? { blocked: 'Already taken' } : {})
+            }
+          })
       }
       case 'spells': {
         const maxLevel = from.maxLevel !== undefined ? num(from.maxLevel, source) : Infinity

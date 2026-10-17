@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Ability, AsiSlotChoice } from '@shared/dnd5e'
 import { FEATS, SPELLS, type CompendiumSpell, type FeatEffect } from '@shared/compendium'
+import { PickField } from './ChoiceCards'
 
 const ORIGIN_FEATS = FEATS.filter((f) => f.category === 'Origin')
 
@@ -17,11 +18,14 @@ export function OriginFeatChooser({
   label,
   level,
   readOnly,
-  onResolve
+  onResolve,
+  taken = []
 }: {
   label: string
   level: number
   readOnly?: boolean
+  /** Feats already granted elsewhere (the background's), shown locked with why. */
+  taken?: Array<{ id: string; why: string }>
   /** Called on every change: the complete pick, or null while something is still unpicked. */
   onResolve: (entry: Omit<AsiSlotChoice, 'id'> | null) => void
 }): JSX.Element {
@@ -64,15 +68,13 @@ export function OriginFeatChooser({
     <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
       <strong>{label}</strong>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>Gain an Origin feat of your choice.</div>
-      <select className="gb-input" value={featId} disabled={readOnly} onChange={(e) => update({ featId: e.target.value })} style={{ fontSize: 12, width: '100%' }}>
-        <option value="">Choose an Origin feat…</option>
-        {ORIGIN_FEATS.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.name}
-          </option>
-        ))}
-      </select>
-      {selectedFeat?.desc && !spellChoiceEffect && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{selectedFeat.desc}</p>}
+      <PickField
+        title="Origin feat"
+        options={ORIGIN_FEATS.map((f) => ({ id: f.id, name: f.name, description: f.desc, locked: taken.find((t) => t.id === f.id)?.why }))}
+        selected={featId ? [featId] : []}
+        readOnly={readOnly}
+        onChange={(ids) => update({ featId: ids[0] ?? '' })}
+      />
       {spellChoiceEffect && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
@@ -80,44 +82,38 @@ export function OriginFeatChooser({
             {spellChoiceEffect.spellCount} level-{spellChoiceEffect.spellLevel} spell from the {spellChoiceEffect.classes.join('/')} list — always
             prepared, and they don't count against your normal spells known.
           </div>
-          <select className="gb-input" value={spellCasterAbility} onChange={(e) => update({ spellCasterAbility: e.target.value as Ability })} style={{ fontSize: 12 }}>
-            {(['int', 'wis', 'cha'] as Ability[]).map((a) => (
-              <option key={a} value={a}>
-                {a.toUpperCase()}
-              </option>
-            ))}
-          </select>
-          <select className="gb-input" value={cantripAId} onChange={(e) => update({ cantripAId: e.target.value })} style={{ fontSize: 12 }}>
-            <option value="">Choose a cantrip…</option>
-            {grantableCantrips.map((s) => (
-              <option key={s.id} value={s.id} disabled={s.id === cantripBId}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <select className="gb-input" value={cantripBId} onChange={(e) => update({ cantripBId: e.target.value })} style={{ fontSize: 12 }}>
-            <option value="">Choose a second cantrip…</option>
-            {grantableCantrips.map((s) => (
-              <option key={s.id} value={s.id} disabled={s.id === cantripAId}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <select className="gb-input" value={leveledSpellId} onChange={(e) => update({ leveledSpellId: e.target.value })} style={{ fontSize: 12 }}>
-            <option value="">Choose a level-{spellChoiceEffect.spellLevel} spell…</option>
-            {grantableLeveledSpells.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          <div style={subLabel}>Spellcasting ability</div>
+          <PickField
+            title="Spellcasting ability"
+            options={(['int', 'wis', 'cha'] as Ability[]).map((a) => ({ id: a, name: ABILITY_NAME[a] }))}
+            selected={[spellCasterAbility]}
+            readOnly={readOnly}
+            onChange={(ids) => ids[0] && update({ spellCasterAbility: ids[0] as Ability })}
+          />
+          <div style={subLabel}>Two cantrips ({[cantripAId, cantripBId].filter(Boolean).length}/2)</div>
+          <PickField
+            title="Two cantrips"
+            options={grantableCantrips.map((sp) => ({ id: sp.id, name: sp.name, description: sp.description }))}
+            selected={[cantripAId, cantripBId].filter(Boolean)}
+            max={2}
+            readOnly={readOnly}
+            onChange={(ids) => update({ cantripAId: ids[0] ?? '', cantripBId: ids[1] ?? '' })}
+          />
+          <div style={subLabel}>A level-{spellChoiceEffect.spellLevel} spell</div>
+          <PickField
+            title={`A level-${spellChoiceEffect.spellLevel} spell`}
+            options={grantableLeveledSpells.map((sp) => ({ id: sp.id, name: sp.name, description: sp.description }))}
+            selected={leveledSpellId ? [leveledSpellId] : []}
+            readOnly={readOnly}
+            onChange={(ids) => update({ leveledSpellId: ids[0] ?? '' })}
+          />
         </div>
       )}
     </div>
   )
 }
 
-/** The inline subclass picker — every subclass the enabled content packs have for this class. Rendered both in FeaturesTab.tsx (permanently, until resolved) and LevelUpPopup.tsx (a shortcut). Picking one from the list is the choice — no confirm button. */
+/** The inline subclass picker — every subclass the enabled content packs have for this class, as tiles (description on hover). Rendered both in FeaturesTab.tsx (permanently, until resolved) and LevelUpPopup.tsx (a shortcut). Clicking one is the choice — no confirm button. */
 export function SubclassChooser({
   classLabel,
   featureName,
@@ -133,48 +129,25 @@ export function SubclassChooser({
   readOnly?: boolean
   onChoose: (name: string) => void
 }): JSX.Element {
-  const [preview, setPreview] = useState('')
-  const previewed = options.find((o) => o.id === preview)
-
   return (
     <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
       <strong>
         {featureName} — {classLabel} {slotLevel}
       </strong>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 var(--space-2)' }}>Choose your {classLabel.toLowerCase()} subclass.</div>
-      <select
-        className="gb-input"
-        value=""
-        disabled={readOnly}
-        onChange={(e) => {
-          const option = options.find((o) => o.id === e.target.value)
+      <PickField
+        title={`${featureName} — ${classLabel}`}
+        options={options.map((o) => ({ id: o.id, name: o.name, description: o.flavor }))}
+        selected={[]}
+        readOnly={readOnly}
+        onChange={(ids) => {
+          const option = options.find((o) => o.id === ids[0])
           if (option) onChoose(option.name)
         }}
-        style={{ fontSize: 12, width: '100%' }}
-      >
-        <option value="">Choose a subclass…</option>
-        {options.map((o) => (
-          <option key={o.id} value={o.id} title={o.flavor}>
-            {o.name}
-          </option>
-        ))}
-      </select>
-      {options.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-          {options.map((o) => (
-            <span
-              key={o.id}
-              className="gb-badge"
-              style={{ fontSize: 11, cursor: 'help' }}
-              onMouseEnter={() => setPreview(o.id)}
-              onMouseLeave={() => setPreview('')}
-            >
-              {o.name}
-            </span>
-          ))}
-        </div>
-      )}
-      {previewed?.flavor && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>{previewed.flavor}</p>}
+      />
     </div>
   )
 }
+
+const subLabel = { fontSize: 11, color: 'var(--text-muted)', marginTop: 2 } as const
+const ABILITY_NAME: Record<string, string> = { int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' }

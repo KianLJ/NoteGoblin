@@ -325,3 +325,29 @@ describe('formula previews', () => {
     expect(d.evaluate!({ formula: '@resource.ce.max' })).toEqual({ ok: true, value: 8 })
   })
 })
+
+describe('feats taken once', () => {
+  it('locks a non-repeatable feat already taken elsewhere in open choices, but not in a fixed grant', async () => {
+    const { emptyCharacterSheet } = await import('@shared/dnd5e')
+    const { deriveSheet } = await import('@shared/content/sheet')
+    const sheet = (versatile?: string) => ({
+      ...emptyCharacterSheet(),
+      race: 'Human',
+      background: 'Acolyte',
+      classes: [{ className: 'Fighter', level: 1 }],
+      asiSlotChoices: [
+        { id: 'a', className: 'Fighter', level: 0, kind: 'feat' as const, featId: 'magic-initiate', chosenAbility: 'wis' as const, chosenSpellIds: [] },
+        ...(versatile ? [{ id: 'h', className: 'Fighter', level: 0, kind: 'feat' as const, featId: versatile }] : [])
+      ]
+    })
+    const plain = deriveSheet(sheet() as never).derived
+    const versatile = plain.choices.find((c) => c.key.startsWith('species:') && c.key.endsWith('#feat'))!
+    expect(versatile.options.find((o) => o.id.endsWith(':magic-initiate'))!.blocked).toBe('Already taken')
+    expect(versatile.options.find((o) => o.id.endsWith(':alert'))!.blocked).toBeUndefined()
+    const fixed = plain.choices.find((c) => c.key.startsWith('background:') && c.key.endsWith('#feat'))!
+    expect(fixed.options[0].blocked).toBeUndefined()
+    // Picked twice anyway (an older sheet): the open choice says so.
+    const twice = deriveSheet(sheet('magic-initiate') as never).derived
+    expect(twice.diagnostics.map((d) => d.message)).toContain('Origin feat: "Magic Initiate" is already taken from another source, and it can only be taken once.')
+  })
+})
