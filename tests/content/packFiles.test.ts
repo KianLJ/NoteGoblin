@@ -116,3 +116,29 @@ describe('active packs', () => {
     expect(key).toMatch(/^hexbound@1\.0\.0#/)
   })
 })
+
+describe('the pack-writing prompt', () => {
+  it('has an example pack that imports without errors and derives cleanly', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { deriveCharacter } = await import('@shared/content/engine')
+    const { srdPack } = await import('@shared/content/srd')
+    const doc = readFileSync('docs/homebrew-pack-prompt.md', 'utf8')
+    const json = doc.match(/```json\r?\n([\s\S]*?)\r?\n```/)![1]
+    const read = readPackFile(json)
+    if (!read.ok) throw new Error(read.issues.map((i) => `${i.path}: ${i.message}`).join('\n'))
+    expect(read.issues.filter((i) => i.severity === 'error')).toEqual([])
+    const d = deriveCharacter(
+      {
+        abilityScores: { str: 15, dex: 12, con: 14, int: 10, wis: 10, cha: 13 },
+        speciesId: 'emberwild:ashborn',
+        backgroundId: 'emberwild:forge-hand',
+        classes: [{ classId: 'emberwild:ember-knight', level: 4, subclassId: 'emberwild:oath-of-cinders' }],
+        choices: { 'class:emberwild:ember-knight:bloodline#pick': ['phoenix-blood'] }
+      },
+      [srdPack(), read.pack]
+    )
+    expect(d.diagnostics.filter((x) => x.severity === 'error')).toEqual([])
+    expect(d.actions.find((a) => a.id === 'flare')?.spend).toEqual({ resourceId: 'embers', min: 1, max: 3 })
+    expect(d.damageRelations.resistances).toContain('fire')
+  })
+})
