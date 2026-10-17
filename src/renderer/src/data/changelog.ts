@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.1',
+    title: 'Make something: homebrew without the jargon',
+    highlights: [
+      'The Homebrew Workshop now opens on "What do you want to make?" — pick a magic item, weapon, armour or shield, spell, feat, species or monster and fill in a form worded like a D&D book: rarity, "+1 to attack and damage", resistances, darkvision, charges, damage dice and more, with the character sheet maths worked out for you',
+      'A live preview shows it as it will appear in the Codex, and "Try it on a character" shows exactly what it changes on a sheet of any class and level — "Armor Class 12 → 13", a new attack, a spell\'s damage at each slot level',
+      'Monsters: set the challenge, ability scores and hit dice, and attacks, saving throws, hit points, initiative and passive Perception are written into the statblock for you. Statblocks now have bonus actions, lair actions and an initiative line too — the initiative tracker rolls with it',
+      'New things go in your My Homebrew pack, or pick another pack with "Save to". Things you\'ve made are listed by pack and type, and each can be reopened, deleted, or opened in the full editor for anything the form doesn\'t cover',
+      'The full editor uses plainer words (Contents, New rules terms, Rename things, Pick lists), and its Contents list folds by section so big packs stay manageable'
+    ]
+  },
+  {
     version: '0.6.0',
     title: 'Homebrew: content packs and the Homebrew Workshop',
     highlights: [
