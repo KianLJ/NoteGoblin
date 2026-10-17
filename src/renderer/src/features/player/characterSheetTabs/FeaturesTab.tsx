@@ -11,6 +11,7 @@ import { useDerivedSheet } from '../useDerivedSheet'
 import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import { SubclassChooser } from '../AsiChoosers'
 import { ChoiceList, useChoiceEditor } from '../ChoiceCards'
+import { XIcon } from '../../../ui/icons'
 
 interface ResourcesDraft {
   resourceUsed: Record<string, number>
@@ -68,7 +69,7 @@ function InfoChip({
         <strong style={{ color: accent ? 'var(--accent-hover)' : 'var(--text-primary)', fontSize: 13 }}>{title}</strong>
         {onRemove && (
           <button type="button" onClick={onRemove} style={removeBtnStyle} title="Remove">
-            ×
+            <XIcon size={12} />
           </button>
         )}
       </div>
@@ -264,7 +265,7 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
                   onClick={() => setFeatureDraft((prev) => ({ features: prev.features.filter((f) => f.id !== feature.id) }))}
                   style={removeBtnStyle}
                 >
-                  ×
+                  <XIcon size={12} />
                 </button>
               </div>
               <textarea

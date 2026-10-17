@@ -109,8 +109,10 @@ describe('active packs', () => {
     const key = getActivePacksKey()
     setActivePacks([hexbound])
     setActivePacks([{ ...hexbound, version: '2.0.0' }])
+    // Same version, different content (a Workshop save without a bump) counts as a change too.
+    setActivePacks([{ ...hexbound, version: '2.0.0', description: 'edited' }])
     unsubscribe()
-    expect(calls).toBe(2)
-    expect(key).toBe('hexbound@1.0.0')
+    expect(calls).toBe(3)
+    expect(key).toMatch(/^hexbound@1\.0\.0#/)
   })
 })

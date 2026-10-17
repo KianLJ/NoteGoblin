@@ -25,6 +25,7 @@ import { applyRestores, resourceRemaining, rollAmount, spendResource, type Resou
 import type { Registry } from '@shared/content/registry'
 import { effectiveScores, knownSpells } from '@shared/content/sheet'
 import { useDerivedSheet } from '../useDerivedSheet'
+import { useTerms } from '../../content/terms'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import { SpellsTab } from './SpellsTab'
@@ -76,6 +77,9 @@ const ACTION_TYPE_LABEL: Record<ActionType, string> = { action: 'Action', bonus:
 /** A built-in action economy's label, or a pack-defined one's name (vocabulary.actionTypes) — e.g. a homebrew "Technique" action. */
 function actionTypeLabel(id: string | undefined, registry: Registry): string | undefined {
   if (!id) return undefined
+  // A pack can rename the built-in ones too (terminology "actionType.bonus").
+  const renamed = registry.terminology[`actionType.${id}`]
+  if (renamed) return renamed
   if (id in ACTION_TYPE_LABEL) return ACTION_TYPE_LABEL[id as ActionType]
   if (id === 'free') return 'Free'
   return registry.vocabulary.actionTypes.find((t) => t.id === id)?.name ?? id
@@ -135,6 +139,7 @@ function customWeaponFields(attack: Attack): DetailField[] {
 /** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells/Features inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
 export function CombatTab({ character, onSave, readOnly, sessionId = null }: CombatTabProps): JSX.Element {
   const { rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
+  const terms = useTerms()
   // Attacks, resources, toggles, actions and spell DC/attack all come from
   // the content engine (see shared/content/sheet.ts) — so a feat, item or
   // active buff that changes an attack (Rage, Archery, a homebrew cursed
@@ -371,7 +376,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
             onClick={() => setInnerTab('Spells')}
             style={{ ...innerTabStyle, borderBottomColor: innerTab === 'Spells' ? 'var(--accent)' : 'transparent', color: innerTab === 'Spells' ? 'var(--text-primary)' : 'var(--text-muted)' }}
           >
-            Spells
+            {terms.t('spells')}
           </button>
         )}
         <button
@@ -432,11 +437,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                 <HoverDetailCard
                   key={spell.id}
                   title={compendium.name}
-                  subtitle="Cantrip"
+                  subtitle={terms.t('cantrips').replace(/s$/, '')}
                   fields={[]}
                   description={compendium.description}
                 >
-                  <EntryCard name={<EntryCardTitle value={compendium.name} />} badge={<span className="gb-badge">Cantrip</span>}>
+                  <EntryCard name={<EntryCardTitle value={compendium.name} />} badge={<span className="gb-badge">{terms.t('cantrips').replace(/s$/, '')}</span>}>
                     {compendium.attackType ? (
                       <MiniStat
                         label="Atk"

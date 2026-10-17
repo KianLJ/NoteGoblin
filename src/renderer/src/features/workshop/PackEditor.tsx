@@ -461,7 +461,7 @@ function Entries({
                   {section.singular} · {String(draft.id)}:{String(entry.id ?? '')}
                 </div>
               </div>
-              {selected.kind !== 'monsters' && <ViewToggle view={view} onView={onView} />}
+              <ViewToggle view={view} onView={onView} />
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -486,7 +486,7 @@ function Entries({
               />
             </div>
             <IssueList issues={issuesForEntry(issues, selected.kind, selected.index)} />
-            {view === 'form' && selected.kind !== 'monsters' ? (
+            {view === 'form' ? (
               <EntryForm
                 key={`${selected.kind}:${selected.index}`}
                 kind={selected.kind}

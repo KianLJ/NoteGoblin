@@ -105,6 +105,17 @@ export class CampaignPackRepo {
     this.db.prepare('DELETE FROM campaign_packs WHERE campaign_id = ? AND pack_id = ?').run(campaignId, packId)
   }
 
+  /** Moves a pack one place earlier (-1) or later (+1) in load order; positions are rewritten 0..n-1. Unknown ids and moves past either end do nothing. */
+  move(campaignId: string, packId: string, delta: -1 | 1): void {
+    const ids = (this.db.prepare('SELECT pack_id FROM campaign_packs WHERE campaign_id = ? ORDER BY position, enabled_at').all(campaignId) as Array<{ pack_id: string }>).map((r) => r.pack_id)
+    const i = ids.indexOf(packId)
+    const j = i + delta
+    if (i < 0 || j < 0 || j >= ids.length) return
+    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+    const update = this.db.prepare('UPDATE campaign_packs SET position = ? WHERE campaign_id = ? AND pack_id = ?')
+    this.db.transaction(() => ids.forEach((id, position) => update.run(position, campaignId, id)))()
+  }
+
   removeAll(campaignId: string): void {
     this.db.prepare('DELETE FROM campaign_packs WHERE campaign_id = ?').run(campaignId)
   }

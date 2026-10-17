@@ -678,3 +678,55 @@ Done: form editors for everything a pack holds.
 
 Not yet: monsters as forms (phase 8), a guided "new class" wizard, and
 drag-and-drop reordering (rows move with up/down buttons).
+
+## Phase 7 — status
+
+Done: terminology and vocabulary across the UI.
+
+- **`term()`** — `shared/content/terms.ts` (`termsFor`, `TERM_DEFAULTS`)
+  and the renderer hook `useTerms()` (`features/content/terms.ts`), over
+  the active packs' merged terminology. The character sheet uses it for
+  species, subclass, proficiency, inspiration, AC, initiative, speed,
+  saving throws, skills, ability names (and `ability.<id>.short`), spell
+  slots, cantrips, spells, hit dice and background; the creator for its
+  step names and abilities; the Actions tab for action types
+  (`actionType.<id>`); the inventory for currencies (`currency.<id>`).
+  The Workshop's terminology form suggests every key.
+- **Conflicts** — `terminologyConflicts`: the Content Packs window lists
+  concepts two enabled packs rename differently and which wins. The DM
+  chooses by reordering the campaign's packs (new up/down buttons; IPC
+  `campaignPacks.move`, `CampaignPackRepo.move`); later packs win, and
+  dependencies still load first.
+- **Vocabulary on the sheet** — pack conditions can be put on a character
+  from the Overview's pack card (`sheet.activeConditions`, with levels for
+  leveled ones; their effects apply through the legacy adapter); pack
+  currencies get their own inventory fields (`sheet.packCurrency`); pack
+  damage types are suggested when adding resistances. Custom skills and
+  stats were already shown (engine additions).
+- **Cache fix** — registries and the active-pack key were cached by
+  pack id + version, so a Workshop save without a version bump kept the
+  old content. They now use a content key (`packKey.ts`).
+
+## Phase 8 — status
+
+Done: monsters in packs.
+
+- Pack monsters are statblocks with an id (`shared/content/monsters.ts`:
+  `packMonsterRecords`, `monsterEntry`). The Codex, encounter builder,
+  initiative tracker, session decks and the note statblock autocomplete
+  read `loadAllMonsters()` / `useAllMonsters()`
+  (`renderer/src/data/packMonsters.ts`): this device's old custom list,
+  every library pack plus the open campaign's packs, then the SRD.
+- "Save to Bestiary" now saves into the personal **My Creatures** pack
+  (`my-creatures`, created on first save), falling back to the old local
+  list if the pack can't be written. Its creatures can be deleted from
+  the Codex.
+- The Codex offers to move creatures saved only on this device into My
+  Creatures; each keeps its old index, so saved encounters still find it.
+- The Workshop has a monster form (statblock fields, ability scores,
+  details, traits / actions / reactions / legendary actions) with a live
+  statblock preview, and a monster template.
+
+Not yet: monster effects (resistances and attacks as engine effects, so
+an encounter could derive numbers the way sheets do) — statblocks stay
+text.

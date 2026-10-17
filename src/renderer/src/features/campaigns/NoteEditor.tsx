@@ -4,7 +4,7 @@ import { renderNoteMarkdown } from '../../markdown'
 import { MarkdownLiveEditor, type MarkdownLiveEditorHandle } from './MarkdownLiveEditor'
 import { EyeIcon, ImageIcon, ImportFromCodexIcon, LinkIcon, PencilIcon, TableIcon } from './icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
-import { saveCustomMonster } from '../../data/customBestiary'
+import { saveMonster } from '../../data/packMonsters'
 import { Bestiary } from '../bestiary/Bestiary'
 import { statblockToFencedBlock } from '../../statblock'
 import type { BestiaryMonster } from '../../data/bestiary'
@@ -257,8 +257,10 @@ export function NoteEditor({
       e.preventDefault()
       try {
         const data = JSON.parse(saveBtn.dataset.saveStatblock ?? '{}')
-        const saved = saveCustomMonster(data)
-        saveBtn.textContent = `Saved: ${saved.name}`
+        saveBtn.textContent = 'Saving…'
+        void saveMonster(data).then((saved) => {
+          saveBtn.textContent = `Saved: ${saved.name}`
+        })
       } catch {
         /* malformed statblock JSON — nothing sensible to save */
       }

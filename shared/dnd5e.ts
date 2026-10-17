@@ -1628,6 +1628,10 @@ export interface CharacterSheetData {
    * legacy fields. Homebrew choices with no legacy equivalent live only here.
    */
   choices?: Record<string, string[]>
+  /** Conditions from the packs' vocabulary that are on the character right now (exhaustion has its own exhaustionLevel), with a level for leveled ones. */
+  activeConditions?: { id: string; level?: number }[]
+  /** Amounts of pack-defined currencies (vocabulary.currencies beyond cp/sp/ep/gp/pp), by currency id. */
+  packCurrency?: Record<string, number>
   /** Values of the enabled packs' counters (Breakthroughs, Renown…), by counter id. */
   counters?: Record<string, number>
   /** Which ability each pack-defined ability alias points at ("Cursed Energy ability: Wisdom"), by alias id. */

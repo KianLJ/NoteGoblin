@@ -1289,6 +1289,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return result
   })
 
+  ipcMain.handle('campaignPacks:move', (_event, campaignId: string, packId: string, delta: -1 | 1) => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = runService(() => campaignService.moveCampaignPack(me.db, campaignId, me.userId, packId, delta))
+    if (result.ok) notifyCampaignPacksChanged(campaignId)
+    return result
+  })
+
   // Entirely local — owned by the local identity, never routed over the
   // network, so no address/host concept applies here at all.
   const characterRepo = new CharacterRepo(localDb, knownPacks)

@@ -156,7 +156,7 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
           )}
           {slotChanges.length > 0 && (
             <div>
-              <div className="gb-label">Spell Slots</div>
+              <div className="gb-label">{registry.terminology.spellSlots ?? 'Spell Slots'}</div>
               <div className="gb-card" style={{ padding: 'var(--space-3)', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                 {slotChanges.map((s) => (
                   <div key={s.level} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>

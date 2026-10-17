@@ -1,5 +1,6 @@
 import { Modal } from '../../ui/Modal'
 import { CHANGELOG } from '../../data/changelog'
+import { XIcon } from '../../ui/icons'
 
 interface ChangelogProps {
   onClose: () => void
@@ -18,7 +19,7 @@ export function Changelog({ onClose, currentVersion }: ChangelogProps): JSX.Elem
           title="Close"
           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}
         >
-          ×
+          <XIcon size={12} />
         </button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CampaignPack, LibraryPack } from '@shared/ipc'
 import type { ContentPack } from '@shared/content/schema'
 import { setActivePacks } from '@shared/content/sheet'
+import { setLibraryPacksForMonsters } from '../../data/packMonsters'
 
 const LIBRARY_CHANGED = 'goblin:pack-library-changed'
 
@@ -82,5 +83,6 @@ export function useApplyActivePacks(campaignPacks: ContentPack[] | null): void {
   const { packs: library } = useLibraryPacks()
   useEffect(() => {
     setActivePacks(campaignPacks ?? (library ?? []).map((p) => p.pack))
+    setLibraryPacksForMonsters((library ?? []).map((p) => p.pack))
   }, [campaignPacks, library])
 }

@@ -419,6 +419,8 @@ export interface AppApi {
     list: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignPack[]>>
     enable: (campaignId: string, packId: string) => Promise<ApiResult<CampaignPack[]>>
     disable: (campaignId: string, packId: string) => Promise<ApiResult<CampaignPack[]>>
+    /** DM-only: one place earlier (-1) or later (+1) in load order — later packs win renames and duplicate vocabulary. */
+    move: (campaignId: string, packId: string, delta: -1 | 1) => Promise<ApiResult<CampaignPack[]>>
   }
   // Characters live entirely on your own device, owned by your local
   // identity — campaign-independent, no session/network involved.

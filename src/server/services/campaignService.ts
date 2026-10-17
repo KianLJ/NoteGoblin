@@ -1409,6 +1409,21 @@ export function disableCampaignPack(db: DatabaseType, campaignId: string, userId
   return { ok: true, data: repo.list(campaignId) }
 }
 
+/**
+ * DM only — moves a pack earlier or later in the campaign's load order. A
+ * later pack wins where two rename the same thing or define the same
+ * vocabulary id; dependencies still always load first.
+ */
+export function moveCampaignPack(db: DatabaseType, campaignId: string, userId: string, packId: string, delta: -1 | 1): ServiceResult<EnabledPack[]> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change a campaign’s content packs.' }
+  const repo = new CampaignPackRepo(db)
+  repo.move(campaignId, packId, delta === -1 ? -1 : 1)
+  return { ok: true, data: repo.list(campaignId) }
+}
+
 function parseScenes(raw: string): SessionScene[] {
   try {
     const parsed = JSON.parse(raw)

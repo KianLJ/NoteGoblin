@@ -4,6 +4,7 @@ import { choicePatch } from '@shared/content/legacyMirror'
 import type { DerivedChoice } from '@shared/content/engine'
 import { ChoiceList } from './ChoiceCards'
 import { usePickerContent } from '../content/pickerContent'
+import { useTerms } from '../content/terms'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { OriginFeatChooser } from './AsiChoosers'
@@ -71,6 +72,9 @@ function randomWeight(): string {
  */
 export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreationWizardProps): JSX.Element {
   const [step, setStep] = useState(0)
+  // Step names and ability names follow the active packs' terminology.
+  const terms = useTerms()
+  const stepTitles = STEP_TITLES.map((t) => (t === 'Race' ? terms.t('species', 'Race') : t === 'Background' ? terms.t('background') : t))
   const [name, setName] = useState('')
   const [raceId, setRaceId] = useState<string | null>(null)
   // Human's Skillful/Versatile traits (SRD 5.2.1) grant a real skill
@@ -368,7 +372,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
         <div>
           <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 22 }}>Create Character</h2>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-            Step {step + 1} of {STEP_TITLES.length}: {STEP_TITLES[step]}
+            Step {step + 1} of {STEP_TITLES.length}: {stepTitles[step]}
           </p>
         </div>
 
@@ -749,7 +753,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)' }}>
-                {ABILITIES.map(({ id, label }) => {
+                {terms.abilities.map(({ id, label }) => {
                   const raceBonus = race?.abilityBonuses[id] ?? 0
                   const backgroundBonus = backgroundBonuses[id] ?? 0
                   const totalBonus = raceBonus + backgroundBonus

@@ -1,7 +1,6 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
-  ABILITIES,
   ABILITY_DESCRIPTIONS,
   SKILLS,
   abilityModifier,
@@ -22,6 +21,9 @@ import { FEATS } from '@shared/compendium'
 import type { DerivedCharacter } from '@shared/content/engine'
 import { deriveSheet, effectiveScores, skillModeOf, skillOf, skillProficiencyOf } from '@shared/content/sheet'
 import { restResources } from '@shared/content/resourceMath'
+import { useTerms } from '../../content/terms'
+import { useActivePackRegistry } from '../../content/pickerContent'
+import { XIcon } from '../../../ui/icons'
 import { PackTraitsSection } from './PackTraitsSection'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { Button } from '../../../ui/Button'
@@ -99,6 +101,8 @@ function resetAllSlots(slots: Record<number, { total: number; used: number }>): 
 export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId = null }: OverviewTabProps): JSX.Element {
   // SRD classes/species plus whatever the active content packs add (see pickerContent.ts).
   const picker = usePickerContent()
+  // Labels go through the active packs' terminology (a pack can rename Spell Slots, Charisma, Subclass…).
+  const terms = useTerms()
   const CLASS_NAMES = picker.classes.map((c) => c.name)
   const RACES = picker.races
   const { rollCheck } = useSheetRoller(sessionId, character.name)
@@ -328,7 +332,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
             <div>
               <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>Short Rest</h3>
               <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-                Spend hit dice to heal — roll and add your Constitution modifier. Death saves are already cleared.
+                Spend {terms.t('hitDice').toLowerCase()} to heal — roll and add your {terms.ability('con', 'Constitution')} modifier. Death saves are already cleared.
               </p>
             </div>
             {hitDicePools(draft.classes, draft.hitDiceUsed).length === 0 ? (
@@ -408,7 +412,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
             borderRadius: 'var(--radius-md)'
           }}
         >
-        <HeaderField label="Race">
+        <HeaderField label={terms.t('species', 'Race')}>
           <select
             className="gb-input"
             style={boxedInputStyle}
@@ -433,7 +437,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           </select>
         </HeaderField>
         {raceIsCustom && (
-          <HeaderField label="Race Name">
+          <HeaderField label={`${terms.t('species', 'Race')} Name`}>
             <input
               className="gb-input"
               style={boxedInputStyle}
@@ -507,7 +511,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
             onChange={(e) => updateClass(0, { level: Number(e.target.value) })}
           />
         </HeaderField>
-        <HeaderField label="Subclass">
+        <HeaderField label={terms.t('subclass')}>
           <SubclassField
             className={primary?.className ?? ''}
             level={primary?.level ?? 1}
@@ -529,7 +533,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
             onChange={(e) => patch({ experiencePoints: Number(e.target.value) })}
           />
         </HeaderField>
-        <VitalStat label="Proficiency" value={formatModifier(pb)} />
+        <VitalStat label={terms.t('proficiencyBonus')} value={formatModifier(pb)} />
         <VitalStat label="Perception" value={String(derived.skills.perception?.passive ?? 10 + derived.abilities.wis.mod)} />
 
         <button
@@ -548,7 +552,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
             cursor: readOnly ? 'default' : 'pointer'
           }}
         >
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Inspiration</span>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{terms.t('inspiration')}</span>
           <StarIcon size={22} filled={draft.inspiration} style={{ color: draft.inspiration ? 'var(--accent)' : 'var(--text-muted)' }} />
         </button>
 
@@ -595,21 +599,21 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
         <Divider />
 
         <VitalStat
-          label="AC"
+          label={terms.t('armorClass')}
           value={String(derived.armorClass)}
           icon={<ShieldIcon size={22} style={{ color: 'var(--accent)' }} />}
           accent
           large
         />
         <VitalStat
-          label="Initiative"
+          label={terms.t('initiative')}
           value={formatModifier(derived.initiative)}
           icon={<InitiativeIcon />}
           large
           badge={initiativeAdvantage && <AdvantageTag kind={initiativeAdvantage} label="Initiative" />}
         />
         <VitalStat
-          label="Speed"
+          label={terms.t('speed')}
           value={`${derived.speeds.walk ?? 0} ft`}
           icon={<SpeedIcon />}
           large
@@ -762,7 +766,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                     onClick={() => patch({ classes: draft.classes.filter((_, idx) => idx !== i) })}
                     style={removeBtnStyle}
                   >
-                    ×
+                    <XIcon size={12} />
                   </button>
                 </div>
               )
@@ -819,7 +823,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           )}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
-          {ABILITIES.map(({ id, label }) => {
+          {terms.abilities.map(({ id, label }) => {
             const bonuses = abilityBonusSources(id)
             const bonusExtra =
               bonuses.length > 0
@@ -830,7 +834,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                 <div className="gb-card" style={{ padding: 'var(--space-2)', textAlign: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
                     <AbilityIcon ability={id} style={{ color: 'var(--text-muted)' }} />
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label.slice(0, 3)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{terms.abilityShort(id, label)}</span>
                     {abilityCheckAdvantage[id] && <AdvantageTag kind={abilityCheckAdvantage[id]!} label={`${label} checks`} />}
                   </div>
                   {abilityEditMode ? (
@@ -897,7 +901,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                             title="Remove"
                             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
                           >
-                            ×
+                            <XIcon size={12} />
                           </button>
                         </div>
                       ))}
@@ -911,9 +915,9 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
       </div>
 
       <div>
-        <div className="gb-label">Saving Throws</div>
+        <div className="gb-label">{terms.t('savingThrows')}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'var(--space-2)' }}>
-          {ABILITIES.map(({ id, label }) => {
+          {terms.abilities.map(({ id, label }) => {
             const proficient = !!derived.saves[id].proficiency
             const bonus = derived.saves[id].bonus
             return (
@@ -948,7 +952,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
                   }}
                   disabled={readOnly}
                 >
-                  {label.slice(0, 3)}
+                  {terms.abilityShort(id, label)}
                   {derived.saves[id].mode && <AdvantageTag kind={derived.saves[id].mode!} label={`${label} saves`} />}
                 </button>
                 {readOnly ? (
@@ -976,7 +980,7 @@ export function OverviewTab({ character, onSave, onLevelUp, readOnly, sessionId 
           names instead of out at a fixed column edge); Combat gets everything else. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: 'var(--space-4)', alignItems: 'start' }}>
         <div>
-          <div className="gb-label">Skills</div>
+          <div className="gb-label">{terms.t('skills')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'max-content auto auto', rowGap: 5, columnGap: 'var(--space-2)', alignItems: 'center' }}>
             {skillRows.map(({ id, ability }) => {
               const bonus = skillOf(derived, id)?.bonus ?? derived.abilities[ability].mod
@@ -1048,6 +1052,12 @@ function ResistancesSection({
   readOnly?: boolean
 }): JSX.Element {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  // The SRD's damage types plus any the active packs add (vocabulary.damageTypes).
+  const { registry } = useActivePackRegistry()
+  const damageTypes = useMemo(() => {
+    const names = [...DAMAGE_TYPES, ...registry.vocabulary.damageTypes.map((d) => registry.terminology[`damage.${d.id}`] ?? d.name)]
+    return names.filter((n, i) => names.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i)
+  }, [registry])
   const grantedFor = (key: (typeof RESISTANCE_ROWS)[number]['key']): string[] =>
     derived.damageRelations[DERIVED_RELATION[key]].filter((t) => !character[key].some((s) => s.toLowerCase() === t.toLowerCase()))
 
@@ -1091,9 +1101,10 @@ function ResistancesSection({
                 <button
                   type="button"
                   onClick={() => removeTag(key, tag)}
-                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, lineHeight: 1, display: 'inline-flex' }}
+                  title={`Remove ${tag}`}
                 >
-                  ×
+                  <XIcon size={10} />
                 </button>
               )}
             </span>
@@ -1119,7 +1130,7 @@ function ResistancesSection({
                 // A datalist pick fires this same 'input'/onChange event as typing does — no separate "option
                 // selected" event exists — so an exact match against the known list is what tells the two apart
                 // from an in-progress keystroke, letting a dropdown pick add immediately without needing Enter.
-                if (DAMAGE_TYPES.some((t) => t.toLowerCase() === value.toLowerCase())) addTagValue(key, value)
+                if (damageTypes.some((t) => t.toLowerCase() === value.toLowerCase())) addTagValue(key, value)
                 else setDrafts((prev) => ({ ...prev, [key]: value }))
               }}
               onKeyDown={(e) => {
@@ -1132,7 +1143,7 @@ function ResistancesSection({
             />
           )}
           <datalist id={`damage-types-${key}`}>
-            {DAMAGE_TYPES.map((t) => (
+            {damageTypes.map((t) => (
               <option key={t} value={t} />
             ))}
           </datalist>

@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { DIE_SIDES, formatBreakdown, formatFormula, type DiceGroup, type DiceRollLogEntry, type DieSides } from '@shared/dice'
 import { Button } from '../../ui/Button'
 import { ensureDiceLogListening, getDiceLog, performRoll, subscribeDiceLog } from './diceLogStore'
+import { XIcon } from '../../ui/icons'
 
 interface DiceTrayProps {
   /** The hosted (DM) or joined (player) session id — null when neither, in which case the tray still rolls and logs locally, it just has no one to share with. */
@@ -103,7 +104,7 @@ export function DiceTray({ sessionId }: DiceTrayProps): JSX.Element {
               <span key={g.sides} className="gb-badge" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
                 {g.count}d{g.sides}
                 <button type="button" onClick={() => removeDie(g.sides)} style={removeChipBtnStyle} title={`Remove one d${g.sides}`}>
-                  ×
+                  <XIcon size={12} />
                 </button>
               </span>
             ))}

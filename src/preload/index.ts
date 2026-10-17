@@ -139,7 +139,8 @@ const api: AppApi = {
   campaignPacks: {
     list: (campaignId, sessionId) => ipcRenderer.invoke('campaignPacks:list', campaignId, sessionId),
     enable: (campaignId, packId) => ipcRenderer.invoke('campaignPacks:enable', campaignId, packId),
-    disable: (campaignId, packId) => ipcRenderer.invoke('campaignPacks:disable', campaignId, packId)
+    disable: (campaignId, packId) => ipcRenderer.invoke('campaignPacks:disable', campaignId, packId),
+    move: (campaignId, packId, delta) => ipcRenderer.invoke('campaignPacks:move', campaignId, packId, delta)
   },
   characters: {
     list: () => ipcRenderer.invoke('characters:list'),

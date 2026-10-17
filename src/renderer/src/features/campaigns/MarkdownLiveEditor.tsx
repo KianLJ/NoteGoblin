@@ -17,8 +17,8 @@ import {
 import { WIKILINK_PATTERN, wikilinkIsDouble, wikilinkTarget } from '../../wikilink'
 import { resolveImageSrc } from '../../imageSrc'
 import { renderNoteMarkdown } from '../../markdown'
-import { saveCustomMonster, loadCustomMonsters } from '../../data/customBestiary'
-import { BESTIARY, formatCr } from '../../data/bestiary'
+import { formatCr } from '../../data/bestiary'
+import { loadAllMonsters, saveMonster } from '../../data/packMonsters'
 import { statblockToFencedBlock } from '../../statblock'
 import { SFX_LIBRARY, findSfxCue, parseOneShotCodeSpan } from '../../data/sfxLibrary'
 import { parseDiceCodeSpan, type DieSides } from '@shared/dice'
@@ -146,7 +146,7 @@ function statblockCompletionSource(): CompletionSource {
     if (!match) return null
     const query = match.text.slice(match.text.indexOf(':') + 1).trim().toLowerCase()
     const seen = new Set<string>()
-    const monsters = [...BESTIARY, ...loadCustomMonsters()].filter((m) => {
+    const monsters = loadAllMonsters().filter((m) => {
       if (seen.has(m.index)) return false
       seen.add(m.index)
       return m.name.toLowerCase().includes(query)
@@ -546,8 +546,10 @@ function livePreviewExtension(
         event.preventDefault()
         try {
           const data = JSON.parse(saveBtn.dataset.saveStatblock ?? '{}')
-          const saved = saveCustomMonster(data)
-          saveBtn.textContent = `Saved: ${saved.name}`
+          saveBtn.textContent = 'Saving…'
+          void saveMonster(data).then((saved) => {
+            saveBtn.textContent = `Saved: ${saved.name}`
+          })
         } catch {
           /* malformed statblock JSON — nothing sensible to save */
         }

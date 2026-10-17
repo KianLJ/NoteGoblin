@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react'
 import type { ApiResult, CampaignPack, PackImportResult } from '@shared/ipc'
 import type { ContentPack } from '@shared/content/schema'
 import { describePackContents } from '@shared/content/packFiles'
+import { terminologyConflicts } from '@shared/content/terms'
+import { ArrowDownIcon, ArrowUpIcon } from '../../ui/icons'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
@@ -36,6 +38,7 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
   const libraryPacks = library.packs ?? []
   const libraryById = new Map(libraryPacks.map((p) => [p.pack.id, p.pack]))
   const notEnabled = libraryPacks.filter((p) => !enabled.some((e) => e.id === p.pack.id))
+  const conflicts = terminologyConflicts(enabled)
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>): Promise<void> {
     setBusy(true)
@@ -84,7 +87,19 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
             {enabled.length === 0 && (
               <Muted>{isDm ? 'No packs enabled — this campaign uses the SRD only. Enable a pack from your library below.' : 'The DM hasn’t enabled any packs — this campaign uses the SRD only.'}</Muted>
             )}
-            {enabled.map((pack) => {
+            {enabled.length > 1 && <Muted>Load order: later packs win where two rename the same thing or define the same vocabulary entry.</Muted>}
+            {conflicts.length > 0 && (
+              <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <strong style={{ fontSize: 12 }}>Renamed by more than one pack</strong>
+                {conflicts.map((c) => (
+                  <div key={c.key} style={{ color: 'var(--text-secondary)' }}>
+                    <code style={{ fontSize: 11 }}>{c.key}</code>: {c.packs.map((p) => `“${p.label}” (${p.name})`).join(' vs ')} — <span style={{ color: 'var(--accent)' }}>{c.packs.find((p) => p.id === c.winner)?.label}</span> wins
+                    {isDm ? ' (move a pack later to change it)' : ''}
+                  </div>
+                ))}
+              </div>
+            )}
+            {enabled.map((pack, index) => {
               const inLibrary = libraryById.get(pack.id)
               const canUpdate = isDm && inLibrary && inLibrary.version !== pack.version
               return (
@@ -95,6 +110,16 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
                   actions={
                     isDm ? (
                       <>
+                        {enabled.length > 1 && (
+                          <>
+                            <button type="button" className="gb-btn gb-btn--ghost" disabled={busy || index === 0} onClick={() => run(() => campaignAction(window.goblin.campaignPacks.move(campaign.id, pack.id, -1)))} title="Load earlier" style={orderButton}>
+                              <ArrowUpIcon size={12} />
+                            </button>
+                            <button type="button" className="gb-btn gb-btn--ghost" disabled={busy || index === enabled.length - 1} onClick={() => run(() => campaignAction(window.goblin.campaignPacks.move(campaign.id, pack.id, 1)))} title="Load later" style={orderButton}>
+                              <ArrowDownIcon size={12} />
+                            </button>
+                          </>
+                        )}
                         {canUpdate && (
                           <Button variant="primary" disabled={busy} onClick={() => run(() => campaignAction(window.goblin.campaignPacks.enable(campaign.id, pack.id)))} style={smallButton} title="Players get the new version, and their sheets flag what changed.">
                             Update to {inLibrary!.version}
@@ -265,3 +290,4 @@ function Muted({ children }: { children: ReactNode }): JSX.Element {
 }
 
 const smallButton = { fontSize: 12, padding: '4px 10px' } as const
+const orderButton = { padding: '4px 6px', display: 'inline-flex' } as const

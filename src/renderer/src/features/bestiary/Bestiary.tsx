@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { BESTIARY, BESTIARY_TYPES, formatCr, type BestiaryMonster } from '../../data/bestiary'
-import { loadCustomMonsters, removeCustomMonster, isCustomMonster } from '../../data/customBestiary'
+import { BESTIARY_TYPES, formatCr, type BestiaryMonster } from '../../data/bestiary'
+import { removeCustomMonster, isCustomMonster } from '../../data/customBestiary'
+import { PERSONAL_MONSTER_PACK_ID, moveLocalMonstersToPack, removePersonalMonster, type PackMonster } from '../../data/packMonsters'
+import { useAllMonsters } from '../../data/useAllMonsters'
+import { XIcon } from '../../ui/icons'
 import { loadNpcs, createNpc, updateNpc, removeNpc, type Npc } from '../../data/npcs'
 import { generateNpcName } from '../../data/npcNames'
 import { renderStatblockHtml } from '../../statblock'
@@ -66,7 +69,11 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [selectedIndex, setSelectedIndex] = useState<string | null>(null)
-  const [customMonsters, setCustomMonsters] = useState(() => loadCustomMonsters())
+  // Device-saved, pack (library + open campaign) and SRD creatures.
+  const { monsters: everyMonster, refresh: refreshMonsters } = useAllMonsters()
+  const [monsterNotice, setMonsterNotice] = useState<string | null>(null)
+  const [movingMonsters, setMovingMonsters] = useState(false)
+  const localMonsterCount = everyMonster.filter((m) => isCustomMonster(m.index)).length
   const [npcs, setNpcs] = useState(() => loadNpcs())
   const [editingNpcId, setEditingNpcId] = useState<string | 'new' | null>(null)
   const [npcDraft, setNpcDraft] = useState<Omit<Npc, 'id' | 'createdAt'>>({
@@ -79,7 +86,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
 
   // Homebrew: everything the active content packs add (the open campaign's, or your library outside one).
   const { packs: activePacks, registry: packRegistry } = useActivePackRegistry()
-  const homebrew = useMemo(() => codexEntries(packRegistry, activePacks), [packRegistry, activePacks])
+  const homebrew = useMemo(() => codexEntries(packRegistry, activePacks).filter((e) => e.kind !== 'monsters'), [packRegistry, activePacks])
   const [packFilter, setPackFilter] = useState('')
   const visibleCategories = (hideMonsters ? CATEGORIES.filter((c) => c !== 'Monsters' && c !== 'NPCs') : CATEGORIES).filter((c) => c !== 'Homebrew' || homebrew.length > 0)
 
@@ -90,7 +97,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   const effectiveCategory: Category =
     onPick ? 'Monsters' : hideMonsters && (category === 'Monsters' || category === 'NPCs') ? 'Equipment' : category
 
-  const allMonsters = useMemo(() => [...customMonsters, ...BESTIARY], [customMonsters])
+  const allMonsters: PackMonster[] = everyMonster
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -187,10 +194,22 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   const selectedTopic: RuleTopic | undefined = PLAYING_THE_GAME_TOPICS.find((t) => t.id === selectedIndex)
   const selectedHomebrew: CodexEntry | undefined = homebrew.find((e) => e.key === selectedIndex)
 
-  function handleDeleteCustom(index: string): void {
-    removeCustomMonster(index)
-    setCustomMonsters(loadCustomMonsters())
-    if (selectedIndex === index) setSelectedIndex(null)
+  async function handleDeleteCustom(m: PackMonster): Promise<void> {
+    if (isCustomMonster(m.index)) removeCustomMonster(m.index)
+    else if (m.fullId) {
+      const error = await removePersonalMonster(m.fullId)
+      if (error) return setMonsterNotice(error)
+    }
+    refreshMonsters()
+    if (selectedIndex === m.index) setSelectedIndex(null)
+  }
+
+  async function moveLocalMonsters(): Promise<void> {
+    setMovingMonsters(true)
+    const result = await moveLocalMonstersToPack()
+    setMovingMonsters(false)
+    setMonsterNotice('error' in result ? result.error : `Moved ${result.moved} creature${result.moved === 1 ? '' : 's'} into your My Creatures pack.`)
+    refreshMonsters()
   }
 
   function startNewNpc(): void {
@@ -416,13 +435,24 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                 {effectiveCategory === 'Playing the Game' && `${filteredTopics.length} topic${filteredTopics.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Homebrew' && `${filteredHomebrew.length} entr${filteredHomebrew.length === 1 ? 'y' : 'ies'}`}
               </div>
+              {effectiveCategory === 'Monsters' && localMonsterCount > 0 && (
+                <div className="gb-card" style={{ padding: '6px 8px', fontSize: 11, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {localMonsterCount} custom creature{localMonsterCount === 1 ? ' is' : 's are'} saved only on this device. Move {localMonsterCount === 1 ? 'it' : 'them'} into your My Creatures pack to edit in the Workshop, export and share.
+                  <button type="button" className="gb-btn gb-btn--secondary" disabled={movingMonsters} onClick={() => void moveLocalMonsters()} style={{ fontSize: 11, padding: '3px 8px', alignSelf: 'flex-start' }}>
+                    {movingMonsters ? 'Moving…' : 'Move to My Creatures'}
+                  </button>
+                </div>
+              )}
+              {effectiveCategory === 'Monsters' && monsterNotice && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{monsterNotice}</div>}
             </div>
 
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', borderTop: '1px solid var(--border-subtle)' }}>
               {effectiveCategory === 'Monsters' &&
                 filteredMonsters.map((m) => {
                   const active = selectedMonster?.index === m.index
-                  const custom = isCustomMonster(m.index)
+                  const local = isCustomMonster(m.index)
+                  const personal = m.packId === PERSONAL_MONSTER_PACK_ID
+                  const custom = local || personal
                   return (
                     <div key={m.index} style={{ display: 'flex', alignItems: 'center', background: active ? 'var(--accent-subtle)' : 'transparent' }}>
                       <button
@@ -435,13 +465,14 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                       >
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {m.name}
-                          {custom && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 5 }}>· custom</span>}
+                          {local && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 5 }}>· this device</span>}
+                          {m.packName && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 5 }}>· {m.packName}</span>}
                         </span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>CR {formatCr(m.crNumeric)}</span>
                       </button>
                       {custom && (
-                        <button type="button" onClick={() => handleDeleteCustom(m.index)} title="Delete this custom creature" style={deleteBtnStyle}>
-                          ×
+                        <button type="button" onClick={() => void handleDeleteCustom(m)} title="Delete this custom creature" style={{ ...deleteBtnStyle, display: 'inline-flex', alignItems: 'center' }}>
+                          <XIcon size={11} />
                         </button>
                       )}
                     </div>
@@ -456,7 +487,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{n.race}</span>
                     </button>
                     <button type="button" onClick={() => handleDeleteNpc(n.id)} title="Delete this NPC" style={deleteBtnStyle}>
-                      ×
+                      <XIcon size={12} />
                     </button>
                   </div>
                 ))}

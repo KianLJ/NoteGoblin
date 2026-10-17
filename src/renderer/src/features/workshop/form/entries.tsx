@@ -30,6 +30,7 @@ import {
   type Obj
 } from './fields'
 import { FeaturesEditor, LevelTable } from './levels'
+import { renderStatblockHtml, type StatblockData } from '../../../statblock'
 
 /** The form for one entry of any kind (monsters keep the JSON view — their statblock shape gets effects in phase 8). */
 export function EntryForm({ kind, value, packId, onChange }: { kind: EntryKind; value: Obj; packId: string; onChange: (v: Obj) => void }): JSX.Element {
@@ -53,7 +54,7 @@ export function EntryForm({ kind, value, packId, onChange }: { kind: EntryKind; 
     case 'items':
       return <ItemForm value={value} onChange={onChange} />
     case 'monsters':
-      return <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Monsters are edited as JSON for now (their statblock format).</p>
+      return <MonsterForm value={value} onChange={onChange} />
   }
 }
 
@@ -523,4 +524,112 @@ function ItemForm({ value, onChange }: FormProps): JSX.Element {
       </Group>
     </div>
   )
+}
+
+const STAT_FIELDS: Array<[string, string, string]> = [
+  ['size', 'Size', 'Medium'],
+  ['type', 'Type', 'beast'],
+  ['alignment', 'Alignment', 'unaligned'],
+  ['ac', 'Armor Class', '13 (natural armor)'],
+  ['hp', 'Hit Points', '22 (4d8 + 4)'],
+  ['speed', 'Speed', '30 ft., climb 20 ft.'],
+  ['cr', 'Challenge', '1/2']
+]
+const DETAIL_FIELDS: Array<[string, string]> = [
+  ['saves', 'Saving throws'],
+  ['skills', 'Skills'],
+  ['damage_vulnerabilities', 'Damage vulnerabilities'],
+  ['damage_resistances', 'Damage resistances'],
+  ['damage_immunities', 'Damage immunities'],
+  ['condition_immunities', 'Condition immunities'],
+  ['senses', 'Senses'],
+  ['languages', 'Languages']
+]
+const BLOCKS: Array<[string, string, string]> = [
+  ['traits', 'Traits', 'Trait'],
+  ['actions', 'Actions', 'Action'],
+  ['reactions', 'Reactions', 'Reaction'],
+  ['legendary_actions', 'Legendary actions', 'Legendary action']
+]
+
+/** A creature as a statblock — the same shape a ```statblock note block and the SRD bestiary use — with a live preview. */
+function MonsterForm({ value, onChange }: FormProps): JSX.Element {
+  const set = (key: string, v: unknown): void => onChange(withKey(value, key, v))
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-4)', alignItems: 'start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        <Grid min={170}>
+          <Field label="Name">
+            <TextInput value={str(value.name)} onChange={(v) => onChange(withRequired(value, 'name', v))} />
+          </Field>
+          <Field label="Id">
+            <IdInput value={str(value.id)} onChange={(v) => onChange(withRequired(value, 'id', v))} fromName={str(value.name)} />
+          </Field>
+          {STAT_FIELDS.map(([key, label, placeholder]) => (
+            <Field key={key} label={label}>
+              <TextInput value={str(value[key])} onChange={(v) => set(key, v)} placeholder={placeholder} />
+            </Field>
+          ))}
+        </Grid>
+        <Group title="Ability scores">
+          <Grid min={70}>
+            {(['str', 'dex', 'con', 'int', 'wis', 'cha'] as const).map((a) => (
+              <Field key={a} label={a.toUpperCase()}>
+                <TextInput value={str(value[a])} onChange={(v) => set(a, v)} placeholder="10" />
+              </Field>
+            ))}
+          </Grid>
+        </Group>
+        <Group title="Details" collapsible defaultOpen={DETAIL_FIELDS.some(([k]) => !!value[k])}>
+          <Grid min={200}>
+            {DETAIL_FIELDS.map(([key, label]) => (
+              <Field key={key} label={label}>
+                <TextInput value={str(value[key])} onChange={(v) => set(key, v)} />
+              </Field>
+            ))}
+          </Grid>
+        </Group>
+        {BLOCKS.map(([key, label, singular]) => {
+          const list = arr<Obj>(value[key])
+          const setList = (next: Obj[]): void => onChange(withRequired(value, key, next))
+          return (
+            <Group key={key} title={`${label}${list.length ? ` (${list.length})` : ''}`} collapsible defaultOpen={key === 'actions' || list.length > 0}>
+              {list.map((entry, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <TextInput value={str(entry.name)} onChange={(v) => setList(list.map((x, j) => (j === i ? { ...x, name: v } : x)))} placeholder="Name" />
+                    <TextArea
+                      value={str(entry.desc)}
+                      onChange={(v) => setList(list.map((x, j) => (j === i ? { ...x, desc: v } : x)))}
+                      rows={2}
+                      placeholder="Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 6 (1d8 + 2) slashing damage."
+                    />
+                  </div>
+                  <RowActions
+                    label={singular.toLowerCase()}
+                    onUp={i > 0 ? () => setList(move(list, i, -1)) : undefined}
+                    onDown={i < list.length - 1 ? () => setList(move(list, i, 1)) : undefined}
+                    onRemove={() => setList(list.filter((_, j) => j !== i))}
+                  />
+                </div>
+              ))}
+              <AddButton onClick={() => setList([...list, { name: '', desc: '' }])}>{singular}</AddButton>
+            </Group>
+          )
+        })}
+      </div>
+      <div className="gb-card" style={{ padding: 'var(--space-3)', position: 'sticky', top: 0 }}>
+        <div className="gb-label">Preview</div>
+        <div dangerouslySetInnerHTML={{ __html: renderStatblockHtml(toStatblock(value), false) }} />
+      </div>
+    </div>
+  )
+}
+
+/** The statblock fields of a monster entry (strings and the four entry lists), for the renderer. */
+function toStatblock(value: Obj): StatblockData {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value)) if (typeof v === 'string') out[k] = v
+  for (const [key] of BLOCKS) out[key] = arr<Obj>(value[key]).map((e) => ({ name: str(e.name), desc: str(e.desc) }))
+  return out as unknown as StatblockData
 }

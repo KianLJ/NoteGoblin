@@ -17,6 +17,7 @@ import type { CharacterSheetData, ClassLevel } from '../dnd5e'
 import { buildRegistry, type Registered, type Registry } from './registry'
 import type { ContentPack } from './schema'
 import { srdPack } from './srd'
+import { packKey } from './packKey'
 
 export const CURRENT_SHEET_VERSION = 2
 
@@ -24,9 +25,9 @@ const lower = (s: string | undefined): string => (s ?? '').trim().toLowerCase()
 
 const registryCache = new Map<string, Registry>()
 
-/** The registry for a pack list — cached by pack id + version, since the same few packs are used for every sheet. */
+/** The registry for a pack list — cached by each pack's content key (see packKey.ts), since the same few packs are used for every sheet. */
 export function registryForPacks(packs: ContentPack[]): Registry {
-  const key = packs.map((p) => `${p.id}@${p.version}`).join(',')
+  const key = packs.map(packKey).join(',')
   let registry = registryCache.get(key)
   if (!registry) {
     if (registryCache.size > 50) registryCache.clear()

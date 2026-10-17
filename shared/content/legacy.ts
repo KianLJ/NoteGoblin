@@ -327,7 +327,10 @@ export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBui
       return itemId ? [{ key: e.id, itemId: registry.get('items', itemId)?.fullId ?? itemId, equipped: !!e.equipped, quantity: e.quantity }] : []
     }),
     activeToggles: [...sheet.activeBuffs],
-    conditions: sheet.exhaustionLevel > 0 ? [{ id: 'exhaustion', level: sheet.exhaustionLevel }] : [],
+    conditions: [
+      ...(sheet.exhaustionLevel > 0 ? [{ id: 'exhaustion', level: sheet.exhaustionLevel }] : []),
+      ...(sheet.activeConditions ?? []).filter((c) => c.id !== 'exhaustion').map((c) => ({ id: c.id, ...(c.level ? { level: c.level } : {}) }))
+    ],
     saveProficiencies: [...sheet.savingThrowProficiencies],
     skillProficiencies,
     resourceUsed: { ...sheet.resourceUsed },

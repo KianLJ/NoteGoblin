@@ -1,4 +1,5 @@
 import type { AbilityId } from '@shared/content/schema'
+import { TERM_DEFAULTS } from '@shared/content/terms'
 import { EffectsEditor } from './effects'
 import {
   AbilityChips,
@@ -147,22 +148,11 @@ function Cell({ col, row, onChange }: { col: Column; row: Obj; onChange: (v: Obj
   }
 }
 
+// Every concept the app labels through terminology (shared/content/terms.ts), plus the abilities' names and short forms.
 const TERM_KEYS = [
-  'spellSlots',
-  'spells',
-  'cantrips',
-  'spellcasting',
-  'hitDice',
-  'subclass',
-  'species',
-  'background',
-  'proficiencyBonus',
-  'ability.str',
-  'ability.dex',
-  'ability.con',
-  'ability.int',
-  'ability.wis',
-  'ability.cha'
+  ...Object.keys(TERM_DEFAULTS),
+  ...['str', 'dex', 'con', 'int', 'wis', 'cha'].flatMap((a) => [`ability.${a}`, `ability.${a}.short`]),
+  ...['cp', 'sp', 'ep', 'gp', 'pp'].map((c) => `currency.${c}`)
 ]
 
 /** Renames: one row per concept key → the label this pack shows instead. */
@@ -184,7 +174,7 @@ export function TerminologyForm({ value, onChange }: { value: Obj; onChange: (v:
                 <TextInput value={key} onChange={(k) => setEntries(entries.map((e, j) => (j === i ? [k, e[1]] : e)))} list="termKeys" mono />
               </Field>
               <Field label="Shown as">
-                <TextInput value={str(label)} onChange={(l) => setEntries(entries.map((e, j) => (j === i ? [e[0], l] : e)))} />
+                <TextInput value={str(label)} onChange={(l) => setEntries(entries.map((e, j) => (j === i ? [e[0], l] : e)))} placeholder={TERM_DEFAULTS[key]} />
               </Field>
             </Grid>
           </div>

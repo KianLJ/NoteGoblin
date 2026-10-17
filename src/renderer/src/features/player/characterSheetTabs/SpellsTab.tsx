@@ -17,6 +17,7 @@ import {
   type CompendiumSpell
 } from '@shared/compendium'
 import { knownSpells, sheetSpellFromPack } from '@shared/content/sheet'
+import { useTerms } from '../../content/terms'
 import { SRD_PACK_ID } from '@shared/content/srd'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
@@ -99,6 +100,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   // (Pact Magic included) is summed into one table, as before. Only levels that actually have slots show up at all.
   const liveSheet = useMemo(() => ({ ...character, ...draft }), [character, draft])
   const { derived, registry } = useDerivedSheet(liveSheet)
+  const terms = useTerms()
   const slotTotals: Record<number, number> = {}
   for (const pool of Object.values(derived.spellcasting.slots)) {
     for (const [lvl, n] of Object.entries(pool)) slotTotals[Number(lvl)] = (slotTotals[Number(lvl)] ?? 0) + n
@@ -278,12 +280,12 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
           </>
         )}
         {spellCap !== null && <Stat label="Spells Known" value={`${leveledSpellCount} / ${spellCap}`} />}
-        {cantripCap !== null && <Stat label="Cantrips Known" value={`${cantripCount} / ${cantripCap}`} />}
+        {cantripCap !== null && <Stat label={`${terms.t('cantrips')} Known`} value={`${cantripCount} / ${cantripCap}`} />}
       </div>
 
       {slotLevels.length > 0 && (
         <div>
-          <div className="gb-label">Spell Slots</div>
+          <div className="gb-label">{terms.t('spellSlots')}</div>
           <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
             {slotLevels.map((level) => {
               const total = slotTotals[level]

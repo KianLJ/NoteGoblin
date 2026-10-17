@@ -110,6 +110,7 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
   // The active packs' items, offered in their own picker (the SRD lists stay as they were).
   const { registry } = useDerivedSheet(character)
   const packItems = registry.all('items').filter((i) => i.packId !== SRD_PACK_ID)
+  const packCurrencies = registry.vocabulary.currencies.filter((c) => !CURRENCIES.some((s) => s.id === c.id))
   const packItemFor = (item: EquipmentItem): ItemDef | undefined => (item.packItemId ? registry.get('items', item.packItemId)?.def : undefined)
 
   function addPackItem(item: (typeof packItems)[number]): void {
@@ -176,7 +177,9 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
         <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
           {CURRENCIES.map(({ id, label }) => (
             <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{label}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }} title={registry.vocabulary.currencies.find((c) => c.id === id)?.name}>
+                {registry.terminology[`currency.${id}`] ?? label}
+              </span>
               <input
                 type="number"
                 min={0}
@@ -184,6 +187,23 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                 style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
                 value={draft.currency[id]}
                 onChange={(e) => patch({ currency: { ...draft.currency, [id]: Number(e.target.value) } })}
+              />
+            </div>
+          ))}
+          {/* Currencies the active packs add (vocabulary.currencies beyond the SRD's five), stored in packCurrency. */}
+          {packCurrencies.map((c) => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }} title={`Worth ${c.valueInBase} base coin${c.valueInBase === 1 ? '' : 's'}`}>
+                {registry.terminology[`currency.${c.id}`] ?? c.name}
+              </span>
+              <input
+                type="number"
+                min={0}
+                className="gb-input"
+                style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+                value={character.packCurrency?.[c.id] ?? 0}
+                disabled={readOnly}
+                onChange={(e) => onSave({ packCurrency: { ...character.packCurrency, [c.id]: Number(e.target.value) } })}
               />
             </div>
           ))}

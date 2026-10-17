@@ -3,13 +3,12 @@ import type { Note } from '@shared/ipc'
 import type { SessionDeck } from '@shared/sessionDeck'
 import { useSessionDecks } from './useSessionDecks'
 import { Button } from '../../ui/Button'
-import { BESTIARY } from '../../data/bestiary'
-import { loadCustomMonsters } from '../../data/customBestiary'
+import { loadAllMonsters } from '../../data/packMonsters'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { playSfx } from '../audio/soundEffects'
 import { pickMood, playSpecificTrack } from '../audio/musicEngine'
-import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, IconLabel } from '../../ui/icons'
+import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, IconLabel, XIcon } from '../../ui/icons'
 
 interface SessionDeckPanelProps {
   campaignId: string | null
@@ -33,7 +32,7 @@ interface SessionDeckPanelProps {
 }
 
 function resolveEncounterMonsters(enc: SavedEncounter): BestiaryMonster[] {
-  const all = [...loadCustomMonsters(), ...BESTIARY]
+  const all = loadAllMonsters()
   return enc.monsterIndexes.map((idx) => all.find((m) => m.index === idx)).filter((m): m is BestiaryMonster => !!m)
 }
 
@@ -190,7 +189,7 @@ export function SessionDeckPanel({
                     onClick={() => removeDeck(deck.id)}
                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: '0 var(--space-3)' }}
                   >
-                    ×
+                    <XIcon size={12} />
                   </button>
                 )}
               </div>
@@ -384,7 +383,7 @@ export function SessionDeckPanel({
                       <ArrowDownIcon size={12} />
                     </button>
                     <button type="button" onClick={() => handleRemoveScene(scene.noteId)} title="Delete scene" style={smallBtnStyle}>
-                      ×
+                      <XIcon size={12} />
                     </button>
                   </div>
                 )}

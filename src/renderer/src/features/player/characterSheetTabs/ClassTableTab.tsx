@@ -15,6 +15,7 @@ import { choicePatch } from '@shared/content/legacyMirror'
 import { normalizeForActivePacks } from '@shared/content/sheet'
 import { useAutosaveDraft } from '../useAutosaveDraft'
 import { useDerivedSheet } from '../useDerivedSheet'
+import { XIcon } from '../../../ui/icons'
 
 /** A short human summary of one resolved ASI slot — "+2 STR", "+1 STR, +1 DEX", or the feat's name. */
 function asiChoiceSummary(choice: AsiSlotChoice): string {
@@ -223,7 +224,7 @@ export function ClassTableTab({ character, onSave, readOnly }: ClassTableTabProp
                   }
                   style={removeBtnStyle}
                 >
-                  ×
+                  <XIcon size={12} />
                 </button>
               </div>
               <textarea

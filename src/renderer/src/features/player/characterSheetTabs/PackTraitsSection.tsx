@@ -3,7 +3,9 @@ import type { CharacterSheetData } from '@shared/dnd5e'
 import type { DerivedCharacter } from '@shared/content/engine'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { Button } from '../../../ui/Button'
-import { MinusIcon, PlusIcon } from '../../../ui/icons'
+import { MinusIcon, PlusIcon, XIcon } from '../../../ui/icons'
+import { useActivePackRegistry } from '../../content/pickerContent'
+import { useTerms } from '../../content/terms'
 
 const ABILITY_LABEL: Record<string, string> = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' }
 
@@ -26,6 +28,11 @@ export function PackTraitsSection({
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
 }): JSX.Element | null {
+  const { registry } = useActivePackRegistry()
+  const terms = useTerms()
+  // Conditions the packs define (exhaustion keeps its own control in the header).
+  const packConditions = registry.vocabulary.conditions.filter((c) => c.id !== 'exhaustion')
+  const active = character.activeConditions ?? []
   const stats = Object.entries(derived.stats).filter(([, s]) => s.display)
   const senses = Object.values(derived.senses)
   const combat = [
@@ -34,7 +41,11 @@ export function PackTraitsSection({
     derived.reactions !== 1 ? { label: 'Reactions', value: String(derived.reactions) } : null
   ].filter((x): x is { label: string; value: string } => !!x)
 
-  if (!derived.abilityAliases.length && !derived.counters.length && !stats.length && !senses.length && !combat.length && !derived.damageReductions.length) return null
+  if (!derived.abilityAliases.length && !derived.counters.length && !stats.length && !senses.length && !combat.length && !derived.damageReductions.length && !packConditions.length) return null
+
+  function setConditions(next: { id: string; level?: number }[]): void {
+    if (!readOnly) onSave({ activeConditions: next })
+  }
 
   function setCounter(id: string, value: number, min: number, max?: number): void {
     if (readOnly) return
@@ -57,7 +68,7 @@ export function PackTraitsSection({
             >
               {a.options.map((o) => (
                 <option key={o} value={o}>
-                  {ABILITY_LABEL[o] ?? o}
+                  {terms.ability(o, ABILITY_LABEL[o] ?? o)}
                 </option>
               ))}
             </select>
@@ -103,6 +114,52 @@ export function PackTraitsSection({
         </div>
       )}
 
+      {packConditions.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', fontSize: 12 }}>
+          <span style={{ color: 'var(--text-muted)' }}>Conditions</span>
+          {active.map((c) => {
+            const def = packConditions.find((d) => d.id === c.id)
+            if (!def) return null
+            const level = c.level ?? 1
+            return (
+              <HoverDetailCard key={c.id} title={def.name} subtitle={def.maxLevel ? `Level ${level} of ${def.maxLevel}` : 'Condition'} fields={[]} description={def.description}>
+                <span className="gb-badge gb-badge--accent" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                  {registry.terminology[`condition.${def.id}`] ?? def.name}
+                  {def.maxLevel !== undefined && (
+                    <>
+                      <button type="button" style={chipButton} disabled={readOnly || level <= 1} onClick={() => setConditions(active.map((x) => (x.id === c.id ? { ...x, level: level - 1 } : x)))} title="Lower">
+                        <MinusIcon size={9} />
+                      </button>
+                      {level}
+                      <button type="button" style={chipButton} disabled={readOnly || level >= def.maxLevel} onClick={() => setConditions(active.map((x) => (x.id === c.id ? { ...x, level: level + 1 } : x)))} title="Raise">
+                        <PlusIcon size={9} />
+                      </button>
+                    </>
+                  )}
+                  {!readOnly && (
+                    <button type="button" style={chipButton} onClick={() => setConditions(active.filter((x) => x.id !== c.id))} title={`Remove ${def.name}`}>
+                      <XIcon size={9} />
+                    </button>
+                  )}
+                </span>
+              </HoverDetailCard>
+            )
+          })}
+          {!readOnly && packConditions.some((d) => !active.some((a) => a.id === d.id)) && (
+            <select className="gb-input" value="" onChange={(e) => e.target.value && setConditions([...active, { id: e.target.value }])} style={{ fontSize: 11, padding: '2px 6px' }}>
+              <option value="">Add…</option>
+              {packConditions
+                .filter((d) => !active.some((a) => a.id === d.id))
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {registry.terminology[`condition.${d.id}`] ?? d.name}
+                  </option>
+                ))}
+            </select>
+          )}
+        </div>
+      )}
+
       {derived.damageReductions.length > 0 && (
         <div style={{ fontSize: 12 }}>
           <div className="gb-label" style={{ fontSize: 11, marginBottom: 2 }}>
@@ -129,5 +186,6 @@ function Tile({ label, value }: { label: string; value: string }): JSX.Element {
   )
 }
 
+const chipButton = { background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'inline-flex' } as const
 const rowStyle = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 } as const
 const stepStyle = { fontSize: 12, padding: '0 8px', lineHeight: '20px' } as const

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { ALIGNMENTS, type Appearance, type CharacterSheetData } from '@shared/dnd5e'
 import { useAutosaveDraft } from '../useAutosaveDraft'
+import { useTerms } from '../../content/terms'
 
 interface BackgroundDraft {
   background: string
@@ -24,6 +25,7 @@ interface BackgroundTabProps {
 const APPEARANCE_FIELDS: (keyof Appearance)[] = ['age', 'height', 'weight', 'eyes', 'skin', 'hair']
 
 export function BackgroundTab({ character, onSave, readOnly }: BackgroundTabProps): JSX.Element {
+  const terms = useTerms()
   const [draft, setDraft] = useAutosaveDraft<BackgroundDraft>(
     {
       background: character.background,
@@ -47,7 +49,7 @@ export function BackgroundTab({ character, onSave, readOnly }: BackgroundTabProp
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-        <Field label="Background">
+        <Field label={terms.t('background')}>
           <input className="gb-input" value={draft.background} onChange={(e) => patch({ background: e.target.value })} />
         </Field>
         <Field label="Alignment">

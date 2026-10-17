@@ -3,6 +3,7 @@ import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { stopMusic } from '../audio/musicEngine'
 import type { CharacterSheet } from '@shared/ipc'
+import { XIcon } from '../../ui/icons'
 
 interface CharacterSwitcherProps {
   characters: CharacterSheet[] | null
@@ -163,7 +164,7 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {confirmingId === character.id ? 'Confirm?' : '×'}
+                    {confirmingId === character.id ? 'Confirm?' : <XIcon size={12} />}
                   </button>
                 </div>
               ))}

@@ -112,7 +112,26 @@ export function entryTemplate(kind: EntryKind, draft: PackDraft): Record<string,
     case 'items':
       return { ...base, category: 'Gear', effects: [] }
     case 'monsters':
-      return { ...base }
+      return {
+        ...base,
+        size: 'Medium',
+        type: 'beast',
+        alignment: 'unaligned',
+        ac: '12',
+        hp: '11 (2d8 + 2)',
+        speed: '30 ft.',
+        str: '10',
+        dex: '10',
+        con: '10',
+        int: '10',
+        wis: '10',
+        cha: '10',
+        cr: '1/4',
+        traits: [],
+        actions: [{ name: 'Claw', desc: 'Melee Weapon Attack: +2 to hit, reach 5 ft., one target. Hit: 3 (1d6) slashing damage.' }],
+        reactions: [],
+        legendary_actions: []
+      }
   }
 }
 

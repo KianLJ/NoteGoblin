@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '../../ui/Button'
 import type { Notifications } from './useNotifications'
 import type { RelayNotification } from '@shared/relay'
+import { XIcon } from '../../ui/icons'
 
 interface NotificationToastsProps {
   notifications: Notifications
@@ -93,7 +94,7 @@ export function NotificationToasts({ notifications: notificationsApi, onJoined }
                 flexShrink: 0
               }}
             >
-              ×
+              <XIcon size={12} />
             </button>
           </div>
           {n.kind === 'session-invite' && (

@@ -13,6 +13,7 @@ import { normalizeSheet, registryForPacks } from './migrate'
 import type { Registry } from './registry'
 import type { ContentPack, SpellDef } from './schema'
 import { srdPack } from './srd'
+import { packKey } from './packKey'
 import { SRD_PACK_ID, skillId } from './srd/common'
 
 export interface DerivedSheet {
@@ -34,7 +35,8 @@ let activePacks: ContentPack[] = []
 let activeKey = ''
 const listeners = new Set<() => void>()
 
-const keyOf = (packs: ContentPack[]): string => packs.map((p) => `${p.id}@${p.version}`).join(',')
+// Content keys, not just id@version: a pack saved from the Workshop can change without a version bump.
+const keyOf = (packs: ContentPack[]): string => packs.map(packKey).join(',')
 
 /** Sets the homebrew packs sheets derive with (the SRD is always included). A no-op if nothing changed. */
 export function setActivePacks(packs: ContentPack[]): void {

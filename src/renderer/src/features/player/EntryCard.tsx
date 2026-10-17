@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { PencilIcon } from '../../ui/icons'
+import { PencilIcon, XIcon } from '../../ui/icons'
 
 interface EntryCardProps {
   name: ReactNode
@@ -24,7 +24,7 @@ export function EntryCard({ name, badge, onEdit, onRemove, children }: EntryCard
         )}
         {onRemove && (
           <button type="button" onClick={onRemove} title="Remove" style={removeBtnStyle}>
-            ×
+            <XIcon size={12} />
           </button>
         )}
       </div>

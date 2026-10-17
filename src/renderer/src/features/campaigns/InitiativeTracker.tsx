@@ -22,14 +22,15 @@ import {
   type InitiativeState,
   type Difficulty
 } from '@shared/encounter'
-import { BESTIARY, formatCr } from '../../data/bestiary'
-import { loadCustomMonsters, isCustomMonster } from '../../data/customBestiary'
+import { formatCr } from '../../data/bestiary'
+import { isCustomMonster } from '../../data/customBestiary'
+import { useAllMonsters } from '../../data/useAllMonsters'
 import { loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { Button } from '../../ui/Button'
 import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
 import { playSfx } from '../audio/soundEffects'
-import { IconLabel, UndoIcon } from '../../ui/icons'
+import { IconLabel, UndoIcon, XIcon } from '../../ui/icons'
 
 interface InitiativeTrackerProps {
   sessionId: string | null
@@ -227,10 +228,8 @@ export function InitiativeTracker({
     })
   }, [playerCharacters])
 
-  const allMonstersForQuickAdd = useMemo(
-    () => [...loadCustomMonsters(), ...BESTIARY].sort((a, b) => a.name.localeCompare(b.name)),
-    []
-  )
+  const { monsters: everyMonster } = useAllMonsters()
+  const allMonstersForQuickAdd = useMemo(() => [...everyMonster].sort((a, b) => a.name.localeCompare(b.name)), [everyMonster])
 
   const ordered = sortedByInitiative(state.combatants)
   const inCombat = state.turnIndex >= 0
@@ -594,7 +593,7 @@ export function InitiativeTracker({
                   cursor: 'pointer'
                 }}
               >
-                ×
+                <XIcon size={12} />
               </button>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
@@ -771,7 +770,7 @@ function EncounterBuilder({
   setEncounterName,
   onAddEncounterToTracker
 }: EncounterBuilderProps): JSX.Element {
-  const allMonsters = useMemo(() => [...loadCustomMonsters(), ...BESTIARY], [])
+  const { monsters: allMonsters } = useAllMonsters()
   // Empty query still shows a default alphabetical page rather than nothing
   // — clicking into the search bar opens a browsable dropdown even before
   // typing, not just a search-results list once you have.
@@ -1050,6 +1049,7 @@ function EncounterBuilder({
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {m.name}
                     {isCustomMonster(m.index) && <span style={{ color: 'var(--text-muted)' }}> · custom</span>}
+                    {'packName' in m && typeof m.packName === 'string' && <span style={{ color: 'var(--text-muted)' }}> · {m.packName}</span>}
                   </span>
                   <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>CR {formatCr(m.crNumeric)}</span>
                 </button>
@@ -1151,7 +1151,7 @@ function EncounterBuilder({
                   {enc.name} <span style={{ color: 'var(--text-muted)' }}>({enc.monsterIndexes.length})</span>
                 </button>
                 <button type="button" onClick={() => deleteEncounter(enc.id)} style={removeBtnStyle}>
-                  ×
+                  <XIcon size={12} />
                 </button>
               </div>
             ))}
@@ -1473,7 +1473,7 @@ function DismembermentPrompt({
           title="Dismiss"
           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}
         >
-          ×
+          <XIcon size={12} />
         </button>
       </div>
       {mode === 'overkill' ? (
@@ -1626,7 +1626,7 @@ function FadeOutBadge({ children, color, onRemove }: { children: ReactNode; colo
         onClick={() => setLeaving(true)}
         style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}
       >
-        ×
+        <XIcon size={12} />
       </button>
     </span>
   )
