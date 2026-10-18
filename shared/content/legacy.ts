@@ -27,6 +27,7 @@ import { SRD_LIST_IDS } from './srd/classes'
 import { skillId, slug } from './srd/common'
 import { FEAT_CHOICE_IDS } from './srd/feats'
 import { LINEAGE_CHOICE_IDS } from './srd/origins'
+import { migrateMagicInitiate } from './magicInitiate'
 import { parsePack } from './validate'
 
 export const LEGACY_HOMEBREW_PACK_ID = 'legacy-homebrew'
@@ -146,7 +147,9 @@ function homebrewPack(names: string[]): { pack: ContentPack; ids: Map<string, st
   return { pack, ids }
 }
 
-export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBuildOptions = {}, srd: ContentPack = srdPack()): LegacyBuild {
+export function legacySheetToBuild(input: CharacterSheetData, options: LegacyBuildOptions = {}, srd: ContentPack = srdPack()): LegacyBuild {
+  // Old single Magic Initiate picks read as its Cleric / Druid / Wizard version (normalizeSheet does this too; a direct call needs it here).
+  const sheet = migrateMagicInitiate(input)
   const enabled = [srd, ...(options.packs ?? []).filter((p) => p.id !== srd.id)]
   const enabledRegistry = registryForPacks(enabled)
   const warnings: string[] = []

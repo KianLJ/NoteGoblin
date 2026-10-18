@@ -10,12 +10,32 @@
     ]
   },
   {
-    "id": "magic-initiate",
-    "name": "Magic Initiate",
+    "id": "magic-initiate-cleric",
+    "name": "Magic Initiate (Cleric)",
     "category": "Origin",
-    "desc": "You gain the following benefits.\nTwo Cantrips. You learn two cantrips of your choice from the Cleric, Druid, or Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat's spells (choose when you select this feat).\nLevel 1 Spell. Choose a level 1 spell from the same list you selected for this feat's cantrips. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.\nSpell Change. Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the chosen spell list.",
+    "desc": "You gain the following benefits.\nTwo Cantrips. You learn two cantrips of your choice from the Cleric spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat's spells (choose when you select this feat).\nLevel 1 Spell. Choose a level 1 spell from the Cleric spell list. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.\nSpell Change. Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the Cleric spell list.\nRepeatable. You can take Magic Initiate more than once, but you must choose a different spell list each time.",
     "effects": [
-      { "kind": "spellChoice", "classes": ["Cleric", "Druid", "Wizard"], "cantripCount": 2, "spellLevel": 1, "spellCount": 1 },
+      { "kind": "spellChoice", "classes": ["Cleric"], "cantripCount": 2, "spellLevel": 1, "spellCount": 1 },
+      { "kind": "note", "text": "The chosen 1st-level spell is always prepared and castable once per Long Rest without a slot, on top of any spell slots you have." }
+    ]
+  },
+  {
+    "id": "magic-initiate-druid",
+    "name": "Magic Initiate (Druid)",
+    "category": "Origin",
+    "desc": "You gain the following benefits.\nTwo Cantrips. You learn two cantrips of your choice from the Druid spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat's spells (choose when you select this feat).\nLevel 1 Spell. Choose a level 1 spell from the Druid spell list. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.\nSpell Change. Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the Druid spell list.\nRepeatable. You can take Magic Initiate more than once, but you must choose a different spell list each time.",
+    "effects": [
+      { "kind": "spellChoice", "classes": ["Druid"], "cantripCount": 2, "spellLevel": 1, "spellCount": 1 },
+      { "kind": "note", "text": "The chosen 1st-level spell is always prepared and castable once per Long Rest without a slot, on top of any spell slots you have." }
+    ]
+  },
+  {
+    "id": "magic-initiate-wizard",
+    "name": "Magic Initiate (Wizard)",
+    "category": "Origin",
+    "desc": "You gain the following benefits.\nTwo Cantrips. You learn two cantrips of your choice from the Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat's spells (choose when you select this feat).\nLevel 1 Spell. Choose a level 1 spell from the Wizard spell list. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.\nSpell Change. Whenever you gain a new level, you can replace one of the spells you chose for this feat with a different spell of the same level from the Wizard spell list.\nRepeatable. You can take Magic Initiate more than once, but you must choose a different spell list each time.",
+    "effects": [
+      { "kind": "spellChoice", "classes": ["Wizard"], "cantripCount": 2, "spellLevel": 1, "spellCount": 1 },
       { "kind": "note", "text": "The chosen 1st-level spell is always prepared and castable once per Long Rest without a slot, on top of any spell slots you have." }
     ]
   },

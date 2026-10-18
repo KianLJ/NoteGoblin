@@ -12,12 +12,15 @@
 //     so an id that no longer matches its name is re-resolved from the name.
 //     The one exception: an id into a pack that isn't enabled is kept (its
 //     name can't be checked), so disabling a homebrew pack never loses it.
+//   - One rewrite: the old single Magic Initiate feat id is moved onto its
+//     Cleric / Druid / Wizard version (magicInitiate.ts), picks kept.
 
 import type { CharacterSheetData, ClassLevel } from '../dnd5e'
 import { buildRegistry, type Registered, type Registry } from './registry'
 import type { ContentPack } from './schema'
 import { srdPack } from './srd'
 import { packKey } from './packKey'
+import { migrateMagicInitiate } from './magicInitiate'
 
 export const CURRENT_SHEET_VERSION = 2
 
@@ -73,7 +76,9 @@ function sameStrings(a: Record<string, string> | undefined, b: Record<string, st
  * Brings a sheet up to format v2 against the given packs (the SRD by
  * default). Safe to call on every read; see the module comment.
  */
-export function normalizeSheet<T extends CharacterSheetData>(sheet: T, packs: ContentPack[] = [srdPack()]): T {
+export function normalizeSheet<T extends CharacterSheetData>(input: T, packs: ContentPack[] = [srdPack()]): T {
+  // Old single Magic Initiate picks move onto its Cleric / Druid / Wizard versions first.
+  const sheet = migrateMagicInitiate(input)
   const registry = registryForPacks(packs)
   const allClasses = registry.all('classes')
   const allSubclasses = registry.all('subclasses')

@@ -116,14 +116,14 @@ describe('legacy sheet adapter', () => {
     expect(granted(derived)).toEqual(['srd-5.2.1:prestidigitation', 'srd-5.2.1:detect-magic'])
   })
 
-  it('fills a feat’s own choices from the slot (Magic Initiate spells and ability)', () => {
+  it('fills a feat’s own choices from the slot (an old Magic Initiate pick, moved to its Cleric version)', () => {
     const { build } = derive({
       classes: [{ className: 'Fighter', level: 4 }],
       asiSlotChoices: [
         { id: 'm', className: 'Fighter', level: 4, kind: 'feat', featId: 'magic-initiate', chosenAbility: 'wis', chosenSpellIds: ['guidance', 'light', 'cure-wounds'] }
       ]
     })
-    const key = 'class:srd-5.2.1:fighter:ability-score-improvement-4#feat/srd-5.2.1:magic-initiate'
+    const key = 'class:srd-5.2.1:fighter:ability-score-improvement-4#feat/srd-5.2.1:magic-initiate-cleric'
     expect(build.choices).toMatchObject({
       [`${key}#spell-ability`]: ['wis'],
       [`${key}#cantrips`]: ['srd-5.2.1:guidance', 'srd-5.2.1:light'],

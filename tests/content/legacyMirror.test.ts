@@ -76,7 +76,7 @@ const MIRROR_FIXTURES: Array<{ name: string; sheet: CharacterSheetData }> = [
       raceLineageChoice: { raceId: 'elf', lineageName: 'High Elf', spellcastingAbility: 'int' },
       asiSlotChoices: [
         { id: rid(), className: '', level: 0, kind: 'ability', abilityIncreases: { wis: 2, cha: 1 } },
-        { id: rid(), className: '', level: 0, kind: 'feat', featId: 'magic-initiate', chosenAbility: 'wis', chosenSpellIds: ['guidance', 'light', 'bane'] }
+        { id: rid(), className: '', level: 0, kind: 'feat', featId: 'magic-initiate-cleric', chosenAbility: 'wis', chosenSpellIds: ['guidance', 'light', 'bane'] }
       ],
       spellcastingAbility: 'wis',
       spells: [free('guidance', 'Guidance', 0), free('light', 'Light', 0), free('bane', 'Bane', 1)]

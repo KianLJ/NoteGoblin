@@ -336,18 +336,20 @@ describe('feats taken once', () => {
       background: 'Acolyte',
       classes: [{ className: 'Fighter', level: 1 }],
       asiSlotChoices: [
-        { id: 'a', className: 'Fighter', level: 0, kind: 'feat' as const, featId: 'magic-initiate', chosenAbility: 'wis' as const, chosenSpellIds: [] },
+        { id: 'a', className: 'Fighter', level: 0, kind: 'feat' as const, featId: 'magic-initiate-cleric', chosenAbility: 'wis' as const, chosenSpellIds: [] },
         ...(versatile ? [{ id: 'h', className: 'Fighter', level: 0, kind: 'feat' as const, featId: versatile }] : [])
       ]
     })
     const plain = deriveSheet(sheet() as never).derived
     const versatile = plain.choices.find((c) => c.key.startsWith('species:') && c.key.endsWith('#feat'))!
-    expect(versatile.options.find((o) => o.id.endsWith(':magic-initiate'))!.blocked).toBe('Already taken')
+    expect(versatile.options.find((o) => o.id.endsWith(':magic-initiate-cleric'))!.blocked).toBe('Already taken')
+    // Magic Initiate can be taken again with a different spell list.
+    expect(versatile.options.find((o) => o.id.endsWith(':magic-initiate-wizard'))!.blocked).toBeUndefined()
     expect(versatile.options.find((o) => o.id.endsWith(':alert'))!.blocked).toBeUndefined()
     const fixed = plain.choices.find((c) => c.key.startsWith('background:') && c.key.endsWith('#feat'))!
     expect(fixed.options[0].blocked).toBeUndefined()
     // Picked twice anyway (an older sheet): the open choice says so.
-    const twice = deriveSheet(sheet('magic-initiate') as never).derived
-    expect(twice.diagnostics.map((d) => d.message)).toContain('Origin feat: "Magic Initiate" is already taken from another source, and it can only be taken once.')
+    const twice = deriveSheet(sheet('magic-initiate-cleric') as never).derived
+    expect(twice.diagnostics.map((d) => d.message)).toContain('Origin feat: "Magic Initiate (Cleric)" is already taken from another source, and it can only be taken once.')
   })
 })

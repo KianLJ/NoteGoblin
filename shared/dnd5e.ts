@@ -530,7 +530,7 @@ export const BACKGROUNDS: Background[] = [
     id: 'acolyte',
     name: 'Acolyte',
     abilityScores: ['int', 'wis', 'cha'],
-    featId: 'magic-initiate',
+    featId: 'magic-initiate-cleric',
     skillProficiencies: ['Insight', 'Religion'],
     toolProficiency: "Calligrapher's Supplies"
   },
@@ -546,7 +546,7 @@ export const BACKGROUNDS: Background[] = [
     id: 'sage',
     name: 'Sage',
     abilityScores: ['con', 'int', 'wis'],
-    featId: 'magic-initiate',
+    featId: 'magic-initiate-wizard',
     skillProficiencies: ['Arcana', 'History'],
     toolProficiency: "Calligrapher's Supplies"
   },

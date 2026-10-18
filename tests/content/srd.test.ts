@@ -15,7 +15,8 @@ describe('SRD 5.2.1 pack', () => {
     expect(pack.subclasses).toHaveLength(12)
     expect(pack.species).toHaveLength(9)
     expect(pack.backgrounds).toHaveLength(4)
-    expect(pack.feats).toHaveLength(17)
+    // 17 legacy feats, with Magic Initiate as three (Cleric, Druid, Wizard).
+    expect(pack.feats).toHaveLength(19)
     expect(pack.spells).toHaveLength(321)
     expect(pack.items).toHaveLength(237 + 362)
   })
