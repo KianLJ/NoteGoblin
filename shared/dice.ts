@@ -47,6 +47,13 @@ export interface DiceRollLogEntry {
   advantage?: AdvantageMode
   /** The DC the roller was trying to beat, if this was rolled against one (e.g. a DM's forced roll) — used to show a pass/fail badge. Absent for an ordinary roll with no target number. */
   dc?: number | null
+  /** An attack roll's lowest critical-hit face when it's below 20 (Improved Critical, a homebrew Critical Shot); absent means only a natural 20 crits. */
+  critOn?: number
+}
+
+/** Whether a kept d20 face is a critical hit for this roll — a natural 20, or at least its lowered crit threshold. */
+export function isCritFace(face: number, entry: Pick<DiceRollLogEntry, 'critOn'>): boolean {
+  return face >= Math.min(20, entry.critOn ?? 20)
 }
 
 /**
@@ -67,7 +74,9 @@ export function buildCheckRollEntry(
   label?: string,
   dc?: number | null,
   /** Already-rolled d20 face(s) to use instead of rolling fresh ones — for an advantage/disadvantage roll where the player clicked each die themselves in RollAnimationOverlay.tsx and already saw both real faces before this entry is even built, so the entry has to carry forward the exact numbers shown, not a second independently-rolled pair. */
-  presetResults?: number[]
+  presetResults?: number[],
+  /** The attack's lowest critical-hit face, when lowered (see DiceRollLogEntry.critOn). */
+  critOn?: number
 ): DiceRollLogEntry {
   const rollCount = advantage === 'normal' ? 1 : 2
   const results = presetResults ?? Array.from({ length: rollCount }, () => rollDie(20))
@@ -88,6 +97,7 @@ export function buildCheckRollEntry(
     createdAt: new Date().toISOString(),
     label,
     advantage,
+    ...(critOn !== undefined && critOn < 20 ? { critOn } : {}),
     dc: dc ?? null
   }
 }

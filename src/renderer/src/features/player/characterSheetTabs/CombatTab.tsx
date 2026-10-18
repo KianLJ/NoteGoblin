@@ -370,8 +370,9 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
 
   const matchesSearch = (name: string): boolean => listSearch.trim() === '' || name.toLowerCase().includes(listSearch.trim().toLowerCase())
 
-  function rollAttack(label: string, bonus: number, mode = attackAdvantage): ((advantage: AdvantageMode) => void) | undefined {
-    return readOnly ? undefined : (advantage) => rollCheck(label, bonus, { advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal') })
+  /** A weapon or unarmed attack crits on the character's lowered threshold (Improved Critical, a homebrew Critical Shot); pass 20 for one it doesn't cover (a cantrip, a companion's own attack). */
+  function rollAttack(label: string, bonus: number, mode = attackAdvantage, critOn = derived.critThreshold): ((advantage: AdvantageMode) => void) | undefined {
+    return readOnly ? undefined : (advantage) => rollCheck(label, bonus, { advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal'), critOn })
   }
   function rollDerivedDamage(attack: DerivedAttack): (() => void) | undefined {
     if (readOnly || attack.damageDice.dice.length !== 1) return undefined
@@ -438,6 +439,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
       <div style={{ display: actionsOnly || innerTab === 'Attacks' ? 'block' : 'none' }}>
         <div className="gs-group">
           <span className="gs-label">Attacks</span>
+          {derived.critThreshold < 20 && (
+            <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }} title="Weapon and unarmed attacks score a critical hit on this roll or higher">
+              Crits on {derived.critThreshold}–20
+            </span>
+          )}
           <span style={{ order: 2 }}>
           <input
             className="gb-input"
@@ -481,7 +487,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
                       <MiniStat
                         label="Atk"
                         value={cantripAttackBonus !== null ? formatModifier(cantripAttackBonus) : '—'}
-                        onRoll={cantripAttackBonus !== null ? rollAttack(`${name} Attack`, cantripAttackBonus) : undefined}
+                        onRoll={cantripAttackBonus !== null ? rollAttack(`${name} Attack`, cantripAttackBonus, attackAdvantage, 20) : undefined}
                       />
                     ) : (
                       <MiniStat label={numbers.saveAbility ? `${numbers.saveAbility.toUpperCase()} DC` : 'DC'} value={spellSaveDc !== null ? String(spellSaveDc) : '—'} />
@@ -705,7 +711,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
                     costLabel={c.summonCost ? `${c.summonCost.amount} ${costResource?.name ?? c.summonCost.resourceId}` : undefined}
                     canSummon={!c.summonCost || !costResource || resourceRemaining(costResource, resourceDraft) >= c.summonCost.amount}
                     readOnly={readOnly}
-                    onRollAttack={(name, bonus) => rollAttack(`${c.name}: ${name}`, bonus, undefined)}
+                    onRollAttack={(name, bonus) => rollAttack(`${c.name}: ${name}`, bonus, undefined, 20)}
                     onSave={(fields) => saveCompanion(c, fields)}
                   />
                 )

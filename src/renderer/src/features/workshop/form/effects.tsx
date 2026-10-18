@@ -381,6 +381,14 @@ function ActionBody({ kind, value, onChange }: { kind: EffectKind; value: Obj; o
               <FormulaInput value={str(value.value)} onChange={(v) => req('value', v)} />
             </Field>
           </Grid>
+          {/* The crit number goes the other way to most: lower is better, so "at least 19" can never bring 20 down. */}
+          {str(value.target) === 'crit.threshold' && (
+            <p style={{ margin: 0, fontSize: 12, color: str(value.op) === 'atLeast' ? 'var(--danger)' : 'var(--text-muted)' }}>
+              {str(value.op) === 'atLeast'
+                ? 'At least won’t lower the critical range: the number starts at 20, and this only stops it going below the value. To crit on 19–20, use At most 19.'
+                : 'This is the lowest roll that crits. At most 19 means a 19 or 20 is a critical hit.'}
+            </p>
+          )}
           {str(value.target).startsWith('ability.') && (
             <Advanced>
               <Check checked={!!value.uncapped} onChange={(v) => set('uncapped', v || undefined)} label="Can go above the ability cap" />

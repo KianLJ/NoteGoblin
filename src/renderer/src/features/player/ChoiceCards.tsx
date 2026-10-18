@@ -82,7 +82,7 @@ export function ChoiceCard({
   const single = choice.count === 1 && !choice.allowRepeats && !choice.freeform && !pointBuy
   const done = choice.remaining <= 0 && choice.picks.length > 0
   const set = (picks: string[]): void => onSetPicks(choice, picks)
-  const abilityPick = choice.options.length === 6 && choice.options.every((o) => ABILITY_IDS.includes(o.id))
+  const abilityPick = choice.options.length > 0 && choice.options.every((o) => ABILITY_IDS.includes(o.id))
 
   const status = pointBuy ? `${choice.spent}/${choice.budget} pts` : choice.count > 1 ? `${choice.picks.length}/${choice.count}` : done ? 'Chosen' : 'Choose 1'
 
@@ -130,6 +130,7 @@ export function ChoiceCard({
             const o = choice.options.find((x) => x.id === id)
             if (!o || lockedReason(o)) return false
             if (!choice.allowRepeats && picks.includes(id)) return false
+            if (choice.maxRepeats !== undefined && picks.filter((p) => p === id).length >= choice.maxRepeats) return false
             return pointBuy || single || picks.length < choice.count
           }}
           onChange={set}
@@ -191,10 +192,10 @@ function AbilityRow({ choice, onSet }: { choice: DerivedChoice; onSet: (picks: s
   const counts = countPicks(choice.picks)
   const full = choice.picks.length >= choice.count
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 4, marginTop: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(3, choice.options.length)}, minmax(0, 1fr))`, gap: 4, marginTop: 6, maxWidth: choice.options.length < 6 ? 260 : undefined }}>
       {choice.options.map((o) => {
         const n = counts.get(o.id) ?? 0
-        const canAdd = !full && !lockedReason(o) && (choice.allowRepeats || n === 0)
+        const canAdd = !full && !lockedReason(o) && (choice.allowRepeats ? choice.maxRepeats === undefined || n < choice.maxRepeats : n === 0)
         return (
           <div
             key={o.id}

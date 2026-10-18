@@ -1,4 +1,4 @@
-import { buildCheckRollEntry, buildRollEntry, redactRollForBroadcast, type AdvantageMode, type DiceGroup, type DiceRollLogEntry } from '@shared/dice'
+import { buildCheckRollEntry, buildRollEntry, isCritFace, redactRollForBroadcast, type AdvantageMode, type DiceGroup, type DiceRollLogEntry } from '@shared/dice'
 import { playSfx } from '../audio/soundEffects'
 
 /**
@@ -41,11 +41,11 @@ function d20Extreme(entry: DiceRollLogEntry): 'natural20' | 'natural1' | null {
         : Math.max(...group.results)
       : null
     if (kept !== null) {
-      if (kept === 20) return 'natural20'
+      if (isCritFace(kept, entry)) return 'natural20'
       if (kept === 1) return 'natural1'
       continue
     }
-    if (group.results.includes(20)) return 'natural20'
+    if (group.results.some((r) => isCritFace(r, entry))) return 'natural20'
     if (group.results.includes(1)) return 'natural1'
   }
   return null
@@ -105,9 +105,11 @@ export function performCheckRoll(
   dc?: number | null,
   presetResults?: number[],
   /** Skips the log's own roll sound — for RollAnimationOverlay.tsx's manual advantage/disadvantage flow, which already played a cue for each individual die click and would otherwise double up with a third sound the instant both are in. */
-  silent?: boolean
+  silent?: boolean,
+  /** The attack's lowest critical-hit face, when lowered. */
+  critOn?: number
 ): DiceRollLogEntry {
-  const entry = buildCheckRollEntry(rollerId, rollerName, modifier, advantage, isPrivate, label, dc, presetResults)
+  const entry = buildCheckRollEntry(rollerId, rollerName, modifier, advantage, isPrivate, label, dc, presetResults, critOn)
   appendToLog(entry, silent)
   if (sessionId) void window.goblin.dice.broadcast(sessionId, redactRollForBroadcast(entry))
   return entry

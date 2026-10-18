@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { formatBreakdown, formatModifierTerm, rollDie, sumGroupResults, type DiceRollLogEntry } from '@shared/dice'
+import { formatBreakdown, formatModifierTerm, isCritFace, rollDie, sumGroupResults, type DiceRollLogEntry } from '@shared/dice'
 import { playSfx } from '../audio/soundEffects'
 import { playSfxCue } from '../audio/sfxBoardEngine'
 import { findSfxCueByLabel } from '../../data/sfxLibrary'
@@ -69,7 +69,7 @@ function rawD20Face(entry: DiceRollLogEntry): number | null {
 /** Whether the die that actually counted toward the total came up its max/min face — only meaningful for a d20 check roll, which is the only thing that ever reaches this overlay (see useSheetRoller.ts/ForceRollPrompt.tsx). */
 function naturalRoll(entry: DiceRollLogEntry): 'crit' | 'fumble' | null {
   const raw = rawD20Face(entry)
-  if (raw === 20) return 'crit'
+  if (raw !== null && isCritFace(raw, entry)) return 'crit'
   if (raw === 1) return 'fumble'
   return null
 }
@@ -604,7 +604,8 @@ export function RollAnimationOverlay(): JSX.Element | null {
       current.label,
       current.dc,
       [displayValue, secondDisplayValue],
-      true // silent — each die's own click already played a sound; resolving shouldn't add a third
+      true, // silent — each die's own click already played a sound; resolving shouldn't add a third
+      current.critOn
     )
     setLocalEntry(entry)
     resolvePendingRoll(entry)
@@ -827,7 +828,7 @@ export function RollAnimationOverlay(): JSX.Element | null {
     playSfx('diceRoll')
     if (current.kind === 'pending-check') {
       pendingSessionIdRef.current = current.sessionId
-      const entry = performCheckRoll(current.sessionId, current.rollerId, current.rollerName, current.modifier, current.advantage, false, current.label, current.dc, undefined, true)
+      const entry = performCheckRoll(current.sessionId, current.rollerId, current.rollerName, current.modifier, current.advantage, false, current.label, current.dc, undefined, true, current.critOn)
       resolvePendingRoll(entry)
     } else if (current.kind === 'pending-damage') {
       pendingSessionIdRef.current = current.sessionId
@@ -870,7 +871,7 @@ export function RollAnimationOverlay(): JSX.Element | null {
   // not an actual natural 20 — gets its own purple rather than borrowing
   // the true crit's green, so the two don't look identical at a glance.
   const rawFace = entry && revealed && entry.dc == null ? rawD20Face(entry) : null
-  const isDirtyTwenty = rawFace !== null && rawFace !== 20 && entry?.total === 20
+  const isDirtyTwenty = rawFace !== null && !isCritFace(rawFace, entry!) && entry?.total === 20
   const totalForColor = entry && revealed && entry.dc == null ? entry.total : null
   // A d20 check (rawFace non-null) always grades against the fixed 1-20 a
   // d20 itself can show; anything else (a damage roll's own die size —

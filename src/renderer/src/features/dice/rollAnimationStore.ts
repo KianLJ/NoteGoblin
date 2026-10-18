@@ -26,6 +26,8 @@ export interface PendingCheckRoll {
   modifier: number
   advantage: AdvantageMode
   dc: number | null
+  /** An attack's lowest critical-hit face, when lowered below 20. */
+  critOn?: number
   sessionId: string | null
   rollerId: string
   rollerName: string

@@ -19,7 +19,7 @@ import {
   type CharacterSheetData,
   type SubclassFeatureChoice
 } from '../dnd5e'
-import { choiceKeys, type CharacterBuild, type ProficiencyLevel } from './engine'
+import { choiceKeys, levelFeatureId, type CharacterBuild, type ProficiencyLevel } from './engine'
 import { registryForPacks } from './migrate'
 import type { Registered, Registry } from './registry'
 import type { BackgroundDef, ChoiceDef, ClassDef, ContentPack, Effect, FeatDef, OptionSource, SpeciesDef } from './schema'
@@ -129,7 +129,7 @@ function levelSites(
   levels: ClassDef['levels'],
   key: (featureId: string) => string
 ): ChoiceSite[] {
-  return levels.flatMap((l) => l.features.map((f) => ({ sourceKey: key(f.id), level: l.level, name: f.name, choices: grantedChoices(f.effects) })))
+  return levels.flatMap((l) => l.features.map((f) => ({ sourceKey: key(levelFeatureId(levels, l.level, f.id)), level: l.level, name: f.name, choices: grantedChoices(f.effects) })))
 }
 
 /** Builds a pack of stub classes for names the SRD doesn't know: they count toward character level but add no hit points or features, as today. */

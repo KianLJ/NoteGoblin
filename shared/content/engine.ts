@@ -229,6 +229,8 @@ export interface DerivedChoice {
   picks: string[]
   remaining: number
   allowRepeats: boolean
+  /** With allowRepeats: the most times any one option can be picked (a background's +2 is the same ability twice, never three times). */
+  maxRepeats?: number
   freeform: boolean
   options: DerivedChoiceOption[]
   /** Key of the source that granted it (a class feature, species trait, picked feat…). */
@@ -455,6 +457,18 @@ function sameId(a: string, b: string): boolean {
 
 function substitutePick<T>(value: T, pick: string): T {
   return JSON.parse(JSON.stringify(value).split('$pick').join(pick)) as T
+}
+
+/**
+ * The id a class or subclass feature goes by in source and choice keys. A
+ * feature repeated at several levels under one id (a homebrew "Ability Score
+ * Increase or Feat" at 4, 8, 12 and 16) would otherwise share one key, so
+ * every repeat would share the first one's picks: the first keeps its plain
+ * id (so existing picks stay where they are), each later one gets "@<level>".
+ */
+export function levelFeatureId(levels: Array<{ level: number; features: Array<{ id: string }> }>, level: number, featureId: string): string {
+  const first = Math.min(...levels.filter((l) => l.features.some((f) => f.id === featureId)).map((l) => l.level))
+  return level === first ? featureId : `${featureId}@${level}`
 }
 
 /**
@@ -691,7 +705,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     if (def.spellcasting) effects.push({ action: { kind: 'spellcasting', config: def.spellcasting }, gates: [], source: implicit })
     for (const lvl of def.levels) {
       if (lvl.level > c.level) continue
-      for (const f of lvl.features) collectFeatureDef(f, choiceKeys.classFeature(c.reg.fullId, f.id), c.reg.packId, [], ctx, lvl.level)
+      for (const f of lvl.features) collectFeatureDef(f, choiceKeys.classFeature(c.reg.fullId, levelFeatureId(def.levels, lvl.level, f.id)), c.reg.packId, [], ctx, lvl.level)
     }
     if (c.subclass) {
       entryIds.add(c.subclass.fullId)
@@ -701,7 +715,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       }
       for (const lvl of sub.def.levels) {
         if (lvl.level > c.level) continue
-        for (const f of lvl.features) collectFeatureDef(f, choiceKeys.subclassFeature(sub.fullId, f.id), sub.packId, [], ctx, lvl.level)
+        for (const f of lvl.features) collectFeatureDef(f, choiceKeys.subclassFeature(sub.fullId, levelFeatureId(sub.def.levels, lvl.level, f.id)), sub.packId, [], ctx, lvl.level)
       }
     }
   })
@@ -1692,6 +1706,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       ...(budget !== undefined ? { budget, spent } : {}),
       ...(groups?.length ? { groups } : {}),
       allowRepeats: !!choice.allowRepeats,
+      ...(choice.allowRepeats && choice.maxRepeats !== undefined ? { maxRepeats: choice.maxRepeats } : {}),
       freeform,
       options,
       sourceKey: source.key,
