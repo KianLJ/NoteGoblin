@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.3',
+    title: 'See what the updater is doing',
+    highlights: [
+      'When an update is found, a small pill next to the version number shows it downloading and how far along it is — updates download in the background, so before this it looked like nothing was happening',
+      'Once it’s downloaded, the pill becomes “Restart to update”, so you can install it whenever suits you, not just from the pop-up',
+      'Click the version number for a Check for updates button and the updater’s status, and if a check fails it now says why (like “No internet connection”) instead of failing silently'
+    ]
+  },
+  {
     version: '0.6.2',
     title: 'A smaller download and homebrew item fixes',
     highlights: [
