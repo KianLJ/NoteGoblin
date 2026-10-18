@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.4',
+    title: 'Attunement',
+    highlights: [
+      'Items that need attunement now have an Attune button in your inventory, next to Equip — a homebrew item that needs attunement works (its bonuses, charges and reminders) once it’s both equipped and attuned',
+      'Your inventory shows how many items you’re attuned to, out of the usual 3, and warns if you go over'
+    ]
+  },
+  {
     version: '0.6.3',
     title: 'See what the updater is doing, and a new look for updates',
     highlights: [
