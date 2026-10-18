@@ -970,6 +970,11 @@ function ResourceCard({
       {resource.shortRestRegain ? (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Short rest: regain {resource.shortRestRegain}</div>
       ) : null}
+      {resource.regain && resource.recharge !== 'none' ? (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+          {resource.recharge === 'dawn' ? 'At dawn' : 'On a rest'}: regains {resource.regain}
+        </div>
+      ) : null}
       {toggle && (
         <Button
           variant={active ? 'secondary' : 'primary'}

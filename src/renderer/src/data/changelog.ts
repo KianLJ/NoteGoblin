@@ -19,7 +19,12 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Fey Ancestry shows as a reminder on your sheet: Advantage on saving throws to avoid or end the Charmed condition',
       'High Elves can swap Prestidigitation for any other Wizard cantrip from its card on the Features tab (as you can after a Long Rest); it starts as Prestidigitation',
       'A Drow’s darkvision is 120 ft. and a Wood Elf’s speed is 35 ft. on the sheet, and every species with Darkvision now shows its range (120 ft. for Dwarves and Orcs)',
-      'The character creator shows a species’ other choices (like Keen Senses) right on the species step'
+      'The character creator shows a species’ other choices (like Keen Senses) right on the species step',
+      'SRD magic items now work on your sheet once equipped (and attuned, if they need it) — every magic item now has an Equip button in your inventory',
+      'Magic items change your numbers: Ring and Cloak of Protection, +1/+2/+3 armour, Dragon Scale Mail, Bracers of Defense, Belts of Giant Strength, Gauntlets of Ogre Power, Amulet of Health, Headband of Intellect, Ioun Stones, the Luckstone, Robe of the Archmagi, Wand of the War Mage, resistance rings and more — plus swimming, climbing and flying speeds, darkvision, and toggles for Boots of Speed, Wings of Flying and Flame Tongue',
+      'Magic weapons add their bonus to the matching weapon you have equipped; a “Weapon, +1” or “any sword” asks which weapon it is right on its inventory card (so does a Ring or Armor of Resistance’s damage type)',
+      'Wands, staffs, rings and other charged items track their charges, and a long rest gives back what the item regains at dawn (a wand’s 1d6 + 1) instead of refilling them all',
+      'Conditions: add Blinded, Charmed, Frightened, Grappled, Invisible, Paralyzed, Petrified, Poisoned, Prone, Restrained, Stunned, Unconscious and the rest from the Conditions card on the Overview tab — they set Advantage or Disadvantage on your attacks, checks, saves and initiative, drop your Speed to 0, and remind you of the rest (like auto-failing Strength and Dexterity saves)'
     ]
   },
   {

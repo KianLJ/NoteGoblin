@@ -79,12 +79,13 @@ export function applyRestores(
   return { state: next, gained }
 }
 
-/** What a rest does to engine resources: a short rest refills short-rest ones and gives back each long-rest resource's shortRestRegain; temporary points always go. */
-export function restResources(kind: 'short' | 'long', resources: DerivedResource[], state: ResourceState): ResourceState {
+/** What a rest does to engine resources: a short rest refills short-rest ones and gives back each long-rest resource's shortRestRegain; a long rest refills the rest (dawn ones included, rolling their regain if they have one); temporary points always go. */
+export function restResources(kind: 'short' | 'long', resources: DerivedResource[], state: ResourceState, random: () => number = Math.random): ResourceState {
   const resourceUsed = { ...state.resourceUsed }
   for (const r of resources) {
     const refills = (kind === 'long' ? ['short', 'long', 'dawn'] : ['short']).includes(r.recharge)
-    if (refills) resourceUsed[r.id] = 0
+    // A resource with a regain amount (a wand's 1d6 + 1 charges at dawn) gets that much back, not all of it.
+    if (refills) resourceUsed[r.id] = r.regain ? Math.max(0, Math.min(resourceUsed[r.id] ?? 0, r.max) - Math.max(0, rollAmount(r.regain, random))) : 0
     else if (kind === 'short' && r.shortRestRegain) resourceUsed[r.id] = Math.max(0, (resourceUsed[r.id] ?? 0) - r.shortRestRegain)
   }
   // Any rest clears temporary points.

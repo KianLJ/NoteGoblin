@@ -131,6 +131,8 @@ export interface DerivedResource {
   temp?: number
   /** For a long-rest resource: how much a short rest gives back. */
   shortRestRegain?: number
+  /** How much comes back when it recharges, if not all of it — a wand's "1d6 + 1" at dawn. */
+  regain?: string
   actionType?: string
   source: string
   /** The class that granted it, when a class or subclass feature did — for the sheet's class badge. */
@@ -475,7 +477,7 @@ function rechargeLabel(r: ResourceDef['recharge'], test: (c: Condition) => boole
 }
 
 // ---------------------------------------------------------------------------
-
+
 /** A filter list, or undefined when it's empty — an empty list in a choice's source means "no filter", as the Workshop's forms say ("None picked = all six"). */
 const some = <T,>(xs: T[] | undefined): T[] | undefined => (xs && xs.length ? xs : undefined)
 
@@ -1303,6 +1305,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     display: resource.display ?? 'uses',
     ...((build.resourceTemp?.[resource.id] ?? 0) > 0 ? { temp: build.resourceTemp![resource.id] } : {}),
     ...(resource.shortRestRegain ? { shortRestRegain: Math.max(0, num(resource.shortRestRegain, source)) } : {}),
+    ...(resource.regain ? { regain: formatDice(dice(resource.regain, source)) } : {}),
     ...(resource.actionType ? { actionType: resource.actionType } : {}),
     ...originOf(source)
   }))

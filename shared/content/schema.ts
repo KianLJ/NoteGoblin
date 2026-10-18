@@ -24,7 +24,8 @@ const nameSchema = z.string().min(1)
 // Filters
 
 export const itemFilterSchema = z.object({
-  itemIds: z.array(idSchema).optional(),
+  /** Inside a choice's onPick, "$pick" stands for the picked item — "which sword is it?" → that sword's attacks. */
+  itemIds: z.array(z.union([idSchema, z.literal('$pick')])).optional(),
   categories: z.array(z.string()).optional(),
   /** 'light' | 'medium' | 'heavy' | 'shield', or any pack-defined armour category. */
   armorCategories: z.array(z.string()).optional(),

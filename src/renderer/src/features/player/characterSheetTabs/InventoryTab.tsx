@@ -21,6 +21,7 @@ import type { DetailField } from '../CompendiumDetailModal'
 import { HoverDetailCard } from '../HoverDetailCard'
 import { EntryCard, EntryCardTitle } from '../EntryCard'
 import { CustomItemForm } from '../CustomItemForm'
+import { ChoiceList, useChoiceEditor } from '../ChoiceCards'
 import { Button } from '../../../ui/Button'
 
 interface InventoryDraft {
@@ -111,10 +112,15 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
   }
 
   // The active packs' items, offered in their own picker (the SRD lists stay as they were).
-  const { registry } = useDerivedSheet(character)
+  const { registry, derived } = useDerivedSheet(character)
+  const setPicks = useChoiceEditor(character, onSave)
   const packItems = registry.all('items').filter((i) => i.packId !== SRD_PACK_ID)
   const packCurrencies = registry.vocabulary.currencies.filter((c) => !CURRENCIES.some((s) => s.id === c.id))
-  const packItemFor = (item: EquipmentItem): ItemDef | undefined => (item.packItemId ? registry.get('items', item.packItemId)?.def : undefined)
+  // SRD magic items are pack items too, so they get the same Equip button and effects.
+  const packItemFor = (item: EquipmentItem): ItemDef | undefined => {
+    const id = item.packItemId ?? item.magicItemId
+    return id ? registry.get('items', id)?.def : undefined
+  }
   // Pack items and SRD magic items both say whether they need attunement.
   const needsAttunement = (item: EquipmentItem): boolean => {
     const id = item.packItemId ?? item.magicItemId
@@ -264,6 +270,8 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
             const packItem = packItemFor(item)
             // A pack item can be equipped when it's a weapon or armour, or its effects apply while equipped/attuned.
             const packEquippable = !!packItem && (!!packItem.weapon || !!packItem.armor || packItem.effectsWhen !== 'carried')
+            // Picks the item asks for once it's in use (which sword a +1 weapon is, a Ring of Resistance's damage type).
+            const itemChoices = derived.choices.filter((c) => c.sourceKey === `item:${item.id}`)
             return (
               <HoverDetailCard
                 key={item.id}
@@ -346,6 +354,11 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                   )}
                   {needsAttunement(item) && packEquippable && item.attuned !== item.equipped && (
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.attuned ? 'Equip it to use it' : 'Attune to use it'}</span>
+                  )}
+                  {itemChoices.length > 0 && (
+                    <div style={{ flexBasis: '100%' }}>
+                      <ChoiceList choices={itemChoices} all={derived.choices} readOnly={readOnly} onSetPicks={setPicks} />
+                    </div>
                   )}
                 </EntryCard>
               </HoverDetailCard>
