@@ -13,6 +13,7 @@ import {
   SENSES,
   SIZES,
   SPELL_SCHOOLS,
+  WEAPON_MASTERIES,
   WEAPON_PROPERTIES,
   describeBenefit,
   type ArmorAnswers,
@@ -402,6 +403,11 @@ function WeaponForm({ a, set, sources }: { a: WeaponAnswers; set: (f: Partial<We
         <Field label="Properties">
           <Chips options={WEAPON_PROPERTIES.map((p) => ({ id: p, label: p }))} value={a.properties} onChange={(properties) => set({ properties })} />
         </Field>
+        <Grid min={150}>
+          <Field label="Mastery" hint="Used by characters with Weapon Mastery for it.">
+            <Select value={a.mastery} onChange={(v) => set({ mastery: v })} options={WEAPON_MASTERIES.map((m) => ({ value: m, label: m }))} none="None" />
+          </Field>
+        </Grid>
         <Grid min={150}>
           {a.properties.includes('Versatile') && (
             <Field label="Two-handed damage">

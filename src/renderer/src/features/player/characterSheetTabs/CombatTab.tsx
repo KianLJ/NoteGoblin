@@ -26,6 +26,7 @@ import type { Registry } from '@shared/content/registry'
 import { effectiveScores, knownSpells } from '@shared/content/sheet'
 import { spellNumbers, splitDice } from '@shared/content/spellNumbers'
 import { SRD_PACK_ID } from '@shared/content/srd'
+import { MASTERY_DESCRIPTIONS } from '@shared/content/srd/items'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { useTerms } from '../../content/terms'
 import { useAutosaveDraft } from '../useAutosaveDraft'
@@ -57,6 +58,9 @@ interface CombatTabProps {
   /** Threaded down from OverviewTab/CharacterSheetEditor — see CharacterSheetEditor.tsx's doc comment. */
   sessionId?: string | null
 }
+
+/** A blank line between paragraphs of a hover card's text. */
+const PARAGRAPH = String.fromCharCode(10, 10)
 
 /** "1d8" -> a single rollable DiceGroup; anything with more than one dice term (e.g. a homebrew "1d8+1d6") or a non-standard die size just isn't rollable from here — the plain text display is the fallback either way. */
 function parseDamageDice(dice: string): { sides: DieSides; count: number } | null {
@@ -473,11 +477,27 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                   title={attack.name}
                   subtitle={attack.kind === 'weapon' ? 'Equipped weapon' : 'Granted attack'}
                   fields={weapon ? weaponFields(weapon) : []}
-                  description={weapon?.description ?? attack.description ?? ''}
+                  description={[
+                    weapon?.description ?? attack.description ?? '',
+                    attack.mastery ? `Mastery — ${attack.mastery}: ${MASTERY_DESCRIPTIONS[attack.mastery] ?? 'see the weapon’s rules.'}` : ''
+                  ]
+                    .filter(Boolean)
+                    .join(PARAGRAPH)}
                 >
                   <EntryCard
                     name={<EntryCardTitle value={attack.name} />}
-                    badge={attack.damageType ? <span className="gb-badge">{attack.damageType}</span> : undefined}
+                    badge={
+                      attack.damageType || attack.mastery ? (
+                        <span style={{ display: 'inline-flex', gap: 4 }}>
+                          {attack.damageType && <span className="gb-badge">{attack.damageType}</span>}
+                          {attack.mastery && (
+                            <span className="gb-badge gb-badge--accent" title={MASTERY_DESCRIPTIONS[attack.mastery] ?? 'Weapon mastery'}>
+                              {attack.mastery}
+                            </span>
+                          )}
+                        </span>
+                      ) : undefined
+                    }
                   >
                     <MiniStat
                       label="Atk"

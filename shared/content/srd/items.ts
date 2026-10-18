@@ -35,6 +35,58 @@ function armorEffects(e: CompendiumEquipment): Effect[] {
   return effects
 }
 
+/** Each SRD weapon's mastery property (SRD 5.2.1 weapons table); the Net has none. */
+export const WEAPON_MASTERY: Record<string, string> = {
+  club: 'Slow',
+  dagger: 'Nick',
+  greatclub: 'Push',
+  handaxe: 'Vex',
+  javelin: 'Slow',
+  'light-hammer': 'Nick',
+  mace: 'Sap',
+  quarterstaff: 'Topple',
+  sickle: 'Nick',
+  spear: 'Sap',
+  'crossbow-light': 'Slow',
+  dart: 'Vex',
+  shortbow: 'Vex',
+  sling: 'Slow',
+  battleaxe: 'Topple',
+  flail: 'Sap',
+  glaive: 'Graze',
+  greataxe: 'Cleave',
+  greatsword: 'Graze',
+  halberd: 'Cleave',
+  lance: 'Topple',
+  longsword: 'Sap',
+  maul: 'Topple',
+  morningstar: 'Sap',
+  pike: 'Push',
+  rapier: 'Vex',
+  scimitar: 'Nick',
+  shortsword: 'Vex',
+  trident: 'Topple',
+  'war-pick': 'Sap',
+  warhammer: 'Push',
+  whip: 'Slow',
+  blowgun: 'Vex',
+  'crossbow-hand': 'Vex',
+  'crossbow-heavy': 'Push',
+  longbow: 'Slow'
+}
+
+/** What each mastery property does (SRD 5.2.1), for the sheet's hover cards. */
+export const MASTERY_DESCRIPTIONS: Record<string, string> = {
+  Cleave: 'If you hit a creature with a melee attack roll using this weapon, you can make a melee attack roll with it against a second creature within 5 feet of the first that is also within your reach. On a hit, the second creature takes the weapon’s damage, without your ability modifier unless it’s negative. Once per turn.',
+  Graze: 'If your attack roll with this weapon misses a creature, you can deal damage to it equal to the ability modifier you used for the attack roll, of the weapon’s damage type.',
+  Nick: 'When you make the extra attack of the Light property, you can make it as part of the Attack action instead of as a Bonus Action. Once per turn.',
+  Push: 'If you hit a creature with this weapon, you can push it up to 10 feet straight away from yourself if it is Large or smaller.',
+  Sap: 'If you hit a creature with this weapon, it has Disadvantage on its next attack roll before the start of your next turn.',
+  Slow: 'If you hit a creature with this weapon and deal damage to it, you can reduce its Speed by 10 feet until the start of your next turn (no more than 10 feet from several hits).',
+  Topple: 'If you hit a creature with this weapon, you can force it to make a Constitution saving throw (DC 8 + the ability modifier you attacked with + your Proficiency Bonus). On a failed save, it has the Prone condition.',
+  Vex: 'If you hit a creature with this weapon and deal damage to it, you have Advantage on your next attack roll against it before the end of your next turn.'
+}
+
 function equipmentItem(e: CompendiumEquipment): ItemInput {
   const item: ItemInput = {
     id: e.id,
@@ -53,7 +105,8 @@ function equipmentItem(e: CompendiumEquipment): ItemInput {
       damageType: e.damageType ?? '',
       properties: e.properties ?? [],
       ...(e.normalRange !== undefined ? { normalRange: e.normalRange } : {}),
-      ...(e.longRange !== undefined ? { longRange: e.longRange } : {})
+      ...(e.longRange !== undefined ? { longRange: e.longRange } : {}),
+      ...(WEAPON_MASTERY[e.id] ? { mastery: WEAPON_MASTERY[e.id] } : {})
     }
   }
   if (e.category === 'Armor' && e.armorCategory) {

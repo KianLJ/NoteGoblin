@@ -219,6 +219,20 @@ const RECIPES: Recipe[] = [
     make: () => ({ do: { kind: 'grantChoice', choice: { id: 'skill', label: 'Skill Proficiency', from: { kind: 'skills' }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick' } }] } } })
   },
   {
+    id: 'chooseExpertise',
+    group: 'Choices',
+    label: 'Expertise in skills of their choice',
+    hint: 'Double proficiency in skills they already have, like a Rogue',
+    make: () => ({ do: { kind: 'grantChoice', choice: { id: 'expertise', label: 'Expertise', count: '2', from: { kind: 'skills', proficientOnly: true }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick', level: 'expertise' } }] } } })
+  },
+  {
+    id: 'chooseMastery',
+    group: 'Choices',
+    label: 'Weapon Mastery of their choice',
+    hint: 'Use the mastery property (Sap, Topple…) of weapons they pick',
+    make: () => ({ do: { kind: 'grantChoice', choice: { id: 'weapon-mastery', label: 'Weapon Mastery', count: '2', from: { kind: 'weapons', proficientOnly: true }, onPick: [{ do: { kind: 'weaponMastery', itemId: '$pick' } }] } } })
+  },
+  {
     id: 'chooseWeapon',
     group: 'Choices',
     label: 'Proficiency with a weapon of their choice',
@@ -846,9 +860,12 @@ export function ChoiceEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
           </Field>
         )}
         {kind === 'skills' && (
-          <Field label="Which skills" hint="Empty = all">
-            <TagsInput value={arr<string>(from.skillIds)} onChange={(v) => fromSet('skillIds', v)} list="skills" />
-          </Field>
+          <>
+            <Field label="Which skills" hint="Empty = all">
+              <TagsInput value={arr<string>(from.skillIds)} onChange={(v) => fromSet('skillIds', v)} list="skills" />
+            </Field>
+            <Check checked={!!from.proficientOnly} onChange={(v) => fromSet('proficientOnly', v || undefined)} label="Only skills they're already proficient in (for Expertise)" />
+          </>
         )}
         {kind === 'weapons' && (
           <Field label="Which kinds of weapon" hint="Empty = every weapon">

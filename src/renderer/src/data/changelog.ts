@@ -8,11 +8,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: '0.6.7',
-    title: 'Spells you can roll',
+    title: 'Spells you can roll, Expertise and Weapon Mastery',
     highlights: [
       'Spells on the Spells tab now show their save DC (with the ability) or attack bonus, and their damage or healing — click the dice to roll them',
       'Upcasting: a spell with higher-level slots available gets a level picker next to Cast, which spends that slot and shows the bigger dice (Fireball at 5th level is 10d6)',
-      'Cantrips grow at levels 5, 11 and 17 on the Combat tab (Fire Bolt is 2d10 at level 5), and healing spells add your spellcasting modifier'
+      'Cantrips grow at levels 5, 11 and 17 on the Combat tab (Fire Bolt is 2d10 at level 5), and healing spells add your spellcasting modifier',
+      'Expertise is a real pick for Rogues (levels 1 and 6), Bards (2 and 9) and Rangers (Deft Explorer, which also asks for two languages, and level 9) — only skills you’re proficient in can be chosen. Skills you’d already marked as Expertise fill those picks for you',
+      'Homebrew: new “Expertise in skills of their choice” effect in the Workshop, and a skill choice can be limited to skills the character is already proficient in',
+      'Weapon Mastery: Barbarians, Fighters, Paladins, Rangers and Rogues pick the kinds of weapons they’ve mastered (Fighters 3, rising to 6; Barbarians melee weapons, 2 rising to 4), and those weapons’ attacks show their mastery — Sap, Topple, Vex and the rest — with what it does on hover',
+      'Every SRD weapon now has its mastery property, and homebrew weapons can have one too (in the guided weapon form, or the full editor); a homebrew class can grant Weapon Mastery with a new Workshop effect'
     ]
   },
   {

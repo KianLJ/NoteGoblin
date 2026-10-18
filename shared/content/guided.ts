@@ -34,6 +34,8 @@ export const ITEM_TYPES = ['Wondrous Item', 'Ring', 'Wand', 'Staff', 'Rod', 'Pot
 export const DAMAGE_TYPES = ['Acid', 'Bludgeoning', 'Cold', 'Fire', 'Force', 'Lightning', 'Necrotic', 'Piercing', 'Poison', 'Psychic', 'Radiant', 'Slashing', 'Thunder']
 export const CONDITIONS = ['blinded', 'charmed', 'deafened', 'exhaustion', 'frightened', 'grappled', 'incapacitated', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious']
 export const WEAPON_PROPERTIES = ['Ammunition', 'Finesse', 'Heavy', 'Light', 'Loading', 'Reach', 'Thrown', 'Two-Handed', 'Versatile']
+/** The 2024 weapon mastery properties. */
+export const WEAPON_MASTERIES = ['Cleave', 'Graze', 'Nick', 'Push', 'Sap', 'Slow', 'Topple', 'Vex']
 export const SPELL_SCHOOLS = ['Abjuration', 'Conjuration', 'Divination', 'Enchantment', 'Evocation', 'Illusion', 'Necromancy', 'Transmutation']
 export const CASTING_TIMES = ['1 action', '1 bonus action', '1 reaction', '1 minute', '10 minutes', '1 hour']
 export const FEAT_CATEGORIES = ['Origin', 'General', 'Fighting Style', 'Epic Boon']
@@ -333,6 +335,8 @@ export interface WeaponAnswers extends Common {
   damageType: string
   versatileDamage: string
   properties: string[]
+  /** Its mastery property (Sap, Topple…), '' for none. */
+  mastery: string
   normalRange: number | null
   longRange: number | null
   /** +0 (plain) to +3. */
@@ -441,6 +445,7 @@ export function blankAnswers(kind: GuidedKind, id: string): GuidedAnswers {
         damageType: 'Slashing',
         versatileDamage: '',
         properties: [],
+        mastery: '',
         normalRange: null,
         longRange: null,
         magicBonus: 1,
@@ -556,6 +561,7 @@ export function answersToEntry(a: GuidedAnswers): Record<string, unknown> {
           damageType: a.damageType,
           ...(a.versatileDamage.trim() && properties.includes('Versatile') ? { versatileDamage: cleanDice(a.versatileDamage) } : {}),
           properties,
+          ...(a.mastery ? { mastery: a.mastery } : {}),
           ...(a.normalRange !== null && (a.ranged || properties.includes('Thrown')) ? { normalRange: a.normalRange } : {}),
           ...(a.longRange !== null && (a.ranged || properties.includes('Thrown')) ? { longRange: a.longRange } : {})
         },
@@ -718,6 +724,7 @@ export function entryToAnswers(kind: GuidedKind, entry: Record<string, unknown>)
         damageType: str(w.damageType, 'Slashing'),
         versatileDamage: str(w.versatileDamage),
         properties: Array.isArray(w.properties) ? w.properties.map(String) : [],
+        mastery: str(w.mastery),
         normalRange: optNum(w.normalRange),
         longRange: optNum(w.longRange),
         magicBonus,

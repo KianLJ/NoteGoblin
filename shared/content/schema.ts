@@ -210,9 +210,18 @@ export const optionSourceSchema = z.discriminatedUnion('kind', [
     spellIds: z.array(idSchema).optional()
   }),
   z.object({ kind: z.literal('abilities'), abilities: z.array(abilitySchema).optional() }),
-  z.object({ kind: z.literal('skills'), skillIds: z.array(idSchema).optional() }),
+  /** Skills, optionally only ones the character is already proficient in (for Expertise). */
+  z.object({ kind: z.literal('skills'), skillIds: z.array(idSchema).optional(), proficientOnly: z.boolean().optional() }),
   /** Weapons (items with weapon stats) from the enabled packs, optionally only some categories ("simple", "martial") — e.g. "proficiency with a weapon of your choice". */
-  z.object({ kind: z.literal('weapons'), categories: z.array(z.string()).optional(), itemIds: z.array(idSchema).optional() }),
+  z.object({
+    kind: z.literal('weapons'),
+    categories: z.array(z.string()).optional(),
+    itemIds: z.array(idSchema).optional(),
+    /** Only melee or only ranged weapons. */
+    range: z.enum(['melee', 'ranged']).optional(),
+    /** Only weapons the character is proficient with (Weapon Mastery). */
+    proficientOnly: z.boolean().optional()
+  }),
   /** Archetypes (leveled feature sets — a bloodline, a patron, a tradition any class can take), filtered by tag or id. */
   z.object({ kind: z.literal('archetypes'), tags: z.array(z.string()).optional(), archetypeIds: z.array(idSchema).optional() }),
   /** Free text the player types (e.g. a language or a favoured enemy). */
@@ -328,7 +337,9 @@ const effectActionSchema: z.ZodType<unknown> = z.lazy(() =>
       label: z.string().optional()
     }),
     z.object({ kind: z.literal('grantCompanion'), companion: companionDefSchema }),
-    z.object({ kind: z.literal('note'), text: z.string().min(1) })
+    z.object({ kind: z.literal('note'), text: z.string().min(1) }),
+    /** Weapon Mastery: the character can use this kind of weapon's mastery property (an item id, or "$pick" in a weapons choice's onPick). */
+    z.object({ kind: z.literal('weaponMastery'), itemId: z.union([idSchema, z.literal('$pick')]) })
   ])
 )
 
@@ -391,6 +402,7 @@ export type EffectActionShape =
   | { kind: 'damageReduction'; amount: Formula; damageTypes?: string[]; label?: string }
   | { kind: 'grantCompanion'; companion: CompanionDef }
   | { kind: 'note'; text: string }
+  | { kind: 'weaponMastery'; itemId: string }
 
 // ---------------------------------------------------------------------------
 // Companions

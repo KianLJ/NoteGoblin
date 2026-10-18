@@ -50,6 +50,7 @@ export const featureId = (name: string, level: number): string => `${slug(name)}
 
 /** Choice ids used on class/subclass features — the legacy adapter keys picks by these. */
 export const CLASS_CHOICE_IDS = { feat: 'feat', options: 'options', spells: 'spells', option: 'option' } as const
+export const EXPERTISE_CHOICE_ID = 'expertise'
 
 // ---------------------------------------------------------------------------
 // Option lists
@@ -88,6 +89,20 @@ const spellsAt = (classId: string, rows: Array<[number, string[]]>): Effect[] =>
     const known = ids.filter((id) => getSpellById(id))
     return known.length ? [{ when: { kind: 'classLevel', classId, min: level } as Condition, do: { kind: 'grantSpells', spellIds: known, alwaysPrepared: true, free: true } } as Effect] : []
   })
+/** "Expertise in N skills you're proficient in" — choice id 'expertise' (the legacy adapter fills it from the sheet's Expertise skills). */
+const expertise = (label: string, count: number): Effect => ({
+  do: {
+    kind: 'grantChoice',
+    choice: { id: EXPERTISE_CHOICE_ID, label, count: String(count), from: { kind: 'skills', proficientOnly: true }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick', level: 'expertise' } }] }
+  }
+})
+/** "Use the mastery property of N kinds of weapons" — picks of weapons the character is proficient with (melee only for a Barbarian). */
+const weaponMastery = (count: string, range?: 'melee'): Effect => ({
+  do: {
+    kind: 'grantChoice',
+    choice: { id: 'weapon-mastery', label: 'Weapon Mastery', count, from: { kind: 'weapons', proficientOnly: true, ...(range ? { range } : {}) }, onPick: [{ do: { kind: 'weaponMastery', itemId: '$pick' } }] }
+  }
+})
 const SKILL_IDS = ['acrobatics', 'animal-handling', 'arcana', 'athletics', 'deception', 'history', 'insight', 'intimidation', 'investigation', 'medicine', 'nature', 'perception', 'performance', 'persuasion', 'religion', 'sleight-of-hand', 'stealth', 'survival']
 
 export function srdClassOptionLists(): OptionListInput[] {
@@ -253,6 +268,7 @@ const COMMON_FEATURES: Record<string, (classId: string) => Effect[]> = {
 
 const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
   barbarian: {
+    'Weapon Mastery': [weaponMastery('@table.masteries', 'melee')],
     'Unarmored Defense': [{ when: NO_BODY_ARMOR, do: { kind: 'acFormula', label: 'Unarmored Defense', formula: '10 + @dex.mod + @con.mod' } }],
     'Danger Sense': [advantage('save:dex')],
     'Extra Attack': [attacks(2)],
@@ -265,6 +281,7 @@ const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
     ])
   },
   bard: {
+    Expertise: [expertise('Expertise', 2)],
     // Half proficiency (rounded down) on every check without it — skills and initiative.
     'Jack of All Trades': [
       ...SKILL_IDS.map((s): Effect => ({ do: { kind: 'modify', target: `skill.${s}.proficiency`, op: 'atLeast', value: '0.5' } })),
@@ -275,7 +292,7 @@ const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
   },
   cleric: { 'Divine Order': [optionChoice('Divine Order', LIST_IDS.divineOrder)] },
   druid: { Druidic: grantSpells('speak-with-animals'), 'Primal Order': [optionChoice('Primal Order', LIST_IDS.primalOrder)] },
-  fighter: { 'Extra Attack': [attacks(2)], 'Two Extra Attacks': [attacks(3)], 'Three Extra Attacks': [attacks(4)] },
+  fighter: { 'Weapon Mastery': [weaponMastery('@table.masteries')], 'Extra Attack': [attacks(2)], 'Two Extra Attacks': [attacks(3)], 'Three Extra Attacks': [attacks(4)] },
   monk: {
     // Neither applies with any armour or a shield (compendium.ts's computeArmorClassFromEquipment / classFeatureSpeedBonus).
     'Unarmored Defense': [{ when: NO_ARMOR_OR_SHIELD, do: { kind: 'acFormula', label: 'Unarmored Defense', formula: '10 + @dex.mod + @wis.mod' } }],
@@ -297,6 +314,7 @@ const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
     ])
   },
   paladin: {
+    'Weapon Mastery': [weaponMastery('2')],
     "Paladin's Smite": grantSpells('divine-smite'),
     'Faithful Steed': grantSpells('find-steed'),
     'Extra Attack': [attacks(2)],
@@ -305,7 +323,13 @@ const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
     'Aura of Courage': [{ do: { kind: 'conditionImmunity', conditionId: 'frightened' } }]
   },
   ranger: {
+    'Weapon Mastery': [weaponMastery('2')],
     'Favored Enemy': grantSpells('hunters-mark'),
+    'Deft Explorer': [
+      expertise('Deft Explorer: Expertise', 1),
+      { do: { kind: 'grantChoice', choice: { id: 'languages', label: 'Deft Explorer: Languages', count: '2', from: { kind: 'freeform' }, onPick: [{ do: { kind: 'proficiency', category: 'language', value: '$pick' } }] } } }
+    ],
+    Expertise: [expertise('Expertise', 2)],
     'Extra Attack': [attacks(2)],
     Roving: [
       { when: NOT_HEAVY, do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '10' } },
@@ -314,7 +338,7 @@ const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
     ],
     'Feral Senses': [{ do: { kind: 'modify', target: 'sense.blindsight', op: 'set', value: '30' } }]
   },
-  rogue: { 'Slippery Mind': saveProfs(['wis', 'cha']) },
+  rogue: { 'Weapon Mastery': [weaponMastery('2')], Expertise: [expertise('Expertise', 2)], 'Slippery Mind': saveProfs(['wis', 'cha']) },
   sorcerer: {
     Metamagic: [{ do: { kind: 'grantChoice', choice: { id: CLASS_CHOICE_IDS.options, label: 'Metamagic', count: '2', from: { kind: 'optionList', listId: LIST_IDS.metamagic } } } }]
   },
@@ -354,7 +378,9 @@ function columns(cls: Class): ColumnInput[] {
     const rage = CLASS_RESOURCES.barbarian.find((r) => r.id === 'barbarian-rage')!
     add('rages', 'Rages', byLevel((l) => rage.max(l, () => 0)))
     add('rageDamage', 'Rage Damage', byLevel((l) => (l >= 16 ? 4 : l >= 9 ? 3 : 2)))
+    add('masteries', 'Weapon Mastery', byLevel((l) => (l >= 10 ? 4 : l >= 4 ? 3 : 2)))
   }
+  if (cls.id === 'fighter') add('masteries', 'Weapon Mastery', byLevel((l) => (l >= 16 ? 6 : l >= 10 ? 5 : l >= 4 ? 4 : 3)))
   if (cls.id === 'monk') add('martialArts', 'Martial Arts', byLevel((l) => (l >= 17 ? 12 : l >= 11 ? 10 : l >= 5 ? 8 : 6)))
   if (cls.id === 'monk') add('unarmoredMovement', 'Unarmored Movement', byLevel((l) => (l >= 18 ? 30 : l >= 14 ? 25 : l >= 10 ? 20 : l >= 6 ? 15 : l >= 2 ? 10 : 0)))
   if (cls.id === 'rogue') add('sneakAttack', 'Sneak Attack (d6)', byLevel((l) => Math.min(10, Math.ceil(l / 2))))

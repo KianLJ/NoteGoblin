@@ -24,7 +24,7 @@ import { registryForPacks } from './migrate'
 import type { Registered, Registry } from './registry'
 import type { BackgroundDef, ChoiceDef, ClassDef, ContentPack, Effect, FeatDef, OptionSource, SpeciesDef } from './schema'
 import { SRD_PACK_ID, srdPack } from './srd'
-import { SRD_LIST_IDS } from './srd/classes'
+import { EXPERTISE_CHOICE_ID, SRD_LIST_IDS } from './srd/classes'
 import { skillId, slug } from './srd/common'
 import { FEAT_CHOICE_IDS } from './srd/feats'
 import { LINEAGE_CHOICE_IDS, SWAPPABLE_LINEAGE_CANTRIP } from './srd/origins'
@@ -295,6 +295,23 @@ export function legacySheetToBuild(input: CharacterSheetData, options: LegacyBui
     const pick = legacyList ? resolvePick(from, record) : record.chosenName
     const key = choiceKeys.choice(adapter.custom(record.featureName, [{ do: { kind: 'grantChoice', choice: { id: 'pick', label: record.featureName, from } } }]), 'pick')
     adapter.pick(key, pick ?? record.chosenName)
+  }
+
+  // --- Expertise picks: the skills the sheet already marks as Expertise fill the class Expertise choices, lowest level first
+  const expertSkills = Object.entries(sheet.skillProficiencies)
+    .filter(([, level]) => level === 'expertise')
+    .map(([name]) => skillId(name))
+  if (expertSkills.length) {
+    const sites = resolvedClasses.flatMap((c) => classSites(c.className)).sort((a, b) => a.level - b.level)
+    let next = 0
+    for (const site of sites) {
+      for (const choice of site.choices.filter((c) => c.id === EXPERTISE_CHOICE_ID)) {
+        const key = choiceKeys.choice(site.sourceKey, choice.id)
+        const count = Number(choice.count ?? '1') || 1
+        for (const pick of expertSkills.slice(next, next + count)) adapter.pick(key, pick)
+        next += count
+      }
+    }
   }
 
   // --- species lineage

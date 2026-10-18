@@ -115,6 +115,8 @@ export interface DerivedAttack {
   extraDamage: { damage: string; damageType?: string; source: string }[]
   mode?: RollMode
   actionType: string
+  /** The weapon's mastery property, when the character has mastered this kind of weapon ("Sap", "Topple"…). */
+  mastery?: string
   /** The weapon item's (or granted attack's) own description, for the sheet's hover card. */
   description?: string
 }
@@ -1458,6 +1460,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     actionType: string
     source: Source
     description?: string
+    mastery?: string
   }
 
   function attackMatches(seed: AttackSeed, filter: AttackFilter | undefined, ability: AbilityId | null): boolean {
@@ -1476,6 +1479,9 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     const category = def.weapon?.category.toLowerCase()
     return (category !== undefined && profs.includes(category)) || profs.some((p) => sameId(p, fullItemId))
   }
+
+  // Weapon Mastery: the kinds of weapon whose mastery property the character can use.
+  const masteredWeapons = activeEffects('weaponMastery').map((e) => e.action.itemId)
 
   const seeds: AttackSeed[] = [
     {
@@ -1509,7 +1515,8 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       proficient: weaponProficient(item.reg.def, item.reg.fullId),
       actionType: 'action',
       source: { key: `item:${item.key}`, name: item.reg.def.name, packId: item.reg.packId },
-      ...(item.reg.def.description ? { description: item.reg.def.description } : {})
+      ...(item.reg.def.description ? { description: item.reg.def.description } : {}),
+      ...(w.mastery && masteredWeapons.some((id) => sameId(id, item.reg.fullId)) ? { mastery: w.mastery } : {})
     })
   }
   for (const e of activeEffects('grantAttack')) {
@@ -1579,7 +1586,8 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       extraDamage: extraDamage.filter((x) => x.damageType).map((x) => ({ damage: formatDice(x.value), damageType: x.damageType, source: x.source })),
       ...(mode ? { mode } : {}),
       actionType: seed.actionType,
-      ...(seed.description ? { description: seed.description } : {})
+      ...(seed.description ? { description: seed.description } : {}),
+      ...(seed.mastery ? { mastery: seed.mastery } : {})
     }
   })
 
@@ -1751,19 +1759,32 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       case 'skills':
         return skillDefs
           .filter((s) => !some(from.skillIds) || from.skillIds!.includes(s.id))
-          .map((s) => ({ id: s.id, name: s.name, description: '', available: true }))
+          // Expertise: only skills already proficient (from anywhere — this pick itself keeps it so).
+          .map((s) => ({ id: s.id, name: s.name, description: '', available: !from.proficientOnly || stat(`skill.${s.id}.proficiency`) >= 1 }))
       case 'weapons': {
         const categories = some(from.categories)?.map((c) => c.toLowerCase())
         const itemIds = some(from.itemIds)
         return registry
           .all('items')
-          .filter((i) => !!i.def.weapon && (!categories || categories.includes(i.def.weapon.category.toLowerCase())) && (!itemIds || itemIds.some((id) => sameId(id, i.fullId))))
+          .filter(
+            (i) =>
+              !!i.def.weapon &&
+              (!from.range || i.def.weapon.range === from.range) &&
+              (!categories || categories.includes(i.def.weapon.category.toLowerCase())) &&
+              (!itemIds || itemIds.some((id) => sameId(id, i.fullId)))
+          )
           .sort((a, b) => a.def.name.localeCompare(b.def.name))
           .map((i) => ({
             id: i.fullId,
             name: i.def.name,
-            description: [`${i.def.weapon!.category} ${i.def.weapon!.range} weapon, ${i.def.weapon!.damage} ${i.def.weapon!.damageType.toLowerCase()}`, i.def.description].filter(Boolean).join('. '),
-            available: true
+            description: [
+              `${i.def.weapon!.category} ${i.def.weapon!.range} weapon, ${i.def.weapon!.damage} ${i.def.weapon!.damageType.toLowerCase()}`,
+              i.def.weapon!.mastery ? `Mastery: ${i.def.weapon!.mastery}` : '',
+              i.def.description
+            ]
+              .filter(Boolean)
+              .join('. '),
+            available: !from.proficientOnly || weaponProficient(i.def, i.fullId)
           }))
       }
       case 'archetypes':
