@@ -7,6 +7,16 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.2',
+    title: 'A smaller download and homebrew item fixes',
+    highlights: [
+      'The app is about half the size to download: the soundtrack is stored more efficiently (you won’t hear a difference), and unused language files are no longer included. This update downloads the music once more; later updates are small again',
+      'The Homebrew Workshop and the Codex load the first time you open them, so the app starts a little faster',
+      'An item’s charges only show on your sheet while the item is in use — equipped, attuned if it needs attunement, or always for items that work just by being carried — and each charged item keeps its own count, named after the item',
+      'Homebrew weapons and item charges now show the item’s description when you hover over them'
+    ]
+  },
+  {
     version: '0.6.1',
     title: 'Make something: homebrew without the jargon',
     highlights: [
