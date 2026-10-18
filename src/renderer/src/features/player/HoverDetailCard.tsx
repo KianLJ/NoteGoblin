@@ -15,6 +15,8 @@ interface HoverDetailCardProps {
   width?: number
   /** Default true — redirects wheel-scrolling into the tooltip's own content while hovering (see the wheel effect's own doc comment), since the underlying row it's attached to normally isn't itself something worth scrolling. Set false when `children` sits inside a scrollable list of its own (e.g. InitiativeTracker.tsx's monster search dropdown) where a wheel over one row should keep scrolling that list, not hijack it into a tooltip most rows won't even need to scroll. */
   interceptWheel?: boolean
+  /** Wraps `children` in an inline span instead of a block div, for a hover target inside running text (a feature name in a class table cell). */
+  inline?: boolean
   children: ReactNode
 }
 
@@ -44,10 +46,10 @@ const VERTICAL_OFFSET = 12
  * attaches synthetic wheel handlers as passive, silently ignoring
  * preventDefault().
  */
-export function HoverDetailCard({ title, subtitle, fields, description, extra, bodyHtml, width, interceptWheel = true, children }: HoverDetailCardProps): JSX.Element {
+export function HoverDetailCard({ title, subtitle, fields, description, extra, bodyHtml, width, interceptWheel = true, inline = false, children }: HoverDetailCardProps): JSX.Element {
   const cardWidth = width ?? CARD_WIDTH
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-  const wrapperRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const posRef = useRef(pos)
@@ -123,6 +125,8 @@ export function HoverDetailCard({ title, subtitle, fields, description, extra, b
       // for both branches (see the maxHeight/overflowY above); contentRef is
       // just the plain (non-overflowing) content inside it.
       if (!posRef.current || !cardRef.current) return
+      // A card whose text all fits has nothing to scroll, so the wheel keeps scrolling the page as normal.
+      if (cardRef.current.scrollHeight <= cardRef.current.clientHeight) return
       e.preventDefault()
       cardRef.current.scrollTop += e.deltaY
     }
@@ -138,8 +142,9 @@ export function HoverDetailCard({ title, subtitle, fields, description, extra, b
     setPos(null)
   }
 
+  const Wrapper = inline ? 'span' : 'div'
   return (
-    <div ref={wrapperRef} onMouseMove={handleMove} onMouseLeave={handleLeave}>
+    <Wrapper ref={wrapperRef as never} onMouseMove={handleMove} onMouseLeave={handleLeave}>
       {children}
       {pos &&
         createPortal(
@@ -195,6 +200,6 @@ export function HoverDetailCard({ title, subtitle, fields, description, extra, b
           </div>,
           document.body
         )}
-    </div>
+    </Wrapper>
   )
 }

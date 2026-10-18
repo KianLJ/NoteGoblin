@@ -173,9 +173,12 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
         <CustomItemForm initial={editingItem ?? undefined} onSave={handleFormSave} onClose={() => setFormOpen(false)} />
       )}
 
-      <div>
-        <div className="gb-label">Carrying Weight</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3) var(--space-5)', alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+        <div className="gs-label" style={{ marginBottom: 4 }}>
+          Carrying
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: encumbered ? 'var(--danger)' : 'var(--text-primary)' }}>
             {totalWeight} / {carryCapacity} lb.
           </span>
@@ -194,11 +197,16 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
             </span>
           )}
         </div>
+        <div className="gs-hpbar" style={{ height: 6, marginTop: 6 }} aria-hidden="true">
+          <div className="gs-hp" style={{ width: `${Math.min(100, (totalWeight / Math.max(1, carryCapacity)) * 100)}%`, background: encumbered ? 'var(--danger)' : 'var(--accent)' }} />
+        </div>
       </div>
 
       <div>
-        <div className="gb-label">Currency</div>
-        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <div className="gs-label" style={{ marginBottom: 4 }}>
+          Coins
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           {CURRENCIES.map(({ id, label }) => (
             <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }} title={registry.vocabulary.currencies.find((c) => c.id === id)?.name}>
@@ -208,7 +216,7 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                 type="number"
                 min={0}
                 className="gb-input"
-                style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+                style={{ width: 52, padding: '3px 6px', fontSize: 13 }}
                 value={draft.currency[id]}
                 onChange={(e) => patch({ currency: { ...draft.currency, [id]: Number(e.target.value) } })}
               />
@@ -224,7 +232,7 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                 type="number"
                 min={0}
                 className="gb-input"
-                style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+                style={{ width: 52, padding: '3px 6px', fontSize: 13 }}
                 value={character.packCurrency?.[c.id] ?? 0}
                 disabled={readOnly}
                 onChange={(e) => onSave({ packCurrency: { ...character.packCurrency, [c.id]: Number(e.target.value) } })}
@@ -233,13 +241,12 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
           ))}
         </div>
       </div>
+      </div>
 
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <div className="gb-label" style={{ margin: 0 }}>
-            Equipment
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+        <div className="gs-group">
+          <span className="gs-label">Equipment</span>
+          <div style={{ display: 'flex', gap: 6, order: 2 }}>
             <input
               className="gb-input"
               placeholder="Search…"
@@ -263,7 +270,7 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
             </select>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+        <div className="gs-cards">
           {visibleEquipment.map((item) => {
             const compendium = item.compendiumId ? getEquipmentById(item.compendiumId) : undefined
             const magicItem = item.magicItemId ? getMagicItemById(item.magicItemId) : undefined

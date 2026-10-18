@@ -147,9 +147,9 @@ export function ChoiceCard({
     </>
   )
 
-  if (isNested) return <div>{body}</div>
+  if (isNested) return <div data-choice-key={choice.key}>{body}</div>
   return (
-    <div className="gb-card" style={{ padding: 'var(--space-3)', borderColor: choice.remaining > 0 ? 'var(--accent)' : undefined }}>
+    <div data-choice-key={choice.key} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: choice.remaining > 0 ? 'var(--accent)' : undefined }}>
       {body}
     </div>
   )

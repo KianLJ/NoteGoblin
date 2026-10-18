@@ -33,7 +33,7 @@ export function HeartIcon({ size = 20, style }: IconProps): JSX.Element {
   )
 }
 
-/** A wilting/drooping flame — used for Exhaustion, whose hover tooltip explains what the character's current level does (see OverviewTab.tsx). */
+/** A wilting/drooping flame — used for Exhaustion, whose hover tooltip explains what the character's current level does (see sheet/SheetParts.tsx). */
 export function ExhaustionIcon({ size = 18, style }: IconProps): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" style={style}>
@@ -61,7 +61,7 @@ export function StarIcon({ size = 20, style, filled }: IconProps & { filled?: bo
   )
 }
 
-/** The app's one d20 icon — a wireframe die (outer silhouette, front face, and the three edges running back from each front-face corner), used everywhere a d20 needs representing: roll buttons next to ability/save/skill/attack bonuses (OverviewTab.tsx/CombatTab.tsx), the initiative dice pill (InitiativeTracker.tsx), and (drawn larger, with its own fill colors) the roll animation overlay/force-roll dialog. */
+/** The app's one d20 icon — a wireframe die (outer silhouette, front face, and the three edges running back from each front-face corner), used everywhere a d20 needs representing: roll buttons next to ability/save/skill/attack bonuses (sheet/SheetParts.tsx, CombatTab.tsx), the initiative dice pill (InitiativeTracker.tsx), and (drawn larger, with its own fill colors) the roll animation overlay/force-roll dialog. */
 export function DiceIcon({ size = 14, style }: IconProps): JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}>

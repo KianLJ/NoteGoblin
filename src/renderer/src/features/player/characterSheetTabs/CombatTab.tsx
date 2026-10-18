@@ -55,8 +55,10 @@ interface CombatTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
-  /** Threaded down from OverviewTab/CharacterSheetEditor — see CharacterSheetEditor.tsx's doc comment. */
+  /** Threaded down from CharacterSheetEditor — see its doc comment. */
   sessionId?: string | null
+  /** The sheet's Actions tab: attacks then reactions, stacked, with no inner tab strip — Spells and Features are tabs of their own there. */
+  actionsOnly?: boolean
 }
 
 /** A blank line between paragraphs of a hover card's text. */
@@ -142,8 +144,8 @@ function customWeaponFields(attack: Attack): DetailField[] {
   return fields
 }
 
-/** AC/HP/speed/death saves/etc. now live in OverviewTab's compact header and its Saving Throws/Death Saves column — this tab is just an Attacks/Spells/Features inner tab strip. Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
-export function CombatTab({ character, onSave, readOnly, sessionId = null }: CombatTabProps): JSX.Element {
+/** The sheet's Actions tab (actionsOnly: attacks, toggles, special and bonus actions, companions, then reactions). Without actionsOnly it's the older Attacks/Spells/Features/Reactions inner tab strip; AC, HP, speed and death saves live in the sheet's rail (see sheet/SheetParts.tsx). Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
+export function CombatTab({ character, onSave, readOnly, sessionId = null, actionsOnly = false }: CombatTabProps): JSX.Element {
   const { rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
   const terms = useTerms()
   // Attacks, resources, toggles, actions and spell DC/attack all come from
@@ -375,7 +377,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
         <CustomWeaponForm initial={editingAttack ?? undefined} onSave={handleFormSave} onClose={() => setFormOpen(false)} />
       )}
 
-      <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)' }}>
+      {!actionsOnly && <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)' }}>
         <button
           type="button"
           onClick={() => setInnerTab('Attacks')}
@@ -417,10 +419,12 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
             + Enable Spellcasting
           </button>
         )}
-      </div>
+      </div>}
 
-      <div style={{ display: innerTab === 'Attacks' ? 'block' : 'none' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+      <div style={{ display: actionsOnly || innerTab === 'Attacks' ? 'block' : 'none' }}>
+        <div className="gs-group">
+          <span className="gs-label">Attacks</span>
+          <span style={{ order: 2 }}>
           <input
             className="gb-input"
             placeholder="Search…"
@@ -428,8 +432,9 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
             onChange={(e) => setListSearch(e.target.value)}
             style={{ width: 130, fontSize: 12, padding: '4px 8px' }}
           />
+          </span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+        <div className="gs-cards">
           {derived.attacks
             .filter((a) => a.kind === 'unarmed' && matchesSearch(a.name))
             .map((attack) => (
@@ -601,11 +606,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
         )}
 
         {toggleFeatures.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div className="gb-label" style={{ margin: '0 0 4px' }}>
-              Toggle Actions
+          <div>
+            <div className="gs-group">
+              <span className="gs-label">Toggle Actions</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+            <div className="gs-cards">
               {toggleFeatures.map((f) => {
                 const active = character.activeBuffs.includes(f.id)
                 const label = actionTypeLabel(f.actionType, registry)
@@ -642,11 +647,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
         )}
 
         {(isDivineSmiteClass || resourceActions.length > 0) && (
-          <div style={{ marginTop: 12 }}>
-            <div className="gb-label" style={{ margin: '0 0 4px' }}>
-              Special Actions
+          <div>
+            <div className="gs-group">
+              <span className="gs-label">Special Actions</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+            <div className="gs-cards">
               {isDivineSmiteClass && <DivineSmiteCard character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />}
               {resourceActions.map((action) => {
                 const resource = action.cost ? resources.find((r) => r.id === action.cost!.resourceId) : undefined
@@ -672,11 +677,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
         )}
 
         {derived.companions.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div className="gb-label" style={{ margin: '0 0 4px' }}>
-              Companions
+          <div>
+            <div className="gs-group">
+              <span className="gs-label">Companions</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+            <div className="gs-cards">
               {derived.companions.map((c) => {
                 const costResource = c.summonCost ? resources.find((r) => r.id === c.summonCost!.resourceId) : undefined
                 return (
@@ -696,11 +701,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
         )}
 
         {bonusActionResources.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div className="gb-label" style={{ margin: '0 0 4px' }}>
-              Bonus Actions
+          <div>
+            <div className="gs-group">
+              <span className="gs-label">Bonus Actions</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+            <div className="gs-cards">
               {bonusActionResources.map((r) => {
                 const toggle = toggleForResource(r.id)
                 return (
@@ -721,11 +726,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
         )}
 
         {otherResources.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div className="gb-label" style={{ margin: '0 0 4px' }}>
-              Other Class Resources
+          <div>
+            <div className="gs-group">
+              <span className="gs-label">Other Class Resources</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+            <div className="gs-cards">
               {otherResources.map((r) => {
                 const toggle = toggleForResource(r.id)
                 return (
@@ -746,17 +751,24 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
         )}
       </div>
 
-      {isCaster && (
+      {isCaster && !actionsOnly && (
         <div style={{ display: innerTab === 'Spells' ? 'block' : 'none' }}>
           <SpellsTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
         </div>
       )}
 
-      <div style={{ display: innerTab === 'Features' ? 'block' : 'none' }}>
-        <FeaturesTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
-      </div>
+      {!actionsOnly && (
+        <div style={{ display: innerTab === 'Features' ? 'block' : 'none' }}>
+          <FeaturesTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
+        </div>
+      )}
 
-      <div style={{ display: innerTab === 'Reactions' ? 'block' : 'none' }}>
+      <div style={{ display: actionsOnly || innerTab === 'Reactions' ? 'block' : 'none' }}>
+        {actionsOnly && (
+          <div className="gs-group">
+            <span className="gs-label">Reactions</span>
+          </div>
+        )}
         {derived.reactions !== 1 && (
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
             Reactions per round: <strong>{derived.reactions}</strong>
@@ -768,17 +780,21 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
             reaction (Shield, Counterspell, Feather Fall, ...), will show up here automatically.
           </p>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+        <div className="gs-cards">
           {reactionFeatures.map((f) => (
-            <div key={`${f.className}:${f.name}`} className="gb-card" style={{ padding: 'var(--space-3)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <strong style={{ flex: 1 }}>{f.name}</strong>
-                <span className="gb-badge" style={{ fontSize: 10 }}>
-                  {f.className}
-                </span>
+            <HoverDetailCard key={`${f.className}:${f.name}`} title={f.name} subtitle={f.className} fields={[]} description={f.description}>
+              <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                  <strong style={{ flex: 1 }}>{f.name}</strong>
+                  <span className="gb-badge" style={{ fontSize: 10 }}>
+                    {f.className}
+                  </span>
+                </div>
+                <p className="gs-clamp" style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                  {f.description}
+                </p>
               </div>
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>{f.description}</p>
-            </div>
+            </HoverDetailCard>
           ))}
           {reactionSpells.map(({ spell, compendium }) => (
             <HoverDetailCard key={spell.id} title={compendium.name} subtitle="Reaction Spell" fields={[]} description={compendium.description}>

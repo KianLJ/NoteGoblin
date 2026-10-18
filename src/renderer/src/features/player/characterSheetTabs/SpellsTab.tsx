@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import {
   ABILITIES,
@@ -103,7 +103,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   // (Pact Magic included) is summed into one table, as before. Only levels that actually have slots show up at all.
   const liveSheet = useMemo(() => ({ ...character, ...draft }), [character, draft])
   const { derived, registry } = useDerivedSheet(liveSheet)
-  const { rollDamage } = useSheetRoller(sessionId, character.name)
+  const { rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
   // The slot level each leveled spell is about to be cast at (its own level until changed).
   const [castAt, setCastAt] = useState<Record<string, number>>({})
   const terms = useTerms()
@@ -264,66 +264,86 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
         />
       )}
 
-      <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <Field label="Spellcasting Ability">
-          <select
-            className="gb-input"
-            value={draft.spellcastingAbility ?? ''}
-            onChange={(e) => patch({ spellcastingAbility: (e.target.value || null) as Ability | null })}
-          >
-            <option value="">Not a spellcaster</option>
-            {ABILITIES.map(({ id, label }) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </Field>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'stretch', flexWrap: 'wrap' }}>
         {draft.spellcastingAbility && (
           <>
-            <Stat label="Spell Save DC" value={String(dc)} />
-            <Stat label="Spell Attack Bonus" value={formatModifier(casterAttackBonus ?? 0)} />
+            <div className="gs-vital" style={{ flex: '0 0 auto', padding: '6px 14px' }} title="Spell save DC">
+              <b>{dc}</b>
+              <span>Save DC</span>
+            </div>
+            <button
+              type="button"
+              className="gs-vital"
+              style={{ flex: '0 0 auto', padding: '6px 14px' }}
+              disabled={readOnly}
+              onClick={() => rollCheck('Spell Attack', casterAttackBonus ?? 0)}
+              title="Roll a spell attack"
+            >
+              <b>{formatModifier(casterAttackBonus ?? 0)}</b>
+              <span>Spell attack</span>
+            </button>
           </>
         )}
-        {spellCap !== null && <Stat label="Spells Known" value={`${leveledSpellCount} / ${spellCap}`} />}
-        {cantripCap !== null && <Stat label={`${terms.t('cantrips')} Known`} value={`${cantripCount} / ${cantripCap}`} />}
-      </div>
-
-      {slotLevels.length > 0 && (
-        <div>
-          <div className="gb-label">{terms.t('spellSlots')}</div>
-          <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+        {slotLevels.length > 0 && (
+          <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
             {slotLevels.map((level) => {
               const total = slotTotals[level]
               const used = Math.min(draft.spellSlots[level]?.used ?? 0, total)
               return (
-                <div key={level} style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Lv {level}</div>
-                  <div style={{ display: 'flex', gap: 3 }}>
+                <div key={level} className="gs-row" style={{ gap: 10 }}>
+                  <span className="gs-label" style={{ width: 68 }}>
+                    {SLOT_ORDINALS[level - 1] ?? `${level}th`} level
+                  </span>
+                  <div className="gs-pips" style={{ justifyContent: 'flex-start' }}>
                     {Array.from({ length: total }, (_, i) => (
                       <button
                         key={i}
                         type="button"
-                        onClick={() => setSlotUsed(level, i < used ? i : i + 1)}
-                        title={i < used ? 'Used' : 'Available'}
-                        style={{
-                          width: 16,
-                          height: 16,
-                          border: '1.5px solid var(--border-strong)',
-                          borderRadius: 3,
-                          background: i < used ? 'transparent' : 'var(--accent)',
-                          cursor: 'pointer',
-                          padding: 0
-                        }}
+                        disabled={readOnly}
+                        className={`gs-pip${i < total - used ? '' : ' gs-pip--spent'}`}
+                        onClick={() => setSlotUsed(level, i < total - used ? total - i : total - i - 1)}
+                        aria-label={`${SLOT_ORDINALS[level - 1] ?? level} level slots: ${total - used} of ${total} left`}
                       />
                     ))}
                   </div>
+                  <span className="gs-hint">
+                    {total - used}/{total}
+                  </span>
                 </div>
               )
             })}
           </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', justifyContent: 'center', marginLeft: 'auto' }}>
+          <label className="gs-hint gs-row" style={{ gap: 6 }}>
+            Casts with
+            <select
+              className="gb-input"
+              style={{ fontSize: 12, padding: '3px 6px', width: 'auto' }}
+              value={draft.spellcastingAbility ?? ''}
+              onChange={(e) => patch({ spellcastingAbility: (e.target.value || null) as Ability | null })}
+              title="Spellcasting ability: set this for feats or subclasses that grant spellcasting outside a caster class"
+            >
+              <option value="">Not a spellcaster</option>
+              {ABILITIES.map(({ id, label }) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {spellCap !== null && (
+            <span className="gs-hint">
+              Spells known {leveledSpellCount} / {spellCap}
+            </span>
+          )}
+          {cantripCap !== null && (
+            <span className="gs-hint">
+              {terms.t('cantrips')} known {cantripCount} / {cantripCap}
+            </span>
+          )}
         </div>
-      )}
+      </div>
 
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -355,21 +375,10 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
         </div>
         {[...spellsByLevel.entries()].map(([level, spellsAtLevel]) => (
           <div key={level} style={{ marginBottom: 12 }}>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: 0.4,
-                color: 'var(--text-muted)',
-                borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.1))',
-                paddingBottom: 4,
-                marginBottom: 8
-              }}
-            >
-              {spellLevelLabel(level)}
+            <div className="gs-group">
+              <span className="gs-label">{level === 0 ? terms.t('cantrips') : `${SLOT_ORDINALS[level - 1] ?? `${level}th`} level`}</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+            <div className="gs-cards">
               {spellsAtLevel.map((spell) => {
             // The slot it's cast with: its own level, or a higher one the player picks (upcasting) — only levels with slots.
             const castLevels = spell.level > 0 ? slotLevels.filter((l) => l >= spell.level && (slotTotals[l] ?? 0) > 0) : []
@@ -407,12 +416,27 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
                 }
               >
                 <EntryCard
-                  name={<EntryCardTitle value={compendium?.name ?? spell.name} />}
+                  name={
+                    <>
+                      <EntryCardTitle value={compendium?.name ?? spell.name} />
+                      <div className="gs-hint" style={{ marginTop: 1 }}>
+                        {[
+                          grantedBy(spell),
+                          compendium?.school ?? spell.school,
+                          ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium?.castingTime ?? spell.castingTime)],
+                          (compendium?.concentration ?? spell.concentration) ? 'Concentration' : null
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
+                    </>
+                  }
                   badge={
-                    <span className="gb-badge gb-badge--accent" title={grantedBy(spell) ? `Granted by ${grantedBy(spell)}` : undefined}>
-                      {spellLevelLabel(spell.level)}
-                      {grantedBy(spell) ? ' · Granted' : spell.free ? ' · Free' : ''}
-                    </span>
+                    grantedBy(spell) || spell.free ? (
+                      <span className="gb-badge gb-badge--accent" title={grantedBy(spell) ? `Granted by ${grantedBy(spell)}` : 'Doesn’t count against spells known'}>
+                        {grantedBy(spell) ? 'Granted' : 'Free'}
+                      </span>
+                    ) : undefined
                   }
                   onEdit={compendium || grantedBy(spell) ? undefined : () => openEditForm(spell)}
                   onRemove={grantedBy(spell) ? undefined : () => patch({ spells: draft.spells.filter((s) => s.id !== spell.id) })}
@@ -429,6 +453,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
                       onRoll={rollDice(numbers.damage ?? numbers.healing!, `${compendium?.name ?? spell.name} ${numbers.damage ? 'Damage' : 'Healing'}`)}
                     />
                   )}
+                  <span className="gs-cast">
                   {castLevels.length > 1 && (
                     <select
                       className="gb-input"
@@ -444,9 +469,6 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
                       ))}
                     </select>
                   )}
-                  <span className="gb-badge" style={{ fontSize: 11 }}>
-                    {ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium?.castingTime ?? spell.castingTime)]}
-                  </span>
                   <Button
                     variant="secondary"
                     disabled={!canCast}
@@ -456,6 +478,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
                   >
                     Cast
                   </Button>
+                  </span>
                 </EntryCard>
               </HoverDetailCard>
                 )
@@ -520,23 +543,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   )
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
-  return (
-    <div>
-      <div className="gb-label">{label}</div>
-      {children}
-    </div>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div>
-      <div className="gb-label">{label}</div>
-      <div style={{ fontSize: 20, fontFamily: 'var(--font-display)' }}>{value}</div>
-    </div>
-  )
-}
+const SLOT_ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th']
 
 /** A spell's damage or healing dice; click to roll them. */
 function SpellRoll({ text, onRoll }: { text: string; onRoll?: () => void }): JSX.Element {

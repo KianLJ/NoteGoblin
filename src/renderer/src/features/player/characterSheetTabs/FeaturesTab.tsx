@@ -1,9 +1,9 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { sneakAttackDice, type CharacterSheetData, type ClassLevel, type Feature } from '@shared/dnd5e'
 import { spellSlotsForClasses } from '@shared/compendium'
-import type { DerivedChoice, DerivedResource, DerivedToggle } from '@shared/content/engine'
-import { removeTempPoints, resourceRemaining, restoreResource, setResourceUsed, spendResource, type ResourceState } from '@shared/content/resourceMath'
+import type { DerivedChoice, DerivedResource } from '@shared/content/engine'
+import { removeTempPoints, restoreResource, setResourceUsed, spendResource, type ResourceState } from '@shared/content/resourceMath'
 import { deriveSheet, normalizeForActivePacks } from '@shared/content/sheet'
 import { Button } from '../../../ui/Button'
 import { HoverDetailCard } from '../HoverDetailCard'
@@ -13,11 +13,6 @@ import { playAbilitySfx } from '../../audio/sfxBoardEngine'
 import { SubclassChooser } from '../AsiChoosers'
 import { ChoiceList, useChoiceEditor } from '../ChoiceCards'
 import { XIcon } from '../../../ui/icons'
-
-interface ResourcesDraft {
-  resourceUsed: Record<string, number>
-  resourceTemp: Record<string, number>
-}
 
 interface FeaturesDraft {
   features: Feature[]
@@ -29,14 +24,6 @@ interface FeaturesTabProps {
   readOnly?: boolean
   /** Threaded down from CombatTab, same as elsewhere — lets an "Activate X" click here play (and, at the table, broadcast) that resource's Class Features cue, same as CombatTab's own duplicate of this section. */
   sessionId?: string | null
-}
-
-const RECHARGE_LABEL: Record<string, string> = {
-  short: 'Short or Long Rest',
-  long: 'Long Rest',
-  dawn: 'Dawn',
-  turn: 'Start of each turn',
-  none: "Doesn't recharge"
 }
 
 /** A compact, always-hoverable chip — the one visual language every card in this tab shares, whether it's a class resource's name, a racial trait, a curated class feature, a feat, or a resolved ASI slot. Hovering shows the full text; the chip itself never does. */
@@ -98,15 +85,10 @@ function InfoChip({
  * shared/dnd5e.ts. Only a small "Custom Notes" section at the bottom stays
  * fully freeform/manual, for anything outside this automatic system.
  */
-export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: FeaturesTabProps): JSX.Element {
-  const [resourceDraft, setResourceDraft] = useAutosaveDraft<ResourcesDraft>(
-    { resourceUsed: character.resourceUsed, resourceTemp: character.resourceTemp ?? {} },
-    onSave,
-    readOnly
-  )
+export function FeaturesTab({ character, onSave, readOnly }: FeaturesTabProps): JSX.Element {
+  const rootRef = useRef<HTMLDivElement>(null)
   const [featureDraft, setFeatureDraft] = useAutosaveDraft<FeaturesDraft>({ features: character.features }, onSave, readOnly)
 
-  // Resources (and the toggles that spend them) come from the content engine — see shared/content/sheet.ts.
   const { derived } = useDerivedSheet(character)
   const resources = derived.resources
   const normalized = normalizeForActivePacks(character)
@@ -118,28 +100,6 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
   // Picks kept from older sheets with nowhere else to go (2014 Favored Enemy/Terrain) — shown, not editable.
   const otherChoices = derived.choices.filter((c) => c.sourceKey.startsWith('custom:'))
 
-  function commitResources(state: ResourceState): void {
-    setResourceDraft(() => ({ resourceUsed: state.resourceUsed, resourceTemp: state.resourceTemp }))
-  }
-
-  /** Activating spends the toggle's cost from this resource (so Rage's uses tracker and its "active" state never drift apart) — deactivating never refunds it, matching how raging doesn't give the use back when it ends. Plays (and, at the table, broadcasts) the toggle's own sound cue on activation only — see playAbilitySfx. */
-  function toggleBuff(toggle: DerivedToggle, resource: DerivedResource): void {
-    if (readOnly) return
-    if (character.activeBuffs.includes(toggle.id)) {
-      onSave({ activeBuffs: character.activeBuffs.filter((id) => id !== toggle.id) })
-      return
-    }
-    const cost = toggle.cost?.amount ?? 0
-    if (cost) {
-      // Temporary points are spent first, like any other spend.
-      const next = spendResource(resource, resourceDraft, cost)
-      if (!next) return
-      commitResources(next)
-    }
-    playAbilitySfx(toggle.name, sessionId)
-    onSave({ activeBuffs: [...character.activeBuffs, toggle.id] })
-  }
-
   function updateFeature(id: string, fields: Partial<Feature>): void {
     setFeatureDraft((prev) => ({ features: prev.features.map((f) => (f.id === id ? { ...f, ...fields } : f)) }))
   }
@@ -149,65 +109,36 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
     onSave({ classes: nextClasses })
   }
 
+  // Every pick still open (on this tab), first one first; the banner jumps to it.
+  const pending = derived.choices.filter((c) => c.remaining > 0 && !c.sourceKey.startsWith('custom:'))
+  function jumpTo(key: string): void {
+    const el = rootRef.current?.querySelector(`[data-choice-key="${CSS.escape(key)}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   const hasAnyContent = resources.length > 0 || originFeatures.length > 0 || character.classes.length > 0 || featureDraft.features.length > 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-      {resources.length > 0 && (
-        <div>
-          <div className="gb-label" style={{ margin: '0 0 4px' }}>
-            Class Resources
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
-            {resources.map((r) => {
-              const remaining = resourceRemaining(r, resourceDraft)
-              const toggle = derived.toggles.find((t) => t.cost?.resourceId === r.id)
-              const active = !!toggle && character.activeBuffs.includes(toggle.id)
-              const cost = toggle?.cost?.amount ?? 0
-              return (
-                <div key={r.id} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
-                  <HoverDetailCard title={r.name} subtitle={r.className ?? r.source} fields={[]} description={r.detail || r.description}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, cursor: 'default' }}>
-                      <strong style={{ flex: 1 }}>{r.name}</strong>
-                      {active && (
-                        <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }}>
-                          Active
-                        </span>
-                      )}
-                      <span className="gb-badge" style={{ fontSize: 10 }}>
-                        {r.className ?? r.source}
-                      </span>
-                    </div>
-                    {r.description && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 4px' }}>{r.description}</p>}
-                    <p style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 var(--space-2)' }}>
-                      Recharges: {RECHARGE_LABEL[r.recharge] ?? r.recharge}
-                    </p>
-
-                    <ResourceTracker resource={r} state={resourceDraft} readOnly={readOnly} onChange={commitResources} />
-
-                    {toggle && (
-                      <Button
-                        variant={active ? 'secondary' : 'primary'}
-                        onClick={() => toggleBuff(toggle, r)}
-                        disabled={readOnly || (!active && remaining < cost)}
-                        style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '4px 10px' }}
-                        title={active ? `End ${toggle.name} — its bonuses stop applying immediately` : `Activate ${toggle.name} — applies its bonuses across the sheet until you end it`}
-                      >
-                        {active ? `End ${toggle.name}` : `Activate ${toggle.name}`}
-                      </Button>
-                    )}
-                  </HoverDetailCard>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+    <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      {pending.length > 0 && !readOnly && (
+        <button type="button" className="gs-banner" onClick={() => jumpTo(pending[0].key)}>
+          <b>
+            {pending.length} {pending.length === 1 ? 'choice' : 'choices'} to make:
+          </b>{' '}
+          {pending
+            .slice(0, 3)
+            .map((c) => c.label)
+            .join(', ')}
+          {pending.length > 3 ? ` and ${pending.length - 3} more` : ''}
+          <span style={{ marginLeft: 'auto', textDecoration: 'underline' }}>Choose now</span>
+        </button>
       )}
 
       {(originFeatures.length > 0 || originChoices.length > 0) && (
         <div>
-          <div className="gb-label">Species &amp; Background{originLabel ? ` — ${originLabel}` : ''}</div>
+          <div className="gs-group">
+            <span className="gs-label">Species &amp; Background{originLabel ? ` — ${originLabel}` : ''}</span>
+          </div>
           {originFeatures.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: originChoices.length ? 6 : 0 }}>
               {originFeatures.map((f) => (
@@ -236,13 +167,17 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
 
       {otherChoices.length > 0 && (
         <div>
-          <div className="gb-label">Other Picks</div>
+          <div className="gs-group">
+            <span className="gs-label">Other Picks</span>
+          </div>
           <ChoiceList choices={otherChoices} all={derived.choices} readOnly onSetPicks={setPicks} />
         </div>
       )}
 
       <div>
-        <div className="gb-label">Custom Notes</div>
+        <div className="gs-group">
+            <span className="gs-label">Custom Notes</span>
+          </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {featureDraft.features.map((feature) => (
             <div key={feature.id} className="gb-card" style={{ padding: 'var(--space-2)' }}>
@@ -282,7 +217,7 @@ export function FeaturesTab({ character, onSave, readOnly, sessionId = null }: F
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
               {hasAnyContent
                 ? 'Anything outside the automatic system above — DM-granted boons, reflavored abilities, homebrew — goes here.'
-                : 'Nothing here yet — set a race and class in Overview to see racial traits, class features, and Ability Score Improvements show up automatically.'}
+                : 'Nothing here yet — set a species and class (the pencil by your name) to see racial traits, class features, and Ability Score Improvements show up automatically.'}
             </p>
           )}
           <button
@@ -361,7 +296,9 @@ function ClassFeatureSection({
 
   return (
     <div>
-      <div className="gb-label">{classLevel.className} Features</div>
+      <div className="gs-group">
+            <span className="gs-label">{classLevel.className} Features</span>
+          </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {features.map((f) => (
