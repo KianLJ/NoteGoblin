@@ -7,6 +7,16 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.5',
+    title: 'Magic Initiate, by spell list',
+    highlights: [
+      'Magic Initiate is now three feats — Magic Initiate (Cleric), (Druid) and (Wizard) — like the 2024 rules and D&D Beyond, each offering only its own list’s cantrips and spell',
+      'Acolyte grants Magic Initiate (Cleric) and Sage grants Magic Initiate (Wizard)',
+      'You can take Magic Initiate more than once with a different list each time — say Cleric from your background and Wizard from Human Versatile',
+      'Existing characters keep every spell they picked: their Magic Initiate becomes the version that matches their background, or the list most of their spells came from'
+    ]
+  },
+  {
     version: '0.6.4',
     title: 'Attunement',
     highlights: [
