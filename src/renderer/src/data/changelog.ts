@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.8',
+    title: 'Homebrew catches up',
+    highlights: [
+      'Homebrew damage cantrips now show on the Combat tab with their attack or save and dice, scaling at levels 5, 11 and 17 like the SRD’s',
+      'Workshop: the weapon mastery effect can be added and edited in the effect editor, and a weapon choice can be limited to melee or ranged weapons, or to ones the character is proficient with'
+    ]
+  },
+  {
     version: '0.6.7',
     title: 'Spells you can roll, Expertise and Weapon Mastery',
     highlights: [
