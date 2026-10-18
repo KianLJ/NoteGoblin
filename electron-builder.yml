@@ -15,6 +15,10 @@ asarUnpack:
   # every release just because the JS bundle's hash moved.
   - out/renderer/assets/*.mp3
   - resources/**
+# Chromium ships ~55 UI language packs (~39MB); the app is English-only, so keep just English.
+electronLanguages:
+  - en-US
+  - en-GB
 win:
   target: nsis
   artifactName: ${productName}-Setup-${version}.${ext}

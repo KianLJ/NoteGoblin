@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { ModeToggle, type Mode } from './ModeToggle'
 import { WindowControls } from './WindowControls'
 import { VersionBadge } from './VersionBadge'
@@ -15,8 +15,6 @@ import { useNotesWorkspace } from '../campaigns/useNotesWorkspace'
 import { PlayerWorkspaceBody } from '../player/PlayerWorkspaceBody'
 import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
-import { Bestiary } from '../bestiary/Bestiary'
-import { Workshop } from '../workshop/Workshop'
 import { MusicButton } from '../audio/MusicButton'
 import { SoundBoardButton } from '../audio/SoundBoardButton'
 import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
@@ -25,6 +23,10 @@ import { ensureSfxBoardListening } from '../audio/sfxBoardEngine'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import { useApplyActivePacks, useCampaignPacks } from '../content/usePacks'
 import type { BestiaryMonster } from '../../data/bestiary'
+
+// Loaded the first time they open, so the app starts without their code.
+const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
+const Workshop = lazy(() => import('../workshop/Workshop').then((m) => ({ default: m.Workshop })))
 
 // Discord presence line shown while the app is open but not actively DMing
 // or connected to a session — one is picked at random per launch (not
@@ -483,7 +485,9 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
       {workshopOpen && (
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <Workshop authorName={displayName} />
+          <Suspense fallback={null}>
+            <Workshop authorName={displayName} />
+          </Suspense>
         </main>
       )}
       <main style={{ flex: 1, display: workshopOpen ? 'none' : 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -517,11 +521,13 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
       <RollAnimationOverlay />
       {bestiaryOpen && (
-        <Bestiary
-          onClose={() => setBestiaryOpen(false)}
-          hideMonsters={mode === 'player' && !!joinedSession}
-          sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}
-        />
+        <Suspense fallback={null}>
+          <Bestiary
+            onClose={() => setBestiaryOpen(false)}
+            hideMonsters={mode === 'player' && !!joinedSession}
+            sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}
+          />
+        </Suspense>
       )}
     </div>
   )

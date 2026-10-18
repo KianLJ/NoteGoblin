@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { Note } from '@shared/ipc'
 import { renderNoteMarkdown } from '../../markdown'
 import { MarkdownLiveEditor, type MarkdownLiveEditorHandle } from './MarkdownLiveEditor'
 import { EyeIcon, ImageIcon, ImportFromCodexIcon, LinkIcon, PencilIcon, TableIcon } from './icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 import { saveMonster } from '../../data/packMonsters'
-import { Bestiary } from '../bestiary/Bestiary'
 import { statblockToFencedBlock } from '../../statblock'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { performRoll } from '../dice/diceLogStore'
@@ -15,6 +14,9 @@ import { useSessionDecks } from './useSessionDecks'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import { MUSIC_LIBRARY } from '../../data/musicLibrary'
 import { getCustomTracks } from '../audio/customMusicStore'
+
+// The Codex's code loads the first time the picker opens.
+const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
 
 interface NoteEditorProps {
   note: Note
@@ -550,7 +552,11 @@ export function NoteEditor({
       </div>
 
       <ContextMenu state={linkMenu} onClose={() => setLinkMenu(null)} />
-      {bestiaryPickerOpen && <Bestiary onClose={() => setBestiaryPickerOpen(false)} onPick={handleBestiaryPick} sessionId={sessionId} />}
+      {bestiaryPickerOpen && (
+        <Suspense fallback={null}>
+          <Bestiary onClose={() => setBestiaryPickerOpen(false)} onPick={handleBestiaryPick} sessionId={sessionId} />
+        </Suspense>
+      )}
     </div>
   )
 }
