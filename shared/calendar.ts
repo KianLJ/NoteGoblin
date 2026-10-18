@@ -273,6 +273,13 @@ export function addDays(config: CalendarConfig, date: CalendarDate, delta: numbe
   return normalizeDate(config, { ...date, day: date.day + delta })
 }
 
+/** The era that starts last — the "present day" era a new calendar or an era-less date defaults to. Null when there are no eras. */
+export function latestEra(config: CalendarConfig): CalendarEra | null {
+  let best: CalendarEra | null = null
+  for (const era of config.eras) if (!best || era.startYear > best.startYear) best = era
+  return best
+}
+
 /** The era whose `startYear` is the greatest one still `<=` the date's year — null if the date predates every defined era. */
 export function eraForYear(config: CalendarConfig, year: number): CalendarEra | null {
   let best: CalendarEra | null = null

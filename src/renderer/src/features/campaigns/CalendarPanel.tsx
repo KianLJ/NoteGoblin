@@ -13,6 +13,7 @@ import {
   cloudinessLabel,
   dayNoteFor,
   eraForYear,
+  latestEra,
   eventsOnDate,
   formatCalendarDate,
   formatHour,
@@ -93,6 +94,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
   const dayPanelHeightRef = useRef(dayPanelHeight)
   dayPanelHeightRef.current = dayPanelHeight
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+  const [jumpOpen, setJumpOpen] = useState(false)
   const lastEditingEvent = useLastTruthy(editingEvent)
 
   useEffect(() => {
@@ -415,14 +417,42 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
             <button type="button" className="gb-btn gb-btn--ghost" style={{ padding: '2px 8px' }} onClick={() => shiftView(-1)}>
               ‹
             </button>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{label.title}</div>
+            <button
+              type="button"
+              onClick={() => setJumpOpen((v) => !v)}
+              title="Go to any era, year, month or day"
+              aria-expanded={jumpOpen}
+              style={{ textAlign: 'center', background: jumpOpen ? 'var(--accent-subtle)' : 'none', border: 0, borderRadius: 6, padding: '2px 10px', cursor: 'pointer', color: 'inherit', font: 'inherit' }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 14 }}>
+                {label.title} <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>▾</span>
+              </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label.subtitle}</div>
-            </div>
+            </button>
             <button type="button" className="gb-btn gb-btn--ghost" style={{ padding: '2px 8px' }} onClick={() => shiftView(1)}>
               ›
             </button>
           </div>
+
+          {jumpOpen && (
+            <JumpToDate
+              config={config}
+              initial={viewed!}
+              readOnly={readOnly}
+              onGo={(date) => {
+                setViewedDate(date)
+                setSelectedDate(date)
+                setJumpOpen(false)
+              }}
+              onMakeCurrent={async (date) => {
+                await setAsCurrentDay(date)
+                setViewedDate(null)
+                setSelectedDate(null)
+                setJumpOpen(false)
+              }}
+              onClose={() => setJumpOpen(false)}
+            />
+          )}
 
           {viewMode === 'day' && (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -659,6 +689,123 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
           onClose={() => setEditingEvent(null)}
         />
       )}
+    </div>
+  )
+}
+
+/**
+ * Straight to any date instead of paging a month at a time: pick an era
+ * (which puts the year at its start, unless the year is already in it), a
+ * year, a month and a day. "Show" moves the view there; for the DM, "Make
+ * it today" also sets it as the campaign's current date.
+ */
+function JumpToDate({
+  config,
+  initial,
+  readOnly,
+  onGo,
+  onMakeCurrent,
+  onClose
+}: {
+  config: CalendarConfig
+  initial: CalendarDate
+  readOnly: boolean
+  onGo: (date: CalendarDate) => void
+  onMakeCurrent: (date: CalendarDate) => void
+  onClose: () => void
+}): JSX.Element {
+  // A year before every era opens on the most recent era instead.
+  const startEra = eraForYear(config, initial.year) ? null : latestEra(config)
+  const [yearText, setYearText] = useState(String(startEra ? startEra.startYear : initial.year))
+  const [monthIndex, setMonthIndex] = useState(initial.monthIndex)
+  const [day, setDay] = useState(initial.day)
+  const parsedYear = Number(yearText)
+  const yearValid = yearText.trim() !== '' && Number.isInteger(parsedYear)
+  const year = yearValid ? parsedYear : initial.year
+  const days = monthLength(config, year, monthIndex)
+  const date: CalendarDate = { year, monthIndex, day: Math.min(day, days) }
+  const eras = [...config.eras].sort((a, b) => a.startYear - b.startYear)
+  const era = eraForYear(config, year)
+
+  function pickEra(id: string): void {
+    const picked = eras.find((e) => e.id === id)
+    if (!picked) return
+    const next = eras[eras.indexOf(picked) + 1]
+    const inside = year >= picked.startYear && (!next || year < next.startYear)
+    if (!inside) setYearText(String(picked.startYear))
+  }
+
+  const field = { fontSize: 12, padding: '3px 6px' } as const
+  return (
+    <div
+      className="gb-card"
+      style={{ padding: 'var(--space-3)', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose()
+        if (e.key === 'Enter' && yearValid) onGo(date)
+      }}
+    >
+      {eras.length > 0 && (
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          Era
+          <select className="gb-input" style={field} value={era?.id ?? ''} onChange={(e) => pickEra(e.target.value)}>
+            {!era && <option value="">Before any era</option>}
+            {eras.map((e, i) => (
+              <option key={e.id} value={e.id}>
+                {e.name} (from {e.startYear}
+                {eras[i + 1] ? ` to ${eras[i + 1].startYear - 1}` : ''})
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '80px minmax(0, 1fr) 64px', gap: 6 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          Year
+          <input
+            className="gb-input"
+            style={{ ...field, borderColor: yearValid ? undefined : 'var(--danger)' }}
+            inputMode="numeric"
+            value={yearText}
+            onChange={(e) => setYearText(e.target.value.replace(/[^\d-]/g, ''))}
+            autoFocus
+          />
+        </label>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          Month
+          <select className="gb-input" style={field} value={monthIndex} onChange={(e) => setMonthIndex(Number(e.target.value))}>
+            {config.months.map((m, i) => (
+              <option key={i} value={i}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          Day
+          <select className="gb-input" style={field} value={date.day} onChange={(e) => setDay(Number(e.target.value))}>
+            {Array.from({ length: days }, (_, i) => (
+              <option key={i + 1} value={i + 1}>
+                {i + 1}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{yearValid ? formatCalendarDate(config, date) : 'Enter a whole-number year'}</div>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button type="button" className="gb-btn gb-btn--ghost" style={{ fontSize: 12, padding: '3px 10px' }} onClick={onClose}>
+          Cancel
+        </button>
+        <button type="button" className="gb-btn gb-btn--secondary" style={{ fontSize: 12, padding: '3px 10px' }} disabled={!yearValid} onClick={() => onGo(date)} title="Show this date without changing the campaign’s current day">
+          Show
+        </button>
+        {!readOnly && (
+          <button type="button" className="gb-btn gb-btn--primary" style={{ fontSize: 12, padding: '3px 10px' }} disabled={!yearValid} onClick={() => onMakeCurrent(date)} title="Set this as the campaign’s current day">
+            Make it today
+          </button>
+        )}
+      </div>
     </div>
   )
 }

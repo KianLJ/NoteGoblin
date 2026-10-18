@@ -4,6 +4,8 @@ import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import {
+  eraForYear,
+  latestEra,
   climateInUnit,
   defaultCalendarConfig,
   SEASON_CLIMATE_PRESETS,
@@ -76,7 +78,11 @@ export function CalendarCreatorWizard({ initial, notes = [], onSave, onClose }: 
     // rather than let it silently reference a month that no longer exists.
     const monthIndex = Math.min(config.currentDate.monthIndex, config.months.length - 1)
     const day = Math.min(config.currentDate.day, config.months[monthIndex]?.length ?? config.currentDate.day)
-    onSave({ ...config, currentDate: { ...config.currentDate, monthIndex, day } })
+    // A new calendar starts in its most recent era (its "present day") rather than year 1, and so does any
+    // calendar whose current date ended up before every era — e.g. eras added later that all start after it.
+    const latest = latestEra(config)
+    const year = latest && (!initial || !eraForYear(config, config.currentDate.year)) ? Math.max(config.currentDate.year, latest.startYear) : config.currentDate.year
+    onSave({ ...config, currentDate: { year, monthIndex, day } })
   }
 
   return (
