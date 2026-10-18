@@ -24,6 +24,8 @@ import type { DerivedAction, DerivedAttack, DerivedCompanion, DerivedResource, D
 import { applyRestores, resourceRemaining, rollAmount, spendResource, type ResourceState } from '@shared/content/resourceMath'
 import type { Registry } from '@shared/content/registry'
 import { effectiveScores, knownSpells } from '@shared/content/sheet'
+import { spellNumbers, splitDice } from '@shared/content/spellNumbers'
+import { SRD_PACK_ID } from '@shared/content/srd'
 import { useDerivedSheet } from '../useDerivedSheet'
 import { useTerms } from '../../content/terms'
 import { useAutosaveDraft } from '../useAutosaveDraft'
@@ -428,7 +430,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
           {damagingCantrips
             .filter(({ spell }) => matchesSearch(spell.name))
             .map(({ spell, compendium }) => {
-              const diceMatch = /\d+d\d+/.exec(compendium.description)
+              // Its dice for this character (cantrips grow at levels 5, 11 and 17); the first dice in its text if it has no roll data.
+              const def = registry.get('spells', `${SRD_PACK_ID}:${compendium.id}`)?.def
+              const numbers = def ? spellNumbers(derived, def, 0) : {}
+              const dice = numbers.damage ?? /\d+d\d+/.exec(compendium.description)?.[0]
+              const split = dice ? splitDice(dice) : null
               return (
                 <HoverDetailCard
                   key={spell.id}
@@ -445,11 +451,11 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                         onRoll={cantripAttackBonus !== null ? rollAttack(`${compendium.name} Attack`, cantripAttackBonus) : undefined}
                       />
                     ) : (
-                      <MiniStat label="DC" value={spellSaveDc !== null ? String(spellSaveDc) : '—'} />
+                      <MiniStat label={numbers.saveAbility ? `${numbers.saveAbility.toUpperCase()} DC` : 'DC'} value={spellSaveDc !== null ? String(spellSaveDc) : '—'} />
                     )}
                     <LockedValue
-                      value={diceMatch ? diceMatch[0] : 'See spell'}
-                      onRoll={diceMatch ? rollWeaponDamage(`${compendium.name} Damage`, diceMatch[0], 0) : undefined}
+                      value={dice ? `${dice}${numbers.damageType ? ` ${numbers.damageType.toLowerCase()}` : ''}` : 'See spell'}
+                      onRoll={split ? rollWeaponDamage(`${compendium.name} Damage`, `${split.count}d${split.sides}`, split.flat) : undefined}
                     />
                     <LockedValue value={ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium.castingTime)]} />
                   </EntryCard>

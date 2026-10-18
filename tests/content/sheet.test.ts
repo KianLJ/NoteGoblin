@@ -15,7 +15,10 @@ const barbarian = (): CharacterSheetData => ({
 describe('deriveSheet', () => {
   it('matches the adapter → engine path the parity tests check', () => {
     const sheet = barbarian()
-    expect(deriveSheet(sheet).derived).toEqual(engineDerive(sheet).derived)
+    // The sheet also keeps the formula evaluator (for spell damage per slot level); everything else matches.
+    const { evaluate, ...derived } = deriveSheet(sheet).derived
+    expect(typeof evaluate).toBe('function')
+    expect(derived).toEqual(engineDerive(sheet).derived)
   })
 
   it('caches per sheet object and reuses the registry across sheets', () => {

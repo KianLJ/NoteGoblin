@@ -83,7 +83,8 @@ export function deriveSheet(sheet: CharacterSheetData): DerivedSheet {
   const srd = srdPack()
   const { build, packs, warnings } = legacySheetToBuild(normalizeSheet(sheet, [srd, ...activePacks]), { packs: activePacks }, srd)
   const registry = registryForPacks(packs)
-  const derived = deriveCharacter(build, registry)
+  // keepEvaluator: the sheet works out spell damage per slot level (spellNumbers) from the same character.
+  const derived = deriveCharacter(build, registry, { keepEvaluator: true })
   for (const message of warnings) derived.diagnostics.push({ severity: 'warning', message })
   const result = { derived, build, registry }
   derivedCache.set(sheet, { key: activeKey, result })

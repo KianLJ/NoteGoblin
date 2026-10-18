@@ -17,6 +17,9 @@ import {
   type CompendiumSpell
 } from '@shared/compendium'
 import { knownSpells, sheetSpellFromPack } from '@shared/content/sheet'
+import { spellNumbers, splitDice } from '@shared/content/spellNumbers'
+import { useSheetRoller } from '../../dice/useSheetRoller'
+import { DIE_SIDES, type DieSides } from '@shared/dice'
 import { useTerms } from '../../content/terms'
 import { SRD_PACK_ID } from '@shared/content/srd'
 import { useDerivedSheet } from '../useDerivedSheet'
@@ -100,6 +103,9 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   // (Pact Magic included) is summed into one table, as before. Only levels that actually have slots show up at all.
   const liveSheet = useMemo(() => ({ ...character, ...draft }), [character, draft])
   const { derived, registry } = useDerivedSheet(liveSheet)
+  const { rollDamage } = useSheetRoller(sessionId, character.name)
+  // The slot level each leveled spell is about to be cast at (its own level until changed).
+  const [castAt, setCastAt] = useState<Record<string, number>>({})
   const terms = useTerms()
   const slotTotals: Record<number, number> = {}
   for (const pool of Object.values(derived.spellcasting.slots)) {
@@ -163,7 +169,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
   }
 
   /** Plays (and, at the table, broadcasts) the spell's own cast cue regardless of level — a cantrip has no slot to spend, so it's otherwise a no-op beyond the sound; a leveled spell also spends a slot, same as before. */
-  function castSpell(spell: Spell): void {
+  function castSpell(spell: Spell, slotLevel = spell.level): void {
     const compendium = spell.compendiumId ? getSpellById(spell.compendiumId) : undefined
     // A compendium spell's override key is its shared compendium id (so
     // Fireball sounds the same everywhere it's cast, and matches the same
@@ -172,10 +178,10 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
     // one character's own local spell entry instead.
     playSpellCastSfx(`spell:${spell.compendiumId ?? spell.id}`, spell.compendiumId, compendium?.school ?? spell.school, sessionId)
     if (spell.level === 0) return
-    const used = draft.spellSlots[spell.level]?.used ?? 0
-    const total = slotTotals[spell.level] ?? 0
+    const used = draft.spellSlots[slotLevel]?.used ?? 0
+    const total = slotTotals[slotLevel] ?? 0
     if (used >= total) return
-    setSlotUsed(spell.level, used + 1)
+    setSlotUsed(slotLevel, used + 1)
   }
 
   // The highest spell level the character's classes/level actually reach —
@@ -365,12 +371,22 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
               {spellsAtLevel.map((spell) => {
-                const total = slotTotals[spell.level] ?? 0
-            const used = draft.spellSlots[spell.level]?.used ?? 0
+            // The slot it's cast with: its own level, or a higher one the player picks (upcasting) — only levels with slots.
+            const castLevels = spell.level > 0 ? slotLevels.filter((l) => l >= spell.level && (slotTotals[l] ?? 0) > 0) : []
+            const castLevel = castAt[spell.id] !== undefined && castLevels.includes(castAt[spell.id]) ? castAt[spell.id] : (castLevels[0] ?? spell.level)
+            const total = slotTotals[castLevel] ?? 0
+            const used = draft.spellSlots[castLevel]?.used ?? 0
             // A cantrip has no slot to run out of — always castable (for the
             // sound, if nothing else); a leveled spell needs one left.
             const canCast = spell.level === 0 || used < total
             const compendium = spell.compendiumId ? getSpellById(spell.compendiumId) : undefined
+            // Its save or attack and its dice for this character at this slot level (SRD or pack spell).
+            const def = spell.compendiumId ? registry.get('spells', `${SRD_PACK_ID}:${spell.compendiumId}`)?.def : spell.packSpellId ? registry.get('spells', spell.packSpellId)?.def : undefined
+            const numbers = def ? spellNumbers(derived, def, castLevel) : {}
+            const rollDice = (dice: string, label: string): (() => void) | undefined => {
+              const split = splitDice(dice)
+              return readOnly || !split || !(DIE_SIDES as readonly number[]).includes(split.sides) ? undefined : () => rollDamage([{ sides: split.sides as DieSides, count: split.count }], split.flat, label)
+            }
             return (
               <HoverDetailCard
                 key={spell.id}
@@ -401,16 +417,42 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
                   onEdit={compendium || grantedBy(spell) ? undefined : () => openEditForm(spell)}
                   onRemove={grantedBy(spell) ? undefined : () => patch({ spells: draft.spells.filter((s) => s.id !== spell.id) })}
                 >
-                  {compendium?.attackType && casterAttackBonus !== null && <MiniStat label="Atk" value={formatModifier(casterAttackBonus)} />}
+                  {numbers.attackBonus !== undefined ? (
+                    <MiniStat label="Atk" value={formatModifier(numbers.attackBonus)} />
+                  ) : (
+                    compendium?.attackType && casterAttackBonus !== null && <MiniStat label="Atk" value={formatModifier(casterAttackBonus)} />
+                  )}
+                  {numbers.saveDc !== undefined && <MiniStat label={`${(numbers.saveAbility ?? '').toUpperCase()} DC`} value={String(numbers.saveDc)} />}
+                  {(numbers.damage || numbers.healing) && (
+                    <SpellRoll
+                      text={numbers.damage ? `${numbers.damage}${numbers.damageType ? ` ${numbers.damageType.toLowerCase()}` : ''}` : `Heals ${numbers.healing}`}
+                      onRoll={rollDice(numbers.damage ?? numbers.healing!, `${compendium?.name ?? spell.name} ${numbers.damage ? 'Damage' : 'Healing'}`)}
+                    />
+                  )}
+                  {castLevels.length > 1 && (
+                    <select
+                      className="gb-input"
+                      value={castLevel}
+                      onChange={(e) => setCastAt((prev) => ({ ...prev, [spell.id]: Number(e.target.value) }))}
+                      title="Cast with a higher-level slot"
+                      style={{ fontSize: 11, padding: '2px 4px', width: 'auto' }}
+                    >
+                      {castLevels.map((l) => (
+                        <option key={l} value={l}>
+                          Lvl {l} ({Math.max(0, (slotTotals[l] ?? 0) - (draft.spellSlots[l]?.used ?? 0))} left)
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <span className="gb-badge" style={{ fontSize: 11 }}>
                     {ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium?.castingTime ?? spell.castingTime)]}
                   </span>
                   <Button
                     variant="secondary"
                     disabled={!canCast}
-                    onClick={() => castSpell(spell)}
+                    onClick={() => castSpell(spell, castLevel)}
                     style={{ fontSize: 11, padding: '3px 8px', flexShrink: 0 }}
-                    title={spell.level === 0 ? 'Cast' : canCast ? `Use a level ${spell.level} slot` : 'No slots remaining'}
+                    title={spell.level === 0 ? 'Cast' : canCast ? `Use a level ${castLevel} slot` : 'No slots remaining'}
                   >
                     Cast
                   </Button>
@@ -493,6 +535,19 @@ function Stat({ label, value }: { label: string; value: string }): JSX.Element {
       <div className="gb-label">{label}</div>
       <div style={{ fontSize: 20, fontFamily: 'var(--font-display)' }}>{value}</div>
     </div>
+  )
+}
+
+/** A spell's damage or healing dice; click to roll them. */
+function SpellRoll({ text, onRoll }: { text: string; onRoll?: () => void }): JSX.Element {
+  return onRoll ? (
+    <button type="button" onClick={onRoll} title="Roll it" className="gb-badge" style={{ fontSize: 12, cursor: 'pointer', border: '1px solid var(--accent)', color: 'var(--accent)', background: 'transparent' }}>
+      {text}
+    </button>
+  ) : (
+    <span className="gb-badge" style={{ fontSize: 12 }}>
+      {text}
+    </span>
   )
 }
 

@@ -4,6 +4,7 @@
 import { SPELLS } from '../../compendium'
 import type { ContentPackInput, Effect } from '../schema'
 import { NO_BODY_ARMOR } from './common'
+import { spellRollFields } from './spellRolls'
 
 type SpellInput = NonNullable<ContentPackInput['spells']>[number]
 
@@ -27,7 +28,8 @@ export function srdSpells(): SpellInput[] {
     ritual: s.ritual,
     lists: s.classes.map((c) => c.toLowerCase()),
     ...(s.higherLevel ? { higherLevel: s.higherLevel } : {}),
-    ...(s.attackType ? { attackType: s.attackType } : {}),
+    // Save, spell attack, damage and healing (with upcasting and cantrip scaling), read from the rules text.
+    ...spellRollFields(s),
     ...(SPELL_EFFECTS[s.id] ? { effects: SPELL_EFFECTS[s.id] } : {})
   }))
 }
