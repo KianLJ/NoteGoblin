@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { answersToEntry, entryToAnswers, guidedKindFor, mergeIntoEntry } from '@shared/content/guided'
-import { blankAttack, blankMonster, blankSave, entryToMonster, hpText, monsterToEntry, proficiencyForCr, type MonsterAnswers } from '@shared/content/guidedMonster'
+import { blankAttack, blankMonster, blankSave, diceSpan, entryToMonster, hpText, monsterToEntry, plainDice, proficiencyForCr, type MonsterAnswers } from '@shared/content/guidedMonster'
 
 const drake: MonsterAnswers = {
   ...blankMonster('ember-drake'),
@@ -49,14 +49,14 @@ describe('guided monsters', () => {
       damage_resistances: 'fire',
       cr: '5'
     })
-    expect(e.hp).toBe('85 (10d10 + 30)')
+    expect(e.hp).toBe('85 (`dice: 10d10 + 30`)')
     const actions = e.actions as Array<{ name: string; desc: string }>
-    expect(actions[0].desc).toBe('Melee Weapon Attack: +7 to hit, reach 10 ft., one target. Hit: 11 (2d6 + 4) piercing damage plus 3 (1d6) fire damage.')
+    expect(actions[0].desc).toBe('Melee Weapon Attack: +7 to hit, reach 10 ft., one target. Hit: 11 (`dice: 2d6 + 4`) piercing damage plus 3 (`dice: 1d6`) fire damage.')
     expect(actions[1]).toEqual({
       name: 'Fire Breath (Recharge 5–6)',
-      desc: 'Each creature in a 15-foot cone must make a DC 14 Dexterity saving throw, taking 28 (8d6) fire damage on a failed save, or half as much damage on a successful one.'
+      desc: 'Each creature in a 15-foot cone must make a DC 14 Dexterity saving throw, taking 28 (`dice: 8d6`) fire damage on a failed save, or half as much damage on a successful one.'
     })
-    expect((e.bonus_actions as Array<{ desc: string }>)[0].desc).toBe('Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 8 (1d8 + 4) bludgeoning damage and the target is knocked prone.')
+    expect((e.bonus_actions as Array<{ desc: string }>)[0].desc).toBe('Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 8 (`dice: 1d8 + 4`) bludgeoning damage and the target is knocked prone.')
   })
 
   it('reads its own statblocks back unchanged', () => {
@@ -68,19 +68,28 @@ describe('guided monsters', () => {
     expect(answersToEntry(back)).toEqual(entry)
   })
 
+  // Dice the form understands come back as inline rolls; apart from that, nothing changes.
   it('keeps SRD statblock lines it cannot rebuild, and loses nothing on a round trip', () => {
     const bestiary = JSON.parse(readFileSync('src/renderer/src/data/bestiary.json', 'utf8')) as Array<Record<string, unknown>>
     for (const m of bestiary) {
       const entry = { ...m, id: String(m.index) }
       const merged = mergeIntoEntry(entryToMonster(entry), entry)
       for (const key of ['ac', 'hp', 'speed', 'saves', 'skills', 'senses', 'damage_resistances', 'damage_immunities', 'condition_immunities', 'languages', 'str', 'dex', 'con']) {
-        expect([m.name, key, merged[key] ?? '']).toEqual([m.name, key, m[key] ?? ''])
+        expect([m.name, key, plainDice(String(merged[key] ?? ''))]).toEqual([m.name, key, m[key] ?? ''])
       }
       for (const key of ['traits', 'actions', 'reactions', 'legendary_actions']) {
         const original = (m[key] as Array<{ name: string; desc: string }> | undefined) ?? []
-        expect([m.name, key, merged[key]]).toEqual([m.name, key, original.map((x) => ({ name: x.name, desc: x.desc }))])
+        const back = (merged[key] as Array<{ name: string; desc: string }>).map((x) => ({ name: x.name, desc: plainDice(x.desc) }))
+        expect([m.name, key, back]).toEqual([m.name, key, original.map((x) => ({ name: x.name, desc: x.desc }))])
       }
     }
+  })
+
+  it('writes dice as inline rolls only when the roller understands them', () => {
+    expect(diceSpan('2d6 + 4')).toBe('`dice: 2d6 + 4`')
+    expect(diceSpan('1d7')).toBe('1d7')
+    expect(diceSpan('2d6 + 1d4')).toBe('2d6 + 1d4')
+    expect(plainDice('Hit: 11 (`dice: 2d6 + 4`) piercing')).toBe('Hit: 11 (2d6 + 4) piercing')
   })
 
   it('reads SRD attacks as attacks', () => {

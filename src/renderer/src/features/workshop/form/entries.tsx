@@ -32,6 +32,7 @@ import {
 } from './fields'
 import { FeaturesEditor, LevelTable } from './levels'
 import { renderStatblockHtml, type StatblockData } from '../../../statblock'
+import { rollInlineDice } from '../../dice/inlineDice'
 
 /** The form for one entry of any kind (monsters keep the JSON view — their statblock shape gets effects in phase 8). */
 export function EntryForm({ kind, value, packId, onChange }: { kind: EntryKind; value: Obj; packId: string; onChange: (v: Obj) => void }): JSX.Element {
@@ -640,7 +641,7 @@ function MonsterForm({ value, onChange }: FormProps): JSX.Element {
       </div>
       <div className="gb-card" style={{ padding: 'var(--space-3)', position: 'sticky', top: 0 }}>
         <div className="gb-label">Preview</div>
-        <div dangerouslySetInnerHTML={{ __html: renderStatblockHtml(toStatblock(value), false) }} />
+        <div onClick={(e) => rollInlineDice(e, null)} dangerouslySetInnerHTML={{ __html: renderStatblockHtml(toStatblock(value), false) }} />
       </div>
     </div>
   )

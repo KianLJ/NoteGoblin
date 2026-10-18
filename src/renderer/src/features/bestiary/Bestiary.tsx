@@ -7,6 +7,7 @@ import { XIcon } from '../../ui/icons'
 import { loadNpcs, createNpc, updateNpc, removeNpc, type Npc } from '../../data/npcs'
 import { generateNpcName } from '../../data/npcNames'
 import { renderStatblockHtml } from '../../statblock'
+import { rollInlineDice } from '../dice/inlineDice'
 import { CloseIcon } from '../campaigns/icons'
 import { playSpellCastSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
 import { PLAYING_THE_GAME_TOPICS, type RuleTopic } from '../../data/playingTheGame'
@@ -569,7 +570,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-4)' }}>
               {effectiveCategory === 'Monsters' &&
                 (selectedMonster ? (
-                  <div dangerouslySetInnerHTML={{ __html: renderStatblockHtml(selectedMonster) }} />
+                  <div onClick={(e) => rollInlineDice(e, sessionId)} dangerouslySetInnerHTML={{ __html: renderStatblockHtml(selectedMonster) }} />
                 ) : (
                   <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No monster selected.</div>
                 ))}

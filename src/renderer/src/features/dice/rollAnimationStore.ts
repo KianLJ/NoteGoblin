@@ -40,6 +40,8 @@ export interface PendingDamageRoll {
   sessionId: string | null
   rollerId: string
   rollerName: string
+  /** Called with the total once the die is actually rolled — e.g. temporary hit points set from the roll. */
+  onRolled?: (total: number) => void
 }
 
 export interface RolledAnimation {

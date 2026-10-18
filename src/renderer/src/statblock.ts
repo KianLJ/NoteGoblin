@@ -1,5 +1,5 @@
 import { abilityModifier, formatModifier } from '@shared/dnd5e'
-import { escapeHtml } from './markdown'
+import { escapeHtml, inlineTextHtml } from './markdown'
 
 /**
  * Renders a ```statblock fenced code block (see markdown.ts's `code`
@@ -170,7 +170,7 @@ function abilityCell(score: string | undefined): string {
 
 function metaLine(label: string, value: string | undefined): string {
   if (!value) return ''
-  return `<div class="gb-statblock-line"><strong>${escapeHtml(label)}</strong> ${escapeHtml(value)}</div>`
+  return `<div class="gb-statblock-line"><strong>${escapeHtml(label)}</strong> ${inlineTextHtml(value)}</div>`
 }
 
 function entrySection(title: string, entries: StatblockEntry[] | undefined): string {
@@ -178,7 +178,7 @@ function entrySection(title: string, entries: StatblockEntry[] | undefined): str
   const rows = entries
     .map(
       (e) =>
-        `<div class="gb-statblock-entry"><span class="gb-statblock-entry-name">${escapeHtml(e.name)}.</span> ${escapeHtml(e.desc)}</div>`
+        `<div class="gb-statblock-entry"><span class="gb-statblock-entry-name">${escapeHtml(e.name)}.</span> ${inlineTextHtml(e.desc)}</div>`
     )
     .join('')
   return `<h4 class="gb-statblock-section">${escapeHtml(title)}</h4>${rows}`

@@ -5,6 +5,7 @@ import { CampaignSwitcher } from './CampaignSwitcher'
 import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import { CharacterSheetEditor } from '../player/CharacterSheetEditor'
 import { renderStatblockHtml } from '../../statblock'
+import { rollInlineDice } from '../dice/inlineDice'
 import type { NotesWorkspace } from './useNotesWorkspace'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
@@ -166,7 +167,7 @@ export function CampaignWorkspace({
           </>
         ) : activeMonster ? (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-5)' }}>
-            <div className="gb-markdown" dangerouslySetInnerHTML={{ __html: renderStatblockHtml(activeMonster, false) }} />
+            <div className="gb-markdown" onClick={(e) => rollInlineDice(e, hostedSessionId ?? null)} dangerouslySetInnerHTML={{ __html: renderStatblockHtml(activeMonster, false) }} />
           </div>
         ) : !campaign ? (
           <div

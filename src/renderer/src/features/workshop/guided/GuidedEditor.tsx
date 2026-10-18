@@ -23,6 +23,7 @@ import { Button } from '../../../ui/Button'
 import { ConfirmButton } from '../../../ui/ConfirmButton'
 import { ArrowLeftIcon, IconLabel } from '../../../ui/icons'
 import { renderStatblockHtml, type StatblockData } from '../../../statblock'
+import { rollInlineDice } from '../../dice/inlineDice'
 import { HomebrewDetail } from '../../bestiary/HomebrewDetail'
 import { Field, Grid, NumberInput, Select } from '../form/fields'
 import { GuidedForm, traitIdsFromNames, type GuidedSources } from './GuidedForms'
@@ -262,7 +263,7 @@ export function GuidedEditor({
             </div>
             <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
               {answers.kind === 'monster' && preview.entry && answers.name.trim() ? (
-                <div dangerouslySetInnerHTML={{ __html: renderStatblockHtml(preview.entry as unknown as StatblockData, false) }} />
+                <div onClick={(e) => rollInlineDice(e, null)} dangerouslySetInnerHTML={{ __html: renderStatblockHtml(preview.entry as unknown as StatblockData, false) }} />
               ) : preview.card ? (
                 <HomebrewDetail entry={preview.card} />
               ) : (

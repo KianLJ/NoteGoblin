@@ -82,11 +82,8 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
         // uses (see features/dice/diceLogStore.ts), so it shows up there
         // too. Anything else falls back to marked's own plain <code>.
         codespan({ text }: Tokens.Codespan): string {
-          const dice = parseDiceCodeSpan(text)
-          if (dice) {
-            const payload = escapeHtml(JSON.stringify(dice))
-            return `<button type="button" class="gb-dice-roll" data-dice-roll="${payload}" title="Click to roll">${DICE_ICON_SVG}${escapeHtml(text.replace(/^dice:\s*/i, ''))}</button>`
-          }
+          const diceButton = diceButtonHtml(text)
+          if (diceButton) return diceButton
           // Inline `` `oneshot: <cueId>` `` code spans render as a clickable
           // Sound Board button instead of plain code — same "a note-authored
           // trigger, not literal code" idea as the dice roll above, see
@@ -183,4 +180,30 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
     console.error('Markdown rendering failed:', err)
     return `<pre>${escapeHtml(source)}</pre>`
   }
+}
+
+/** A `dice: 2d6 + 3` code span's text as its clickable roll button (see the `codespan` renderer above), or null when it isn't one. */
+export function diceButtonHtml(text: string): string | null {
+  const dice = parseDiceCodeSpan(text)
+  if (!dice) return null
+  const payload = escapeHtml(JSON.stringify(dice))
+  return `<button type="button" class="gb-dice-roll" data-dice-roll="${payload}" title="Click to roll">${DICE_ICON_SVG}${escapeHtml(text.replace(/^dice:\s*/i, ''))}</button>`
+}
+
+/**
+ * Plain text with `backtick` code spans, for places that aren't full
+ * markdown (a statblock's actions and traits): everything is escaped, a
+ * `dice: 1d10` span becomes a roll button, and any other span plain code.
+ */
+export function inlineTextHtml(text: string): string {
+  return text
+    .split(/(`[^`\n]+`)/)
+    .map((part) => {
+      if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+        const inner = part.slice(1, -1)
+        return diceButtonHtml(inner) ?? `<code>${escapeHtml(inner)}</code>`
+      }
+      return escapeHtml(part)
+    })
+    .join('')
 }

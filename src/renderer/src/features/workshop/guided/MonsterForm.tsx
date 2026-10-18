@@ -12,6 +12,7 @@ import {
   blankSave,
   blockText,
   hpText,
+  plainDice,
   proficiencyForCr,
   type CustomField,
   type MonsterAnswers,
@@ -100,7 +101,7 @@ export function MonsterForm({ a, set }: { a: MonsterAnswers; set: (f: Partial<Mo
           <Field label="Armour (optional)">
             <TextInput value={a.acNote} onChange={(acNote) => set({ acNote })} placeholder="natural armor" />
           </Field>
-          <Field label="Hit dice" hint={`= ${hpText(a)} hit points`}>
+          <Field label="Hit dice" hint={`= ${plainDice(hpText(a))} hit points`}>
             <NumberInput value={a.hitDice} min={1} max={60} onChange={(v) => set({ hitDice: v ?? 1 })} />
           </Field>
         </Grid>

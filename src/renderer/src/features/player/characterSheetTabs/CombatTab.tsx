@@ -40,7 +40,7 @@ import { CustomWeaponForm } from '../CustomWeaponForm'
 import { Button } from '../../../ui/Button'
 import { useSheetRoller } from '../../dice/useSheetRoller'
 import { RollButton } from '../../dice/RollButton'
-import { DIE_SIDES, type AdvantageMode, type DieSides } from '@shared/dice'
+import { DIE_SIDES, diceGroups, type AdvantageMode, type DieSides } from '@shared/dice'
 
 interface CombatDraft {
   attacks: Attack[]
@@ -202,11 +202,25 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
     const numbers = action.spend ? (action.scaling?.find((x) => x.spent === spent) ?? action) : action
     if (numbers.restores?.length) state = applyRestores(numbers.restores, derived.resources, state).state
     commitResources(state)
-    if (numbers.tempHp) {
-      const gained = rollAmount(numbers.tempHp)
-      if (gained > character.tempHp) onSave({ tempHp: gained })
-    }
     playAbilitySfx(action.name, sessionId)
+    // Its dice go to the dice roller, the same as an attack's: the attack roll, then damage, healing and temp HP.
+    if (numbers.attackBonus !== undefined) rollCheck(`${action.name} Attack`, numbers.attackBonus, { advantage: attackAdvantage ?? 'normal' })
+    if (numbers.damage) rollExpression(numbers.damage, `${action.name} Damage`)
+    if (numbers.healing) rollExpression(numbers.healing, `${action.name} Healing`)
+    if (numbers.tempHp) {
+      const apply = (gained: number): void => {
+        if (gained > character.tempHp) onSave({ tempHp: gained })
+      }
+      if (!rollExpression(numbers.tempHp, `${action.name} Temp HP`, apply)) apply(rollAmount(numbers.tempHp))
+    }
+  }
+
+  /** Queues a dice expression ("2d6 + 3") on the dice roller; false when it isn't one the roller can take (a flat number, an odd die). */
+  function rollExpression(expr: string, label: string, onRolled?: (total: number) => void): boolean {
+    const parsed = diceGroups(expr)
+    if (!parsed) return false
+    rollDamage(parsed.groups, parsed.modifier, label, onRolled)
+    return true
   }
 
   function saveCompanion(companion: DerivedCompanion, fields: { state?: string; currentHp?: number }): void {
@@ -853,7 +867,7 @@ function ResourceActionCard({
     action.duration ?? null,
     ...restoreText
   ].filter((x): x is string => !!x)
-  const usable = !!action.cost || !!action.spend || !!n.restores?.length || !!n.tempHp
+  const usable = !!action.cost || !!action.spend || !!n.restores?.length || !!n.tempHp || !!n.damage || !!n.healing || n.attackBonus !== undefined
   const affordable = (remaining === null || remaining >= cost) && (!action.spend || spendRemaining === null || spendRemaining >= spent + (action.cost?.resourceId === action.spend.resourceId ? cost : 0))
   const left = action.spend ? spendRemaining : remaining
   return (

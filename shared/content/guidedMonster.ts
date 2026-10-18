@@ -6,6 +6,7 @@
 // speed line, "piercing from nonmagical attacks") is kept as written.
 
 import type { AbilityId } from './schema'
+import { parseDiceCodeSpan } from '../dice'
 
 type Ability = AbilityId
 const ABILITIES: Ability[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
@@ -173,22 +174,37 @@ export function blankSave(): MonsterSave {
 
 // --- Numbers ---------------------------------------------------------------
 
-/** "22 (4d8 + 4)". */
+/**
+ * A dice expression as an inline roll — `` `dice: 1d8 + 3` ``, which a
+ * statblock shows as a button that rolls it (see renderer statblock.ts) —
+ * when it's one the roller understands (one kind of standard die, plus a
+ * flat bonus); anything else stays plain text.
+ */
+export function diceSpan(dice: string): string {
+  return parseDiceCodeSpan(`dice: ${dice}`) ? `\`dice: ${dice}\`` : dice
+}
+
+/** The text with its inline rolls back to plain dice: "7 (`dice: 1d8 + 3`)" → "7 (1d8 + 3)". */
+export function plainDice(text: string): string {
+  return text.replace(/`dice:\s*([^`]+)`/g, '$1')
+}
+
+/** "22 (`dice: 4d8 + 4`)" — the dice roll when clicked in the statblock; plainDice() for showing it as text. */
 export function hpText(a: Pick<MonsterAnswers, 'hitDice' | 'size' | 'scores'>): string {
   const die = HIT_DIE[a.size] ?? 8
   const n = Math.max(1, a.hitDice)
   const bonus = n * mod(a.scores.con)
   const avg = Math.max(1, Math.floor((n * (die + 1)) / 2) + bonus)
-  return `${avg} (${n}d${die}${bonus ? ` ${bonus > 0 ? '+' : '-'} ${Math.abs(bonus)}` : ''})`
+  return `${avg} (${diceSpan(`${n}d${die}${bonus ? ` ${bonus > 0 ? '+' : '-'} ${Math.abs(bonus)}` : ''}`)})`
 }
 
-/** Average of a dice expression plus a flat bonus, as the statblock shows it: "7 (1d8 + 3)". */
+/** Average of a dice expression plus a flat bonus, as the statblock shows it: "7 (`dice: 1d8 + 3`)", the dice an inline roll. */
 export function averageText(dice: string, bonus: number): string {
   const m = /^\s*(\d+)d(\d+)\s*$/.exec(dice)
   if (!m) return bonus ? `${dice} ${bonus > 0 ? '+' : '-'} ${Math.abs(bonus)}` : dice
   const [count, sides] = [Number(m[1]), Number(m[2])]
   const avg = Math.max(1, Math.floor((count * (sides + 1)) / 2) + bonus)
-  return `${avg} (${count}d${sides}${bonus ? ` ${bonus > 0 ? '+' : '-'} ${Math.abs(bonus)}` : ''})`
+  return `${avg} (${diceSpan(`${count}d${sides}${bonus ? ` ${bonus > 0 ? '+' : '-'} ${Math.abs(bonus)}` : ''}`)})`
 }
 
 export function attackBonus(a: MonsterAnswers, atk: MonsterAttack): number {
@@ -295,7 +311,7 @@ export function entryToMonster(entry: Record<string, unknown>): MonsterAnswers {
     a.ac = Number(acm[1])
     a.acNote = acm[2] ?? ''
   }
-  const hpm = /^\d+ \((\d+)d\d+/.exec(str(entry.hp))
+  const hpm = /^\d+ \((\d+)d\d+/.exec(plainDice(str(entry.hp)))
   if (hpm) a.hitDice = Number(hpm[1])
   // Speeds.
   a.senses = { blindsight: 0, darkvision: 0, tremorsense: 0, truesight: 0 }
@@ -354,7 +370,7 @@ export function entryToMonster(entry: Record<string, unknown>): MonsterAnswers {
     condition_immunities: str(entry.condition_immunities)
   }
   for (const k of Object.keys(original) as CustomField[]) {
-    if (original[k] === rebuilt[k]) continue
+    if (plainDice(original[k]) === plainDice(rebuilt[k])) continue
     // An empty initiative line on an older statblock is simply worked out from Dex.
     if (k === 'initiative' && !original[k]) continue
     a.custom[k] = original[k]
@@ -366,7 +382,8 @@ function readBlock(a: MonsterAnswers, rawName: string, desc: string): MonsterBlo
   const nm = /^(.*?) \(((?:Recharge|\d+\/Day|Costs|Recharges).*)\)$/.exec(rawName)
   const name = nm ? nm[1] : rawName
   const usage = nm ? nm[2] : ''
-  const atk = ATTACK_RE.exec(desc)
+  // Statblocks from before inline rolls (and the SRD's) have plain dice — read and compare without them.
+  const atk = ATTACK_RE.exec(plainDice(desc))
   if (atk) {
     const ranged = atk[1] === 'Ranged'
     const roll: MonsterAttack = {
@@ -385,15 +402,15 @@ function readBlock(a: MonsterAnswers, rawName: string, desc: string): MonsterBlo
     // Which ability makes the numbers come out as written (Str, else Dex, else keep the text).
     for (const ability of ['str', 'dex', ...ABILITIES] as Ability[]) {
       const block = { name, usage, desc: '', roll: { ...roll, ability } }
-      if (blockText(a, block) === desc) return block
+      if (plainDice(blockText(a, block)) === plainDice(desc)) return block
     }
   }
-  const sv = SAVE_RE.exec(desc)
+  const sv = SAVE_RE.exec(plainDice(desc))
   if (sv) {
     const ability = (Object.keys(SAVE_NAME) as Ability[]).find((k) => SAVE_NAME[k] === sv[2])!
     for (const dcAbility of ['con', ...ABILITIES] as Ability[]) {
       const block: MonsterBlock = { name, usage, desc: '', roll: { kind: 'save', ability, dcAbility, targets: sv[1].charAt(0).toLowerCase() + sv[1].slice(1), dice: sv[3], damageType: sv[4], half: sv[5] === 'half as much damage', rider: sv[6].trim() } }
-      if (blockText(a, block) === desc) return block
+      if (plainDice(blockText(a, block)) === plainDice(desc)) return block
     }
   }
   return { name, usage, desc, roll: null }
@@ -402,5 +419,5 @@ function readBlock(a: MonsterAnswers, rawName: string, desc: string): MonsterBlo
 /** Plain lines for the preview: the numbers the form worked out. */
 export function describeMonster(a: MonsterAnswers): string[] {
   const prof = proficiencyForCr(a.cr)
-  return [`Proficiency bonus ${signed(prof)} (from challenge ${a.cr})`, `Hit points ${hpText(a)} from ${a.hitDice} ${a.size} hit dice (d${HIT_DIE[a.size] ?? 8}) and its Constitution`]
+  return [`Proficiency bonus ${signed(prof)} (from challenge ${a.cr})`, `Hit points ${plainDice(hpText(a))} from ${a.hitDice} ${a.size} hit dice (d${HIT_DIE[a.size] ?? 8}) and its Constitution`]
 }

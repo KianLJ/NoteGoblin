@@ -156,6 +156,35 @@ export function buildRollEntry(rollerId: string, rollerName: string, groups: Dic
 }
 
 /**
+ * A dice expression ("2d6 + 1d4 + 3", "1d8 - 1") as dice-roller groups plus
+ * a flat modifier — null when any part isn't a standard die or a number
+ * (a negative die, a d7, a leftover formula), so the caller can fall back.
+ */
+export function diceGroups(expr: string): { groups: DiceGroup[]; modifier: number } | null {
+  const terms = expr.replace(/\s+/g, '').match(/[+-]?[^+-]+/g)
+  if (!terms) return null
+  const bySides = new Map<DieSides, number>()
+  let modifier = 0
+  for (const term of terms) {
+    const negative = term.startsWith('-')
+    const body = term.replace(/^[+-]/, '')
+    const die = /^(\d*)d(\d+)$/i.exec(body)
+    if (die) {
+      const count = Number(die[1] || 1)
+      const sides = Number(die[2])
+      if (negative || count < 1 || count > 100 || !(DIE_SIDES as readonly number[]).includes(sides)) return null
+      bySides.set(sides as DieSides, (bySides.get(sides as DieSides) ?? 0) + count)
+    } else if (/^\d+$/.test(body)) {
+      modifier += (negative ? -1 : 1) * Number(body)
+    } else {
+      return null
+    }
+  }
+  if (bySides.size === 0) return null
+  return { groups: [...bySides.entries()].sort((a, b) => b[0] - a[0]).map(([sides, count]) => ({ sides, count })), modifier }
+}
+
+/**
  * Recognizes the inline `dice: 2d6 + 3` code-span syntax (see markdown.ts's
  * `codespan` renderer override and MarkdownLiveEditor.tsx's matching Write-
  * mode widget) — a single die type plus an optional flat modifier, written

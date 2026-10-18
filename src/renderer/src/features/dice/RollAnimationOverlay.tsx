@@ -832,6 +832,7 @@ export function RollAnimationOverlay(): JSX.Element | null {
     } else if (current.kind === 'pending-damage') {
       pendingSessionIdRef.current = current.sessionId
       const entry = performRoll(current.sessionId, current.rollerId, current.rollerName, current.groups, current.modifier, false, true)
+      if (entry.total !== null) current.onRolled?.(entry.total)
       resolvePendingRoll({ ...entry, label: current.label })
     }
   }

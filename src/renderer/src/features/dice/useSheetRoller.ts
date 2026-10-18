@@ -24,7 +24,7 @@ export function useSheetRoller(
   myId: string
   myName: string
   rollCheck: (label: string, modifier: number, options?: { advantage?: AdvantageMode; dc?: number | null }) => void
-  rollDamage: (groups: DiceGroup[], modifier: number, label?: string) => void
+  rollDamage: (groups: DiceGroup[], modifier: number, label?: string, onRolled?: (total: number) => void) => void
 } {
   const [myId, setMyId] = useState('me')
   const [myName, setMyName] = useState('You')
@@ -52,8 +52,8 @@ export function useSheetRoller(
     })
   }
 
-  function rollDamage(groups: DiceGroup[], modifier: number, label = 'Damage'): void {
-    queuePendingDamage({ label, groups, modifier, sessionId, rollerId: myId, rollerName })
+  function rollDamage(groups: DiceGroup[], modifier: number, label = 'Damage', onRolled?: (total: number) => void): void {
+    queuePendingDamage({ label, groups, modifier, sessionId, rollerId: myId, rollerName, onRolled })
   }
 
   return { myId, myName, rollCheck, rollDamage }
