@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.7',
+    title: 'Spells you can roll',
+    highlights: [
+      'Spells on the Spells tab now show their save DC (with the ability) or attack bonus, and their damage or healing — click the dice to roll them',
+      'Upcasting: a spell with higher-level slots available gets a level picker next to Cast, which spends that slot and shows the bigger dice (Fireball at 5th level is 10d6)',
+      'Cantrips grow at levels 5, 11 and 17 on the Combat tab (Fire Bolt is 2d10 at level 5), and healing spells add your spellcasting modifier'
+    ]
+  },
+  {
     version: '0.6.6',
     title: 'More of the SRD on your sheet',
     highlights: [
