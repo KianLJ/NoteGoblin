@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.10',
+    title: 'Dice you can click, and a calendar you can jump around',
+    highlights: [
+      'Calendar: click the month and year above the grid to go straight to any era, year, month and day — Show just looks at it, Make it today moves the campaign there',
+      'A new calendar starts in its most recent era instead of year 1',
+      'Statblocks roll: write `dice: 1d10` in a monster’s actions or traits (or its hit points) and it becomes a button that rolls in the dice roller — in notes, the Bestiary, the encounter panel and the Workshop',
+      'Monsters made with the Workshop’s monster form get rollable hit points and damage automatically',
+      'Using an action or an item’s ability now rolls its dice: its attack, then its damage, healing or temporary hit points (set from the actual roll). Actions with damage or healing but no uses get a Use button too'
+    ]
+  },
+  {
     version: '0.6.9',
     title: 'A new character sheet',
     highlights: [
