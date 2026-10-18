@@ -7,6 +7,19 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.9',
+    title: 'A new character sheet',
+    highlights: [
+      'The character sheet has a new layout: who you are, hit points, AC, initiative, speed and resources down the left; your six abilities with their saves across the top; skills, passive scores and resistances on the right; and everything else in tabs — Actions, Spells, Features, Inventory, Class and Story',
+      'Level up straight from your character card — pick the class if you have more than one, and the button lights up once you have the XP for it. Class levels use − and + buttons instead of a tiny number field',
+      'The Class tab is a proper table for every class, homebrew included: features by level (hover one to read it), the class’s own columns and spell slots, with your current level highlighted. Big homebrew tables scroll sideways with the level column kept in view',
+      'Spells shows your save DC and spell attack (click to roll) next to your slots, and spell cards are smaller, grouped by level',
+      'Features tells you how many choices you still have to make and jumps to the first one',
+      'Resources are pips you click to spend, right on the sheet; inventory shows how much you’re carrying as a bar beside your coins',
+      'Hover a skill to see where its bonus comes from and its passive score, or an ability to see which improvements and feats raised it. Hover cards only catch the mouse wheel when their text is too long to fit'
+    ]
+  },
+  {
     version: '0.6.8',
     title: 'Homebrew catches up',
     highlights: [
