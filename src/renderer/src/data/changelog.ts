@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.6',
+    title: 'Elves, in full',
+    highlights: [
+      'Keen Senses now asks you to pick Insight, Perception or Survival — in the character creator and on the sheet — and gives you proficiency in it',
+      'Fey Ancestry shows as a reminder on your sheet: Advantage on saving throws to avoid or end the Charmed condition',
+      'High Elves can swap Prestidigitation for any other Wizard cantrip from its card on the Features tab (as you can after a Long Rest); it starts as Prestidigitation',
+      'A Drow’s darkvision is 120 ft. and a Wood Elf’s speed is 35 ft. on the sheet, and every species with Darkvision now shows its range (120 ft. for Dwarves and Orcs)',
+      'The character creator shows a species’ other choices (like Keen Senses) right on the species step'
+    ]
+  },
+  {
     version: '0.6.5',
     title: 'Magic Initiate by spell list, and homebrew choice fixes',
     highlights: [
