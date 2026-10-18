@@ -58,7 +58,9 @@ const LIST_IDS = {
   metamagic: 'metamagic',
   invocations: 'eldritch-invocations',
   favoredEnemies: 'favored-enemies',
-  favoredTerrains: 'favored-terrains'
+  favoredTerrains: 'favored-terrains',
+  divineOrder: 'divine-order',
+  primalOrder: 'primal-order'
 } as const
 export const SRD_LIST_IDS = LIST_IDS
 
@@ -72,6 +74,22 @@ function invocationPrerequisite(level: number, prereqInvocation?: string): Condi
   return parts.length === 1 ? parts[0] : { kind: 'all', of: parts }
 }
 
+const prof = (category: 'weapon' | 'armor', value: string): Effect => ({ do: { kind: 'proficiency', category, value } })
+const extraCantrip: Effect = { do: { kind: 'modify', target: 'spells.cantripsLimit', op: 'add', value: '1' } }
+const skillBonus = (skills: string[], value: string): Effect[] => skills.map((s) => ({ do: { kind: 'modify', target: `skill.${s}`, op: 'add', value } }))
+const advantage = (target: string): Effect => ({ do: { kind: 'rollMode', target, mode: 'advantage' } })
+const attacks = (n: number): Effect => ({ do: { kind: 'modify', target: 'attacks.perAction', op: 'set', value: String(n) } })
+const saveProfs = (abilities: Ability[]): Effect[] => abilities.map((a) => ({ do: { kind: 'proficiency', category: 'save', value: a } }))
+const NOT_HEAVY: Condition = { kind: 'not', of: { kind: 'equipped', filter: { armorCategories: ['heavy'] } } }
+const RAGING: Condition = { kind: 'toggle', toggleId: 'barbarian-rage' }
+/** Always-prepared spells by class level, from a subclass's spell table. */
+const spellsAt = (classId: string, rows: Array<[number, string[]]>): Effect[] =>
+  rows.flatMap(([level, ids]) => {
+    const known = ids.filter((id) => getSpellById(id))
+    return known.length ? [{ when: { kind: 'classLevel', classId, min: level } as Condition, do: { kind: 'grantSpells', spellIds: known, alwaysPrepared: true, free: true } } as Effect] : []
+  })
+const SKILL_IDS = ['acrobatics', 'animal-handling', 'arcana', 'athletics', 'deception', 'history', 'insight', 'intimidation', 'investigation', 'medicine', 'nature', 'perception', 'performance', 'persuasion', 'religion', 'sleight-of-hand', 'stealth', 'survival']
+
 export function srdClassOptionLists(): OptionListInput[] {
   return [
     { id: LIST_IDS.metamagic, name: 'Metamagic', options: namedOptions(METAMAGIC_OPTIONS) },
@@ -83,6 +101,32 @@ export function srdClassOptionLists(): OptionListInput[] {
         const spellPrereq = o.prereqSpell ? ` Prerequisite: the ${getSpellById(o.prereqSpell)?.name ?? o.prereqSpell} cantrip.` : ''
         return { id: slug(o.name), name: o.name, description: o.description + spellPrereq, ...(prerequisite ? { prerequisite } : {}) }
       })
+    },
+    {
+      id: LIST_IDS.divineOrder,
+      name: 'Divine Order',
+      options: [
+        { id: 'protector', name: 'Protector', description: 'Trained for battle, you gain proficiency with Martial weapons and training with Heavy armor.', effects: [prof('weapon', 'martial'), prof('armor', 'heavy')] },
+        {
+          id: 'thaumaturge',
+          name: 'Thaumaturge',
+          description: 'You know one extra Cleric cantrip, and add your Wisdom modifier (minimum +1) to Intelligence (Arcana or Religion) checks.',
+          effects: [extraCantrip, ...skillBonus(['arcana', 'religion'], 'max(1, @wis.mod)')]
+        }
+      ]
+    },
+    {
+      id: LIST_IDS.primalOrder,
+      name: 'Primal Order',
+      options: [
+        {
+          id: 'magician',
+          name: 'Magician',
+          description: 'You know one extra Druid cantrip, and add your Wisdom modifier (minimum +1) to Intelligence (Arcana or Nature) checks.',
+          effects: [extraCantrip, ...skillBonus(['arcana', 'nature'], 'max(1, @wis.mod)')]
+        },
+        { id: 'warden', name: 'Warden', description: 'Trained for battle, you gain proficiency with Martial weapons and training with Medium armor.', effects: [prof('weapon', 'martial'), prof('armor', 'medium')] }
+      ]
     },
     // 2014 Ranger picks the 5.2.1 Ranger no longer has — kept so characters who made them still show them.
     { id: LIST_IDS.favoredEnemies, name: 'Favored Enemy', description: 'SRD 2014 Ranger favored enemies.', options: namedOptions(FAVORED_ENEMY_OPTIONS) },
@@ -187,6 +231,7 @@ function resourceEffects(classId: string, def: ClassResourceDef): Effect[] {
 // ---------------------------------------------------------------------------
 // Feature effects by class and feature name
 
+const optionChoice = (label: string, listId: string): Effect => ({ do: { kind: 'grantChoice', choice: { id: CLASS_CHOICE_IDS.option, label, from: { kind: 'optionList', listId } } } })
 const feats = (label: string, categories?: string[]): Effect => ({
   do: { kind: 'grantChoice', choice: { id: CLASS_CHOICE_IDS.feat, label, from: { kind: 'feats', ...(categories ? { categories } : {}) } } }
 })
@@ -209,6 +254,10 @@ const COMMON_FEATURES: Record<string, (classId: string) => Effect[]> = {
 const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
   barbarian: {
     'Unarmored Defense': [{ when: NO_BODY_ARMOR, do: { kind: 'acFormula', label: 'Unarmored Defense', formula: '10 + @dex.mod + @con.mod' } }],
+    'Danger Sense': [advantage('save:dex')],
+    'Extra Attack': [attacks(2)],
+    'Fast Movement': [{ when: NOT_HEAVY, do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '10' } }],
+    'Feral Instinct': [advantage('initiative')],
     // compendium.ts's effectiveAbilityScores: +4 after the usual cap (and any Epic Boon), to a maximum of 24.
     'Primal Champion': (['str', 'con'] as Ability[]).flatMap((a): Effect[] => [
       { do: { kind: 'modify', target: `ability.${a}.score`, op: 'add', value: '4', uncapped: true } },
@@ -216,17 +265,56 @@ const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
     ])
   },
   bard: {
+    // Half proficiency (rounded down) on every check without it — skills and initiative.
+    'Jack of All Trades': [
+      ...SKILL_IDS.map((s): Effect => ({ do: { kind: 'modify', target: `skill.${s}.proficiency`, op: 'atLeast', value: '0.5' } })),
+      { do: { kind: 'modify', target: 'initiative', op: 'add', value: 'floor(@prof / 2)' } }
+    ],
     'Magical Secrets': [spellChoice('Magical Secrets', 2, { kind: 'spells', minLevel: 1, maxLevel: 'min(9, ceil(@classLevel / 2))' })],
     'Words of Creation': grantSpells('power-word-heal', 'power-word-kill')
   },
-  druid: { Druidic: grantSpells('speak-with-animals') },
+  cleric: { 'Divine Order': [optionChoice('Divine Order', LIST_IDS.divineOrder)] },
+  druid: { Druidic: grantSpells('speak-with-animals'), 'Primal Order': [optionChoice('Primal Order', LIST_IDS.primalOrder)] },
+  fighter: { 'Extra Attack': [attacks(2)], 'Two Extra Attacks': [attacks(3)], 'Three Extra Attacks': [attacks(4)] },
   monk: {
     // Neither applies with any armour or a shield (compendium.ts's computeArmorClassFromEquipment / classFeatureSpeedBonus).
     'Unarmored Defense': [{ when: NO_ARMOR_OR_SHIELD, do: { kind: 'acFormula', label: 'Unarmored Defense', formula: '10 + @dex.mod + @wis.mod' } }],
-    'Unarmored Movement': [{ when: NO_ARMOR_OR_SHIELD, do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '@table.unarmoredMovement' } }]
+    'Unarmored Movement': [{ when: NO_ARMOR_OR_SHIELD, do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '@table.unarmoredMovement' } }],
+    // Unarmed Strikes use the Martial Arts die and Strength or Dexterity; Monk weapons (Simple melee, Martial with Light) can use Dexterity.
+    'Martial Arts': [
+      {
+        when: NO_ARMOR_OR_SHIELD,
+        do: { kind: 'grantAttack', attack: { id: 'martial-arts', name: 'Unarmed Strike', range: 'melee', abilities: ['str', 'dex'], damage: '1d@table.martialArts', damageType: 'Bludgeoning', replaces: 'unarmed-strike' } }
+      },
+      { when: NO_ARMOR_OR_SHIELD, do: { kind: 'attackAbility', ability: 'dex', appliesTo: { kinds: ['weapon'], range: 'melee', item: { weaponCategories: ['simple'] } } } },
+      { when: NO_ARMOR_OR_SHIELD, do: { kind: 'attackAbility', ability: 'dex', appliesTo: { kinds: ['weapon'], item: { weaponCategories: ['martial'], properties: ['light'] } } } }
+    ],
+    'Extra Attack': [attacks(2)],
+    'Disciplined Survivor': saveProfs(['str', 'dex', 'con', 'int', 'wis', 'cha']),
+    'Body and Mind': (['dex', 'wis'] as Ability[]).flatMap((a): Effect[] => [
+      { do: { kind: 'modify', target: `ability.${a}.score`, op: 'add', value: '4', uncapped: true } },
+      { do: { kind: 'modify', target: `ability.${a}.score`, op: 'atMost', value: '25' } }
+    ])
   },
-  paladin: { "Paladin's Smite": grantSpells('divine-smite'), 'Faithful Steed': grantSpells('find-steed') },
-  ranger: { 'Favored Enemy': grantSpells('hunters-mark') },
+  paladin: {
+    "Paladin's Smite": grantSpells('divine-smite'),
+    'Faithful Steed': grantSpells('find-steed'),
+    'Extra Attack': [attacks(2)],
+    // You (and allies within 10 ft.) add your Charisma modifier, minimum +1, to saving throws.
+    'Aura of Protection': (['str', 'dex', 'con', 'int', 'wis', 'cha'] as Ability[]).map((a): Effect => ({ do: { kind: 'modify', target: `save.${a}`, op: 'add', value: 'max(1, @cha.mod)' } })),
+    'Aura of Courage': [{ do: { kind: 'conditionImmunity', conditionId: 'frightened' } }]
+  },
+  ranger: {
+    'Favored Enemy': grantSpells('hunters-mark'),
+    'Extra Attack': [attacks(2)],
+    Roving: [
+      { when: NOT_HEAVY, do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '10' } },
+      { do: { kind: 'modify', target: 'speed.climb', op: 'set', value: '@speed.walk' } },
+      { do: { kind: 'modify', target: 'speed.swim', op: 'set', value: '@speed.walk' } }
+    ],
+    'Feral Senses': [{ do: { kind: 'modify', target: 'sense.blindsight', op: 'set', value: '30' } }]
+  },
+  rogue: { 'Slippery Mind': saveProfs(['wis', 'cha']) },
   sorcerer: {
     Metamagic: [{ do: { kind: 'grantChoice', choice: { id: CLASS_CHOICE_IDS.options, label: 'Metamagic', count: '2', from: { kind: 'optionList', listId: LIST_IDS.metamagic } } } }]
   },
@@ -267,6 +355,7 @@ function columns(cls: Class): ColumnInput[] {
     add('rages', 'Rages', byLevel((l) => rage.max(l, () => 0)))
     add('rageDamage', 'Rage Damage', byLevel((l) => (l >= 16 ? 4 : l >= 9 ? 3 : 2)))
   }
+  if (cls.id === 'monk') add('martialArts', 'Martial Arts', byLevel((l) => (l >= 17 ? 12 : l >= 11 ? 10 : l >= 5 ? 8 : 6)))
   if (cls.id === 'monk') add('unarmoredMovement', 'Unarmored Movement', byLevel((l) => (l >= 18 ? 30 : l >= 14 ? 25 : l >= 10 ? 20 : l >= 6 ? 15 : l >= 2 ? 10 : 0)))
   if (cls.id === 'rogue') add('sneakAttack', 'Sneak Attack (d6)', byLevel((l) => Math.min(10, Math.ceil(l / 2))))
   if (cls.id === 'warlock') add('invocations', 'Eldritch Invocations', byLevel(eldritchInvocationSlotCountAtLevel))
@@ -354,8 +443,59 @@ function subclassOptionEffects(classId: string, baseName: string, label: string)
 
 /** Effects on single subclass features that dnd5e.ts/compendium.ts apply in code. */
 const SUBCLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
-  // dnd5e.ts's subclassFightingStyleSlotLevelsUpToLevel.
-  champion: { 'Additional Fighting Style': [feats('Additional Fighting Style', ['Fighting Style'])] }
+  berserker: { 'Mindless Rage': ['charmed', 'frightened'].map((conditionId): Effect => ({ when: RAGING, do: { kind: 'conditionImmunity', conditionId } })) },
+  lore: {
+    'Bonus Proficiencies': [
+      { do: { kind: 'grantChoice', choice: { id: 'skills', label: 'Bonus Proficiencies', count: '3', from: { kind: 'skills' }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick' } }] } } }
+    ]
+  },
+  life: {
+    'Life Domain Spells': spellsAt('cleric', [
+      [3, ['aid', 'bless', 'cure-wounds', 'lesser-restoration']],
+      [5, ['mass-healing-word', 'revivify']],
+      [7, ['aura-of-life', 'death-ward']],
+      [9, ['greater-restoration', 'mass-cure-wounds']]
+    ])
+  },
+  champion: {
+    // dnd5e.ts's subclassFightingStyleSlotLevelsUpToLevel.
+    'Additional Fighting Style': [feats('Additional Fighting Style', ['Fighting Style'])],
+    'Improved Critical': [{ do: { kind: 'modify', target: 'crit.threshold', op: 'atMost', value: '19' } }],
+    'Superior Critical': [{ do: { kind: 'modify', target: 'crit.threshold', op: 'atMost', value: '18' } }],
+    'Remarkable Athlete': [advantage('initiative'), advantage('skill:athletics')]
+  },
+  devotion: {
+    'Oath of Devotion Spells': spellsAt('paladin', [
+      [3, ['protection-from-evil-and-good', 'shield-of-faith']],
+      [5, ['aid', 'zone-of-truth']],
+      [9, ['beacon-of-hope', 'dispel-magic']],
+      [13, ['freedom-of-movement', 'guardian-of-faith']],
+      [17, ['commune', 'flame-strike']]
+    ]),
+    'Aura of Devotion': [{ do: { kind: 'conditionImmunity', conditionId: 'charmed' } }]
+  },
+  thief: { 'Second-Story Work': [{ do: { kind: 'modify', target: 'speed.climb', op: 'set', value: '@speed.walk' } }] },
+  draconic: {
+    // +3 at Sorcerer level 3 and +1 per level after: the Sorcerer level. Base AC 10 + Dex + Cha while unarmored.
+    'Draconic Resilience': [
+      { do: { kind: 'modify', target: 'hp.max', op: 'add', value: '@classLevel' } },
+      { when: NO_BODY_ARMOR, do: { kind: 'acFormula', label: 'Draconic Resilience', formula: '10 + @dex.mod + @cha.mod' } }
+    ],
+    'Draconic Spells': spellsAt('sorcerer', [
+      [3, ['alter-self', 'chromatic-orb', 'command', 'dragons-breath']],
+      [5, ['fear', 'fly']],
+      [7, ['arcane-eye', 'charm-monster']],
+      [9, ['legend-lore', 'summon-dragon']]
+    ])
+  },
+  fiend: {
+    'Fiend Spells': spellsAt('warlock', [
+      [3, ['burning-hands', 'command', 'scorching-ray', 'suggestion']],
+      [5, ['fireball', 'stinking-cloud']],
+      [7, ['fire-shield', 'wall-of-fire']],
+      [9, ['geas', 'insect-plague']]
+    ])
+  }
 }
 
 export function srdSubclasses(): { subclasses: SubclassInput[]; optionLists: OptionListInput[] } {

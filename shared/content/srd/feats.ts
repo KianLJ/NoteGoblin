@@ -18,7 +18,15 @@ const AUTOMATED_FEAT_NOTES: Record<string, { replacesNotes: number[]; effects: E
   defense: { replacesNotes: [0], effects: [{ when: BODY_ARMOR, do: { kind: 'modify', target: 'ac', op: 'add', value: '1' } }] },
   archery: { replacesNotes: [0], effects: [{ do: { kind: 'modify', target: 'attack.bonus', op: 'add', value: '2', appliesTo: { kinds: ['weapon'], range: 'ranged' } } }] },
   // Initiative Proficiency; the Initiative Swap note stays.
-  alert: { replacesNotes: [0], effects: [{ do: { kind: 'modify', target: 'initiative', op: 'add', value: '@prof' } }] }
+  alert: { replacesNotes: [0], effects: [{ do: { kind: 'modify', target: 'initiative', op: 'add', value: '@prof' } }] },
+  // "Any combination of three skills or tools": three skill picks; a tool goes under Other Proficiencies instead.
+  skilled: {
+    replacesNotes: [0],
+    effects: [
+      { do: { kind: 'grantChoice', choice: { id: 'skills', label: 'Skilled', count: '3', from: { kind: 'skills' }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick' } }] } } },
+      { do: { kind: 'note', text: 'Taking a tool instead of a skill? Leave a pick empty and add the tool under Other Proficiencies.' } }
+    ]
+  }
 }
 
 /** The ASI feat's own pick: +2 to one score or +1 to two (legacy kind: 'ability' slots). */

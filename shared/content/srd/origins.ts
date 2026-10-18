@@ -2,7 +2,7 @@
 // RACES, RACE_TRAIT_DESCRIPTIONS, RACE_LINEAGES and BACKGROUNDS.
 
 import { BACKGROUNDS, RACES, RACE_LINEAGES, RACE_TRAIT_DESCRIPTIONS, type LineageOption } from '../../dnd5e'
-import type { ContentPackInput, Effect } from '../schema'
+import type { Condition, ContentPackInput, Effect } from '../schema'
 import { skillId, slug } from './common'
 
 type SpeciesInput = NonNullable<ContentPackInput['species']>[number]
@@ -33,7 +33,10 @@ export const SWAPPABLE_LINEAGE_CANTRIP: Record<string, { list: string; label: st
 /** What a lineage does besides its spells (Drow's longer darkvision, a Wood Elf's speed). */
 const LINEAGE_EXTRAS: Record<string, Effect[]> = {
   Drow: [{ do: { kind: 'modify', target: 'sense.darkvision', op: 'set', value: '120' } }],
-  'Wood Elf': [{ do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '5' } }]
+  'Wood Elf': [{ do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '5' } }],
+  Abyssal: [{ do: { kind: 'damageRelation', damageType: 'poison', relation: 'resistance' } }],
+  Chthonic: [{ do: { kind: 'damageRelation', damageType: 'necrotic', relation: 'resistance' } }],
+  Infernal: [{ do: { kind: 'damageRelation', damageType: 'fire', relation: 'resistance' } }]
 }
 
 function lineageEffects(option: LineageOption): Effect[] {
@@ -48,12 +51,62 @@ function lineageEffects(option: LineageOption): Effect[] {
 }
 
 export function srdLineageLists(): OptionListInput[] {
-  return Object.entries(RACE_LINEAGES).map(([raceId, options]) => ({
-    id: lineageListId(raceId),
-    name: LINEAGE_TRAIT[raceId] ?? 'Lineage',
-    options: options.map((o) => ({ id: slug(o.name), name: o.name, description: o.description, effects: lineageEffects(o) }))
-  }))
+  return [
+    ...Object.entries(RACE_LINEAGES).map(([raceId, options]) => ({
+      id: lineageListId(raceId),
+      name: LINEAGE_TRAIT[raceId] ?? 'Lineage',
+      options: options.map((o) => ({ id: slug(o.name), name: o.name, description: o.description, effects: lineageEffects(o) }))
+    })),
+    {
+      id: DRACONIC_ANCESTRY_LIST,
+      name: 'Draconic Ancestry',
+      options: DRAGONS.map(([dragon, damageType]) => ({
+        id: slug(dragon),
+        name: `${dragon} Dragon`,
+        description: `${damageType} damage: your Breath Weapon deals it, and you have Resistance to it.`,
+        effects: [
+          { do: { kind: 'damageRelation', damageType: damageType.toLowerCase(), relation: 'resistance' } },
+          {
+            do: {
+              kind: 'grantAction',
+              action: {
+                id: 'breath-weapon',
+                name: 'Breath Weapon',
+                description: 'Replace one attack of the Attack action: a 15-foot Cone or 30-foot Line (5 feet wide). Dexterity save; half damage on a success.',
+                actionType: 'action',
+                cost: { resourceId: 'breath-weapon', amount: '1' },
+                saveDc: '8 + @con.mod + @prof',
+                saveAbility: 'dex',
+                damage: '(1 + (@level >= 5) + (@level >= 11) + (@level >= 17))d10',
+                damageType
+              }
+            }
+          }
+        ]
+      }))
+    }
+  ]
 }
+
+const DRACONIC_ANCESTRY_LIST = 'draconic-ancestries'
+/** Each dragon and its damage type (SRD 5.2.1 Draconic Ancestors table). */
+const DRAGONS: Array<[string, string]> = [
+  ['Black', 'Acid'],
+  ['Blue', 'Lightning'],
+  ['Brass', 'Fire'],
+  ['Bronze', 'Lightning'],
+  ['Copper', 'Acid'],
+  ['Gold', 'Fire'],
+  ['Green', 'Poison'],
+  ['Red', 'Fire'],
+  ['Silver', 'Cold'],
+  ['White', 'Cold']
+]
+
+const uses = (id: string, name: string, max: string, recharge: 'short' | 'long'): Effect => ({ do: { kind: 'grantResource', resource: { id, name, max, recharge } } })
+const advantage = (target: string): Effect => ({ do: { kind: 'rollMode', target, mode: 'advantage' } })
+const reminder = (text: string): Effect => ({ do: { kind: 'note', text } })
+const AT_LEVEL_5: Condition = { kind: 'level', min: 5 }
 
 function traitEffects(raceId: string, trait: string): Effect[] {
   if (LINEAGE_TRAIT[raceId] === trait) {
@@ -76,8 +129,30 @@ function traitEffects(raceId: string, trait: string): Effect[] {
     ]
   }
   if (trait === 'Fey Ancestry') return [{ do: { kind: 'note', text: 'Advantage on saving throws to avoid or end the Charmed condition.' } }]
-  // Every other trait is rules text only today (Dwarven Toughness, Draconic Ancestry…).
-  return []
+  return SPECIES_TRAITS[trait] ?? []
+}
+
+/** Species traits that do something on the sheet (the rest are rules text). */
+const SPECIES_TRAITS: Record<string, Effect[]> = {
+  Resourceful: [reminder('You gain Heroic Inspiration whenever you finish a Long Rest.')],
+  'Dwarven Resilience': [{ do: { kind: 'damageRelation', damageType: 'poison', relation: 'resistance' } }, reminder('Advantage on saving throws to avoid or end the Poisoned condition.')],
+  'Dwarven Toughness': [{ do: { kind: 'modify', target: 'hp.max', op: 'add', value: '@level' } }],
+  Stonecunning: [uses('stonecunning', 'Stonecunning', '@prof', 'long')],
+  Brave: [reminder('Advantage on saving throws to avoid or end the Frightened condition.')],
+  Luck: [reminder('When you roll a 1 on the d20 of a D20 Test, you can reroll it and must use the new roll.')],
+  'Draconic Ancestry': [{ do: { kind: 'grantChoice', choice: { id: 'ancestry', label: 'Draconic Ancestry', from: { kind: 'optionList', listId: DRACONIC_ANCESTRY_LIST } } } }],
+  'Breath Weapon': [uses('breath-weapon', 'Breath Weapon', '@prof', 'long')],
+  'Draconic Flight': [{ when: AT_LEVEL_5, ...uses('draconic-flight', 'Draconic Flight', '1', 'long') }],
+  'Gnomish Cunning': [advantage('save:int'), advantage('save:wis'), advantage('save:cha')],
+  // One size larger for carrying capacity: double it.
+  'Powerful Build': [{ do: { kind: 'modify', target: 'carry.capacity', op: 'multiply', value: '2' } }],
+  'Large Form': [{ when: AT_LEVEL_5, ...uses('large-form', 'Large Form', '1', 'long') }],
+  'Adrenaline Rush': [
+    uses('adrenaline-rush', 'Adrenaline Rush', '@prof', 'short'),
+    { do: { kind: 'grantAction', action: { id: 'adrenaline-rush', name: 'Adrenaline Rush', description: 'Take the Dash action, gaining Temporary Hit Points equal to your Proficiency Bonus.', actionType: 'bonus', cost: { resourceId: 'adrenaline-rush', amount: '1' }, tempHp: '@prof' } } }
+  ],
+  'Relentless Endurance': [uses('relentless-endurance', 'Relentless Endurance', '1', 'long')],
+  'Otherworldly Presence': [{ do: { kind: 'grantSpells', spellIds: ['thaumaturgy'], alwaysPrepared: true, free: true } }]
 }
 
 export function srdSpecies(): SpeciesInput[] {

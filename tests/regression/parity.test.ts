@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CLASSES } from '@shared/dnd5e'
 import { classSheet, regressionFixtures } from './fixtures'
-import { legacyDerive } from './legacyDerive'
 import { engineDerive } from './project'
-
-const SPECIES_TRAIT_NOTES = ['Fey Ancestry']
 
 // Phase 2 parity: every baseline fixture run through the legacy adapter, the
 // SRD pack and deriveCharacter, projected back to the legacy shape. The
@@ -20,21 +17,21 @@ describe('SRD pack parity', () => {
   }
 })
 
-// A denser sweep against the live legacy calculations: every class at every
-// level, with its kit and ASIs but no feats (feat automation is where the
-// engine deliberately differs — see the snapshot above). Legacy-compatible
-// adapter options throughout.
-describe('SRD pack matches legacy at every class level', () => {
+// A denser sweep: every class at every level, with its kit and ASIs but no
+// feats. It matched the legacy sheet exactly until the engine started
+// automating rules the legacy sheet left as text (Extra Attack, Aura of
+// Protection, Jack of All Trades…), so it's a snapshot now — a rules change
+// shows up as a diff to review, like the fixtures above.
+describe('SRD pack at every class level', () => {
   for (const cls of CLASSES) {
     it(cls.id, () => {
+      const levels: Record<number, unknown> = {}
       for (let level = 1; level <= 20; level++) {
         const base = classSheet(cls.id, level, level)
         const sheet = { ...base, asiSlotChoices: base.asiSlotChoices.filter((s) => s.kind === 'ability') }
-        const projected = engineDerive(sheet, { assumeWeaponProficiency: true }).projected
-        // Species-trait reminders (Fey Ancestry) are engine-only — the legacy sheet never had them.
-        const engine = { ...projected, notes: projected.notes.filter((n: string) => !SPECIES_TRAIT_NOTES.some((t) => n.startsWith(`${t}: `))) }
-        expect(engine, `${cls.id} ${level}`).toEqual(legacyDerive(sheet))
+        levels[level] = engineDerive(sheet, { assumeWeaponProficiency: true }).projected
       }
+      expect(levels).toMatchSnapshot()
     })
   }
 })

@@ -8,8 +8,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: '0.6.6',
-    title: 'Elves, in full',
+    title: 'More of the SRD on your sheet',
     highlights: [
+      'Class features now change your numbers: Extra Attack, Barbarian Danger Sense, Fast Movement and Feral Instinct, Bard Jack of All Trades, Monk Martial Arts (your Martial Arts die and Dexterity for unarmed strikes and Monk weapons), Disciplined Survivor and Body and Mind, Paladin Aura of Protection and Aura of Courage, Ranger Roving and Feral Senses, and Rogue Slippery Mind',
+      'Clerics choose a Divine Order (Protector or Thaumaturge) and Druids a Primal Order (Magician or Warden) on the Features tab',
+      'Subclasses: Champion crits on 19 (then 18) with Remarkable Athlete, Draconic Resilience’s HP and AC, Lore’s three bonus skills, Mindless Rage, Aura of Devotion, Second-Story Work, and the Life, Devotion, Draconic and Fiend spell lists, always prepared at the right levels',
+      'Species: Dwarven Toughness and Resilience, Gnomish Cunning, Goliath Powerful Build, a Tiefling’s Thaumaturgy and legacy resistance, Dragonborn ancestry (resistance and a Breath Weapon that scales), uses for Breath Weapon, Stonecunning, Adrenaline Rush, Relentless Endurance, Large Form and Draconic Flight, and reminders for Brave, Luck and Resourceful',
+      'The Skilled feat asks for its three skills',
       'Keen Senses now asks you to pick Insight, Perception or Survival — in the character creator and on the sheet — and gives you proficiency in it',
       'Fey Ancestry shows as a reminder on your sheet: Advantage on saving throws to avoid or end the Charmed condition',
       'High Elves can swap Prestidigitation for any other Wizard cantrip from its card on the Features tab (as you can after a Long Rest); it starts as Prestidigitation',
