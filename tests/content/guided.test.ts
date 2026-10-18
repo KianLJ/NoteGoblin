@@ -161,7 +161,7 @@ describe('guided answers', () => {
     expect(d.initiativeMode).toBe('advantage')
     expect(d.maxHp).toBe(without.maxHp + 5)
     expect(d.abilities.str.score).toBe(19)
-    expect(d.resources.find((r) => r.name === 'Charges')?.max).toBe(3)
+    expect(d.resources.find((r) => r.name === 'Cloak of Embers charges')?.max).toBe(3)
     expect(d.spellcasting.granted.map((s) => s.name)).toContain('Misty Step')
     // Not attuned: nothing applies.
     const loose = deriveCharacter(fighter({ equipment: [{ itemId: 'guided:cloak-of-embers', equipped: true }] }), [srdPack(), pack])
@@ -204,7 +204,7 @@ describe('guided answers', () => {
     expect(lines).toContain('Resistant to cold, fire damage')
     expect(lines).toContain('Flying speed: 0 ft. → 30 ft.')
     expect(lines).toContain('Can cast Misty Step')
-    expect(lines).toContain('Charges: 3')
+    expect(lines).toContain('Cloak of Embers charges: 3')
     expect(lines).toContain('Glows faintly.')
   })
 

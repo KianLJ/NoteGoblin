@@ -115,6 +115,8 @@ export interface DerivedAttack {
   extraDamage: { damage: string; damageType?: string; source: string }[]
   mode?: RollMode
   actionType: string
+  /** The weapon item's (or granted attack's) own description, for the sheet's hover card. */
+  description?: string
 }
 
 export interface DerivedResource {
@@ -697,13 +699,25 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     }
   })
 
+  const chargeIds = new Set<string>()
   for (const item of items) {
     entryIds.add(item.reg.fullId)
     const def = item.reg.def
     const active = def.effectsWhen === 'carried' || (def.effectsWhen === 'equipped' && item.equipped) || (def.effectsWhen === 'attuned' && item.attuned && item.equipped)
     const source: Source = { key: `item:${item.key}`, name: def.name, packId: item.reg.packId }
-    if (def.charges) effects.push({ action: { kind: 'grantResource', resource: { ...def.charges, id: def.charges.id || `${item.key}-charges` } }, gates: [], source })
-    if (active) collectEffects(def.effects, source, [])
+    if (!active) continue
+    // Charges show (and can be spent) only while the item is in use, like its effects. Two charged
+    // items (or two of the same wand) each get their own count, even when their charges share an id.
+    if (def.charges) {
+      const base = def.charges.id || `${item.key}-charges`
+      const id = chargeIds.has(base) ? `${base}-${item.key}` : base
+      chargeIds.add(id)
+      const name = def.charges.name === 'Charges' ? `${def.name} charges` : def.charges.name
+      // Without a description of their own, the charges' hover card shows the item's.
+      const description = def.charges.description || def.description || undefined
+      effects.push({ action: { kind: 'grantResource', resource: { ...def.charges, id, name, ...(description ? { description } : {}) } }, gates: [], source })
+    }
+    collectEffects(def.effects, source, [])
   }
 
   for (const [conditionId, level] of conditionLevels) {
@@ -1437,6 +1451,7 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
     proficient: boolean
     actionType: string
     source: Source
+    description?: string
   }
 
   function attackMatches(seed: AttackSeed, filter: AttackFilter | undefined, ability: AbilityId | null): boolean {
@@ -1487,7 +1502,8 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       addAbilityToDamage: true,
       proficient: weaponProficient(item.reg.def, item.reg.fullId),
       actionType: 'action',
-      source: { key: `item:${item.key}`, name: item.reg.def.name, packId: item.reg.packId }
+      source: { key: `item:${item.key}`, name: item.reg.def.name, packId: item.reg.packId },
+      ...(item.reg.def.description ? { description: item.reg.def.description } : {})
     })
   }
   for (const e of activeEffects('grantAttack')) {
@@ -1503,7 +1519,8 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       addAbilityToDamage: a.addAbilityToDamage ?? true,
       proficient: a.proficient ?? true,
       actionType: a.actionType ?? 'action',
-      source: e.source
+      source: e.source,
+      ...(a.description ? { description: a.description } : {})
     }
     const replaced = a.replaces ? seeds.findIndex((s) => s.id === a.replaces) : -1
     if (a.replaces && replaced === -1) warn(`${a.name} replaces "${a.replaces}", which this character doesn't have.`, e.source.key)
@@ -1555,7 +1572,8 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
       damageType: seed.damageType,
       extraDamage: extraDamage.filter((x) => x.damageType).map((x) => ({ damage: formatDice(x.value), damageType: x.damageType, source: x.source })),
       ...(mode ? { mode } : {}),
-      actionType: seed.actionType
+      actionType: seed.actionType,
+      ...(seed.description ? { description: seed.description } : {})
     }
   })
 

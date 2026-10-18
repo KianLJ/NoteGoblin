@@ -467,7 +467,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
                   title={attack.name}
                   subtitle={attack.kind === 'weapon' ? 'Equipped weapon' : 'Granted attack'}
                   fields={weapon ? weaponFields(weapon) : []}
-                  description={weapon?.description ?? ''}
+                  description={weapon?.description ?? attack.description ?? ''}
                 >
                   <EntryCard
                     name={<EntryCardTitle value={attack.name} />}

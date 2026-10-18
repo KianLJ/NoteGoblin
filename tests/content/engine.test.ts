@@ -268,6 +268,54 @@ describe('core 5e rules as pack data', () => {
     expect(derive({ equipment: [{ itemId: 'wand-of-sparks' }] }).resources).toEqual([expect.objectContaining({ id: 'wand-of-sparks-charges', max: 7, recharge: 'dawn' })])
   })
 
+  it('shows item charges only while the item is in use, each item with its own count', () => {
+    const gear = parsePack(
+      {
+        formatVersion: 1,
+        id: 'gear',
+        name: 'Gear',
+        dependsOn: ['core'],
+        items: [
+          { id: 'storm-rod', name: 'Storm Rod', description: 'Crackles with lightning.', category: 'Gear', charges: { id: 'charges', name: 'Charges', max: '3', recharge: 'dawn' } },
+          { id: 'frost-rod', name: 'Frost Rod', category: 'Gear', charges: { id: 'charges', name: 'Charges', max: '5', recharge: 'dawn' } }
+        ]
+      },
+      [core]
+    )
+    const packs = [core, gear]
+    expect(derive({ equipment: [{ itemId: 'gear:storm-rod' }] }, packs).resources).toEqual([])
+    const both = derive(
+      {
+        equipment: [
+          { key: 'a', itemId: 'gear:storm-rod', equipped: true },
+          { key: 'b', itemId: 'gear:frost-rod', equipped: true }
+        ]
+      },
+      packs
+    ).resources
+    expect(both.map((r) => [r.id, r.name, r.max])).toEqual([
+      ['charges', 'Storm Rod charges', 3],
+      ['charges-b', 'Frost Rod charges', 5]
+    ])
+    // Their hover card shows the item's description.
+    expect(both[0].description).toBe('Crackles with lightning.')
+  })
+
+  it('gives a pack weapon attack its item description', () => {
+    const arms = parsePack(
+      {
+        formatVersion: 1,
+        id: 'arms',
+        name: 'Arms',
+        dependsOn: ['core'],
+        items: [{ id: 'ember-blade', name: 'Ember Blade', description: 'Warm to the touch.', category: 'Weapon', weapon: { category: 'martial', range: 'melee', damage: '1d8', damageType: 'Slashing' } }]
+      },
+      [core]
+    )
+    const d = derive({ equipment: [{ itemId: 'arms:ember-blade', equipped: true }] }, [core, arms])
+    expect(d.attacks.find((a) => a.name === 'Ember Blade')?.description).toBe('Warm to the touch.')
+  })
+
   it('accepts per-sheet custom effects', () => {
     const d = derive({ customEffects: [{ name: 'Blessing of the Goblin King', effects: [{ do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '10' } }] }] })
     expect(d.speeds.walk).toBe(40)
