@@ -83,9 +83,12 @@ export function CharacterSheetEditor({ character, onSave, readOnly, sessionId = 
           <IdentityCard s={s} name={readOnly ? character.name : nameDraft} onName={(name) => setNameDraft(() => name)} />
           <HitPointsCard s={s} />
           <VitalsRow s={s} />
+          <div className="gs-span">
+            <PackTraitsSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} part="reminders" />
+          </div>
           <ResourcesCard s={s} />
           <div className="gs-span">
-            <PackTraitsSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} />
+            <PackTraitsSection character={character} derived={derived} onSave={onSave} readOnly={readOnly} part="rest" />
           </div>
         </aside>
 

@@ -25,12 +25,15 @@ export function PackTraitsSection({
   character,
   derived,
   onSave,
-  readOnly
+  readOnly,
+  part = 'all'
 }: {
   character: CharacterSheet
   derived: DerivedCharacter
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
+  /** Just the reminders card, everything but it, or both — so the sheet can put reminders somewhere of their own. */
+  part?: 'all' | 'reminders' | 'rest'
 }): JSX.Element | null {
   const { registry } = useActivePackRegistry()
   const terms = useTerms()
@@ -53,7 +56,9 @@ export function PackTraitsSection({
   // Rules text the sheet can't calculate (a feat's "once per turn, reroll…") — listed by name, the text on hover.
   const notes = derived.notes
 
-  if (!derived.abilityAliases.length && !derived.counters.length && !numbers.length && !derived.damageReductions.length && !packConditions.length && !notes.length) return null
+  const rest = part !== 'reminders'
+  const reminders = part !== 'rest' && notes.length > 0
+  if (!reminders && !(rest && (derived.abilityAliases.length || derived.counters.length || numbers.length || derived.damageReductions.length || packConditions.length))) return null
 
   function setConditions(next: { id: string; level?: number }[]): void {
     if (!readOnly) onSave({ activeConditions: next })
@@ -67,7 +72,7 @@ export function PackTraitsSection({
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 'var(--space-3)', alignItems: 'start' }}>
-      {derived.abilityAliases.map((a) => (
+      {rest && derived.abilityAliases.map((a) => (
         <Card key={a.id} title={a.name} description={a.description} hint={a.chosen ? undefined : 'Not picked yet'}>
           <div role="radiogroup" aria-label={a.name} style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(a.options.length, 3)}, 1fr)`, gap: 6 }}>
             {a.options.map((o) => {
@@ -101,7 +106,7 @@ export function PackTraitsSection({
         </Card>
       ))}
 
-      {derived.counters.map((c) => (
+      {rest && derived.counters.map((c) => (
         <Card key={c.id} title={c.name} description={c.description}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)' }}>
             <Button variant="secondary" style={stepStyle} disabled={readOnly || c.value <= c.min} onClick={() => setCounter(c.id, c.value - 1, c.min, c.max)} title={`Lower ${c.name}`}>
@@ -124,7 +129,7 @@ export function PackTraitsSection({
         </Card>
       ))}
 
-      {numbers.length > 0 && (
+      {rest && numbers.length > 0 && (
         <Card title="Stats & Senses">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 6 }}>
             {numbers.map((n) => (
@@ -137,7 +142,7 @@ export function PackTraitsSection({
         </Card>
       )}
 
-      {packConditions.length > 0 && (
+      {rest && packConditions.length > 0 && (
         <Card title="Conditions">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', fontSize: 12 }}>
             {active.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>None</span>}
@@ -185,7 +190,7 @@ export function PackTraitsSection({
         </Card>
       )}
 
-      {notes.length > 0 && (
+      {reminders && (
         <Card title="Reminders" hint="Hover for the rule">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {notes.map((n, i) => (
@@ -199,7 +204,7 @@ export function PackTraitsSection({
         </Card>
       )}
 
-      {derived.damageReductions.length > 0 && (
+      {rest && derived.damageReductions.length > 0 && (
         <Card title="Damage Reduction">
           {derived.damageReductions.map((r, i) => (
             <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
