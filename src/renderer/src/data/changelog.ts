@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.11',
+    title: 'Homebrew fixes: crits, repeated features and +2/+1',
+    highlights: [
+      'A lowered critical range now counts when you roll: with Improved Critical or a homebrew feature that crits on 19–20, a 19 on a weapon attack is a critical hit. The Attacks heading shows your range',
+      'Workshop: lowering the critical range needs “At most” (At most 19 crits on 19–20) — it now warns if you pick “At least”, which can’t lower it',
+      'A homebrew class that repeats a feature at several levels (an Ability Score Increase or Feat at 4, 8, 12…) now gets a separate pick at each level, offered when you level up, instead of the first pick counting twice',
+      'Background ability increases stop at +2 on one ability, as the rules say, and a background that offers three abilities shows them as simple − / + boxes',
+      'Reminders now sit above Resources on the character sheet'
+    ]
+  },
+  {
     version: '0.6.10',
     title: 'Dice you can click, and a calendar you can jump around',
     highlights: [
