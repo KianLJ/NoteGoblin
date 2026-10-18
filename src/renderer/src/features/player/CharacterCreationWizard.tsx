@@ -94,6 +94,8 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
   // Picks for the chosen class's own level-1 choices (a Fighting Style, a homebrew Bloodline…), keyed like
   // sheet.choices. Applied through choicePatch at creation, so SRD ones are mirrored into the legacy fields too.
   const [classChoices, setClassChoices] = useState<Record<string, string[]>>({})
+  // Picks for the species' own choices the step below doesn't ask about itself (an Elf's Keen Senses, a High Elf's cantrip).
+  const [speciesChoices, setSpeciesChoices] = useState<Record<string, string[]>>({})
   const [backgroundId, setBackgroundId] = useState<string | null>(null)
   // The background's ability score bonus (SRD 5.2.1): either +1 to all
   // three of its listed abilities, or +2 to one and +1 to another —
@@ -153,14 +155,33 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
   // The character as built so far, just enough to ask the content engine which choices the chosen class grants
   // at 1st level — so any class (SRD or homebrew) gets its own picks here, rendered generically.
   const previewSheet = useMemo<CharacterSheetData>(
-    () => ({ ...emptyCharacterSheet(), race: race?.name ?? '', background: background?.name ?? '', classes: cls ? [{ className: cls.name, level: 1 }] : [], choices: classChoices }),
-    [race, background, cls, classChoices]
+    () => ({
+      ...emptyCharacterSheet(),
+      race: race?.name ?? '',
+      background: background?.name ?? '',
+      classes: cls ? [{ className: cls.name, level: 1 }] : [],
+      raceLineageChoice: race && lineage ? { raceId: race.id, lineageName: lineage.name, spellcastingAbility: lineageAbility } : null,
+      choices: { ...speciesChoices, ...classChoices }
+    }),
+    [race, background, cls, lineage, lineageAbility, speciesChoices, classChoices]
   )
   const preview = deriveSheet(previewSheet)
   const previewClassId = normalizeForActivePacks(previewSheet).classes[0]?.classId
   const classLevelChoices = preview.derived.choices.filter((c) => !!previewClassId && c.classId === previewClassId)
   const needsPick = (c: DerivedChoice): boolean => c.remaining > 0 || preview.derived.choices.some((n) => n.parentKey === c.key && needsPick(n))
   const classChoicesDone = classLevelChoices.filter((c) => !c.parentKey).every((c) => !needsPick(c))
+
+  // The species' choices beyond the ones this step asks about itself (Human's Skillful/Versatile, the lineage and its
+  // ability): shown as cards, a nested one (a lineage's cantrip) on its own since its parent pick is made above.
+  const speciesExtraChoices = preview.derived.choices
+    .filter((c) => c.key.startsWith('species:') && !/#(lineage|spell-ability)$/.test(c.key) && !(race?.id === 'human' && /#(feat|skill)$/.test(c.key)))
+    .filter((c) => !c.parentKey || !c.parentKey.startsWith('species:') || /#lineage$/.test(c.parentKey))
+    .map((c) => (c.parentKey && /#lineage$/.test(c.parentKey) ? { ...c, parentKey: undefined } : c))
+  const speciesChoicesDone = speciesExtraChoices.filter((c) => !c.parentKey).every((c) => !needsPick(c))
+
+  function setSpeciesChoice(choice: DerivedChoice, picks: string[]): void {
+    setSpeciesChoices(choicePatch(previewSheet, preview.derived, choice, picks).choices ?? {})
+  }
 
   function setClassChoice(choice: DerivedChoice, picks: string[]): void {
     // choicePatch's native part already drops picks nested under anything removed.
@@ -215,7 +236,8 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
       return (
         raceId !== null &&
         (race?.id !== 'human' || (humanSkill !== null && humanFeatChoice !== null)) &&
-        (lineageOptions.length === 0 || lineageName !== null)
+        (lineageOptions.length === 0 || lineageName !== null) &&
+        speciesChoicesDone
       )
     }
     if (step === 2) return classId !== null && chosenSkills.length === cls?.skillChoice.choose && classChoicesDone
@@ -317,10 +339,8 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
     // FeaturesTab.tsx's LineageSpellGrant once the character actually
     // reaches those levels (there's nothing to grant them into yet at
     // creation, since every character starts at level 1).
-    const lineageCantripIds = lineage
-      ? [lineage.cantripId, lineage.secondCantripId, lineage.alwaysPreparedSpellId].filter((id): id is string => !!id)
-      : []
-    const grantedSpells = [...featSpellIds, ...lineageCantripIds]
+    // A lineage's cantrips aren't stored: the sheet grants them from the lineage pick (so a High Elf's swap shows correctly).
+    const grantedSpells = [...featSpellIds]
       .map((id) => SPELLS.find((s) => s.id === id))
       .filter((s): s is CompendiumSpell => !!s)
       .map((s) => ({ id: crypto.randomUUID(), name: s.name, level: s.level, description: '', actionType: 'action' as const, compendiumId: s.id, free: true }))
@@ -358,10 +378,11 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
     // The class's level-1 picks, through the same path as the Features tab — parents first, since a nested
     // choice (a feat's own picks) only exists once its parent pick does.
     let built: CharacterSheetData = sheet
-    for (const key of Object.keys(classChoices).sort((a, b) => a.length - b.length)) {
+    const picked = { ...speciesChoices, ...classChoices }
+    for (const key of Object.keys(picked).sort((a, b) => a.length - b.length)) {
       const { derived } = deriveSheet(built)
       const choice = derived.choices.find((c) => c.key === key)
-      if (choice) built = { ...built, ...choicePatch(built, derived, choice, classChoices[key]) }
+      if (choice) built = { ...built, ...choicePatch(built, derived, choice, picked[key]) }
     }
 
     // Start at full HP, as the finished sheet's own Overview tab will compute it.
@@ -476,6 +497,7 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                       setHumanSkill(null)
                       setHumanFeatChoice(null)
                       setLineageName(null)
+                      setSpeciesChoices({})
                     }}
                   >
                     <strong>{r.name}</strong>
@@ -545,9 +567,15 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                   )}
                   {lineage?.level3SpellId && (
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
-                      You'll be prompted to add its level 3 and 5 spells once your character reaches those levels.
+                      Its level 3 and 5 spells are added automatically once your character reaches those levels.
                     </p>
                   )}
+                </Section>
+              )}
+
+              {race && speciesExtraChoices.length > 0 && (
+                <Section title={`${race.name} — your choices`}>
+                  <ChoiceList choices={speciesExtraChoices} all={preview.derived.choices} onSetPicks={setSpeciesChoice} />
                 </Section>
               )}
             </div>

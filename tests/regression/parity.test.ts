@@ -4,6 +4,8 @@ import { classSheet, regressionFixtures } from './fixtures'
 import { legacyDerive } from './legacyDerive'
 import { engineDerive } from './project'
 
+const SPECIES_TRAIT_NOTES = ['Fey Ancestry']
+
 // Phase 2 parity: every baseline fixture run through the legacy adapter, the
 // SRD pack and deriveCharacter, projected back to the legacy shape. The
 // snapshot file started as a copy of baseline.test.ts.snap (same entries,
@@ -28,7 +30,10 @@ describe('SRD pack matches legacy at every class level', () => {
       for (let level = 1; level <= 20; level++) {
         const base = classSheet(cls.id, level, level)
         const sheet = { ...base, asiSlotChoices: base.asiSlotChoices.filter((s) => s.kind === 'ability') }
-        expect(engineDerive(sheet, { assumeWeaponProficiency: true }).projected, `${cls.id} ${level}`).toEqual(legacyDerive(sheet))
+        const projected = engineDerive(sheet, { assumeWeaponProficiency: true }).projected
+        // Species-trait reminders (Fey Ancestry) are engine-only — the legacy sheet never had them.
+        const engine = { ...projected, notes: projected.notes.filter((n: string) => !SPECIES_TRAIT_NOTES.some((t) => n.startsWith(`${t}: `))) }
+        expect(engine, `${cls.id} ${level}`).toEqual(legacyDerive(sheet))
       }
     })
   }

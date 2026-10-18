@@ -13,6 +13,7 @@
 import {
   activeAsiSlotChoices,
   activeSubclassFeatureChoices,
+  RACE_LINEAGES,
   type Ability,
   type AsiSlotChoice,
   type CharacterSheetData,
@@ -22,11 +23,11 @@ import { choiceKeys, type CharacterBuild, type ProficiencyLevel } from './engine
 import { registryForPacks } from './migrate'
 import type { Registered, Registry } from './registry'
 import type { BackgroundDef, ChoiceDef, ClassDef, ContentPack, Effect, FeatDef, OptionSource, SpeciesDef } from './schema'
-import { srdPack } from './srd'
+import { SRD_PACK_ID, srdPack } from './srd'
 import { SRD_LIST_IDS } from './srd/classes'
 import { skillId, slug } from './srd/common'
 import { FEAT_CHOICE_IDS } from './srd/feats'
-import { LINEAGE_CHOICE_IDS } from './srd/origins'
+import { LINEAGE_CHOICE_IDS, SWAPPABLE_LINEAGE_CANTRIP } from './srd/origins'
 import { migrateMagicInitiate } from './magicInitiate'
 import { parsePack } from './validate'
 
@@ -305,8 +306,12 @@ export function legacySheetToBuild(input: CharacterSheetData, options: LegacyBui
       const list = registry.get('optionLists', lineageChoice.from.listId)
       const option = list?.def.options.find((o) => lower(o.name) === lower(lineage.lineageName))
       if (!option) continue
-      adapter.pick(choiceKeys.choice(site.sourceKey, lineageChoice.id), option.id)
+      const lineageKey = choiceKeys.choice(site.sourceKey, lineageChoice.id)
+      adapter.pick(lineageKey, option.id)
       adapter.pick(choiceKeys.choice(site.sourceKey, LINEAGE_CHOICE_IDS.spellAbility), lineage.spellcastingAbility)
+      // A swappable cantrip (High Elf) starts as the lineage's usual one; a pick on the sheet replaces it.
+      const usual = SWAPPABLE_LINEAGE_CANTRIP[option.name] ? RACE_LINEAGES[species.def.id]?.find((l) => l.name === option.name)?.cantripId : undefined
+      if (usual) adapter.pick(choiceKeys.choice(choiceKeys.pick(lineageKey, option.id), LINEAGE_CHOICE_IDS.cantrip), `${SRD_PACK_ID}:${usual}`)
     }
   }
 

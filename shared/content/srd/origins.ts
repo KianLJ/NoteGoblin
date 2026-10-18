@@ -11,17 +11,36 @@ type OptionListInput = NonNullable<ContentPackInput['optionLists']>[number]
 
 const SMALL = new Set(['halfling', 'gnome'])
 
+/** Darkvision range by species, where it isn't the usual 60 ft. */
+const DARKVISION: Record<string, number> = { dwarf: 120, orc: 120 }
+
 /** The trait that carries each species' lineage pick. */
 const LINEAGE_TRAIT: Record<string, string> = { elf: 'Elven Lineage', gnome: 'Gnomish Lineage', tiefling: 'Fiendish Legacy' }
 
 export const lineageListId = (raceId: string): string => `${raceId}-lineages`
 
 /** Choice ids on a lineage trait — the legacy adapter fills them from RaceLineageChoice. */
-export const LINEAGE_CHOICE_IDS = { lineage: 'lineage', spellAbility: 'spell-ability' } as const
+export const LINEAGE_CHOICE_IDS = { lineage: 'lineage', spellAbility: 'spell-ability', cantrip: 'cantrip' } as const
+
+/**
+ * Lineages whose cantrip the player can swap for another from a spell list
+ * (High Elf: "replace it with a different cantrip from the Wizard spell
+ * list" on a Long Rest) — a pick, with the usual cantrip as the default the
+ * legacy adapter fills in.
+ */
+export const SWAPPABLE_LINEAGE_CANTRIP: Record<string, { list: string; label: string }> = { 'High Elf': { list: 'wizard', label: 'High Elf cantrip' } }
+
+/** What a lineage does besides its spells (Drow's longer darkvision, a Wood Elf's speed). */
+const LINEAGE_EXTRAS: Record<string, Effect[]> = {
+  Drow: [{ do: { kind: 'modify', target: 'sense.darkvision', op: 'set', value: '120' } }],
+  'Wood Elf': [{ do: { kind: 'modify', target: 'speed.walk', op: 'add', value: '5' } }]
+}
 
 function lineageEffects(option: LineageOption): Effect[] {
-  const now = [option.cantripId, option.secondCantripId, option.alwaysPreparedSpellId].filter((id): id is string => !!id)
-  const effects: Effect[] = [{ do: { kind: 'grantSpells', spellIds: now, alwaysPrepared: true, free: true } }]
+  const swap = SWAPPABLE_LINEAGE_CANTRIP[option.name]
+  const now = [swap ? undefined : option.cantripId, option.secondCantripId, option.alwaysPreparedSpellId].filter((id): id is string => !!id)
+  const effects: Effect[] = [...(now.length ? [{ do: { kind: 'grantSpells', spellIds: now, alwaysPrepared: true, free: true } } as Effect] : []), ...(LINEAGE_EXTRAS[option.name] ?? [])]
+  if (swap) effects.push({ do: { kind: 'grantChoice', choice: { id: LINEAGE_CHOICE_IDS.cantrip, label: swap.label, from: { kind: 'spells', lists: [swap.list], maxLevel: '0' } } } })
   // Gated by total character level — the species doesn't belong to a class.
   if (option.level3SpellId) effects.push({ when: { kind: 'level', min: 3 }, do: { kind: 'grantSpells', spellIds: [option.level3SpellId], alwaysPrepared: true, free: true } })
   if (option.level5SpellId) effects.push({ when: { kind: 'level', min: 5 }, do: { kind: 'grantSpells', spellIds: [option.level5SpellId], alwaysPrepared: true, free: true } })
@@ -45,7 +64,19 @@ function traitEffects(raceId: string, trait: string): Effect[] {
   }
   if (trait === 'Versatile') return [{ do: { kind: 'grantChoice', choice: { id: 'feat', label: 'Origin feat', from: { kind: 'feats', categories: ['Origin'] } } } }]
   if (trait === 'Skillful') return [{ do: { kind: 'grantChoice', choice: { id: 'skill', label: 'Skill proficiency', from: { kind: 'skills' }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick' } }] } } }]
-  // Every other trait is rules text only today (Darkvision, Dwarven Toughness, Draconic Ancestry…).
+  if (trait === 'Darkvision') return [{ do: { kind: 'modify', target: 'sense.darkvision', op: 'set', value: String(DARKVISION[raceId] ?? 60) } }]
+  if (trait === 'Keen Senses') {
+    return [
+      {
+        do: {
+          kind: 'grantChoice',
+          choice: { id: 'skill', label: 'Keen Senses', from: { kind: 'skills', skillIds: ['insight', 'perception', 'survival'] }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick' } }] }
+        }
+      }
+    ]
+  }
+  if (trait === 'Fey Ancestry') return [{ do: { kind: 'note', text: 'Advantage on saving throws to avoid or end the Charmed condition.' } }]
+  // Every other trait is rules text only today (Dwarven Toughness, Draconic Ancestry…).
   return []
 }
 
