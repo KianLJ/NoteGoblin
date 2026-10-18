@@ -270,13 +270,24 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
   // Affinity bonus, a Circle of the Land spell), since a spell that lands
   // in character.spells isn't distinguishable here from one a class
   // granted directly.
+  // Damage cantrips, SRD or homebrew: the pack spell's own rules (damage dice, attack, save) or the SRD compendium entry's.
   const damagingCantrips = spells
     .filter((s) => s.level === 0)
-    .map((s) => ({ spell: s, compendium: s.compendiumId ? getSpellById(s.compendiumId) : undefined }))
-    .filter(
-      (s): s is { spell: (typeof spells)[number]; compendium: NonNullable<ReturnType<typeof getSpellById>> } =>
-        !!s.compendium && spellDealsDamage(s.compendium)
-    )
+    .flatMap((s) => {
+      const compendium = s.compendiumId ? getSpellById(s.compendiumId) : undefined
+      const def = compendium ? registry.get('spells', `${SRD_PACK_ID}:${compendium.id}`)?.def : s.packSpellId ? registry.get('spells', s.packSpellId)?.def : undefined
+      if (compendium ? !spellDealsDamage(compendium) : !def || !(def.damage || def.attackType)) return []
+      return [
+        {
+          spell: s,
+          def,
+          name: compendium?.name ?? def?.name ?? s.name,
+          description: compendium?.description ?? def?.description ?? s.description,
+          attackType: compendium?.attackType ?? def?.attackType,
+          castingTime: compendium?.castingTime ?? def?.castingTime ?? s.castingTime
+        }
+      ]
+    })
   const cantripAttackBonus = derived.spellcasting.attackBonus
   const spellSaveDc = derived.spellcasting.dc
 
@@ -433,35 +444,34 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null }: Com
 
           {damagingCantrips
             .filter(({ spell }) => matchesSearch(spell.name))
-            .map(({ spell, compendium }) => {
+            .map(({ spell, def, name, description, attackType, castingTime }) => {
               // Its dice for this character (cantrips grow at levels 5, 11 and 17); the first dice in its text if it has no roll data.
-              const def = registry.get('spells', `${SRD_PACK_ID}:${compendium.id}`)?.def
               const numbers = def ? spellNumbers(derived, def, 0) : {}
-              const dice = numbers.damage ?? /\d+d\d+/.exec(compendium.description)?.[0]
+              const dice = numbers.damage ?? /\d+d\d+/.exec(description)?.[0]
               const split = dice ? splitDice(dice) : null
               return (
                 <HoverDetailCard
                   key={spell.id}
-                  title={compendium.name}
+                  title={name}
                   subtitle={terms.t('cantrips').replace(/s$/, '')}
                   fields={[]}
-                  description={compendium.description}
+                  description={description}
                 >
-                  <EntryCard name={<EntryCardTitle value={compendium.name} />} badge={<span className="gb-badge">{terms.t('cantrips').replace(/s$/, '')}</span>}>
-                    {compendium.attackType ? (
+                  <EntryCard name={<EntryCardTitle value={name} />} badge={<span className="gb-badge">{terms.t('cantrips').replace(/s$/, '')}</span>}>
+                    {attackType ? (
                       <MiniStat
                         label="Atk"
                         value={cantripAttackBonus !== null ? formatModifier(cantripAttackBonus) : '—'}
-                        onRoll={cantripAttackBonus !== null ? rollAttack(`${compendium.name} Attack`, cantripAttackBonus) : undefined}
+                        onRoll={cantripAttackBonus !== null ? rollAttack(`${name} Attack`, cantripAttackBonus) : undefined}
                       />
                     ) : (
                       <MiniStat label={numbers.saveAbility ? `${numbers.saveAbility.toUpperCase()} DC` : 'DC'} value={spellSaveDc !== null ? String(spellSaveDc) : '—'} />
                     )}
                     <LockedValue
                       value={dice ? `${dice}${numbers.damageType ? ` ${numbers.damageType.toLowerCase()}` : ''}` : 'See spell'}
-                      onRoll={split ? rollWeaponDamage(`${compendium.name} Damage`, `${split.count}d${split.sides}`, split.flat) : undefined}
+                      onRoll={split ? rollWeaponDamage(`${name} Damage`, `${split.count}d${split.sides}`, split.flat) : undefined}
                     />
-                    <LockedValue value={ACTION_TYPE_LABEL[actionTypeFromCastingTime(compendium.castingTime)]} />
+                    <LockedValue value={ACTION_TYPE_LABEL[actionTypeFromCastingTime(castingTime)]} />
                   </EntryCard>
                 </HoverDetailCard>
               )

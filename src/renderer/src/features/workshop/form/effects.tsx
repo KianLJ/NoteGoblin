@@ -57,6 +57,7 @@ const EFFECT_KINDS = [
   { value: 'spellcasting', label: 'Spellcasting' },
   { value: 'grantChoice', label: 'Grant a choice' },
   { value: 'grantCompanion', label: 'Grant a companion' },
+  { value: 'weaponMastery', label: 'Weapon mastery' },
   { value: 'note', label: 'Note' }
 ] as const
 type EffectKind = (typeof EFFECT_KINDS)[number]['value']
@@ -97,6 +98,8 @@ function blankAction(kind: EffectKind): Obj {
       return { kind, choice: { id: '', label: '', from: { kind: 'optionList', listId: '' } } }
     case 'grantCompanion':
       return { kind, companion: { id: '', name: '', ac: '12', hp: '10' } }
+    case 'weaponMastery':
+      return { kind, itemId: '$pick' }
     case 'note':
       return { kind, text: '' }
   }
@@ -163,6 +166,9 @@ export function effectSummary(effect: Obj): string {
       break
     case 'grantCompanion':
       text = `Companion: ${named(d.companion, 'unnamed')}`
+      break
+    case 'weaponMastery':
+      text = str(d.itemId) === '$pick' ? 'Weapon mastery of the picked weapon' : `Weapon mastery: ${str(d.itemId)}`
       break
     case 'note':
       text = `Note: ${str(d.text).slice(0, 60)}`
@@ -533,6 +539,12 @@ function ActionBody({ kind, value, onChange }: { kind: EffectKind; value: Obj; o
       return <ChoiceEditor value={obj(value.choice)} onChange={(v) => req('choice', v)} />
     case 'grantCompanion':
       return <CompanionEditor value={obj(value.companion)} onChange={(v) => req('companion', v)} />
+    case 'weaponMastery':
+      return (
+        <Field label="Weapon" hint="A weapon's id, or $pick inside a weapons choice for the weapon the player picked. Its attacks then show its mastery property.">
+          <TextInput value={str(value.itemId)} onChange={(v) => req('itemId', v)} list="items" placeholder="$pick" />
+        </Field>
+      )
     case 'note':
       return (
         <Field label="Shown on the sheet">
@@ -868,9 +880,23 @@ export function ChoiceEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
           </>
         )}
         {kind === 'weapons' && (
-          <Field label="Which kinds of weapon" hint="Empty = every weapon">
-            <TagsInput value={arr<string>(from.categories)} onChange={(v) => fromSet('categories', v)} placeholder="simple, martial" />
-          </Field>
+          <>
+            <Field label="Which kinds of weapon" hint="Empty = every weapon">
+              <TagsInput value={arr<string>(from.categories)} onChange={(v) => fromSet('categories', v)} placeholder="simple, martial" />
+            </Field>
+            <Field label="Melee or ranged">
+              <Select
+                value={str(from.range) as 'melee' | 'ranged' | ''}
+                onChange={(v) => fromSet('range', v || undefined)}
+                options={[
+                  { value: 'melee', label: 'Melee only' },
+                  { value: 'ranged', label: 'Ranged only' }
+                ]}
+                none="Either"
+              />
+            </Field>
+            <Check checked={!!from.proficientOnly} onChange={(v) => fromSet('proficientOnly', v || undefined)} label="Only weapons they're proficient with" />
+          </>
         )}
         {kind === 'archetypes' && (
           <Grid min={160}>
