@@ -8,12 +8,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: '0.6.5',
-    title: 'Magic Initiate, by spell list',
+    title: 'Magic Initiate by spell list, and homebrew choice fixes',
     highlights: [
       'Magic Initiate is now three feats — Magic Initiate (Cleric), (Druid) and (Wizard) — like the 2024 rules and D&D Beyond, each offering only its own list’s cantrips and spell',
       'Acolyte grants Magic Initiate (Cleric) and Sage grants Magic Initiate (Wizard)',
       'You can take Magic Initiate more than once with a different list each time — say Cleric from your background and Wizard from Human Versatile',
-      'Existing characters keep every spell they picked: their Magic Initiate becomes the version that matches their background, or the list most of their spells came from'
+      'Existing characters keep every spell they picked: their Magic Initiate becomes the version that matches their background, or the list most of their spells came from',
+      'Homebrew: a choice with no abilities (or skills, spells, feats) ticked now offers all of them, as the Workshop says, instead of nothing — so a custom background’s ability score increase can be picked',
+      'Homebrew: the character creator’s background step now offers a custom background’s own ability scores',
+      'Homebrew: new “Proficiency with a weapon of their choice” effect in the Workshop — the player picks a weapon (any, or just simple or martial) and attacks with it get their proficiency bonus'
     ]
   },
   {

@@ -210,6 +210,8 @@ export const optionSourceSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('abilities'), abilities: z.array(abilitySchema).optional() }),
   z.object({ kind: z.literal('skills'), skillIds: z.array(idSchema).optional() }),
+  /** Weapons (items with weapon stats) from the enabled packs, optionally only some categories ("simple", "martial") — e.g. "proficiency with a weapon of your choice". */
+  z.object({ kind: z.literal('weapons'), categories: z.array(z.string()).optional(), itemIds: z.array(idSchema).optional() }),
   /** Archetypes (leveled feature sets — a bloodline, a patron, a tradition any class can take), filtered by tag or id. */
   z.object({ kind: z.literal('archetypes'), tags: z.array(z.string()).optional(), archetypeIds: z.array(idSchema).optional() }),
   /** Free text the player types (e.g. a language or a favoured enemy). */

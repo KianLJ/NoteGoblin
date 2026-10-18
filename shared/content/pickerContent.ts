@@ -1,4 +1,5 @@
-import { BACKGROUNDS, CLASSES, RACES, type Background, type Class, type Race, type SkillName } from '../dnd5e'
+import { BACKGROUNDS, CLASSES, RACES, type Ability, type Background, type Class, type Race, type SkillName } from '../dnd5e'
+import type { BackgroundDef } from './schema'
 import { subclassesForClass, type CompendiumSubclass } from '../compendium'
 import { registryForPacks } from './migrate'
 import { getActivePacks } from './sheet'
@@ -55,7 +56,7 @@ export function buildPickerContent(): PickerContent {
   )
   const backgrounds = notTaken(
     BACKGROUNDS,
-    fromPacks(registry.all('backgrounds')).map(({ fullId, def }) => ({ id: fullId, name: def.name, abilityScores: [], featId: '', skillProficiencies: [], toolProficiency: '' }))
+    fromPacks(registry.all('backgrounds')).map(({ fullId, def }) => ({ id: fullId, name: def.name, abilityScores: backgroundAbilities(def), featId: '', skillProficiencies: [], toolProficiency: '' }))
   )
 
   function subclassesFor(className: string): CompendiumSubclass[] {
@@ -70,4 +71,18 @@ export function buildPickerContent(): PickerContent {
   }
 
   return { classes, races, backgrounds, subclassesFor }
+}
+
+/** The abilities a pack background's own ability-score choice offers (all six when it lists none), for the creator's background step; none if it has no such choice. */
+function backgroundAbilities(def: BackgroundDef): Ability[] {
+  for (const f of def.features) {
+    for (const e of f.effects) {
+      const action = e.do as { kind?: string; choice?: { from?: { kind?: string; abilities?: Ability[] } } }
+      if (action.kind === 'grantChoice' && action.choice?.from?.kind === 'abilities') {
+        const listed = action.choice.from.abilities ?? []
+        return listed.length ? listed : ['str', 'dex', 'con', 'int', 'wis', 'cha']
+      }
+    }
+  }
+  return []
 }

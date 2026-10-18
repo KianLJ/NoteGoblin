@@ -475,6 +475,9 @@ function rechargeLabel(r: ResourceDef['recharge'], test: (c: Condition) => boole
 }
 
 // ---------------------------------------------------------------------------
+
+/** A filter list, or undefined when it's empty — an empty list in a choice's source means "no filter", as the Workshop's forms say ("None picked = all six"). */
+const some = <T,>(xs: T[] | undefined): T[] | undefined => (xs && xs.length ? xs : undefined)
 
 export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentPack[] | Registry, options: DeriveOptions = {}): DerivedCharacter {
   const registry = Array.isArray(packsOrRegistry) ? buildRegistry(packsOrRegistry) : packsOrRegistry
@@ -1709,12 +1712,13 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
         }))
       }
       case 'feats': {
-        const categories = from.categories?.map((c) => c.toLowerCase())
+        const categories = some(from.categories)?.map((c) => c.toLowerCase())
+        const featIds = some(from.featIds)
         // A fixed grant (a background's own feat) always offers its feat; an open choice locks a non-repeatable feat already taken elsewhere.
-        const open = !from.featIds
+        const open = !featIds
         return registry
           .all('feats')
-          .filter((f) => (!categories || categories.includes(f.def.category.toLowerCase())) && (!from.featIds || from.featIds.some((id) => sameId(id, f.fullId))))
+          .filter((f) => (!categories || categories.includes(f.def.category.toLowerCase())) && (!featIds || featIds.some((id) => sameId(id, f.fullId))))
           .map((f) => {
             const takenElsewhere = open && !(f.def as FeatDef).repeatable && (featsTaken.get(f.fullId) ?? []).some((k) => k !== key)
             return {
@@ -1732,26 +1736,40 @@ export function deriveCharacter(build: CharacterBuild, packsOrRegistry: ContentP
           .all('spells')
           .filter(
             (s) =>
-              (!from.lists || from.lists.some((l) => s.def.lists.includes(l))) &&
-              (!from.spellIds || from.spellIds.some((id) => sameId(id, s.fullId))) &&
+              (!some(from.lists) || from.lists!.some((l) => s.def.lists.includes(l))) &&
+              (!some(from.spellIds) || from.spellIds!.some((id) => sameId(id, s.fullId))) &&
               s.def.level >= (from.minLevel ?? 0) &&
               s.def.level <= maxLevel
           )
           .map((s) => ({ id: s.fullId, name: s.def.name, description: s.def.description, available: true }))
       }
       case 'abilities':
-        return (from.abilities ?? ABILITY_IDS).map((a) => ({ id: a, name: registry.terminology[`ability.${a}`] ?? a.toUpperCase(), description: '', available: true }))
+        return (some(from.abilities) ?? ABILITY_IDS).map((a) => ({ id: a, name: registry.terminology[`ability.${a}`] ?? a.toUpperCase(), description: '', available: true }))
       case 'skills':
         return skillDefs
-          .filter((s) => !from.skillIds || from.skillIds.includes(s.id))
+          .filter((s) => !some(from.skillIds) || from.skillIds!.includes(s.id))
           .map((s) => ({ id: s.id, name: s.name, description: '', available: true }))
+      case 'weapons': {
+        const categories = some(from.categories)?.map((c) => c.toLowerCase())
+        const itemIds = some(from.itemIds)
+        return registry
+          .all('items')
+          .filter((i) => !!i.def.weapon && (!categories || categories.includes(i.def.weapon.category.toLowerCase())) && (!itemIds || itemIds.some((id) => sameId(id, i.fullId))))
+          .sort((a, b) => a.def.name.localeCompare(b.def.name))
+          .map((i) => ({
+            id: i.fullId,
+            name: i.def.name,
+            description: [`${i.def.weapon!.category} ${i.def.weapon!.range} weapon, ${i.def.weapon!.damage} ${i.def.weapon!.damageType.toLowerCase()}`, i.def.description].filter(Boolean).join('. '),
+            available: true
+          }))
+      }
       case 'archetypes':
         return registry
           .all('archetypes')
           .filter(
             (x) =>
-              (!from.tags || from.tags.some((t) => (x.def.tags ?? []).some((own) => own.toLowerCase() === t.toLowerCase()))) &&
-              (!from.archetypeIds || from.archetypeIds.some((id) => sameId(id, x.fullId)))
+              (!some(from.tags) || from.tags!.some((t) => (x.def.tags ?? []).some((own) => own.toLowerCase() === t.toLowerCase()))) &&
+              (!some(from.archetypeIds) || from.archetypeIds!.some((id) => sameId(id, x.fullId)))
           )
           .map((x) => {
             const takenBy = archetypesTaken.get(x.fullId)

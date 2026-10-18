@@ -218,6 +218,13 @@ const RECIPES: Recipe[] = [
     hint: 'The player picks which',
     make: () => ({ do: { kind: 'grantChoice', choice: { id: 'skill', label: 'Skill Proficiency', from: { kind: 'skills' }, onPick: [{ do: { kind: 'proficiency', category: 'skill', value: '$pick' } }] } } })
   },
+  {
+    id: 'chooseWeapon',
+    group: 'Choices',
+    label: 'Proficiency with a weapon of their choice',
+    hint: 'The player picks which (narrow it to simple or martial)',
+    make: () => ({ do: { kind: 'grantChoice', choice: { id: 'weapon', label: 'Weapon Proficiency', from: { kind: 'weapons' }, onPick: [{ do: { kind: 'proficiency', category: 'weapon', value: '$pick' } }] } } })
+  },
   { id: 'chooseFeat', group: 'Choices', label: 'Pick a feat', hint: 'From a category of feats', make: () => ({ do: { kind: 'grantChoice', choice: { id: 'feat', label: 'Feat', from: { kind: 'feats', categories: ['General'] } } } }) },
   { id: 'chooseArchetype', group: 'Choices', label: 'Pick an archetype', hint: 'A bloodline, patron or tradition (by tag)', make: () => ({ do: { kind: 'grantChoice', choice: { id: 'archetype', label: '', from: { kind: 'archetypes', tags: [] } } } }) },
   { id: 'note', group: 'Other', label: 'A reminder on the sheet', hint: "For a rule the sheet can't calculate", make: () => ({ do: { kind: 'note', text: '' } }) }
@@ -767,6 +774,7 @@ const SOURCE_KINDS = [
   { value: 'spells', label: 'Spells' },
   { value: 'abilities', label: 'Abilities' },
   { value: 'skills', label: 'Skills' },
+  { value: 'weapons', label: 'Weapons' },
   { value: 'archetypes', label: 'Archetypes' },
   { value: 'freeform', label: 'Typed by the player' }
 ] as const
@@ -840,6 +848,11 @@ export function ChoiceEditor({ value, onChange }: { value: Obj; onChange: (v: Ob
         {kind === 'skills' && (
           <Field label="Which skills" hint="Empty = all">
             <TagsInput value={arr<string>(from.skillIds)} onChange={(v) => fromSet('skillIds', v)} list="skills" />
+          </Field>
+        )}
+        {kind === 'weapons' && (
+          <Field label="Which kinds of weapon" hint="Empty = every weapon">
+            <TagsInput value={arr<string>(from.categories)} onChange={(v) => fromSet('categories', v)} placeholder="simple, martial" />
           </Field>
         )}
         {kind === 'archetypes' && (
