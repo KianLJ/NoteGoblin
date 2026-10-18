@@ -1,14 +1,18 @@
 import { Modal } from '../../ui/Modal'
 import { CHANGELOG } from '../../data/changelog'
 import { XIcon } from '../../ui/icons'
+import type { UpdateStatus } from '@shared/ipc'
+import { UpdatePanel } from './UpdateStatus'
 
 interface ChangelogProps {
   onClose: () => void
   /** The version currently running, highlighted so "what did I just get" is obvious at a glance. Falls back to CHANGELOG's newest entry when unset. */
   currentVersion?: string | null
+  /** The auto-updater's status, shown above the list with Check for updates (omitted: no updates block). */
+  update?: UpdateStatus
 }
 
-export function Changelog({ onClose, currentVersion }: ChangelogProps): JSX.Element {
+export function Changelog({ onClose, currentVersion, update }: ChangelogProps): JSX.Element {
   return (
     <Modal onClose={onClose} width={480}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
@@ -22,6 +26,7 @@ export function Changelog({ onClose, currentVersion }: ChangelogProps): JSX.Elem
           <XIcon size={12} />
         </button>
       </div>
+      {update && <UpdatePanel status={update} />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {CHANGELOG.map((entry) => (
           <div key={entry.version}>

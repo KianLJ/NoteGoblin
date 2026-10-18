@@ -1,18 +1,11 @@
-import { app, shell, BrowserWindow, dialog, protocol, session } from 'electron'
+import { app, shell, BrowserWindow, protocol, session } from 'electron'
 import { join, extname } from 'path'
 import { readFile } from 'node:fs/promises'
-// electron-updater is CommonJS — our main bundle is ESM (package.json has
-// "type": "module"), and Node's ESM loader doesn't do the static named-export
-// analysis a bundler would, so `import { autoUpdater } from 'electron-updater'`
-// throws a SyntaxError at module load (crashing every launch, not just when
-// actually checking for updates). Default-import the whole module instead.
-import electronUpdater from 'electron-updater'
 import { registerIpcHandlers } from './registerIpc'
 import { resolveVaultAssetPath } from '@server/files/vaultStore'
 import { resolveCustomMusicPath } from './customMusic'
 import { resolveCustomEntitySfxPath } from './customEntitySfx'
-
-const { autoUpdater } = electronUpdater
+import { initAutoUpdater } from './updates'
 
 // Only one instance of the app may run at a time — a DM's/player's local
 // host/identity databases aren't built for two processes writing to the same
@@ -145,57 +138,6 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-// A session left open for a long stretch used to only ever check for
-// updates once, at launch — a release that went out after that point sat
-// undetected until the app was fully quit and reopened, which is easy to
-// mistake for auto-update just being slow/broken. This re-checks on top of
-// that every few hours for as long as the app stays running.
-const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
-
-/**
- * Checks GitHub Releases (see electron-builder.yml's `publish` block) for a
- * newer version, downloads it silently in the background if found, and asks
- * before restarting to apply it — never interrupts an active session
- * unprompted. No-op in dev (unpackaged runs have nothing to update, and
- * electron-updater errors immediately without a real app.getAppPath()
- * update metadata file anyway).
- */
-function checkForUpdates(): void {
-  autoUpdater.checkForUpdates().catch((err) => {
-    console.error('Update check failed:', err)
-  })
-}
-
-/** Wires up the update-downloaded/error handlers once, then checks immediately and every UPDATE_CHECK_INTERVAL_MS after — call once at startup, not per-check (checkForUpdates itself is what's meant to be called repeatedly). */
-function initAutoUpdater(): void {
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = false
-
-  autoUpdater.on('update-downloaded', () => {
-    dialog
-      .showMessageBox({
-        type: 'info',
-        buttons: ['Restart now', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-        message: 'A new version of NoteGoblin is ready.',
-        detail: 'Restart to finish installing it — your campaigns and notes are untouched either way.'
-      })
-      .then((result) => {
-        if (result.response === 0) autoUpdater.quitAndInstall()
-      })
-  })
-
-  // Silent by design — a missed check (offline, no release yet, etc.) isn't
-  // worth interrupting anyone over; it just quietly tries again next check.
-  autoUpdater.on('error', (err) => {
-    console.error('Update check failed:', err)
-  })
-
-  checkForUpdates()
-  setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS)
-}
-
 app.whenReady().then(() => {
   // Auto-grants the Local Font Access API so the Appearance settings' font
   // picker can list actually-installed system fonts — this is our own
@@ -269,7 +211,7 @@ app.whenReady().then(() => {
   mainWindow = win
   registerIpcHandlers(win)
 
-  if (!isDev) initAutoUpdater()
+  initAutoUpdater(isDev)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()

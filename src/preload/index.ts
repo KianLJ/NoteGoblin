@@ -8,13 +8,24 @@ import type {
   PlayerCharacterUpdate,
   PlayerInitiativeUpdate,
   PresenceUpdate,
-  SceneChangedUpdate
+  SceneChangedUpdate,
+  UpdateStatus
 } from '../../shared/ipc'
 import type { DiceRollLogEntry } from '../../shared/dice'
 import type { RelayMessage } from '../../shared/relay'
 
 const api: AppApi = {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  updates: {
+    getStatus: () => ipcRenderer.invoke('updates:get-status'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    install: () => ipcRenderer.invoke('updates:install'),
+    onStatus: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => callback(status)
+      ipcRenderer.on('updates:status', listener)
+      return () => ipcRenderer.removeListener('updates:status', listener)
+    }
+  },
   identity: {
     hasAny: () => ipcRenderer.invoke('identity:has-any'),
     create: (displayName, password) => ipcRenderer.invoke('identity:create', displayName, password),

@@ -212,8 +212,27 @@ export interface CampaignCalendar {
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
+/** Where the auto-updater is: shown by the version badge. */
+export type UpdateStatus =
+  | { state: 'idle' }
+  /** An unpackaged dev run — nothing to update. */
+  | { state: 'dev' }
+  | { state: 'checking' }
+  | { state: 'current'; checkedAt: number }
+  | { state: 'downloading'; version: string; percent: number; transferred: number; total: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string; checkedAt: number }
+
 export interface AppApi {
   getAppVersion: () => Promise<string>
+  updates: {
+    getStatus: () => Promise<UpdateStatus>
+    /** Checks now (unless an update is already downloading or ready) and resolves with the status after. */
+    check: () => Promise<UpdateStatus>
+    /** Restarts into a downloaded update. */
+    install: () => Promise<void>
+    onStatus: (callback: (status: UpdateStatus) => void) => () => void
+  }
   identity: {
     hasAny: () => Promise<boolean>
     create: (displayName: string, password: string) => Promise<LoginResult>
