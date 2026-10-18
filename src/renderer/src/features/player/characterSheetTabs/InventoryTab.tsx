@@ -72,6 +72,9 @@ function customItemFields(item: EquipmentItem): DetailField[] {
   return fields
 }
 
+/** The most magic items a character can be attuned to at once. */
+const MAX_ATTUNED = 3
+
 export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps): JSX.Element {
   const [draft, setDraft] = useAutosaveDraft<InventoryDraft>(
     { currency: character.currency, equipment: character.equipment },
@@ -112,6 +115,12 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
   const packItems = registry.all('items').filter((i) => i.packId !== SRD_PACK_ID)
   const packCurrencies = registry.vocabulary.currencies.filter((c) => !CURRENCIES.some((s) => s.id === c.id))
   const packItemFor = (item: EquipmentItem): ItemDef | undefined => (item.packItemId ? registry.get('items', item.packItemId)?.def : undefined)
+  // Pack items and SRD magic items both say whether they need attunement.
+  const needsAttunement = (item: EquipmentItem): boolean => {
+    const id = item.packItemId ?? item.magicItemId
+    return !!id && !!registry.get('items', id)?.def.requiresAttunement
+  }
+  const attunedCount = draft.equipment.filter((i) => i.attuned && needsAttunement(i)).length
 
   function addPackItem(item: (typeof packItems)[number]): void {
     patch({
@@ -167,6 +176,15 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
           {encumbered && (
             <span className="gb-badge" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} title="Over your Strength score × 15 lb. carrying capacity">
               Encumbered
+            </span>
+          )}
+          {attunedCount > 0 && (
+            <span
+              className="gb-badge"
+              style={attunedCount > MAX_ATTUNED ? { color: 'var(--danger)', borderColor: 'var(--danger)' } : undefined}
+              title={attunedCount > MAX_ATTUNED ? `A character can only be attuned to ${MAX_ATTUNED} items at once.` : 'Magic items you’re attuned to (up to 3)'}
+            >
+              Attuned: {attunedCount} / {MAX_ATTUNED}
             </span>
           )}
         </div>
@@ -305,10 +323,29 @@ export function InventoryTab({ character, onSave, readOnly }: InventoryTabProps)
                       variant={item.equipped ? 'primary' : 'secondary'}
                       onClick={() => updateItem(item.id, { equipped: !item.equipped })}
                       style={{ fontSize: 11, padding: '3px 8px' }}
-                      title="Equipped items apply their effects, attacks and AC"
+                      title={needsAttunement(item) ? 'Wear or hold it — it works while it’s equipped and you’re attuned to it' : 'Equipped items apply their effects, attacks and AC'}
                     >
                       {item.equipped ? 'Equipped' : 'Equip'}
                     </Button>
+                  )}
+                  {needsAttunement(item) && (
+                    <Button
+                      variant={item.attuned ? 'primary' : 'secondary'}
+                      onClick={() => updateItem(item.id, { attuned: !item.attuned })}
+                      style={{ fontSize: 11, padding: '3px 8px' }}
+                      title={
+                        item.attuned
+                          ? 'Attuned — click to end the attunement'
+                          : attunedCount >= MAX_ATTUNED
+                            ? `You’re already attuned to ${MAX_ATTUNED} items — end one first (or attune anyway if your table allows more)`
+                            : 'Attune to it (a short rest spent with the item). It needs attunement to work.'
+                      }
+                    >
+                      {item.attuned ? 'Attuned' : 'Attune'}
+                    </Button>
+                  )}
+                  {needsAttunement(item) && packEquippable && item.attuned !== item.equipped && (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.attuned ? 'Equip it to use it' : 'Attune to use it'}</span>
                   )}
                 </EntryCard>
               </HoverDetailCard>

@@ -324,7 +324,7 @@ export function legacySheetToBuild(sheet: CharacterSheetData, options: LegacyBui
     choices: { ...adapter.choices, ...(sheet.choices ?? {}) },
     equipment: sheet.equipment.flatMap((e) => {
       const itemId = e.packItemId ?? e.compendiumId ?? e.magicItemId
-      return itemId ? [{ key: e.id, itemId: registry.get('items', itemId)?.fullId ?? itemId, equipped: !!e.equipped, quantity: e.quantity }] : []
+      return itemId ? [{ key: e.id, itemId: registry.get('items', itemId)?.fullId ?? itemId, equipped: !!e.equipped, attuned: !!e.attuned, quantity: e.quantity }] : []
     }),
     activeToggles: [...sheet.activeBuffs],
     conditions: [

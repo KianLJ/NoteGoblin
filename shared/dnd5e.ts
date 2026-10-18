@@ -1493,6 +1493,8 @@ export interface EquipmentItem {
   cost?: string
   /** For Armor-category items, feeds into computeArmorClassFromEquipment (shared/compendium.ts) instead of the default unarmored AC formula. For Weapon-category items, an equipped one is what actually puts it on the Combat tab's Attacks list — see weaponAttacksFromEquipment; unequip it there (not a remove button in Combat) to take it off. */
   equipped?: boolean
+  /** Attuned to (for an item that requires attunement) — its effects and charges need this as well as being equipped. */
+  attuned?: boolean
   /** Links back to a shared/compendium.ts mundane equipment entry — see Attack.compendiumId. */
   compendiumId?: string
   /** Links back to a shared/compendium.ts magic item entry (Potion of Healing, Ring of Protection, etc.) — a separate id space/lookup from compendiumId since magic items are a different SRD list (rarity/category, no weight/cost) from mundane equipment. */
