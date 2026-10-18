@@ -27,6 +27,13 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  # Branded art for the installer's pages, drawn by build/make-installer-art.py
+  # from the logo in the app's colours (rerun it if the logo changes).
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/uninstallerSidebar.bmp
+  installerHeader: build/installerHeader.bmp
 # electron-updater's feed — publishing (uploading the built installer + the
 # latest.yml update manifest it generates) requires a GH_TOKEN env var with
 # repo scope; just building normally (no --publish flag) never touches this.

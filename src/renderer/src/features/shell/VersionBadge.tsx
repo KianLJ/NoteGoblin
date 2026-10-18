@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Changelog } from './Changelog'
-import { UpdatePill, useUpdateStatus } from './UpdateStatus'
+import { UpdatePill, UpdateReadyCard, useUpdateStatus } from './UpdateStatus'
 
 interface VersionBadgeProps {
   /** 'fixed' (default) floats it in the bottom-right corner — used on the login screen, which has no header row to sit inline in. 'inline' renders as a plain flex child instead, for AppShell's header (bottom-right is now the Messages panel's chat composer, a real collision the fixed corner used to have). */
@@ -45,6 +45,7 @@ export function VersionBadge({ variant = 'fixed' }: VersionBadgeProps): JSX.Elem
       >
         v{version}
       </button>
+      <UpdateReadyCard status={update} />
       {changelogOpen && <Changelog currentVersion={version} update={update} onClose={() => setChangelogOpen(false)} />}
     </span>
   )

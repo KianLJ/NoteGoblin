@@ -8,10 +8,12 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: '0.6.3',
-    title: 'See what the updater is doing',
+    title: 'See what the updater is doing, and a new look for updates',
     highlights: [
+      'The “update ready” pop-up is now a NoteGoblin card in the corner instead of a plain Windows box — Restart now, or Later',
+      'The installer has a fresh look with the NoteGoblin logo and colours',
       'When an update is found, a small pill next to the version number shows it downloading and how far along it is — updates download in the background, so before this it looked like nothing was happening',
-      'Once it’s downloaded, the pill becomes “Restart to update”, so you can install it whenever suits you, not just from the pop-up',
+      'Once it’s downloaded, the pill becomes “Restart to update”, so you can install it whenever suits you, even after choosing Later',
       'Click the version number for a Check for updates button and the updater’s status, and if a check fails it now says why (like “No internet connection”) instead of failing silently'
     ]
   },

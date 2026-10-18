@@ -480,3 +480,15 @@
 .gb-hover-row:hover {
   background: var(--bg-surface-raised);
 }
+
+/* The update-ready card slides up into the corner. */
+@keyframes gb-update-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

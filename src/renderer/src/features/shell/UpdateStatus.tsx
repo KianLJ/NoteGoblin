@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { UpdateStatus } from '@shared/ipc'
+import appIcon from '../../assets/icon.png'
 
 /** The auto-updater's current status, kept live. */
 export function useUpdateStatus(): UpdateStatus {
@@ -116,5 +118,79 @@ export function UpdatePanel({ status }: { status: UpdateStatus }): JSX.Element {
         )}
       </div>
     </div>
+  )
+}
+
+const DISMISSED_KEY = 'gb-update-card-dismissed'
+
+/**
+ * "NoteGoblin x.y.z is ready" — the app's own card, bottom-right, once an
+ * update has downloaded: Restart now, or Later (the badge's "Restart to
+ * update" pill stays, and the card doesn't come back for that version).
+ */
+export function UpdateReadyCard({ status }: { status: UpdateStatus }): JSX.Element | null {
+  const version = status.state === 'ready' ? status.version : null
+  const [dismissed, setDismissed] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(DISMISSED_KEY)
+    } catch {
+      return null
+    }
+  })
+  const [restarting, setRestarting] = useState(false)
+  if (!version || dismissed === version) return null
+  const later = (): void => {
+    setDismissed(version)
+    try {
+      localStorage.setItem(DISMISSED_KEY, version)
+    } catch {
+      /* per-device convenience only */
+    }
+  }
+  return createPortal(
+    <div
+      role="dialog"
+      aria-label="Update ready"
+      className="gb-card gb-no-drag"
+      style={{
+        position: 'fixed',
+        right: 16,
+        bottom: 16,
+        zIndex: 2000,
+        width: 340,
+        padding: 'var(--space-4)',
+        display: 'flex',
+        gap: 'var(--space-3)',
+        boxShadow: 'var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.25))',
+        borderTop: '3px solid var(--accent)',
+        animation: 'gb-update-card-in 220ms ease-out'
+      }}
+    >
+      <img src={appIcon} alt="" width={44} height={44} style={{ flexShrink: 0, objectFit: 'contain' }} />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, lineHeight: 1.2 }}>NoteGoblin {version} is ready</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          Restart to finish installing it. Your campaigns, notes and characters are untouched either way — see what's new from the version number.
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+          <button
+            type="button"
+            className="gb-btn gb-btn--primary"
+            disabled={restarting}
+            onClick={() => {
+              setRestarting(true)
+              void window.goblin.updates.install()
+            }}
+            style={{ fontSize: 12, padding: '5px 12px' }}
+          >
+            {restarting ? 'Restarting…' : 'Restart now'}
+          </button>
+          <button type="button" className="gb-btn gb-btn--ghost" onClick={later} style={{ fontSize: 12, padding: '5px 12px' }}>
+            Later
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }

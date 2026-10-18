@@ -5,7 +5,7 @@
 // failed. Before this the whole thing ran silently, so a 400MB download in
 // the background looked exactly like "no update found".
 
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 // electron-updater is CommonJS and the main bundle is ESM, whose loader
 // can't see its named exports — `import { autoUpdater }` would crash every
 // launch. Default-import the whole module instead.
@@ -64,21 +64,8 @@ export function initAutoUpdater(isDev: boolean): void {
     const version = status.state === 'downloading' ? status.version : ''
     setStatus({ state: 'downloading', version, percent: Math.floor(p.percent), transferred: p.transferred, total: p.total })
   })
-  autoUpdater.on('update-downloaded', (info) => {
-    setStatus({ state: 'ready', version: info.version })
-    dialog
-      .showMessageBox({
-        type: 'info',
-        buttons: ['Restart now', 'Later'],
-        defaultId: 0,
-        cancelId: 1,
-        message: `NoteGoblin ${info.version} is ready.`,
-        detail: 'Restart to finish installing it — your campaigns and notes are untouched either way. You can also restart later from the version badge.'
-      })
-      .then((result) => {
-        if (result.response === 0) autoUpdater.quitAndInstall()
-      })
-  })
+  // The app shows its own "ready — restart?" card (UpdateReadyCard) when this status arrives.
+  autoUpdater.on('update-downloaded', (info) => setStatus({ state: 'ready', version: info.version }))
   autoUpdater.on('error', (err) => {
     console.error('Update check failed:', err)
     setStatus({ state: 'error', message: updateErrorMessage(err), checkedAt: Date.now() })
