@@ -1,5 +1,16 @@
 /** DM mode — a robed/armored figure, for table authority. */
 /** Workshop mode — a hammer over an anvil. */
+/** Crossed swords — the Combat tab. */
+export function CombatModeIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M2 2l7.5 7.5M2 2h2.6l6 6M2 2v2.6l6 6" />
+      <path d="M14 2L6.5 9.5M14 2h-2.6l-6 6M14 2v2.6l-6 6" />
+      <path d="M4 10.6l1.4 1.4M3.3 12.7l1-1M10.6 12l1.4-1.4M11.7 11.7l1 1" />
+    </svg>
+  )
+}
+
 export function WorkshopModeIcon(): JSX.Element {
   return (
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>

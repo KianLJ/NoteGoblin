@@ -96,6 +96,37 @@ export function sortedByInitiative(combatants: Combatant[]): Combatant[] {
   return [...combatants].sort((a, b) => (b.initiative ?? -Infinity) - (a.initiative ?? -Infinity) || a.name.localeCompare(b.name))
 }
 
+/** A combatant's hit points set to `value` — a player dropping to 0 starts death saves, and one healed above 0 clears them. Shared by the initiative tracker and the Combat tab. */
+export function withCombatantHp(state: InitiativeState, id: string, value: number): InitiativeState {
+  return {
+    ...state,
+    combatants: state.combatants.map((c) => {
+      if (c.id !== id) return c
+      if (c.kind !== 'player') return { ...c, currentHp: value }
+      if (value <= 0 && c.deathSaves === null) return { ...c, currentHp: value, deathSaves: { successes: 0, failures: 0 } }
+      if (value > 0 && c.deathSaves !== null) return { ...c, currentHp: value, deathSaves: null }
+      return { ...c, currentHp: value }
+    })
+  }
+}
+
+/** The next turn (wrapping to the top of the order starts a new round); starts combat if it hasn't. */
+export function nextTurnState(state: InitiativeState): InitiativeState {
+  const count = state.combatants.length
+  if (count === 0) return state
+  if (state.turnIndex < 0) return { ...state, turnIndex: 0, round: 1 }
+  const next = state.turnIndex + 1
+  return next >= count ? { ...state, turnIndex: 0, round: state.round + 1 } : { ...state, turnIndex: next }
+}
+
+/** The previous turn (going back past the top returns to the previous round). */
+export function previousTurnState(state: InitiativeState): InitiativeState {
+  const count = state.combatants.length
+  if (count === 0 || state.turnIndex < 0) return state
+  const prev = state.turnIndex - 1
+  return prev < 0 ? { ...state, turnIndex: count - 1, round: Math.max(1, state.round - 1) } : { ...state, turnIndex: prev }
+}
+
 /**
  * What a connected player is allowed to see of one combatant — real name
  * for everyone (including monsters), real current/max HP for a fellow

@@ -13,6 +13,7 @@ import {
   emptyInitiativeState,
   emptyCombatant,
   sortedByInitiative,
+  withCombatantHp,
   computeEncounterDifficulty,
   encounterMultiplier,
   DIFFICULTY_LABELS,
@@ -31,6 +32,7 @@ import { Button } from '../../ui/Button'
 import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
 import { playSfx } from '../audio/soundEffects'
 import { IconLabel, UndoIcon, XIcon } from '../../ui/icons'
+import { useEncounter } from '../combat/encounterStore'
 import { vehicleName, type TrackedVehicle } from '@shared/vehicles'
 
 interface InitiativeTrackerProps {
@@ -174,7 +176,8 @@ export function InitiativeTracker({
   onVehicleHp,
   onSelectVehicle
 }: InitiativeTrackerProps): JSX.Element {
-  const [state, setState] = useState<InitiativeState>(emptyInitiativeState())
+  // Shared with the Combat tab (features/combat/encounterStore.ts), so both edit the same fight.
+  const [state, setState] = useEncounter()
   const [view, setView] = useState<'tracker' | 'build'>('tracker')
   const [monsterQuery, setMonsterQuery] = useState('')
   const [savedEncounters, setSavedEncounters] = useState(() => loadSavedEncounters())
@@ -316,15 +319,7 @@ export function InitiativeTracker({
 
   /** HP changes need to touch deathSaves too — crossing down to 0 starts tracking them (players only; a monster just dies), crossing back above 0 (a heal) clears whatever was rolled so far. */
   function setCombatantHp(id: string, value: number): void {
-    patch({
-      combatants: state.combatants.map((c) => {
-        if (c.id !== id) return c
-        if (c.kind !== 'player') return { ...c, currentHp: value }
-        if (value <= 0 && c.deathSaves === null) return { ...c, currentHp: value, deathSaves: { successes: 0, failures: 0 } }
-        if (value > 0 && c.deathSaves !== null) return { ...c, currentHp: value, deathSaves: null }
-        return { ...c, currentHp: value }
-      })
-    })
+    setState((prev) => withCombatantHp(prev, id, value))
   }
 
   /** Only an actual forward roll (delta > 0 — clicking a pip past the current count, not undoing one) plays a cue: the tension-tick for the first two, then a distinct success/fail stinger the moment a third one lands — see playTurnFlowSfx's own doc comment for why these never show up as a manual Sound Board button. */

@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Combat mockup</title>
+<style>
+  :root {
+    --bg: #17140f; --panel: #211d17; --raised: #29241d; --sunken: #1b1813;
+    --ink: #efe6d4; --ink-2: #c3b8a2; --ink-3: #8c826f; --line: #3a3328; --line-2: #4c4335;
+    --ember: #d17448; --ember-soft: #3a271e; --ember-ink: #f0b28f;
+    --good: #8fc27f; --good-soft: #233320; --bad: #e08573; --bad-soft: #3b2420; --sky: #7fbad6; --sky-soft: #1e2f38;
+    --display: Cambria, 'Iowan Old Style', Georgia, serif; --sans: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); display: flex; flex-direction: column; overflow: hidden; }
+  button { font: inherit; color: inherit; }
+  .top { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .modes { display: inline-flex; padding: 3px; border-radius: 8px; background: var(--sunken); border: 1px solid var(--line); }
+  .modes button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--ink-3); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+  .modes button.on { background: var(--raised); color: var(--ink); box-shadow: 0 1px 2px #0006; }
+  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .display { font-family: var(--display); }
+  .btn { border: 1px solid var(--line-2); background: var(--raised); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: var(--ember); border-color: var(--ember); color: #1b120c; font-weight: 600; }
+  .btn.ghost { background: none; border-color: transparent; color: var(--ink-2); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line-2); background: var(--raised); color: var(--ink-2); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .chip.ember { background: var(--ember-soft); color: var(--ember-ink); border-color: transparent; }
+
+  .body { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 280px; }
+  .order { border-right: 1px solid var(--line); background: var(--sunken); display: flex; flex-direction: column; min-height: 0; }
+  .order-head { padding: 12px 14px 8px; display: flex; align-items: center; gap: 8px; }
+  .order-list { overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .combatant { display: grid; grid-template-columns: 30px 1fr; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; }
+  .combatant:hover { background: var(--panel); }
+  .combatant.turn { background: var(--ember-soft); border-color: var(--ember); }
+  .combatant.sel { border-color: var(--line-2); background: var(--panel); }
+  .init { font-weight: 700; text-align: center; color: var(--ink-2); }
+  .bar { height: 5px; border-radius: 9px; background: var(--bg); overflow: hidden; margin-top: 3px; }
+  .bar > i { display: block; height: 100%; background: var(--good); }
+
+  .stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #0d0b08; }
+  .tools { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); z-index: 5; box-shadow: 0 6px 20px #0008; }
+  .tools button { border: 0; background: none; padding: 6px 10px; border-radius: 7px; cursor: pointer; color: var(--ink-2); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+  .tools button.on { background: var(--ember-soft); color: var(--ember-ink); }
+  .tools .sep { width: 1px; background: var(--line); margin: 4px 2px; }
+  .zoom { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 5; }
+  .zoom button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; }
+  .hint { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: var(--ink-3); background: #0009; padding: 4px 10px; border-radius: 8px; z-index: 5; }
+  svg.map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: default; user-select: none; }
+  .token { cursor: grab; }
+  .token text { font: 700 13px var(--sans); fill: #fff; pointer-events: none; }
+
+  .detail { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .detail-body { overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .stat { text-align: center; padding: 6px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); }
+  .stat b { display: block; font-family: var(--display); font-size: 20px; }
+  .stat span { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+  .attack { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); font-size: 13px; }
+  .attack b { flex: 1; }
+  .pill { border: 1px solid var(--ember); color: var(--ember-ink); border-radius: 999px; padding: 1px 8px; background: none; font-size: 12px; cursor: pointer; }
+  .log { border-top: 1px solid var(--line); padding: 10px 14px; font-size: 12px; color: var(--ink-2); max-height: 120px; overflow-y: auto; }
+  .note { font-size: 12px; color: var(--ink-3); }
+  .callout { border: 1px dashed var(--line-2); border-radius: 10px; padding: 8px 10px; font-size: 12px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="modes">
+    <button>DM</button><button>Player</button><button>Homebrew</button><button class="on">Combat</button>
+  </div>
+  <div class="display" style="font-size:17px">The Sunken Vault</div>
+  <span class="chip ember" id="roundChip">Round 1</span>
+  <div style="flex:1"></div>
+  <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="asPlayer" /> See it as a player</label>
+  <button class="btn" id="prevTurn">Previous</button>
+  <button class="btn primary" id="nextTurn">Next turn</button>
+</header>
+
+<div class="body">
+  <aside class="order">
+    <div class="order-head"><span class="label" style="flex:1">Initiative</span><button class="btn ghost" style="font-size:12px;padding:2px 6px">+ Add</button></div>
+    <div class="order-list" id="order"></div>
+  </aside>
+
+  <section class="stage" id="stage">
+    <div class="tools" id="tools">
+      <button data-tool="move" class="on" title="Select and move tokens">Move</button>
+      <button data-tool="ruler" title="Measure: drag between squares">Ruler</button>
+      <button data-tool="cone" title="15 ft cone: drag from the caster">Cone</button>
+      <button data-tool="sphere" title="20 ft sphere: click a point">Sphere</button>
+      <div class="sep"></div>
+      <button data-tool="fog" class="dm-only" title="Reveal or hide areas (DM only)">Fog</button>
+      <button class="dm-only" title="Upload a map image and set the grid">Map…</button>
+    </div>
+    <svg class="map" id="map"></svg>
+    <div class="zoom"><button title="Zoom in">+</button><button title="Zoom out">−</button></div>
+    <div class="hint" id="hint">Drag a token to move it. Each square is 5 ft.</div>
+  </section>
+
+  <aside class="detail">
+    <div class="detail-body" id="detail"></div>
+    <div class="log" id="log"><div class="label" style="margin-bottom:4px">Rolls</div></div>
+  </aside>
+</div>
+
+<script>
+const CELL = 46, COLS = 22, ROWS = 15
+const combatants = [
+  { id: 'goren', name: 'Goren Vakras', short: 'GV', kind: 'player', init: 19, hp: 52, max: 64, ac: 16, x: 6, y: 9, color: '#3f7fb5', attacks: [['Revolver', '+8', '2d8+4 piercing'], ['Hand Crossbow', '+7', '1d6+4 piercing']] },
+  { id: 'lio', name: 'Liosgarnion', short: 'LW', kind: 'player', init: 15, hp: 18, max: 31, ac: 14, x: 5, y: 11, color: '#4f9a62', attacks: [['Shortsword', '+5', '1d6+3 piercing']] },
+  { id: 'ogre', name: 'Ogre', short: 'O', kind: 'monster', init: 12, hp: 41, max: 68, ac: 11, x: 14, y: 6, size: 2, color: '#a9473a', attacks: [['Greatclub', '+6', '2d8+4 bludgeoning'], ['Javelin', '+6', '2d6+4 piercing']] },
+  { id: 'gob1', name: 'Goblin', short: 'G1', kind: 'monster', init: 17, hp: 7, max: 7, ac: 15, x: 12, y: 10, color: '#a9473a', attacks: [['Scimitar', '+4', '1d6+2 slashing']] },
+  { id: 'gob2', name: 'Goblin', short: 'G2', kind: 'monster', init: 9, hp: 0, max: 7, ac: 15, x: 16, y: 11, color: '#a9473a', attacks: [] },
+  { id: 'skiff', name: 'The Wandering Star', short: 'WS', kind: 'vehicle', init: 8, hp: 175, max: 200, ac: 15, x: 2, y: 2, size: 3, color: '#8a6d3b', attacks: [['Laser Battery', '+7', '4d10 radiant']] }
+]
+let turn = 0, round = 1, selected = 'ogre', tool = 'move', asPlayer = false
+const fog = new Set() // hidden cells as "x,y"
+for (let x = 17; x < COLS; x++) for (let y = 0; y < ROWS; y++) fog.add(`${x},${y}`)
+let overlay = null // ruler / template drawing
+const order = () => [...combatants].sort((a, b) => b.init - a.init)
+
+function drawMap() {
+  const svg = document.getElementById('map')
+  const w = svg.clientWidth, h = svg.clientHeight
+  const ox = Math.max(10, (w - COLS * CELL) / 2), oy = Math.max(56, (h - ROWS * CELL) / 2 + 20)
+  svg.dataset.ox = ox; svg.dataset.oy = oy
+  let s = `<defs>
+    <pattern id="stone" width="${CELL}" height="${CELL}" patternUnits="userSpaceOnUse"><rect width="${CELL}" height="${CELL}" fill="#4a4235"/><rect x="2" y="2" width="${CELL - 4}" height="${CELL - 4}" rx="4" fill="#544b3c"/></pattern>
+  </defs>`
+  s += `<g transform="translate(${ox},${oy})">`
+  s += `<rect width="${COLS * CELL}" height="${ROWS * CELL}" fill="url(#stone)" rx="6"/>`
+  // walls and features
+  const walls = [[0, 0, COLS, 1], [0, ROWS - 1, COLS, 1], [0, 0, 1, ROWS], [COLS - 1, 0, 1, ROWS], [9, 1, 1, 5], [9, 8, 1, 6], [17, 4, 1, 7]]
+  for (const [x, y, ww, hh] of walls) s += `<rect x="${x * CELL}" y="${y * CELL}" width="${ww * CELL}" height="${hh * CELL}" fill="#2a241c"/>`
+  s += `<rect x="${11 * CELL}" y="${2 * CELL}" width="${4 * CELL}" height="${2 * CELL}" fill="#2f5a6e" opacity=".85" rx="8"/>` // pool
+  s += `<text x="${13 * CELL}" y="${3 * CELL + 5}" text-anchor="middle" font-size="12" fill="#9fd0e3">water</text>`
+  // grid
+  for (let x = 0; x <= COLS; x++) s += `<line x1="${x * CELL}" y1="0" x2="${x * CELL}" y2="${ROWS * CELL}" stroke="#0005"/>`
+  for (let y = 0; y <= ROWS; y++) s += `<line x1="0" y1="${y * CELL}" x2="${COLS * CELL}" y2="${y * CELL}" stroke="#0005"/>`
+  // overlay (ruler/template)
+  if (overlay) s += overlay
+  // tokens
+  const turnId = order()[turn].id
+  for (const c of combatants) {
+    if (asPlayer && fog.has(`${c.x},${c.y}`)) continue
+    const size = (c.size || 1) * CELL
+    const cx = c.x * CELL + size / 2, cy = c.y * CELL + size / 2
+    const dead = c.hp <= 0
+    s += `<g class="token" data-id="${c.id}" opacity="${dead ? 0.45 : 1}">`
+    if (c.id === turnId) s += `<circle cx="${cx}" cy="${cy}" r="${size / 2 + 3}" fill="none" stroke="#d17448" stroke-width="3"/>`
+    if (c.id === selected) s += `<circle cx="${cx}" cy="${cy}" r="${size / 2 + 7}" fill="none" stroke="#efe6d4" stroke-width="1.5" stroke-dasharray="4 3"/>`
+    s += c.kind === 'vehicle'
+      ? `<rect x="${c.x * CELL + 4}" y="${c.y * CELL + 4}" width="${size - 8}" height="${size - 8}" rx="14" fill="${c.color}" stroke="#0008" stroke-width="2"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="${size / 2 - 4}" fill="${c.color}" stroke="#0008" stroke-width="2"/>`
+    s += `<text x="${cx}" y="${cy + 5}" text-anchor="middle">${dead ? 'X' : c.short}</text>`
+    // hp ring arc for DM / known
+    const known = !asPlayer || c.kind !== 'monster'
+    if (known && !dead) {
+      const r = size / 2 - 2, frac = c.hp / c.max, len = 2 * Math.PI * r
+      s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${frac > .5 ? '#8fc27f' : frac > .25 ? '#d17448' : '#e08573'}" stroke-width="3" stroke-dasharray="${len * frac} ${len}" transform="rotate(-90 ${cx} ${cy})"/>`
+    }
+    s += `</g>`
+  }
+  // fog
+  for (const key of fog) {
+    const [x, y] = key.split(',').map(Number)
+    s += `<rect x="${x * CELL}" y="${y * CELL}" width="${CELL}" height="${CELL}" fill="#0d0b08" opacity="${asPlayer ? 1 : 0.55}" pointer-events="none"/>`
+  }
+  s += `</g>`
+  svg.innerHTML = s
+}
+
+function cellAt(evt) {
+  const svg = document.getElementById('map'), r = svg.getBoundingClientRect()
+  return { x: Math.floor((evt.clientX - r.left - +svg.dataset.ox) / CELL), y: Math.floor((evt.clientY - r.top - +svg.dataset.oy) / CELL) }
+}
+const ft = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) * 5
+
+let drag = null
+document.getElementById('map').addEventListener('pointerdown', (e) => {
+  const tokenEl = e.target.closest('.token'), cell = cellAt(e)
+  if (tool === 'move' && tokenEl) {
+    const c = combatants.find((x) => x.id === tokenEl.dataset.id)
+    if (asPlayer && c.kind !== 'player') return
+    selected = c.id; drag = { c, from: { x: c.x, y: c.y } }; render()
+  } else if (tool === 'ruler' || tool === 'cone') drag = { from: cell }
+  else if (tool === 'sphere') { const r = 4 * CELL; overlay = `<circle cx="${(cell.x + .5) * CELL}" cy="${(cell.y + .5) * CELL}" r="${r}" fill="#d1744833" stroke="#d17448" stroke-width="2"/>`; hint('20 ft sphere. Everyone inside makes the save.'); drawMap() }
+  else if (tool === 'fog' && !asPlayer) { const k = `${cell.x},${cell.y}`; fog.has(k) ? fog.delete(k) : fog.add(k); drawMap() }
+})
+window.addEventListener('pointermove', (e) => {
+  if (!drag) return
+  const cell = cellAt(e)
+  if (drag.c) { drag.c.x = Math.max(0, Math.min(COLS - (drag.c.size || 1), cell.x)); drag.c.y = Math.max(0, Math.min(ROWS - (drag.c.size || 1), cell.y)); hint(`Moved ${ft(drag.from, drag.c)} ft.`); drawMap() }
+  else if (tool === 'ruler') {
+    const a = drag.from, b = cell
+    overlay = `<line x1="${(a.x + .5) * CELL}" y1="${(a.y + .5) * CELL}" x2="${(b.x + .5) * CELL}" y2="${(b.y + .5) * CELL}" stroke="#f0b28f" stroke-width="3" stroke-dasharray="8 5"/><rect x="${(b.x + .5) * CELL + 8}" y="${(b.y + .5) * CELL - 26}" width="60" height="22" rx="6" fill="#211d17"/><text x="${(b.x + .5) * CELL + 38}" y="${(b.y + .5) * CELL - 10}" text-anchor="middle" font-size="13" font-weight="700" fill="#f0b28f">${ft(a, b)} ft</text>`
+    drawMap()
+  } else if (tool === 'cone') {
+    const a = { x: (drag.from.x + .5) * CELL, y: (drag.from.y + .5) * CELL }, ang = Math.atan2((cell.y + .5) * CELL - a.y, (cell.x + .5) * CELL - a.x), L = 3 * CELL, half = Math.atan(0.5)
+    const p1 = [a.x + L * Math.cos(ang - half) / Math.cos(half), a.y + L * Math.sin(ang - half) / Math.cos(half)], p2 = [a.x + L * Math.cos(ang + half) / Math.cos(half), a.y + L * Math.sin(ang + half) / Math.cos(half)]
+    overlay = `<polygon points="${a.x},${a.y} ${p1.join(',')} ${p2.join(',')}" fill="#d1744833" stroke="#d17448" stroke-width="2"/>`
+    hint('15 ft cone. Release to keep it on the map.'); drawMap()
+  }
+})
+window.addEventListener('pointerup', () => { drag = null })
+
+function hint(t) { document.getElementById('hint').textContent = t }
+
+function renderOrder() {
+  const turnId = order()[turn].id
+  document.getElementById('order').innerHTML = order().map((c) => {
+    const hidden = asPlayer && c.kind === 'monster'
+    const frac = c.hp / c.max
+    return `<div class="combatant ${c.id === turnId ? 'turn' : ''} ${c.id === selected ? 'sel' : ''}" data-id="${c.id}">
+      <div class="init">${hidden ? '–' : c.init}</div>
+      <div><div style="display:flex;gap:6px;align-items:center"><b style="flex:1;font-size:13px">${c.name}</b>${c.hp <= 0 ? `<span class="chip bad">${c.kind === 'vehicle' ? 'Wrecked' : 'Down'}</span>` : ''}</div>
+      ${hidden ? `<div class="note">${frac >= 1 ? 'Unhurt' : frac > .5 ? 'Hurt' : frac > 0 ? 'Bloodied' : 'Down'}</div>` : `<div class="note">${c.hp}/${c.max} HP · AC ${c.ac}</div><div class="bar"><i style="width:${Math.max(0, frac) * 100}%;background:${frac > .5 ? 'var(--good)' : frac > .25 ? 'var(--ember)' : 'var(--bad)'}"></i></div>`}</div></div>`
+  }).join('')
+  document.querySelectorAll('.combatant').forEach((el) => el.addEventListener('click', () => { selected = el.dataset.id; render() }))
+}
+
+function renderDetail() {
+  const c = combatants.find((x) => x.id === selected)
+  const hidden = asPlayer && c.kind === 'monster'
+  document.getElementById('detail').innerHTML = `
+    <div><div class="display" style="font-size:20px">${c.name}</div><div class="note">${{ player: 'Party member', monster: 'Enemy', vehicle: 'Vehicle · Gargantuan space' }[c.kind]}</div></div>
+    ${hidden ? `<div class="callout">Players see an enemy's name, position and how hurt it looks — not its numbers.</div>` : `
+    <div class="stat-row"><div class="stat"><b>${c.hp}</b><span>HP / ${c.max}</span></div><div class="stat"><b>${c.ac}</b><span>AC</span></div><div class="stat"><b>${c.init}</b><span>Init</span></div></div>
+    ${asPlayer ? '' : `<div style="display:flex;gap:6px"><input type="number" id="amt" placeholder="0" style="width:64px;background:var(--sunken);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:4px 8px"><button class="btn" id="dmg" style="color:var(--bad)">Damage</button><button class="btn" id="heal" style="color:var(--good)">Heal</button></div>`}
+    <div><div class="label" style="margin-bottom:6px">${c.kind === 'vehicle' ? 'Weapons' : 'Attacks'}</div>${c.attacks.length ? c.attacks.map(([n, hit, dmg]) => `<div class="attack"><b>${n}</b><button class="pill" data-roll="${n} attack: d20 ${hit}">${hit}</button><button class="pill" data-roll="${n} damage: ${dmg}">${dmg.split(' ')[0]}</button></div>`).join('<div style="height:4px"></div>') : '<div class="note">None</div>'}</div>
+    <div><div class="label" style="margin-bottom:6px">Conditions</div><div style="display:flex;gap:4px;flex-wrap:wrap">${c.id === 'ogre' ? '<span class="chip">Prone</span>' : ''}<span class="chip" style="cursor:pointer">+ Add</span></div></div>
+    <div class="callout">${c.kind === 'player' ? 'Opens their full character sheet.' : c.kind === 'vehicle' ? 'Opens the vehicle in the Vehicles tab: components, crew, fuel.' : 'Opens the full statblock.'}</div>`}`
+  document.querySelectorAll('[data-roll]').forEach((b) => b.addEventListener('click', () => {
+    const log = document.getElementById('log'); const n = 2 + Math.floor(Math.random() * 18)
+    log.insertAdjacentHTML('beforeend', `<div>${b.dataset.roll} → <b>${n}</b></div>`); log.scrollTop = 1e9
+  }))
+  const amt = () => Number(document.getElementById('amt')?.value) || 0
+  document.getElementById('dmg')?.addEventListener('click', () => { c.hp = Math.max(0, c.hp - amt()); render() })
+  document.getElementById('heal')?.addEventListener('click', () => { c.hp = Math.min(c.max, c.hp + amt()); render() })
+}
+
+function render() { renderOrder(); renderDetail(); drawMap(); document.getElementById('roundChip').textContent = `Round ${round}` }
+
+document.getElementById('tools').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tool]'); if (!b) return
+  tool = b.dataset.tool; overlay = null
+  document.querySelectorAll('#tools button').forEach((x) => x.classList.toggle('on', x === b))
+  hint({ move: 'Drag a token to move it. Each square is 5 ft.', ruler: 'Drag to measure. Diagonals count as 5 ft.', cone: 'Drag from the caster in the direction of the cone.', sphere: 'Click where the spell lands.', fog: 'Click squares to hide or reveal them. Players never see hidden squares.' }[tool])
+  drawMap()
+})
+document.getElementById('nextTurn').addEventListener('click', () => { turn = (turn + 1) % combatants.length; if (turn === 0) round++; selected = order()[turn].id; render() })
+document.getElementById('prevTurn').addEventListener('click', () => { if (turn === 0 && round > 1) { round--; turn = combatants.length - 1 } else if (turn > 0) turn--; selected = order()[turn].id; render() })
+document.getElementById('asPlayer').addEventListener('change', (e) => {
+  asPlayer = e.target.checked
+  document.querySelectorAll('.dm-only').forEach((x) => (x.style.display = asPlayer ? 'none' : ''))
+  if (asPlayer && tool === 'fog') document.querySelector('[data-tool="move"]').click()
+  render()
+})
+window.addEventListener('resize', drawMap)
+render()
+</script>
+</body>
+</html>

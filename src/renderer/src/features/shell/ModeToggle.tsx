@@ -1,4 +1,4 @@
-import { DmModeIcon, PlayerModeIcon, WorkshopModeIcon } from './icons'
+import { CombatModeIcon, DmModeIcon, PlayerModeIcon, WorkshopModeIcon } from './icons'
 
 export type Mode = 'dm' | 'player'
 
@@ -11,16 +11,20 @@ interface ModeToggleProps {
   /** The Homebrew Workshop is open — it sits on top of whichever mode you were in, which stays running underneath (a hosted session keeps going). */
   workshop: boolean
   onWorkshop: () => void
+  /** The Combat tab is open — like the Workshop, it sits over the DM workspace, which keeps running. Only offered in DM mode for now. */
+  combat: boolean
+  onCombat?: () => void
 }
 
-const OPTIONS: Array<{ mode: Mode | 'workshop'; label: string; icon: JSX.Element }> = [
+const OPTIONS: Array<{ mode: Mode | 'workshop' | 'combat'; label: string; icon: JSX.Element }> = [
   { mode: 'dm', label: 'DM Mode', icon: <DmModeIcon /> },
   { mode: 'player', label: 'Player Mode', icon: <PlayerModeIcon /> },
-  { mode: 'workshop', label: 'Homebrew Workshop', icon: <WorkshopModeIcon /> }
+  { mode: 'workshop', label: 'Homebrew Workshop', icon: <WorkshopModeIcon /> },
+  { mode: 'combat', label: 'Combat', icon: <CombatModeIcon /> }
 ]
 
-export function ModeToggle({ mode, onChange, disabledMode, disabledReason, workshop, onWorkshop }: ModeToggleProps): JSX.Element {
-  const selected = workshop ? 'workshop' : mode
+export function ModeToggle({ mode, onChange, disabledMode, disabledReason, workshop, onWorkshop, combat, onCombat }: ModeToggleProps): JSX.Element {
+  const selected = workshop ? 'workshop' : combat ? 'combat' : mode
   return (
     <div
       role="tablist"
@@ -33,7 +37,7 @@ export function ModeToggle({ mode, onChange, disabledMode, disabledReason, works
         border: '1px solid var(--border-subtle)'
       }}
     >
-      {OPTIONS.map((option) => {
+      {OPTIONS.filter((o) => o.mode !== 'combat' || onCombat).map((option) => {
         const locked = option.mode === disabledMode
         const active = selected === option.mode
         return (
@@ -46,6 +50,7 @@ export function ModeToggle({ mode, onChange, disabledMode, disabledReason, works
             onClick={() => {
               if (locked) return
               if (option.mode === 'workshop') onWorkshop()
+              else if (option.mode === 'combat') onCombat?.()
               else onChange(option.mode)
             }}
             style={{

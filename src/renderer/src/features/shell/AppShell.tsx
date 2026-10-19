@@ -26,6 +26,7 @@ import type { BestiaryMonster } from '../../data/bestiary'
 
 // Loaded the first time they open, so the app starts without their code.
 const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
+import { CombatView } from '../combat/CombatView'
 const Workshop = lazy(() => import('../workshop/Workshop').then((m) => ({ default: m.Workshop })))
 
 // Discord presence line shown while the app is open but not actively DMing
@@ -52,6 +53,14 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [mode, setMode] = useState<Mode>('dm')
   // The Homebrew Workshop covers the workspace without unmounting it, so a hosted or joined session carries on underneath.
   const [workshopOpen, setWorkshopOpen] = useState(false)
+  // The Combat tab (DM only for now) sits over the workspace like the Workshop; the encounter lives in encounterStore, so nothing is lost switching back and forth.
+  const [combatOpen, setCombatOpen] = useState(false)
+  // Once opened, the Workshop stays mounted (hidden) while you're elsewhere, so unsaved edits are still there
+  // when you come back — they live only in memory, so they're gone once NoteGoblin closes.
+  const [workshopMounted, setWorkshopMounted] = useState(false)
+  useEffect(() => {
+    if (workshopOpen) setWorkshopMounted(true)
+  }, [workshopOpen])
 
   // --- DM side: one active campaign workspace, switched via CampaignSwitcher (lives in the sidebar footer) ---
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null)
@@ -110,6 +119,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     setJoinedSession({ sessionId, label })
     setMode('player')
     setWorkshopOpen(false)
+    setCombatOpen(false)
   }
 
   // Locks the mode you're NOT currently using once you're mid-session, so
@@ -128,6 +138,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault()
         setWorkshopOpen(false)
+        setCombatOpen(false)
         setMode((m) => {
           const next = m === 'dm' ? 'player' : 'dm'
           return next === lockedMode ? m : next
@@ -373,15 +384,28 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             mode={mode}
             onChange={(m) => {
               setWorkshopOpen(false)
+              setCombatOpen(false)
               setMode(m)
             }}
             disabledMode={lockedMode}
             disabledReason={lockedReason}
             workshop={workshopOpen}
-            onWorkshop={() => setWorkshopOpen(true)}
+            onWorkshop={() => {
+              setCombatOpen(false)
+              setWorkshopOpen(true)
+            }}
+            combat={combatOpen && mode === 'dm'}
+            onCombat={
+              mode === 'dm'
+                ? () => {
+                    setWorkshopOpen(false)
+                    setCombatOpen(true)
+                  }
+                : undefined
+            }
           />
 
-          {!workshopOpen && mode === 'dm' && activeCampaign && (
+          {!workshopOpen && !combatOpen && mode === 'dm' && activeCampaign && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
               <WorkspaceHeaderBar
@@ -483,14 +507,19 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
         </div>
       )}
 
-      {workshopOpen && (
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {workshopMounted && (
+        <main style={{ flex: 1, display: workshopOpen ? 'flex' : 'none', flexDirection: 'column', minHeight: 0 }}>
           <Suspense fallback={null}>
             <Workshop authorName={displayName} />
           </Suspense>
         </main>
       )}
-      <main style={{ flex: 1, display: workshopOpen ? 'none' : 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {combatOpen && mode === 'dm' && !workshopOpen && (
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <CombatView sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} playerCharacters={playerCharacters} />
+        </main>
+      )}
+      <main style={{ flex: 1, display: workshopOpen || (combatOpen && mode === 'dm') ? 'none' : 'flex', flexDirection: 'column', minHeight: 0 }}>
         {mode === 'dm' ? (
           <CampaignWorkspace
             campaign={activeCampaign}
