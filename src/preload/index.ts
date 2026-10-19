@@ -92,6 +92,10 @@ const api: AppApi = {
     remove: (campaignId, noteId, sessionId) =>
       ipcRenderer.invoke('notes:remove', campaignId, noteId, sessionId)
   },
+  vehicles: {
+    get: (campaignId, sessionId) => ipcRenderer.invoke('vehicles:get', campaignId, sessionId),
+    save: (campaignId, vehicles) => ipcRenderer.invoke('vehicles:save', campaignId, vehicles)
+  },
   calendar: {
     get: (campaignId, sessionId) => ipcRenderer.invoke('calendar:get', campaignId, sessionId),
     save: (campaignId, config, sessionId) => ipcRenderer.invoke('calendar:save', campaignId, config, sessionId),

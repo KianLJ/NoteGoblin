@@ -828,7 +828,8 @@ const STARTERS: Array<{ kind: EntryKind; label: string; hint: string }> = [
   { kind: 'backgrounds', label: 'A background', hint: 'Features from a past life' },
   { kind: 'classes', label: 'A class', hint: 'Hit points, a level table, features' },
   { kind: 'archetypes', label: 'An archetype', hint: 'A bloodline or patron any class can take' },
-  { kind: 'monsters', label: 'A creature', hint: 'A statblock for the DM' }
+  { kind: 'monsters', label: 'A creature', hint: 'A statblock for the DM' },
+  { kind: 'vehicles', label: 'A vehicle', hint: 'A mount, ship, car or starship' }
 ]
 
 const smallButton = { fontSize: 12, padding: '4px 10px' } as const

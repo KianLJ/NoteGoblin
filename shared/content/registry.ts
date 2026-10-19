@@ -5,8 +5,8 @@
 
 import type { ContentPack, Terminology, Vocabulary } from './schema'
 
-export type EntryKind = 'classes' | 'subclasses' | 'species' | 'backgrounds' | 'feats' | 'spells' | 'items' | 'monsters' | 'optionLists' | 'archetypes'
-export const ENTRY_KINDS: EntryKind[] = ['classes', 'subclasses', 'species', 'backgrounds', 'feats', 'spells', 'items', 'monsters', 'optionLists', 'archetypes']
+export type EntryKind = 'classes' | 'subclasses' | 'species' | 'backgrounds' | 'feats' | 'spells' | 'items' | 'monsters' | 'vehicles' | 'optionLists' | 'archetypes'
+export const ENTRY_KINDS: EntryKind[] = ['classes', 'subclasses', 'species', 'backgrounds', 'feats', 'spells', 'items', 'monsters', 'vehicles', 'optionLists', 'archetypes']
 
 type EntryOf<K extends EntryKind> = ContentPack[K][number]
 

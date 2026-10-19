@@ -192,6 +192,15 @@ CREATE TABLE IF NOT EXISTS campaign_calendars (
 
 CREATE INDEX IF NOT EXISTS idx_calendars_campaign ON campaign_calendars(campaign_id);
 
+-- The vehicles a campaign is tracking (see shared/vehicles.ts): one JSON
+-- document per campaign, DM-written and member-read, like campaign_calendars
+-- (and, like it, campaign_id is deliberately not a foreign key).
+CREATE TABLE IF NOT EXISTS campaign_vehicles (
+  campaign_id TEXT PRIMARY KEY,
+  vehicles_json TEXT NOT NULL DEFAULT '{"vehicles":[]}',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- Content packs the DM has enabled for a campaign (see shared/content/schema.ts
 -- and docs/homebrew-engine.md, phase 5). Each row holds its own copy of the
 -- pack as enabled — the campaign keeps that version until the DM explicitly

@@ -6,6 +6,7 @@ import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, R
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
+import type { CampaignVehicles } from './vehicles'
 import type { ContentPack } from './content/schema'
 import type { PackIssue } from './content/validate'
 import type { SessionDeck, SessionScene, LiveSceneState } from './sessionDeck'
@@ -326,6 +327,12 @@ export interface AppApi {
   // the whole config and is rejected server-side for anyone but the DM.
   // Reuses campaigns.onChanged (not a dedicated event) to tell other windows
   // to re-fetch after a save, same as notes/folders.
+  // The vehicles a campaign tracks (see shared/vehicles.ts) — every member
+  // reads them (minus ones the DM has hidden); only the DM saves, locally.
+  vehicles: {
+    get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignVehicles>>
+    save: (campaignId: string, vehicles: CampaignVehicles) => Promise<ApiResult<CampaignVehicles>>
+  }
   calendar: {
     get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignCalendar | null>>
     save: (campaignId: string, config: CalendarConfig, sessionId?: string) => Promise<ApiResult<CampaignCalendar>>

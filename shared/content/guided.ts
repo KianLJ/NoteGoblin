@@ -13,7 +13,7 @@ import { entriesOf, slugify, uniqueId, withEntries, type PackDraft } from './wor
 
 export type { MonsterAnswers } from './guidedMonster'
 
-export type GuidedKind = 'magicItem' | 'weapon' | 'armor' | 'spell' | 'feat' | 'species' | 'monster'
+export type GuidedKind = 'magicItem' | 'weapon' | 'armor' | 'spell' | 'feat' | 'species' | 'monster' | 'vehicle'
 
 /** The "What do you want to make?" cards, in order. */
 export const GUIDED_KINDS: Array<{ kind: GuidedKind; entryKind: EntryKind; title: string; hint: string }> = [
@@ -23,7 +23,8 @@ export const GUIDED_KINDS: Array<{ kind: GuidedKind; entryKind: EntryKind; title
   { kind: 'spell', entryKind: 'spells', title: 'Spell', hint: 'A cantrip or levelled spell for your casters' },
   { kind: 'feat', entryKind: 'feats', title: 'Feat', hint: 'A special talent taken at a level-up or from a background' },
   { kind: 'species', entryKind: 'species', title: 'Species', hint: 'A playable people, with their size, speed and traits' },
-  { kind: 'monster', entryKind: 'monsters', title: 'Monster', hint: 'A creature for the DM, with a full statblock' }
+  { kind: 'monster', entryKind: 'monsters', title: 'Monster', hint: 'A creature for the DM, with a full statblock' },
+  { kind: 'vehicle', entryKind: 'vehicles', title: 'Vehicle', hint: 'A mount, cart, car, ship or starship, with crew, weapons and fuel' }
 ]
 
 export const ABILITY_LABELS: Record<AbilityId, string> = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' }
@@ -421,7 +422,13 @@ export interface SpeciesAnswers extends Common {
   otherSpeeds: Record<string, string>
 }
 
-export type GuidedAnswers = MagicItemAnswers | WeaponAnswers | ArmorAnswers | SpellAnswers | FeatAnswers | SpeciesAnswers | MonsterAnswers
+/** A vehicle's fields are all plain, so its answers are just the entry (everything but id, name and description). */
+export interface VehicleAnswers extends Common {
+  kind: 'vehicle'
+  entry: Record<string, unknown>
+}
+
+export type GuidedAnswers = MagicItemAnswers | WeaponAnswers | ArmorAnswers | SpellAnswers | FeatAnswers | SpeciesAnswers | MonsterAnswers | VehicleAnswers
 
 export function entryKindOf(kind: GuidedKind): EntryKind {
   return GUIDED_KINDS.find((k) => k.kind === kind)!.entryKind
@@ -489,12 +496,15 @@ export function blankAnswers(kind: GuidedKind, id: string): GuidedAnswers {
       return { ...base, kind, size: 'Medium', speed: 30, darkvision: 0, traits: [], otherSpeeds: {} }
     case 'monster':
       return blankMonster(id)
+    case 'vehicle':
+      return { ...base, kind, entry: { category: 'Land', size: 'Large', speeds: [{ mode: 'walk', value: '30 ft.' }], ac: 12, hp: 50, crew: 1 } }
   }
 }
 
 /** Which guided form an existing entry opens in (null: it's a kind the guided forms don't make). */
 export function guidedKindFor(entryKind: EntryKind, entry: Record<string, unknown>): GuidedKind | null {
   if (entryKind === 'items') return entry.weapon ? 'weapon' : entry.armor ? 'armor' : 'magicItem'
+  if (entryKind === 'vehicles') return 'vehicle'
   if (entryKind === 'spells') return 'spell'
   if (entryKind === 'feats') return 'feat'
   if (entryKind === 'species') return 'species'
@@ -529,6 +539,8 @@ export function answersToEntry(a: GuidedAnswers): Record<string, unknown> {
   switch (a.kind) {
     case 'monster':
       return monsterToEntry(a)
+    case 'vehicle':
+      return { ...a.entry, ...base }
     case 'magicItem': {
       return {
         ...base,
@@ -682,6 +694,10 @@ export function entryToAnswers(kind: GuidedKind, entry: Record<string, unknown>)
   switch (kind) {
     case 'monster':
       return entryToMonster(entry)
+    case 'vehicle': {
+      const { id: _id, name: _name, description: _description, ...rest } = entry
+      return { ...(blank as VehicleAnswers), ...common, entry: rest }
+    }
     case 'magicItem': {
       const { benefits, extras } = effectsToBenefits(effects)
       const when = str(entry.effectsWhen, 'equipped')
@@ -909,6 +925,8 @@ export function mergeIntoEntry(a: GuidedAnswers, original: Record<string, unknow
 
 const ITEM_FIELDS = ['id', 'name', 'description', 'category', 'rarity', 'requiresAttunement', 'effectsWhen', 'charges', 'effects', 'cost', 'weight', 'weapon', 'armor']
 const MANAGED_FIELDS: Record<GuidedKind, string[]> = {
+  // The form covers a vehicle's every field, so a field cleared in it must go.
+  vehicle: ['id', 'name', 'description', 'category', 'size', 'speeds', 'ac', 'hp', 'damageThreshold', 'abilities', 'crew', 'passengers', 'cargo', 'cost', 'components', 'stations', 'weapons', 'resources', 'traits', 'actions'],
   magicItem: ITEM_FIELDS,
   weapon: ITEM_FIELDS,
   armor: ITEM_FIELDS,
@@ -980,6 +998,18 @@ export function describeAnswers(a: GuidedAnswers, names: { skill?: (id: string) 
     case 'monster':
       lines.push(...describeMonster(a))
       break
+    case 'vehicle': {
+      const n = (key: string): number => (Array.isArray(a.entry[key]) ? (a.entry[key] as unknown[]).length : 0)
+      const parts = [
+        n('components') ? `${n('components')} component${n('components') === 1 ? '' : 's'} with their own hit points` : '',
+        n('stations') ? `${n('stations')} crew station${n('stations') === 1 ? '' : 's'}` : '',
+        n('weapons') ? `${n('weapons')} weapon${n('weapons') === 1 ? '' : 's'} to roll` : '',
+        n('resources') ? `${n('resources')} resource${n('resources') === 1 ? '' : 's'} to track` : ''
+      ].filter(Boolean)
+      if (parts.length) lines.push(parts.join(', '))
+      lines.push('Add it to a campaign from its Vehicles panel to track its hit points, crew and fuel')
+      break
+    }
     case 'species':
       if (a.darkvision) lines.push(`Darkvision ${a.darkvision} ft.`)
       for (const t of a.traits) lines.push(...benefitLines(t.benefits))
@@ -1045,7 +1075,7 @@ export function removeGuidedEntry(draft: PackDraft, kind: GuidedKind, id: string
 /** Every entry in a pack the guided forms can open, newest last. */
 export function guidedEntries(draft: PackDraft): Array<{ kind: GuidedKind; entryKind: EntryKind; entry: Record<string, unknown> }> {
   const out: Array<{ kind: GuidedKind; entryKind: EntryKind; entry: Record<string, unknown> }> = []
-  for (const entryKind of ['items', 'spells', 'feats', 'species', 'monsters'] as EntryKind[]) {
+  for (const entryKind of ['items', 'spells', 'feats', 'species', 'monsters', 'vehicles'] as EntryKind[]) {
     for (const entry of entriesOf(draft, entryKind)) {
       const kind = guidedKindFor(entryKind, entry)
       if (kind) out.push({ kind, entryKind, entry })

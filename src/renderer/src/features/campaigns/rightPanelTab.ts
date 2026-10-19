@@ -5,14 +5,14 @@
  * selected tab survives a DM/player mode switch or an app restart instead
  * of each side tracking its own independently.
  */
-export type RightPanelTab = 'players' | 'initiative' | 'dice' | 'calendar' | 'sessions'
+export type RightPanelTab = 'players' | 'initiative' | 'dice' | 'calendar' | 'vehicles' | 'sessions'
 
 const STORAGE_KEY = 'gb-right-panel-tab'
 
 export function loadRightPanelTab(): RightPanelTab {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'players' || raw === 'initiative' || raw === 'dice' || raw === 'calendar' || raw === 'sessions') return raw
+    if (raw === 'players' || raw === 'initiative' || raw === 'dice' || raw === 'calendar' || raw === 'vehicles' || raw === 'sessions') return raw
   } catch {
     /* fall through to the default */
   }

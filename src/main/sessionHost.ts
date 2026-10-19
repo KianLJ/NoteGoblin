@@ -475,6 +475,9 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (result.ok) broadcastCampaignChanged(campaignId)
       return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
     }
+    // Players only read vehicles — the DM changes them locally (see registerIpc.ts's vehicles:save).
+    case 'vehicles.get':
+      return fromService(frame.reqId, campaignService.getVehicles(db, str('campaignId'), userId))
     // Players only ever read a campaign's packs — the DM changes them locally (see registerIpc.ts's campaignPacks:*).
     case 'campaignPacks.list':
       return fromService(frame.reqId, campaignService.listCampaignPacks(db, str('campaignId'), userId))

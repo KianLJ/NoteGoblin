@@ -638,6 +638,80 @@ export type ItemDef = z.infer<typeof itemDefSchema>
 export const monsterDefSchema = z.object({ ...entryBase }).passthrough()
 export type MonsterDef = z.infer<typeof monsterDefSchema>
 
+/**
+ * A vehicle of any kind — a rideable beast, a cart, a car, a sailing ship, a
+ * starship. The DM tracks copies of it in a campaign (see shared/vehicles.ts):
+ * its hull and components take damage, its resources (fuel, shield charges)
+ * and weapons' ammo run down, and crew sit at its stations.
+ */
+const vehicleIdSchema = z.string().min(1)
+export const vehicleComponentSchema = z.object({
+  id: vehicleIdSchema,
+  name: nameSchema,
+  /** Defaults to the vehicle's own AC. */
+  ac: z.number().int().optional(),
+  hp: z.number().int().min(1),
+  /** Damage below this from one hit does nothing (0: none). */
+  threshold: z.number().int().min(0).default(0),
+  /** What happens as it's damaged or destroyed ("At 0 HP the ship can't move"). */
+  notes: z.string().default('')
+})
+export const vehicleStationSchema = z.object({
+  id: vehicleIdSchema,
+  name: nameSchema,
+  /** How many crew it takes. */
+  count: z.number().int().min(1).default(1),
+  notes: z.string().default('')
+})
+export const vehicleWeaponSchema = z.object({
+  id: vehicleIdSchema,
+  name: nameSchema,
+  /** The station that fires it (a station id), if any. */
+  station: z.string().optional(),
+  /** An attack roll's bonus — or a save DC instead (saveDc + saveAbility). */
+  attackBonus: z.number().int().optional(),
+  saveDc: z.number().int().optional(),
+  saveAbility: z.enum(['str', 'dex', 'con', 'int', 'wis', 'cha']).optional(),
+  /** Dice, e.g. "4d10" or "2d6 + 3". */
+  damage: z.string().default(''),
+  damageType: z.string().default(''),
+  range: z.string().default(''),
+  /** Shots before it needs reloading or resupply (none: unlimited). */
+  ammo: z.number().int().min(1).optional(),
+  notes: z.string().default('')
+})
+export const vehicleResourceSchema = z.object({
+  id: vehicleIdSchema,
+  name: nameSchema,
+  max: z.number().int().min(1),
+  recharge: z.enum(['none', 'short', 'long', 'dawn']).default('none')
+})
+export const vehicleTextSchema = z.object({ name: nameSchema, desc: z.string().default('') })
+export const vehicleDefSchema = z.object({
+  ...entryBase,
+  /** "Mount", "Land", "Water", "Air", "Space" — or anything else. */
+  category: z.string().default('Land'),
+  size: z.string().default('Large'),
+  /** Each way it moves: { mode: "fly", value: "60 ft." } — or "Warp 3", "4 hexes". */
+  speeds: z.array(z.object({ mode: z.string().min(1), value: z.string().min(1) })).default([]),
+  ac: z.number().int().default(10),
+  hp: z.number().int().min(1).default(10),
+  damageThreshold: z.number().int().min(0).default(0),
+  /** A creature's scores, for a mount or beast of burden; left out for a machine. */
+  abilities: z.object({ str: z.number().int(), dex: z.number().int(), con: z.number().int(), int: z.number().int(), wis: z.number().int(), cha: z.number().int() }).optional(),
+  crew: z.number().int().min(0).default(0),
+  passengers: z.number().int().min(0).default(0),
+  cargo: z.string().default(''),
+  cost: z.string().optional(),
+  components: z.array(vehicleComponentSchema).default([]),
+  stations: z.array(vehicleStationSchema).default([]),
+  weapons: z.array(vehicleWeaponSchema).default([]),
+  resources: z.array(vehicleResourceSchema).default([]),
+  traits: z.array(vehicleTextSchema).default([]),
+  actions: z.array(vehicleTextSchema).default([])
+})
+export type VehicleDef = z.infer<typeof vehicleDefSchema>
+
 // ---------------------------------------------------------------------------
 // Vocabulary and terminology
 
@@ -719,6 +793,7 @@ export const contentPackSchema = z.object({
   spells: z.array(spellDefSchema).default([]),
   items: z.array(itemDefSchema).default([]),
   monsters: z.array(monsterDefSchema).default([]),
+  vehicles: z.array(vehicleDefSchema).default([]),
   optionLists: z.array(optionListDefSchema).default([]),
   archetypes: z.array(archetypeDefSchema).default([])
 })

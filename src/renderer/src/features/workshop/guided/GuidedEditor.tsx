@@ -24,6 +24,7 @@ import { ConfirmButton } from '../../../ui/ConfirmButton'
 import { ArrowLeftIcon, IconLabel } from '../../../ui/icons'
 import { renderStatblockHtml, type StatblockData } from '../../../statblock'
 import { rollInlineDice } from '../../dice/inlineDice'
+import { VehicleCard, asVehicle } from '../../vehicles/VehicleCard'
 import { HomebrewDetail } from '../../bestiary/HomebrewDetail'
 import { Field, Grid, NumberInput, Select } from '../form/fields'
 import { GuidedForm, traitIdsFromNames, type GuidedSources } from './GuidedForms'
@@ -190,6 +191,8 @@ export function GuidedEditor({
       text:
         answers.kind === 'monster'
           ? `Saved to ${result.data.pack.name} — it's in your Codex, encounter builder and initiative tracker now.`
+          : answers.kind === 'vehicle'
+            ? `Saved to ${result.data.pack.name}. Turn the pack on for a campaign, then add the vehicle from the campaign’s Vehicles panel.`
           : `Saved to ${result.data.pack.name}. A DM can turn it on for a campaign from Content Packs.`
     })
     setPackId(result.data.pack.id)
@@ -198,6 +201,7 @@ export function GuidedEditor({
   }
 
   const names = { skill: (id: string) => sources.skills.find((s) => s.id === id)?.name ?? id, spell: sources.spellName }
+  const vehiclePreview = answers.kind === 'vehicle' && preview.entry ? asVehicle(preview.entry) : null
   const lines = describeAnswers(answers, names)
   const canSave = !busy && dirty && !blocked && preview.problems.length === 0 && settled === answers && answers.name.trim() !== ''
 
@@ -262,7 +266,11 @@ export function GuidedEditor({
               Preview
             </div>
             <div className="gb-card" style={{ padding: 'var(--space-3)' }}>
-              {answers.kind === 'monster' && preview.entry && answers.name.trim() ? (
+              {answers.kind === 'vehicle' && vehiclePreview && answers.name.trim() ? (
+                <div onClick={(e) => rollInlineDice(e, null)}>
+                  <VehicleCard vehicle={vehiclePreview} />
+                </div>
+              ) : answers.kind === 'monster' && preview.entry && answers.name.trim() ? (
                 <div onClick={(e) => rollInlineDice(e, null)} dangerouslySetInnerHTML={{ __html: renderStatblockHtml(preview.entry as unknown as StatblockData, false) }} />
               ) : preview.card ? (
                 <HomebrewDetail entry={preview.card} />
@@ -271,7 +279,7 @@ export function GuidedEditor({
               )}
               {lines.length > 0 && (
                 <div style={{ marginTop: 'var(--space-3)' }}>
-                  <div className="gb-label">{answers.kind === 'monster' ? 'Worked out for you' : 'On the character sheet'}</div>
+                  <div className="gb-label">{answers.kind === 'monster' ? 'Worked out for you' : answers.kind === 'vehicle' ? 'In play' : 'On the character sheet'}</div>
                   <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.5 }}>
                     {lines.map((l, i) => (
                       <li key={i}>{l}</li>
@@ -293,7 +301,7 @@ export function GuidedEditor({
               </ul>
             </div>
           )}
-          {answers.kind !== 'monster' && preview.registry && preview.card && <TryIt registry={preview.registry} answers={answers} fullId={preview.fullId} />}
+          {answers.kind !== 'monster' && answers.kind !== 'vehicle' && preview.registry && preview.card && <TryIt registry={preview.registry} answers={answers} fullId={preview.fullId} />}
         </aside>
       </div>
     </div>

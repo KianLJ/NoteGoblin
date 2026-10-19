@@ -4,7 +4,10 @@ import { InitiativeTracker } from './InitiativeTracker'
 import { CalendarPanel } from './CalendarPanel'
 import { SessionDeckPanel } from './SessionDeckPanel'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from './panelIcons'
+import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon, VehicleIcon } from './panelIcons'
+import { VehiclesPanel } from '../vehicles/VehiclesPanel'
+import { useVehicles } from '../vehicles/useVehicles'
+import type { TrackedVehicle } from '@shared/vehicles'
 import { DiceTray } from '../dice/DiceTray'
 import { useDiceRollToast } from '../dice/useDiceRollToast'
 import { DiceRollToast } from '../dice/DiceRollToast'
@@ -54,6 +57,11 @@ export function RightPanel({
   // combat state — lifted just far enough (not into a global store) for the
   // two to hand off through their shared parent.
   const [pendingEncounterMonsters, setPendingEncounterMonsters] = useState<BestiaryMonster[] | null>(null)
+  // "Add to initiative" on a vehicle hands it to the tracker the same way.
+  const [pendingVehicle, setPendingVehicle] = useState<TrackedVehicle | null>(null)
+  // The tracker keeps vehicle combatants' hit points and the hull in step through this.
+  const vehicles = useVehicles(null, campaignId)
+  const [focusVehicle, setFocusVehicle] = useState<{ id: string } | null>(null)
 
   return (
     <ResizableSidebar
@@ -79,6 +87,7 @@ export function RightPanel({
           </div>
           <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
           <TabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
+          <TabButton icon={<VehicleIcon />} label="Vehicles" active={tab === 'vehicles'} onClick={() => setTab('vehicles')} />
           <TabButton icon={<SessionIcon />} label="Sessions" active={tab === 'sessions'} onClick={() => setTab('sessions')} />
         </div>
 
@@ -96,6 +105,14 @@ export function RightPanel({
               onSelectMonster={onSelectMonster}
               pendingEncounterMonsters={pendingEncounterMonsters}
               onPendingEncounterConsumed={() => setPendingEncounterMonsters(null)}
+              pendingVehicle={pendingVehicle}
+              onPendingVehicleConsumed={() => setPendingVehicle(null)}
+              vehicles={vehicles.doc.vehicles}
+              onVehicleHp={(id, hp) => void vehicles.save({ vehicles: vehicles.doc.vehicles.map((v) => (v.id === id ? { ...v, hp } : v)) })}
+              onSelectVehicle={(id) => {
+                setFocusVehicle({ id })
+                setTab('vehicles')
+              }}
             />
           </div>
           <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
@@ -110,6 +127,21 @@ export function RightPanel({
                 still broadcast to connected players regardless — see registerIpc.ts's calendar:save
                 handler, which already checks getHostedSession() server-side. */}
             <CalendarPanel sessionId={null} campaignId={campaignId} readOnly={false} notes={notes} />
+          </div>
+          <div style={{ display: tab === 'vehicles' ? 'block' : 'none', height: '100%' }}>
+            {/* Read and saved locally like the calendar; rolls go to the hosted session. */}
+            <VehiclesPanel
+              sessionId={null}
+              rollSessionId={sessionId}
+              campaignId={campaignId}
+              readOnly={false}
+              playerCharacters={playerCharacters}
+              focus={focusVehicle}
+              onAddToInitiative={(v) => {
+                setPendingVehicle(v)
+                setTab('initiative')
+              }}
+            />
           </div>
           <div style={{ display: tab === 'sessions' ? 'block' : 'none', height: '100%' }}>
             {/* Same reasoning as Calendar above: always the local/direct path, never the hosted

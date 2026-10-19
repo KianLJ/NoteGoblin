@@ -80,12 +80,12 @@ export function PlayerInitiativeView({ sessionId }: PlayerInitiativeViewProps): 
               {c.isSelf && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> (you)</span>}
               {c.dead && (
                 <span className="gb-badge" style={{ marginLeft: 6, fontSize: 9, color: 'var(--danger)' }}>
-                  Dead
+                  {c.kind === 'vehicle' ? 'Wrecked' : 'Dead'}
                 </span>
               )}
             </span>
             {!c.dead &&
-              (c.kind === 'player' ? (
+              (c.currentHp !== null && c.maxHp !== null ? (
                 c.currentHp !== null && c.maxHp !== null && (
                   <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                     {c.currentHp} / {c.maxHp} HP

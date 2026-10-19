@@ -32,7 +32,13 @@ export const WORKSHOP_SECTIONS: Array<{ kind: EntryKind; label: string; singular
   },
   { kind: 'spells', label: 'Spells', singular: 'spell', description: 'A spell characters can learn or be granted, with its casting details, damage or healing, and any ongoing effects.' },
   { kind: 'items', label: 'Items', singular: 'item', description: 'Equipment: weapons, armor and magic items. Equipped (or attuned) items apply their effects to the sheet.' },
-  { kind: 'monsters', label: 'Monsters', singular: 'monster', description: 'A creature statblock for the DM, offered in the Codex, the encounter builder and the initiative tracker.' }
+  { kind: 'monsters', label: 'Monsters', singular: 'monster', description: 'A creature statblock for the DM, offered in the Codex, the encounter builder and the initiative tracker.' },
+  {
+    kind: 'vehicles',
+    label: 'Vehicles',
+    singular: 'vehicle',
+    description: 'Anything that carries people: a mount, a cart, a car, a ship or a starship, with its hit points, crew stations, weapons and fuel. The DM tracks them in a campaign’s Vehicles panel.'
+  }
 ]
 
 /** Lower-case, hyphenated, safe as a pack or entry id: "Arcane Frontier!" → "arcane-frontier". */
@@ -144,6 +150,8 @@ export function entryTemplate(kind: EntryKind, draft: PackDraft): Record<string,
         legendary_actions: [],
         lair_actions: []
       }
+    case 'vehicles':
+      return { ...base, category: 'Land', size: 'Large', speeds: [{ mode: 'walk', value: '30 ft.' }], ac: 12, hp: 50, crew: 1 }
   }
 }
 

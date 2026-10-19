@@ -4,6 +4,8 @@ import { NoteRepo, type NoteRow } from '../repositories/noteRepo'
 import { FolderRepo, type FolderRow } from '../repositories/folderRepo'
 import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
 import { CalendarRepo, type CalendarRow } from '../repositories/calendarRepo'
+import { VehiclesRepo } from '../repositories/vehiclesRepo'
+import { campaignVehiclesSchema, vehiclesForPlayer, type CampaignVehicles } from '@shared/vehicles'
 import { CampaignPackRepo, type EnabledPack } from '../repositories/packRepo'
 import { dependents, enableProblems } from '@shared/content/packFiles'
 import { contentPackSchema } from '@shared/content/schema'
@@ -360,6 +362,7 @@ export function deleteCampaign(db: DatabaseType, campaignId: string, userId: str
   db.prepare('DELETE FROM initiative_entries WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM messages WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM campaign_calendars WHERE campaign_id = ?').run(campaignId)
+  new VehiclesRepo(db).remove(campaignId)
   new CampaignPackRepo(db).removeAll(campaignId)
   db.prepare('DELETE FROM session_decks WHERE campaign_id = ?').run(campaignId)
   return { ok: true, data: undefined }
@@ -1350,6 +1353,37 @@ export function saveCalendar(
 
   const row = new CalendarRepo(db).upsert(campaignId, JSON.stringify(validated.config))
   return { ok: true, data: toCalendarJson(row) }
+}
+
+/**
+ * The vehicles a campaign is tracking. Every member reads them; a player
+ * doesn't see ones the DM has hidden. Rows saved by an older version are
+ * re-validated, so a field added later comes back with its default.
+ */
+export function getVehicles(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignVehicles> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  const row = new VehiclesRepo(db).findByCampaignId(campaignId)
+  let doc: CampaignVehicles = { vehicles: [] }
+  if (row) {
+    const parsed = campaignVehiclesSchema.safeParse(JSON.parse(row.vehicles_json))
+    if (parsed.success) doc = parsed.data
+  }
+  return { ok: true, data: campaign.dm_user_id === userId ? doc : vehiclesForPlayer(doc) }
+}
+
+/** Only the DM changes the vehicles (players roll from their stations, which doesn't need a save) — replaces the whole list. */
+export function saveVehicles(db: DatabaseType, campaignId: string, userId: string, input: unknown): ServiceResult<CampaignVehicles> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change the vehicles.' }
+  const parsed = campaignVehiclesSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, status: 400, error: `Invalid vehicles: ${parsed.error.issues[0]?.message ?? 'unknown problem'}` }
+  new VehiclesRepo(db).upsert(campaignId, JSON.stringify(parsed.data))
+  return { ok: true, data: parsed.data }
 }
 
 /** Only the DM can delete their campaign's calendar — irreversible, the same as deleting a note/folder/campaign. The client is expected to have already confirmed with the user. */

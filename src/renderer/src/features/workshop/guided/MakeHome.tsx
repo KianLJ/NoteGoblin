@@ -11,7 +11,8 @@ const ICONS: Record<GuidedKind, JSX.Element> = {
   spell: <path d="M5 19l9-9M14 4v3M18 8h3M17 5l2-2M12 6l1 2M16 10l2 1M7 11l1-1M11 15l-1 1" />,
   feat: <path d="M12 2l3 6 6 .9-4.5 4.4 1 6.2L12 16.6 6.5 19.5l1-6.2L3 8.9 9 8z" />,
   species: <path d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />,
-  monster: <path d="M5 20c0-6 2-11 7-11s7 5 7 11M8 9L6 4l4 3M16 9l2-5-4 3M10 14h.01M14 14h.01" />
+  monster: <path d="M5 20c0-6 2-11 7-11s7 5 7 11M8 9L6 4l4 3M16 9l2-5-4 3M10 14h.01M14 14h.01" />,
+  vehicle: <path d="M12 2c3 3 4 7 4 11l2 3v3l-3-1-1 2h-4l-1-2-3 1v-3l2-3c0-4 1-8 4-11zM12 9a1.5 1.5 0 100 3 1.5 1.5 0 000-3z" />
 }
 
 const PLURAL: Record<GuidedKind, string> = {
@@ -21,7 +22,8 @@ const PLURAL: Record<GuidedKind, string> = {
   spell: 'Spells',
   feat: 'Feats',
   species: 'Species',
-  monster: 'Monsters'
+  monster: 'Monsters',
+  vehicle: 'Vehicles'
 }
 
 /** A heading with a count that folds what's under it. */

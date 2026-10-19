@@ -35,13 +35,19 @@ export interface DeathSaves {
 export type Combatant = {
   id: string
   name: string
-  kind: 'player' | 'monster'
+  kind: 'player' | 'monster' | 'vehicle'
   initiative: number | null
   maxHp: number
   currentHp: number
   ac: number
   /** kind 'monster' only — links back to a bestiary/custom entry for hover/restat purposes. */
   monsterIndex?: string
+  /** kind 'vehicle' only — the campaign's tracked vehicle (shared/vehicles.ts) whose hull this is; its hit points stay in step with it. */
+  vehicleId?: string
+  /** kind 'vehicle' only — the party's own: players see its real hit points, like a fellow player's. */
+  party?: boolean
+  /** kind 'vehicle' only — a single hit below this does nothing. */
+  damageThreshold?: number
   /** kind 'player' only — the connected player's relay userId, so the DM can click through to their sheet like elsewhere in the app. */
   userId?: string
   /** Free-text condition tags (Prone, Poisoned, Concentrating, etc.) — same list shown to the DM and to players, since knowing an enemy is prone/restrained is normal tactical information, not a secret. */
@@ -100,10 +106,10 @@ export function sortedByInitiative(combatants: Combatant[]): Combatant[] {
  */
 export interface PlayerVisibleCombatant {
   id: string
-  kind: 'player' | 'monster'
+  kind: 'player' | 'monster' | 'vehicle'
   name: string
   initiative: number | null
-  /** Real numbers for a player combatant; null for a monster (see `injury` instead). */
+  /** Real numbers for a player combatant (and the party's own vehicle); null for a monster or enemy vehicle (see `injury` instead). */
   currentHp: number | null
   maxHp: number | null
   injury: InjuryLevel
@@ -150,7 +156,7 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
   // at whoever's actually active after the reorder.
   const activeId = state.turnIndex >= 0 ? ordered[state.turnIndex]?.id : undefined
   const monsterSlots = ordered.reduce<number[]>((slots, c, i) => {
-    if (c.kind === 'monster') slots.push(i)
+    if (c.kind === 'monster' || (c.kind === 'vehicle' && !c.party)) slots.push(i)
     return slots
   }, [])
   const shuffledMonsters = shuffle(monsterSlots.map((i) => ordered[i]))
@@ -165,6 +171,8 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
     turnIndex,
     combatants: display.map((c) => {
       const isSelf = c.kind === 'player' && c.userId === viewerUserId
+      // The party's own vehicle is known to everyone, like a fellow player; an enemy vehicle is hidden like a monster.
+      const known = c.kind === 'player' || (c.kind === 'vehicle' && !!c.party)
       return {
         id: c.id,
         kind: c.kind,
@@ -173,9 +181,9 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
         // own rolls), but null for a monster — the shuffle above already
         // hides its relative position, and there's no reason to also hand
         // over its literal roll on top of that.
-        initiative: c.kind === 'player' ? c.initiative : null,
-        currentHp: c.kind === 'player' ? c.currentHp : null,
-        maxHp: c.kind === 'player' ? c.maxHp : null,
+        initiative: known ? c.initiative : null,
+        currentHp: known ? c.currentHp : null,
+        maxHp: known ? c.maxHp : null,
         injury: injuryLevel(c.currentHp, c.maxHp),
         dead: c.currentHp <= 0,
         isSelf,

@@ -31,6 +31,7 @@ import { Button } from '../../ui/Button'
 import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
 import { playSfx } from '../audio/soundEffects'
 import { IconLabel, UndoIcon, XIcon } from '../../ui/icons'
+import { vehicleName, type TrackedVehicle } from '@shared/vehicles'
 
 interface InitiativeTrackerProps {
   sessionId: string | null
@@ -40,6 +41,15 @@ interface InitiativeTrackerProps {
   /** Set by RightPanel when the DM clicks "Load Encounter" on a presented scene (see SessionDeckPanel.tsx) — added to the tracker the same way EncounterBuilder's own "Add to Tracker" does, then cleared via onPendingEncounterConsumed so it doesn't re-add on every re-render. */
   pendingEncounterMonsters?: BestiaryMonster[] | null
   onPendingEncounterConsumed?: () => void
+  /** A vehicle sent from the Vehicles tab's "Add to initiative" — added once, then cleared. */
+  pendingVehicle?: TrackedVehicle | null
+  onPendingVehicleConsumed?: () => void
+  /** The campaign's tracked vehicles: a vehicle combatant's hit points follow its hull. */
+  vehicles?: TrackedVehicle[]
+  /** A vehicle combatant's hit points changed here — the hull follows. */
+  onVehicleHp?: (vehicleId: string, hp: number) => void
+  /** Clicking a vehicle combatant's name shows it in the Vehicles tab. */
+  onSelectVehicle?: (vehicleId: string) => void
 }
 
 const STATUS_EFFECT_PRESETS = [
@@ -99,6 +109,22 @@ function monsterToCombatant(monster: BestiaryMonster): Combatant {
   }
 }
 
+function vehicleToCombatant(v: TrackedVehicle): Combatant {
+  return {
+    id: `vehicle:${v.id}:${crypto.randomUUID()}`,
+    name: vehicleName(v),
+    kind: 'vehicle',
+    initiative: null,
+    maxHp: v.def.hp,
+    currentHp: v.hp,
+    ac: v.def.ac,
+    vehicleId: v.id,
+    party: v.party,
+    ...(v.def.damageThreshold ? { damageThreshold: v.def.damageThreshold } : {}),
+    ...emptyCombatant()
+  }
+}
+
 /** A monster statblock's Dex is a raw score string (e.g. "14"), not a modifier — same shape OverviewTab parses for players' own ability scores, just from `StatblockData` instead of a `CharacterSheet`. Missing/unparseable Dex falls back to a flat 10 (the modifier-0 baseline) rather than blocking the roll. */
 function monsterDexModifier(monster: BestiaryMonster | undefined): number {
   // A statblock with its own initiative line ("+5 (15)") rolls with that; otherwise the Dex modifier.
@@ -112,7 +138,8 @@ function monsterDexModifier(monster: BestiaryMonster | undefined): number {
 function initiativeModifierFor(
   c: Combatant,
   playerCharacters: Map<string, CharacterSheet>,
-  allMonsters: BestiaryMonster[]
+  allMonsters: BestiaryMonster[],
+  vehicles?: TrackedVehicle[]
 ): number {
   if (c.kind === 'player' && c.userId) {
     const character = playerCharacters.get(c.userId)
@@ -121,6 +148,8 @@ function initiativeModifierFor(
   if (c.kind === 'monster') {
     return monsterDexModifier(allMonsters.find((m) => m.index === c.monsterIndex))
   }
+  // A vehicle rolls with its creature Dex (a mount); a machine rolls flat — or the DM types its pilot's roll in.
+  if (c.kind === 'vehicle') return vehicles?.find((v) => v.id === c.vehicleId)?.def.abilities ? abilityModifier(vehicles.find((v) => v.id === c.vehicleId)!.def.abilities!.dex) : 0
   return 0
 }
 
@@ -138,7 +167,12 @@ export function InitiativeTracker({
   playerCharacters,
   onSelectMonster,
   pendingEncounterMonsters,
-  onPendingEncounterConsumed
+  onPendingEncounterConsumed,
+  pendingVehicle,
+  onPendingVehicleConsumed,
+  vehicles,
+  onVehicleHp,
+  onSelectVehicle
 }: InitiativeTrackerProps): JSX.Element {
   const [state, setState] = useState<InitiativeState>(emptyInitiativeState())
   const [view, setView] = useState<'tracker' | 'build'>('tracker')
@@ -169,6 +203,28 @@ export function InitiativeTracker({
   useEffect(() => {
     if (sessionId) void window.goblin.initiative.broadcast(state)
   }, [state, sessionId])
+
+  useEffect(() => {
+    if (!pendingVehicle) return
+    setState((prev) => ({ ...prev, combatants: [...prev.combatants, vehicleToCombatant(pendingVehicle)] }))
+    setView('tracker')
+    onPendingVehicleConsumed?.()
+  }, [pendingVehicle, onPendingVehicleConsumed])
+
+  // A vehicle damaged or repaired in the Vehicles tab: its combatant's hit points follow.
+  useEffect(() => {
+    if (!vehicles) return
+    setState((prev) => {
+      let changed = false
+      const combatants = prev.combatants.map((c) => {
+        const v = c.kind === 'vehicle' ? vehicles.find((x) => x.id === c.vehicleId) : undefined
+        if (!v || (v.hp === c.currentHp && v.def.hp === c.maxHp)) return c
+        changed = true
+        return { ...c, currentHp: v.hp, maxHp: v.def.hp }
+      })
+      return changed ? { ...prev, combatants } : prev
+    })
+  }, [vehicles])
 
   useEffect(() => {
     if (!pendingEncounterMonsters || pendingEncounterMonsters.length === 0) return
@@ -326,7 +382,7 @@ export function InitiativeTracker({
 
   /** 1d20 + Dex modifier, rolled instantly (no interactive reveal — this is DM-side bulk setup, not a player's own suspenseful check) and written straight into that combatant's initiative field. Kept purely local: never broadcast to the dice log, since a monster's exact initiative roll is meant to stay hidden from players (see sanitizeForPlayer). */
   function rollInitiativeFor(c: Combatant): void {
-    const modifier = initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd)
+    const modifier = initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd, vehicles)
     const entry = buildCheckRollEntry(c.id, c.name, modifier, 'normal', true, 'Initiative')
     updateCombatant(c.id, { initiative: entry.total })
     playSfx('diceRoll')
@@ -338,7 +394,7 @@ export function InitiativeTracker({
     pushHistory()
     patch({
       combatants: state.combatants.map((c) => {
-        const modifier = initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd)
+        const modifier = initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd, vehicles)
         return { ...c, initiative: buildCheckRollEntry(c.id, c.name, modifier, 'normal', true, 'Initiative').total }
       })
     })
@@ -379,9 +435,12 @@ export function InitiativeTracker({
     if (!Number.isFinite(amount) || amount <= 0) return
     const c = state.combatants.find((x) => x.id === id)
     if (!c) return
+    // A vehicle shrugs off a hit under its damage threshold, and can't be repaired past full.
+    if (kind === 'damage' && c.kind === 'vehicle' && c.damageThreshold && amount < c.damageThreshold) return
     pushHistory()
-    const next = kind === 'damage' ? Math.max(0, c.currentHp - amount) : c.currentHp + amount
+    const next = kind === 'damage' ? Math.max(0, c.currentHp - amount) : c.kind === 'vehicle' ? Math.min(c.maxHp, c.currentHp + amount) : c.currentHp + amount
     setCombatantHp(id, next)
+    if (c.kind === 'vehicle' && c.vehicleId) onVehicleHp?.(c.vehicleId, next)
 
     // Dismemberment (opt-in, see the toolbar checkbox) — tiered by how much
     // of the hit landed. A killing blow that also dealt the target's entire
@@ -608,7 +667,7 @@ export function InitiativeTracker({
                   </span>
                   <IconValueColumn
                     icon={<DiceIcon size={ICON_STAT_SIZE} style={{ color: 'var(--accent)' }} />}
-                    iconTitle={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd))}`}
+                    iconTitle={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd, vehicles))}`}
                     onIconClick={() => rollInitiativeFor(c)}
                     value={c.initiative ?? ''}
                     onChange={(v) => updateCombatant(c.id, { initiative: v === '' ? null : Number(v) })}
@@ -617,14 +676,18 @@ export function InitiativeTracker({
                   />
 
                   <div style={{ flex: 1, minWidth: 0, paddingTop: 6 }}>
-                    {c.kind === 'monster' ? (
+                    {c.kind === 'monster' || c.kind === 'vehicle' ? (
                       <button
                         type="button"
                         onClick={() => {
+                          if (c.kind === 'vehicle') {
+                            if (c.vehicleId) onSelectVehicle?.(c.vehicleId)
+                            return
+                          }
                           const monster = allMonstersForQuickAdd.find((m) => m.index === c.monsterIndex)
                           if (monster) onSelectMonster(monster)
                         }}
-                        title="View statblock"
+                        title={c.kind === 'vehicle' ? 'Open in the Vehicles tab' : 'View statblock'}
                         style={{
                           display: 'block',
                           width: '100%',
@@ -650,7 +713,7 @@ export function InitiativeTracker({
                     )}
                     {c.currentHp <= 0 && (
                       <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)', marginTop: 2 }}>
-                        Dead
+                        {c.kind === 'vehicle' ? 'Wrecked' : 'Dead'}
                       </span>
                     )}
                     {c.kind === 'player' &&

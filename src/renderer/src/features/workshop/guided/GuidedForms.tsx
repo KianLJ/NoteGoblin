@@ -32,6 +32,7 @@ import type { TargetChoice } from '@shared/content/workshop'
 import { slugify, uniqueId } from '@shared/content/workshop'
 import { PickerWindow, type PickOption } from '../../player/PickerWindow'
 import { MonsterForm } from './MonsterForm'
+import { VehicleEditor } from '../form/vehicle'
 import { AddButton, Check, Field, Grid, Group, NumberInput, RowActions, Select, TagsInput, TargetPicker, TextArea, TextInput, move } from '../form/fields'
 
 /** What the guided forms pick from: the skills, spells, class spell lists and rolls the character sheet knows about. */
@@ -64,6 +65,16 @@ export function GuidedForm({ answers, onChange, sources }: { answers: GuidedAnsw
       return <SpeciesForm a={answers} set={(f) => onChange({ ...answers, ...f })} sources={sources} />
     case 'monster':
       return <MonsterForm a={answers} set={(f) => onChange({ ...answers, ...f })} />
+    case 'vehicle':
+      return (
+        <VehicleEditor
+          value={{ ...answers.entry, name: answers.name, description: answers.description }}
+          onChange={(v) => {
+            const { name, description, ...entry } = v
+            onChange({ ...answers, name: typeof name === 'string' ? name : '', description: typeof description === 'string' ? description : '', entry })
+          }}
+        />
+      )
   }
 }
 

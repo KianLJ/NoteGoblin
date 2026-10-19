@@ -51,6 +51,16 @@ export function ChatIcon(): JSX.Element {
   )
 }
 
+/** A small ship under sail — the Vehicles tab (mounts, carts and starships live there too). */
+export function VehicleIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 1.8v8.4M8 2.6l4.6 6.6H8M8 4l-3.4 5.2H8" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" strokeLinecap="round" />
+      <path d="M1.8 11h12.4l-1.6 2.6c-.2.3-.5.5-.9.5H4.3c-.4 0-.7-.2-.9-.5L1.8 11Z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function CalendarIcon(): JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

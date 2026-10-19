@@ -31,6 +31,7 @@ import {
   type Obj
 } from './fields'
 import { FeaturesEditor, LevelTable } from './levels'
+import { VehicleEditor } from './vehicle'
 import { renderStatblockHtml, type StatblockData } from '../../../statblock'
 import { rollInlineDice } from '../../dice/inlineDice'
 
@@ -57,6 +58,15 @@ export function EntryForm({ kind, value, packId, onChange }: { kind: EntryKind; 
       return <ItemForm value={value} onChange={onChange} />
     case 'monsters':
       return <MonsterForm value={value} onChange={onChange} />
+    case 'vehicles':
+      return (
+        <>
+          <Field label="Id" hint="How campaigns refer to it.">
+            <IdInput value={str(value.id)} onChange={(v) => onChange(withRequired(value, 'id', v))} fromName={str(value.name)} />
+          </Field>
+          <VehicleEditor value={value} onChange={onChange} />
+        </>
+      )
   }
 }
 

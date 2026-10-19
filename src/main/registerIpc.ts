@@ -83,6 +83,7 @@ import type {
   CampaignCalendar
 } from '@shared/ipc'
 import type { CalendarConfig } from '@shared/calendar'
+import type { CampaignVehicles } from '@shared/vehicles'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 import { normalizeSheet } from '@shared/content/migrate'
 import { packFileName, readPackFile, writePackFile } from '@shared/content/packFiles'
@@ -792,6 +793,38 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return sendSessionRequest<void>('notes.remove', { campaignId, noteId })
     }
   )
+
+  ipcMain.handle(
+    'vehicles:get',
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<CampaignVehicles>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.getVehicles(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<CampaignVehicles>('vehicles.get', { campaignId })
+    }
+  )
+
+  // DM-only and always local, like enabling packs: a player's crew rolls go through the dice log, not here.
+  ipcMain.handle('vehicles:save', async (_event, campaignId: string, vehicles: CampaignVehicles): Promise<ApiResult<CampaignVehicles>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    try {
+      const result = campaignService.saveVehicles(me.db, campaignId, me.userId, vehicles)
+      if (result.ok) {
+        // This window's other panels (the initiative tracker) refresh too, and players refetch while hosting.
+        mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+        if (getHostedSession()) broadcastCampaignChanged(campaignId)
+      }
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+    }
+  })
 
   ipcMain.handle(
     'calendar:get',

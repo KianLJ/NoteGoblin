@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from '../campaigns/panelIcons'
+import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon, VehicleIcon } from '../campaigns/panelIcons'
+import { VehiclesPanel } from '../vehicles/VehiclesPanel'
 import { CalendarPanel } from '../campaigns/CalendarPanel'
 import { SessionDeckPanel } from '../campaigns/SessionDeckPanel'
 import { loadRightPanelTab, saveRightPanelTab } from '../campaigns/rightPanelTab'
@@ -94,6 +95,7 @@ export function PartySidebar({
                 </div>
                 <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
                 <PartyTabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
+                <PartyTabButton icon={<VehicleIcon />} label="Vehicles" active={tab === 'vehicles'} onClick={() => setTab('vehicles')} />
                 <PartyTabButton icon={<SessionIcon />} label="Sessions" active={tab === 'sessions'} onClick={() => setTab('sessions')} />
               </div>
 
@@ -108,6 +110,9 @@ export function PartySidebar({
               </div>
               <div style={{ display: tab === 'calendar' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <CalendarPanel sessionId={sessionId} campaignId={campaignId} readOnly />
+              </div>
+              <div style={{ display: tab === 'vehicles' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
+                <VehiclesPanel sessionId={sessionId} rollSessionId={sessionId} campaignId={campaignId} readOnly myUserId={myUserId} />
               </div>
               <div style={{ display: tab === 'sessions' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <SessionDeckPanel
