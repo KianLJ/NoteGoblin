@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.2',
+    title: 'Fix: adding a vehicle to initiative',
+    highlights: [
+      'Adding a vehicle to the initiative tracker (Add to initiative, in the Vehicles tab) no longer breaks the app',
+      'Loading an encounter from a session scene can no longer add its monsters over and over'
+    ]
+  },
+  {
     version: '0.7.1',
     title: 'Walls, light and sight on the battle map',
     highlights: [
