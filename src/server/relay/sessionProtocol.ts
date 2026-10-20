@@ -29,6 +29,7 @@ export type RequestKind =
   | 'battleMap.get'
   | 'battleMap.image'
   | 'battleMap.moveToken'
+  | 'battleMap.dragToken'
   | 'campaignPacks.list'
   | 'folders.list'
   | 'folders.create'
@@ -136,6 +137,13 @@ export interface ForceRollFrame {
   request: ForceRollRequest
 }
 
+/** The DM changed this player's hit points in a fight (damage, healing) — their own sheet takes the new numbers. */
+export interface CharacterHpFrame {
+  type: 'character-hp'
+  currentHp?: number
+  tempHp?: number
+}
+
 /**
  * Pushed to every connected player whenever the DM starts presenting a
  * session deck, advances/rewinds a scene, or stops presenting — `deckId:
@@ -193,6 +201,19 @@ export interface MusicChangedFrame {
 export interface BattleMapFrame {
   type: 'battle-map'
   map: PlayerBattleMap | null
+}
+
+/**
+ * A token being dragged right now, so everyone sees it move (x and y in
+ * squares, fractional — where it is under the pointer); `x: null` when the
+ * drag ends (the move itself comes with the next battle-map frame). Only
+ * sent to players who can see that token.
+ */
+export interface BattleMapDragFrame {
+  type: 'battle-map-drag'
+  combatantId: string
+  x: number | null
+  y: number | null
 }
 
 /** The map image, in pieces under the relay's 1 MiB message cap — sent when it changes, or when a player asks ('battleMap.image'). */

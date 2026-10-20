@@ -59,6 +59,8 @@ interface CombatTabProps {
   sessionId?: string | null
   /** The sheet's Actions tab: attacks then reactions, stacked, with no inner tab strip — Spells and Features are tabs of their own there. */
   actionsOnly?: boolean
+  /** The Combat tab's side panel: no "add a custom attack" (that's for the sheet itself). */
+  compact?: boolean
 }
 
 /** A blank line between paragraphs of a hover card's text. */
@@ -145,7 +147,7 @@ function customWeaponFields(attack: Attack): DetailField[] {
 }
 
 /** The sheet's Actions tab (actionsOnly: attacks, toggles, special and bonus actions, companions, then reactions). Without actionsOnly it's the older Attacks/Spells/Features/Reactions inner tab strip; AC, HP, speed and death saves live in the sheet's rail (see sheet/SheetParts.tsx). Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
-export function CombatTab({ character, onSave, readOnly, sessionId = null, actionsOnly = false }: CombatTabProps): JSX.Element {
+export function CombatTab({ character, onSave, readOnly, sessionId = null, actionsOnly = false, compact = false }: CombatTabProps): JSX.Element {
   const { rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
   const terms = useTerms()
   // Attacks, resources, toggles, actions and spell DC/attack all come from
@@ -610,14 +612,18 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
             )
           })}
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>
-          Equip a weapon on the Inventory tab to add it here automatically — unequip it there to remove it.
-        </p>
-        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-          <Button variant="secondary" onClick={openCreateForm} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
-            + Add Custom Attack
-          </Button>
-        </div>
+        {!compact && (
+          <>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>
+              Equip a weapon on the Inventory tab to add it here automatically — unequip it there to remove it.
+            </p>
+            <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+              <Button variant="secondary" onClick={openCreateForm} disabled={readOnly} style={{ fontSize: 12, padding: '4px 10px' }}>
+                + Add Custom Attack
+              </Button>
+            </div>
+          </>
+        )}
 
         {attackAdvantage && (
           <p style={{ fontSize: 12, color: 'var(--accent)', margin: '10px 0 0' }}>

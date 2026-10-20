@@ -16,6 +16,8 @@ import type {
   DiceRollFrame,
   MessageFrame,
   ForceRollFrame,
+  CharacterHpFrame,
+  BattleMapDragFrame,
   SceneChangedFrame,
   MusicChangedFrame,
   MusicTrackChunkFrame,
@@ -29,6 +31,7 @@ import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
 import { canStand, hiddenCombatantIds, imageIdOf, isFogged, mapForPlayer, type BattleMap } from '@shared/battleMap'
+import { canReach, visionActive } from '@shared/vision'
 import type { DiceRollLogEntry } from '@shared/dice'
 import type { LiveSceneState } from '@shared/sessionDeck'
 
@@ -247,14 +250,70 @@ function sendBattleImage(userIds: string[], image: string): void {
   }
 }
 
-/** The DM's map changed (or the encounter it shows did): every player gets the new view, and the image too if it changed. */
+/** The map images players may see (hidden ones stay on the DM's computer). */
+function shownImages(map: BattleMap | undefined): string[] {
+  return (map?.images ?? []).filter((i) => !i.hidden).map((i) => i.src)
+}
+
+/** The DM's map changed (or the encounter it shows did): every player gets the new view, and any image they haven't had yet. */
 export function broadcastBattleMap(map: BattleMap | null, encounter: InitiativeState): void {
-  const before = imageIdOf(battle?.map.image ?? null)
+  const before = new Set(shownImages(battle?.map).map((src) => imageIdOf(src)))
   battle = map ? { map, encounter } : null
   const userIds = [...players.keys()]
-  if (map?.image && imageIdOf(map.image) !== before) sendBattleImage(userIds, map.image)
-  const frame: BattleMapFrame = { type: 'battle-map', map: map ? mapForPlayer(map, hiddenCombatantIds(encounter.combatants)) : null }
-  for (const id of userIds) sendToRelay(id, frame)
+  for (const src of shownImages(map ?? undefined)) if (!before.has(imageIdOf(src))) sendBattleImage(userIds, src)
+  // Each player's own copy: on a map that limits sight, what their party can see differs from player to player.
+  seenTokens.clear()
+  for (const id of userIds) {
+    const frame: BattleMapFrame = { type: 'battle-map', map: map ? playerMap(map, encounter, id) : null }
+    if (frame.map) seenTokens.set(id, new Set(Object.keys(frame.map.tokens)))
+    sendToRelay(id, frame)
+  }
+}
+
+/** Which tokens each player was last sent (so a drag only goes to those who can see the token). */
+const seenTokens = new Map<string, Set<string>>()
+let lastSightCheck = 0
+
+/**
+ * Mid-drag, on a map that limits sight: a token on the move can bring an
+ * enemy into someone's sight (or take one out of it), so whoever's view
+ * changed is sent their map again, worked out with the token where it is
+ * right now — a few times a second at most.
+ */
+function recheckSight(combatantId: string, x: number, y: number): void {
+  if (!battle || !visionActive(battle.map)) return
+  const t = battle.map.tokens[combatantId]
+  const now = Date.now()
+  if (!t || now - lastSightCheck < 100) return
+  lastSightCheck = now
+  const live = { ...battle.map, tokens: { ...battle.map.tokens, [combatantId]: { ...t, x, y } } }
+  for (const userId of players.keys()) {
+    const map = playerMap(live, battle.encounter, userId)
+    const ids = new Set(Object.keys(map.tokens))
+    const had = seenTokens.get(userId)
+    if (had && had.size === ids.size && [...ids].every((id) => had.has(id))) continue
+    seenTokens.set(userId, ids)
+    const frame: BattleMapFrame = { type: 'battle-map', map }
+    sendToRelay(userId, frame)
+  }
+}
+
+/** A token being dragged (x null: let go): shown live to every player who can see it, except the one dragging. */
+export function broadcastTokenDrag(combatantId: string, x: number | null, y: number | null, exceptUserId?: string): void {
+  if (x !== null && y !== null) recheckSight(combatantId, x, y)
+  const frame: BattleMapDragFrame = { type: 'battle-map-drag', combatantId, x, y }
+  for (const [userId, tokens] of seenTokens) if (userId !== exceptUserId && tokens.has(combatantId)) sendToRelay(userId, frame)
+}
+
+function playerMap(map: BattleMap, encounter: InitiativeState, userId: string): ReturnType<typeof mapForPlayer> {
+  return mapForPlayer(map, hiddenCombatantIds(encounter.combatants), { combatants: encounter.combatants, userId })
+}
+
+/** The DM changed a player's hit points in the fight: their own sheet follows. */
+export function pushCharacterHp(targetUserId: string, hp: { currentHp?: number; tempHp?: number }): void {
+  if (!players.has(targetUserId)) return
+  const frame: CharacterHpFrame = { type: 'character-hp', ...hp }
+  sendToRelay(targetUserId, frame)
 }
 
 /**
@@ -574,12 +633,26 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
     // same shape as characters.sync above.
     // A player opening their Combat tab (or joining mid-fight): the map as they may see it, and the turn order.
     case 'battleMap.get':
-      return { reqId: frame.reqId, ok: true, data: battle ? { map: mapForPlayer(battle.map, hiddenCombatantIds(battle.encounter.combatants)), initiative: sanitizeForPlayer(battle.encounter, userId) } : { map: null, initiative: null } }
-    // The map image, pushed to just this player in pieces.
-    case 'battleMap.image':
-      if (battle?.map.image) sendBattleImage([userId], battle.map.image)
-      return { reqId: frame.reqId, ok: true, data: { imageId: imageIdOf(battle?.map.image ?? null) } }
+      return { reqId: frame.reqId, ok: true, data: battle ? { map: playerMap(battle.map, battle.encounter, userId), initiative: sanitizeForPlayer(battle.encounter, userId) } : { map: null, initiative: null } }
+    // The map images (or just the one asked for), pushed to just this player in pieces.
+    case 'battleMap.image': {
+      const wanted = typeof p.imageId === 'string' ? p.imageId : null
+      const srcs = shownImages(battle?.map).filter((src) => !wanted || imageIdOf(src) === wanted)
+      for (const src of srcs) sendBattleImage([userId], src)
+      return { reqId: frame.reqId, ok: true, data: { imageIds: srcs.map((src) => imageIdOf(src)) } }
+    }
     // A player moving their own token: checked here (theirs, not locked, free, not into fog), then handed to the DM's map.
+    // A player dragging their own token, right now: the DM and the rest of the table see it move.
+    case 'battleMap.dragToken': {
+      const combatantId = typeof p.combatantId === 'string' ? p.combatantId : ''
+      const x = typeof p.x === 'number' && Number.isFinite(p.x) ? p.x : null
+      const y = typeof p.y === 'number' && Number.isFinite(p.y) ? p.y : null
+      const c = battle?.encounter.combatants.find((k) => k.id === combatantId)
+      if (!battle || !c || c.kind !== 'player' || c.userId !== userId || battle.map.tokens[combatantId]?.locked) return { reqId: frame.reqId, ok: true, data: undefined }
+      if (dmWindow) dmWindow.webContents.send('ws:battle-map-drag', { sessionId: null, combatantId, x, y })
+      broadcastTokenDrag(combatantId, x, y, userId)
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
     case 'battleMap.moveToken': {
       const combatantId = typeof p.combatantId === 'string' ? p.combatantId : ''
       const x = typeof p.x === 'number' ? Math.round(p.x) : NaN
@@ -591,6 +664,7 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       const moved = { ...token, x, y }
       if (!Number.isFinite(x) || !Number.isFinite(y) || !canStand(battle.map, moved, combatantId)) return { reqId: frame.reqId, ok: false, error: 'You can’t stand there.' }
       if (isFogged(battle.map, { x: x + token.size / 2, y: y + token.size / 2 })) return { reqId: frame.reqId, ok: false, error: 'You can’t see that far.' }
+      if (!canReach(battle.map, token, { x, y })) return { reqId: frame.reqId, ok: false, error: 'A wall (or a closed door) is in the way.' }
       if (dmWindow) dmWindow.webContents.send('ws:battle-map-player-move', { combatantId, x, y })
       return { reqId: frame.reqId, ok: true, data: undefined }
     }

@@ -137,7 +137,7 @@ function monsterDexModifier(monster: BestiaryMonster | undefined): number {
 }
 
 /** Initiative modifier for whichever combatant this is — a player's comes from the same content-engine derivation as HP/AC above (Dex modifier plus anything like Alert's proficiency bonus), so it matches their sheet. Monsters look themselves up in the bestiary by `monsterIndex`; a combatant that's neither a matched player nor monster (shouldn't normally happen) rolls flat. */
-function initiativeModifierFor(
+export function initiativeModifierFor(
   c: Combatant,
   playerCharacters: Map<string, CharacterSheet>,
   allMonsters: BestiaryMonster[],

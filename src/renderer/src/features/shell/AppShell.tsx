@@ -29,6 +29,8 @@ const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ defaul
 import { CombatView } from '../combat/CombatView'
 import { PlayerCombatView } from '../combat/PlayerCombatView'
 import { useBattleMapSync } from '../combat/useBattleMapSync'
+import { useCombatSheetSync } from '../combat/useCombatSheetSync'
+import { useTestPlayerSheets } from '../combat/useTestPlayerSheets'
 const Workshop = lazy(() => import('../workshop/Workshop').then((m) => ({ default: m.Workshop })))
 
 // Discord presence line shown while the app is open but not actively DMing
@@ -36,6 +38,9 @@ const Workshop = lazy(() => import('../workshop/Workshop').then((m) => ({ defaul
 // re-rolled on every render) rather than staying blank, since "the app's
 // just sitting there" is exactly the moment a bit of goblin flavor earns
 // its keep more than a literal status ever would.
+/** No sheets to sync (Player mode). */
+const NO_CHARACTERS = new Map<string, CharacterSheet>()
+
 const IDLE_PRESENCE_LINES = [
   'Hoarding notes in goblin hole',
   'Rifling through old campaign notes',
@@ -292,6 +297,26 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     })
   }, [])
   const [viewedPlayerUserId, setViewedPlayerUserId] = useState<string | null>(null)
+  // The DM's test players play the DM's own characters; in the Combat tab they're treated like connected players.
+  const testSheets = useTestPlayerSheets(mode === 'dm')
+  const combatCharacters = useMemo(() => (testSheets.size ? new Map([...playerCharacters, ...testSheets]) : playerCharacters), [playerCharacters, testSheets])
+  // The party's hit points (and AC, darkvision) follow their sheets in the fight, and the DM's damage goes back to them.
+  useCombatSheetSync(mode === 'dm' ? combatCharacters : NO_CHARACTERS, mode === 'dm' && !!hostedSessionId)
+
+  // Player: the DM damaged or healed you in the fight — your sheet takes the new hit points.
+  const hpTarget = useRef(playerWorkspace)
+  hpTarget.current = playerWorkspace
+  useEffect(
+    () =>
+      window.goblin.characters.onHpFromDm((hp) => {
+        const ws = hpTarget.current
+        const character = ws.lastActiveCharacter
+        if (!character) return
+        const patch = { ...(hp.currentHp !== undefined ? { currentHp: hp.currentHp } : {}), ...(hp.tempHp !== undefined ? { tempHp: hp.tempHp } : {}) }
+        if (Object.keys(patch).length) void ws.saveCharacter(character.id, patch)
+      }),
+    []
+  )
 
   // Enemy statblock tabs opened from the Initiative tracker (see
   // InitiativeTracker.tsx's onSelectMonster) — a separate open list from
@@ -523,9 +548,18 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       {combatShown && !workshopOpen && (
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {mode === 'dm' ? (
-            <CombatView sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} playerCharacters={playerCharacters} />
+            <CombatView sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} playerCharacters={combatCharacters} />
           ) : (
-            joinedSession && <PlayerCombatView sessionId={joinedSession.sessionId} character={playerWorkspace.lastActiveCharacter} />
+            joinedSession && (
+              <PlayerCombatView
+                sessionId={joinedSession.sessionId}
+                character={playerWorkspace.lastActiveCharacter}
+                onSaveCharacter={(patch) => {
+                  const character = playerWorkspace.lastActiveCharacter
+                  if (character) void playerWorkspace.saveCharacter(character.id, patch)
+                }}
+              />
+            )
           )}
         </main>
       )}

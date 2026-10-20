@@ -52,6 +52,10 @@ export type Combatant = {
   damageThreshold?: number
   /** kind 'player' only — the connected player's relay userId, so the DM can click through to their sheet like elsewhere in the app. */
   userId?: string
+  /** kind 'player' only — darkvision range in feet, from their sheet: on a dark map they see this far without light. */
+  darkvision?: number
+  /** kind 'player' only — a stand-in the DM added to try the map out (see battleMap.ts's TestPlayer), not a real connected player. */
+  test?: boolean
   /** Free-text condition tags (Prone, Poisoned, Concentrating, etc.) — same list shown to the DM and to players, since knowing an enemy is prone/restrained is normal tactical information, not a secret. */
   statusEffects: string[]
   /** kind 'player' only, and only once currentHp <= 0 — SRD death saving throws. Cleared (set back to null) once currentHp rises back above 0. */
@@ -148,6 +152,10 @@ export interface PlayerVisibleCombatant {
   injury: InjuryLevel
   dead: boolean
   isSelf: boolean
+  /** A fellow player's relay userId (never set for anything else), so their sheet can be looked at from the Combat tab. */
+  userId?: string
+  /** Armour class — only for the party (players and the party's vehicle). */
+  ac: number | null
   statusEffects: string[]
   dismemberments: string[]
   /** Only ever populated for the viewer's own combatant, and only when the DM hasn't made death saves private — see InitiativeState.deathSavesPrivate. */
@@ -221,6 +229,8 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
         injury: injuryLevel(c.currentHp, c.maxHp),
         dead: c.currentHp <= 0,
         isSelf,
+        ...(c.kind === 'player' && c.userId ? { userId: c.userId } : {}),
+        ac: known ? c.ac : null,
         statusEffects: c.statusEffects,
         dismemberments: c.dismemberments,
         deathSaves: isSelf && !state.deathSavesPrivate ? c.deathSaves : null

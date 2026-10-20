@@ -2,11 +2,12 @@
 // initiative order, a battle map with a token per combatant, and the
 // selected combatant's numbers and attacks to roll. It edits the same
 // encounter as the right panel's initiative tracker (encounterStore.ts).
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { nextTurnState, previousTurnState, sortedByInitiative, withCombatantHp, type Combatant } from '@shared/encounter'
-import { activeBattle, canStand, emptyBattleMap, fogEverything, newBattle, type BattleMap } from '@shared/battleMap'
-import { diceGroups } from '@shared/dice'
+import { activeBattle, canStand, fogEverything, hiddenCombatantIds, isFogged, isTestUser, newBattle, type Ambient, type BattleMap, type MapImage, type Pt, type TemplateKind } from '@shared/battleMap'
+import { lightsOf, LIGHT_PRESETS, viewerKey, viewerSources, visionActive } from '@shared/vision'
+import { buildCheckRollEntry, diceGroups } from '@shared/dice'
 import { deriveSheet } from '@shared/content/sheet'
 import { formatModifier } from '@shared/dnd5e'
 import { vehicleName, type TrackedVehicle } from '@shared/vehicles'
@@ -21,10 +22,15 @@ import { useVehicles } from '../vehicles/useVehicles'
 import { XIcon } from '../../ui/icons'
 import { canRedoBattleMap, canUndoBattleMap, redoBattleMap, setLibrary, switchBattle, undoBattleMap, useBattleLibrary, useBattleMap, useEncounter } from './encounterStore'
 import { loadSavedEncounters } from '../../data/savedEncounters'
-import { monsterToCombatant } from '../campaigns/InitiativeTracker'
+import { initiativeModifierFor, monsterToCombatant } from '../campaigns/InitiativeTracker'
+import { playSfx } from '../audio/soundEffects'
+import { CharacterTabs, HpControls, InitiativeField, MonsterAbilities, Stat, hpChange } from './CombatPanels'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { BattleMapView, EyeIcon, HideToggle, LockToggle, type FogDraw, type FogTool, type MapTool } from './BattleMapView'
+import { BattleMapView, EyeIcon, HideToggle, LockToggle, type FogTool, type MapTool, type Sight, type WallDraw } from './BattleMapView'
+import { MapControls, RAIL, ToolOptions, ToolRail, railKey, type RailTool } from './MapToolbar'
+import { TestPlayersMenu } from './TestPlayersMenu'
+import { useRemoteDrags } from './useRemoteDrags'
 
 interface CombatViewProps {
   /** The session the DM is hosting — rolls and turn cues go to the table. */
@@ -34,25 +40,6 @@ interface CombatViewProps {
 }
 
 const CONDITIONS = ['Blinded', 'Charmed', 'Concentrating', 'Deafened', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious']
-
-const TOOLS: Array<{ tool: MapTool; label: string; hint: string }> = [
-  { tool: 'move', label: 'Move', hint: 'Drag a token to move it, or drag the map to pan. Scroll to zoom.' },
-  { tool: 'ruler', label: 'Ruler', hint: 'Drag between squares to measure. Diagonals count as one square.' },
-  { tool: 'cone', label: 'Cone', hint: 'Drag from the caster: the distance sets its length, the direction where it points.' },
-  { tool: 'sphere', label: 'Sphere', hint: 'Drag from where the spell lands: the distance sets its radius.' },
-  { tool: 'line', label: 'Line', hint: 'Drag from the caster along the line (5 ft wide): the distance sets its length.' },
-  { tool: 'cube', label: 'Cube', hint: 'Drag from one corner: the distance sets its side.' },
-  { tool: 'fog', label: 'Fog', hint: 'Draw fog to hide parts of the map from players; switch to Cut to clear it.' }
-]
-
-const FOG_DRAWS: Array<{ draw: FogDraw; label: string; hint: string }> = [
-  { draw: 'move', label: 'Move', hint: 'Click fog (or a cut) to pick it, then drag it. Delete removes it; its options can lock it.' },
-  { draw: 'brush', label: 'Brush', hint: 'Paint freely.' },
-  { draw: 'line', label: 'Line', hint: 'Drag a straight line.' },
-  { draw: 'points', label: 'Points', hint: 'Click point by point; click the first point, double-click or press Enter to finish. Escape cancels.' },
-  { draw: 'rect', label: 'Square', hint: 'Drag from one corner to the other.' },
-  { draw: 'circle', label: 'Circle', hint: 'Drag from the centre outwards.' }
-]
 
 const SNAP_KEY = 'gb-combat-snap'
 function loadSnap(): boolean {
@@ -70,9 +57,18 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
   const { monsters } = useAllMonsters()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tool, setTool] = useState<MapTool>('move')
-  const [hint, setHint] = useState(TOOLS[0].hint)
+  const [hint, setHint] = useState(RAIL[0].hint)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [fogTool, setFogTool] = useState<FogTool>({ op: 'add', draw: 'rect', width: 1 })
+  const [wallDraw, setWallDraw] = useState<WallDraw>('room')
+  // The spell area the Spell areas tool places (the last one picked).
+  const [shapeKind, setShapeKind] = useState<TemplateKind>('cone')
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const centreRef = useRef<(() => Pt) | null>(null)
+  // Playing the map as a player would: '' is the DM's own view, 'party' the whole party, else a player's (or test player's) userId.
+  const [playAs, setPlayAs] = useState('')
+  // Players dragging their tokens right now, shown as they move.
+  const remoteDrags = useRemoteDrags(null)
   const [snap, setSnapState] = useState(loadSnap)
   const setSnap = (on: boolean): void => {
     setSnapState(on)
@@ -81,6 +77,43 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     } catch {
       /* best-effort */
     }
+  }
+
+  function pickTool(r: RailTool): void {
+    setTool(r === 'shapes' ? shapeKind : r)
+    setHint(RAIL.find((x) => x.tool === r)!.hint)
+  }
+
+  // A tool's key picks it (V, R, S, F, W, L, I) — the player's tools only, while playing as one.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const r = railKey(e, !!playAs)
+      if (r) pickTool(r)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  /** Map images go in the middle of the view, 20 squares across (drag the corner, or set pixels per square, to fit the grid). */
+  function addImages(files: File[]): void {
+    const centre = centreRef.current?.() ?? { x: 0, y: 0 }
+    files.forEach((file, n) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const src = String(reader.result)
+        const img = new Image()
+        img.onload = () => {
+          const w = 20
+          const h = Math.max(1, Math.round((w * img.height) / img.width))
+          const added: MapImage = { id: crypto.randomUUID(), src, x: Math.round(centre.x - w / 2) + n, y: Math.round(centre.y - h / 2) + n, w, h, naturalW: img.width, naturalH: img.height }
+          setMap((m) => ({ ...m, images: [...m.images, added] }))
+          setSelectedImage(added.id)
+          setHint('Image added. Drag it to line it up with the grid, and drag its corner (or set its pixels per square) to size it.')
+        }
+        img.src = src
+      }
+      reader.readAsDataURL(file)
+    })
   }
 
   // Ctrl+Z undoes the last map change (a move, a shape, fog); Ctrl+Y or Ctrl+Shift+Z redoes it. Typing in a box keeps its own undo.
@@ -112,6 +145,63 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
 
   const selected = encounter.combatants.find((c) => c.id === selectedId) ?? null
 
+  // Playing as a player (or the party): they see what their party sees (on a map with walls or darkness), and move only their own tokens, as on their screen.
+  const vision = visionActive(map)
+  const players = encounter.combatants.filter((c) => c.kind === 'player' && c.userId)
+  const sight: Sight | null = useMemo(() => {
+    if (!playAs || !vision) return null
+    const userId = playAs === 'party' ? null : playAs
+    const skip = new Set(hiddenCombatantIds(encounter.combatants))
+    return { sources: viewerSources(map, encounter.combatants, userId), explored: map.explored[userId ? viewerKey(map, userId) : 'party'] ?? null, lights: lightsOf(map, skip) }
+  }, [playAs, vision, map, encounter.combatants])
+  // Hidden and fogged enemies are left off; what's in sight is worked out by the map, live as tokens are dragged.
+  const shownCombatants = useMemo(() => {
+    if (!playAs) return encounter.combatants
+    return encounter.combatants.filter((c) => {
+      const t = map.tokens[c.id]
+      if (c.kind === 'player' || (c.kind === 'vehicle' && c.party)) return true
+      return t && !c.hidden && !isFogged(map, { x: t.x + t.size / 2, y: t.y + t.size / 2 })
+    })
+  }, [playAs, map, encounter.combatants])
+  useEffect(() => {
+    if (playAs && playAs !== 'party' && !players.some((c) => c.userId === playAs)) setPlayAs('')
+  }, [playAs, players])
+  // Playing as someone, only their tools are left.
+  useEffect(() => {
+    if (playAs && tool !== 'move' && tool !== 'ruler') setTool('move')
+  }, [playAs, tool])
+  const playingName = playAs === 'party' ? 'the party' : players.find((c) => c.userId === playAs)?.name
+  const mineToMove = (id: string): boolean => {
+    const c = encounter.combatants.find((x) => x.id === id)
+    return !!c && c.kind === 'player' && (playAs === 'party' || c.userId === playAs)
+  }
+  /** A move made playing as someone, checked as the host checks a real player's (walls are checked by the map). */
+  function playMove(id: string, x: number, y: number): void {
+    const t = map.tokens[id]
+    if (!t) return
+    const moved = { ...t, x, y }
+    if (!canStand(map, moved, id)) setHint('Something’s already standing there.')
+    else if (isFogged(map, { x: x + t.size / 2, y: y + t.size / 2 })) setHint('You can’t see that far (it’s under fog).')
+    else setMap({ ...map, tokens: { ...map.tokens, [id]: moved } })
+  }
+
+  function setInitiative(c: Combatant, initiative: number | null): void {
+    setEncounter((s) => ({ ...s, combatants: s.combatants.map((x) => (x.id === c.id ? { ...x, initiative } : x)) }))
+  }
+  /** Rolled quietly (an enemy's roll stays the DM's), as the initiative tracker does. */
+  function rollInitiative(c: Combatant): void {
+    const modifier = initiativeModifierFor(c, playerCharacters, monsters, vehicles.doc.vehicles)
+    setInitiative(c, buildCheckRollEntry(c.id, c.name, modifier, 'normal', true, 'Initiative').total)
+    playSfx('diceRoll')
+  }
+  function rollAllInitiative(): void {
+    setEncounter((s) => ({
+      ...s,
+      combatants: s.combatants.map((c) => ({ ...c, initiative: buildCheckRollEntry(c.id, c.name, initiativeModifierFor(c, playerCharacters, monsters, vehicles.doc.vehicles), 'normal', true, 'Initiative').total }))
+    }))
+    playSfx('diceRoll')
+  }
+
   function step(dir: 1 | -1): void {
     const next = dir === 1 ? nextTurnState(encounter) : previousTurnState(encounter)
     setEncounter(next)
@@ -120,9 +210,21 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     if (id) setSelectedId(id)
   }
 
-  /** Damage or healing — a vehicle ignores a hit under its threshold, can't be repaired past full, and its hull follows. */
-  function changeHp(c: Combatant, amount: number, kind: 'damage' | 'heal'): void {
+  /**
+   * Damage or healing — a vehicle ignores a hit under its threshold, can't be
+   * repaired past full, and its hull follows. A player's comes off their
+   * temporary hit points first, and their sheet follows (useCombatSheetSync).
+   */
+  function changeHp(c: Combatant, amount: number, kind: 'damage' | 'heal' | 'temp'): void {
     if (!(amount > 0)) return
+    const character = characterOf(c)
+    if (character && c.userId) {
+      const next = hpChange(c.currentHp, character.tempHp ?? 0, c.maxHp, amount, kind)
+      if (next.tempHp !== (character.tempHp ?? 0)) void window.goblin.characters.setPlayerHp(c.userId, { tempHp: next.tempHp })
+      if (next.currentHp !== c.currentHp) setEncounter((s) => withCombatantHp(s, c.id, next.currentHp))
+      return
+    }
+    if (kind === 'temp') return
     if (kind === 'damage' && c.kind === 'vehicle' && c.damageThreshold && amount < c.damageThreshold) return
     const next = kind === 'damage' ? Math.max(0, c.currentHp - amount) : c.kind === 'vehicle' ? Math.min(c.maxHp, c.currentHp + amount) : c.currentHp + amount
     setEncounter((s) => withCombatantHp(s, c.id, next))
@@ -147,6 +249,28 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
         {encounter.turnIndex >= 0 && <span className="gb-badge gb-badge--accent">Round {encounter.round}</span>}
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{encounter.combatants.length === 0 ? 'Add combatants in the Initiative tab (right panel), or load an encounter from a session scene.' : ''}</span>
         <div style={{ flex: 1 }} />
+        <TestPlayersMenu />
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title="Use the map as a player would: see only what they see, and move only their token (walls, doors and fog stop it)">
+          Play as
+          <select
+            className="gb-input"
+            value={playAs}
+            onChange={(e) => {
+              setPlayAs(e.target.value)
+              setHint(e.target.value ? 'Drag your token to move it — walls, closed doors and fog stop it. Scroll to zoom.' : RAIL[0].hint)
+            }}
+            style={{ fontSize: 12, padding: '2px 6px', maxWidth: 170 }}
+          >
+            <option value="">DM (everything)</option>
+            {players.length > 0 && <option value="party">The whole party</option>}
+            {players.map((c) => (
+              <option key={c.id} value={c.userId}>
+                {c.name}
+                {isTestUser(c.userId) ? ' (test)' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
         {encounter.turnIndex >= 0 ? (
           <>
             <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => step(-1)}>
@@ -177,8 +301,15 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         <ResizableSidebar defaultWidth={240} minWidth={180} maxWidth={420} handleSide="right" collapseStorageKey="gb-sidebar-collapsed:combat-order" widthStorageKey="gb-sidebar-width:combat-order">
         <aside style={{ height: '100%', borderRight: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)', overflowY: 'auto', padding: 'var(--space-2)' }}>
-          <div className="gb-label" style={{ padding: '6px 6px 4px' }}>
-            Initiative
+          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 6px 4px' }}>
+            <span className="gb-label" style={{ margin: 0, flex: 1 }}>
+              Initiative
+            </span>
+            {encounter.combatants.length > 0 && (
+              <button type="button" onClick={rollAllInitiative} title="Roll initiative for everyone (enemies' rolls stay yours)" style={{ ...pill, fontSize: 11 }}>
+                Roll all
+              </button>
+            )}
           </div>
           {ordered.map((c) => (
             <OrderRow key={c.id} c={c} turn={c.id === turnId} selected={c.id === selectedId} onClick={() => setSelectedId(c.id)} />
@@ -187,71 +318,64 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
         </ResizableSidebar>
 
         <section style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden', background: '#0b0907' }}>
-          <BattleMapView map={map} onChange={(m) => setMap(m)} combatants={encounter.combatants} turnId={turnId} selectedId={selectedId} onSelect={setSelectedId} tool={tool} fogTool={fogTool} snap={snap} onHint={setHint} />
-          <div style={toolbar}>
-            {TOOLS.map((t) => (
-              <button
-                key={t.tool}
-                type="button"
-                onClick={() => {
-                  setTool(t.tool)
-                  setHint(t.hint)
-                }}
-                style={toolButton(tool === t.tool)}
-                title={t.hint}
-              >
-                {t.label}
-              </button>
-            ))}
-            <span style={{ width: 1, background: 'var(--border-subtle)', margin: '4px 2px' }} />
-            <button type="button" style={toolButton(snap)} onClick={() => setSnap(!snap)} title={snap ? 'Snapping to square corners and centres (click to place freely)' : 'Placing freely (click to snap to square corners and centres)'}>
-              Snap {snap ? 'on' : 'off'}
-            </button>
-            <span style={{ width: 1, background: 'var(--border-subtle)', margin: '4px 2px' }} />
-            <button type="button" style={{ ...toolButton(false), opacity: canUndoBattleMap() ? 1 : 0.4 }} onClick={() => undoBattleMap() && setHint('Undone. Ctrl+Y redoes it.')} disabled={!canUndoBattleMap()} title="Undo (Ctrl+Z)">
-              Undo
-            </button>
-            <button type="button" style={{ ...toolButton(false), opacity: canRedoBattleMap() ? 1 : 0.4 }} onClick={() => redoBattleMap() && setHint('Redone.')} disabled={!canRedoBattleMap()} title="Redo (Ctrl+Y)">
-              Redo
-            </button>
-            <span style={{ width: 1, background: 'var(--border-subtle)', margin: '4px 2px' }} />
-            <button type="button" style={toolButton(settingsOpen)} onClick={() => setSettingsOpen((o) => !o)}>
-              Map…
-            </button>
-          </div>
-          {tool === 'fog' && (
-            <div style={{ ...toolbar, top: 54 }}>
-              {(['add', 'cut'] as const).map((op) => (
-                <button key={op} type="button" style={toolButton(fogTool.op === op)} onClick={() => setFogTool({ ...fogTool, op })} title={op === 'add' ? 'Draw fog' : 'Cut fog away'}>
-                  {op === 'add' ? 'Add fog' : 'Cut fog'}
+          <BattleMapView
+            map={map}
+            onChange={(m) => setMap(m)}
+            combatants={shownCombatants}
+            turnId={turnId}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            tool={tool}
+            fogTool={fogTool}
+            wallDraw={wallDraw}
+            snap={snap}
+            onHint={setHint}
+            sight={sight}
+            viewer={playAs ? { canDrag: mineToMove, onMoveToken: playMove } : undefined}
+            centreRef={centreRef}
+            selectedImage={selectedImage}
+            onSelectImage={setSelectedImage}
+            remoteDrags={remoteDrags}
+            onLiveDrag={sessionId ? (id, x, y) => void window.goblin.battleMap.drag(id, x, y) : undefined}
+          />
+          <ToolRail tool={tool} onTool={pickTool} playerOnly={!!playAs} />
+          {!playAs && (
+            <ToolOptions
+              tool={tool}
+              onShape={(k) => {
+                setShapeKind(k)
+                setTool(k)
+              }}
+              fogTool={fogTool}
+              onFogTool={setFogTool}
+              wallDraw={wallDraw}
+              onWallDraw={setWallDraw}
+              onAddImages={addImages}
+              onHint={setHint}
+            />
+          )}
+          <MapControls
+            canUndo={canUndoBattleMap()}
+            canRedo={canRedoBattleMap()}
+            onUndo={() => undoBattleMap() && setHint('Undone. Ctrl+Y redoes it.')}
+            onRedo={() => redoBattleMap() && setHint('Redone.')}
+            snap={snap}
+            onSnap={() => setSnap(!snap)}
+            settingsOpen={settingsOpen}
+            onSettings={() => setSettingsOpen((o) => !o)}
+          />
+          {playAs && (
+            <div style={{ position: 'absolute', top: 12, left: 64, right: 190, zIndex: 5, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+              <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 6px 14px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--accent)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', fontSize: 12, color: 'var(--text-primary)' }}>
+                <span>Playing as {playingName}: you see and move as they would.</span>
+                <button type="button" className="gb-btn gb-btn--secondary" style={{ fontSize: 12, padding: '2px 10px', whiteSpace: 'nowrap' }} onClick={() => setPlayAs('')}>
+                  Back to DM
                 </button>
-              ))}
-              <span style={{ width: 1, background: 'var(--border-subtle)', margin: '4px 2px' }} />
-              {FOG_DRAWS.map((d) => (
-                <button
-                  key={d.draw}
-                  type="button"
-                  style={toolButton(fogTool.draw === d.draw)}
-                  onClick={() => {
-                    setFogTool({ ...fogTool, draw: d.draw })
-                    setHint(d.hint)
-                  }}
-                  title={d.hint}
-                >
-                  {d.label}
-                </button>
-              ))}
-              {(fogTool.draw === 'brush' || fogTool.draw === 'line') && (
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)', paddingLeft: 4 }} title="How wide, in squares">
-                  Width
-                  <input type="range" min={0.25} max={6} step={0.25} value={fogTool.width} onChange={(e) => setFogTool({ ...fogTool, width: Number(e.target.value) })} style={{ width: 80 }} />
-                  <span style={{ minWidth: 26 }}>{fogTool.width}</span>
-                </label>
-              )}
+              </div>
             </div>
           )}
           {settingsOpen && <MapSettings map={map} onChange={setMap} onClose={() => setSettingsOpen(false)} />}
-          <div style={{ position: 'absolute', left: 12, bottom: 12, fontSize: 12, color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: 8, pointerEvents: 'none' }}>{hint}</div>
+          <div style={{ position: 'absolute', left: 12, bottom: 12, maxWidth: 'calc(100% - 80px)', fontSize: 12, color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: 8, pointerEvents: 'none' }}>{hint}</div>
         </section>
 
         <ResizableSidebar defaultWidth={290} minWidth={220} maxWidth={480} handleSide="left" collapseStorageKey="gb-sidebar-collapsed:combat-detail" widthStorageKey="gb-sidebar-width:combat-detail">
@@ -266,6 +390,13 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
                 vehicle={vehicleOf(selected)}
                 character={characterOf(selected)}
                 onHp={(amount, kind) => changeHp(selected, amount, kind)}
+                onInitiative={(v) => setInitiative(selected, v)}
+                onRollInitiative={() => rollInitiative(selected)}
+                light={map.tokens[selected.id]?.light}
+                onLight={(light) => {
+                  const t = map.tokens[selected.id]
+                  if (t) setMap({ ...map, tokens: { ...map.tokens, [selected.id]: { ...t, light } } })
+                }}
                 onConditions={(list) => setConditions(selected, list)}
                 onHidden={(hidden) => setEncounter((s) => ({ ...s, combatants: s.combatants.map((x) => (x.id === selected.id ? { ...x, hidden: hidden || undefined } : x)) }))}
                 locked={!!map.tokens[selected.id]?.locked}
@@ -517,6 +648,10 @@ function Detail({
   vehicle,
   character,
   onHp,
+  onInitiative,
+  onRollInitiative,
+  light,
+  onLight,
   onConditions,
   onHidden,
   locked,
@@ -527,7 +662,12 @@ function Detail({
   monster?: BestiaryMonster
   vehicle?: TrackedVehicle
   character?: CharacterSheet
-  onHp: (amount: number, kind: 'damage' | 'heal') => void
+  onHp: (amount: number, kind: 'damage' | 'heal' | 'temp') => void
+  onInitiative: (v: number | null) => void
+  onRollInitiative: () => void
+  /** The light its token carries, if any. */
+  light?: { bright: number; dim: number }
+  onLight: (light: { bright: number; dim: number } | undefined) => void
   onConditions: (list: string[]) => void
   onHidden: (hidden: boolean) => void
   /** Its token is locked in place on the map. */
@@ -535,14 +675,9 @@ function Detail({
   onLock: (locked: boolean) => void
 }): JSX.Element {
   const { rollCheck, rollDamage } = useSheetRoller(sessionId, c.name)
-  const [amount, setAmount] = useState('')
   const [showBlock, setShowBlock] = useState(false)
   const attacks = useMemo(() => attacksFor(monster, vehicle, character), [monster, vehicle, character])
-  const n = Number(amount)
-  const hit = (kind: 'damage' | 'heal'): void => {
-    onHp(n, kind)
-    setAmount('')
-  }
+  const lightName = light ? (LIGHT_PRESETS.find((pr) => pr.bright === light.bright && pr.dim === light.dim)?.name ?? 'custom') : ''
   const rollDice = (expr: string, label: string): void => {
     const parsed = diceGroups(expr)
     if (parsed) rollDamage(parsed.groups, parsed.modifier, label)
@@ -561,25 +696,39 @@ function Detail({
         {c.hidden && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Players can’t see it on the map or in the turn order.</div>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-        <Stat value={`${c.currentHp}`} label={`HP / ${c.maxHp}`} />
+        <Stat value={`${c.currentHp}${character?.tempHp ? ` +${character.tempHp}` : ''}`} label={`HP / ${c.maxHp}`} />
         <Stat value={`${c.ac}`} label="AC" />
-        <Stat value={c.initiative === null ? '–' : `${c.initiative}`} label="Init" />
+        <InitiativeField value={c.initiative} onChange={onInitiative} onRoll={onRollInitiative} rollTitle={c.kind === 'player' ? 'Roll for them (players can roll their own in their Combat tab)' : 'Roll it quietly — players never see an enemy’s roll'} />
       </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        <input type="number" min={1} className="gb-input" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && hit('damage')} placeholder="0" aria-label="Amount" style={{ width: 60, padding: '4px 8px' }} />
-        <button type="button" className="gb-btn gb-btn--secondary" style={{ ...btn, flex: 1, color: 'var(--danger)' }} disabled={!(n > 0)} onClick={() => hit('damage')} title={c.damageThreshold ? `Hits under ${c.damageThreshold} do nothing` : undefined}>
-          Damage
-        </button>
-        <button type="button" className="gb-btn gb-btn--secondary" style={{ ...btn, flex: 1, color: 'var(--success)' }} disabled={!(n > 0)} onClick={() => hit('heal')}>
-          {c.kind === 'vehicle' ? 'Repair' : 'Heal'}
-        </button>
-      </div>
+      <HpControls onHp={onHp} repair={c.kind === 'vehicle'} temp={!!character} />
+      {c.damageThreshold ? <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Hits under {c.damageThreshold} do nothing.</div> : null}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }} title="A light it carries lights the dark around it, for everyone who can see it">
+        Carries a light
+        <select
+          className="gb-input"
+          value={lightName}
+          onChange={(e) => {
+            const pr = LIGHT_PRESETS.find((x) => x.name === e.target.value)
+            onLight(pr ? { bright: pr.bright, dim: pr.dim } : undefined)
+          }}
+          style={{ fontSize: 12, padding: '2px 6px' }}
+        >
+          <option value="">None</option>
+          {LIGHT_PRESETS.map((pr) => (
+            <option key={pr.name} value={pr.name}>
+              {pr.name} ({pr.bright}/{pr.dim} ft)
+            </option>
+          ))}
+          {lightName === 'custom' && <option value="custom">{`${light!.bright}/${light!.dim} ft`}</option>}
+        </select>
+      </label>
       {c.deathSaves && (
         <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
           Death saves: {c.deathSaves.successes} successes, {c.deathSaves.failures} failures (track them in the Initiative tab)
         </div>
       )}
 
+      {!character && (
       <Block title={c.kind === 'vehicle' ? 'Weapons' : 'Attacks'}>
         {attacks.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>None to roll.</span>}
         {attacks.map((a, i) => (
@@ -601,6 +750,7 @@ function Detail({
           </div>
         ))}
       </Block>
+      )}
 
       <Block title="Conditions">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -623,6 +773,8 @@ function Detail({
         </div>
       </Block>
 
+      {character && <CharacterTabs character={character} sessionId={sessionId} />}
+      {monster && <MonsterAbilities monster={monster} sessionId={sessionId} />}
       {monster && (
         <div>
           <button type="button" className="gb-btn gb-btn--ghost" style={btn} onClick={() => setShowBlock((s) => !s)}>
@@ -632,15 +784,6 @@ function Detail({
         </div>
       )}
       {vehicle && <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Components, crew and fuel are in the Vehicles tab (right panel).</p>}
-    </div>
-  )
-}
-
-function Stat({ value, label }: { value: string; label: string }): JSX.Element {
-  return (
-    <div style={{ textAlign: 'center', padding: 6, borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border-subtle)' }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>{value}</div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
     </div>
   )
 }
@@ -679,51 +822,21 @@ function RollLog(): JSX.Element {
   )
 }
 
-/** Grid size, the map image, and fog for the whole map. */
+/** Feet per square, lighting and sight, party start spots, and clearing things off the whole map. */
 function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m: BattleMap) => void; onClose: () => void }): JSX.Element {
-  function upload(file: File): void {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const url = String(reader.result)
-      // Keep the image's shape: the columns stay, the rows follow its height.
-      const img = new Image()
-      img.onload = () => onChange({ ...map, image: url, rows: Math.max(4, Math.round((map.cols * img.height) / img.width)) })
-      img.src = url
-    }
-    reader.readAsDataURL(file)
-  }
   return (
-    <div style={{ position: 'absolute', top: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 6, width: 320, padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ position: 'absolute', top: 60, right: 12, zIndex: 6, width: 320, maxHeight: 'calc(100% - 120px)', overflowY: 'auto', padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <strong style={{ flex: 1, fontSize: 13 }}>Map</strong>
         <button type="button" onClick={onClose} style={iconBtn} title="Close">
           <XIcon size={12} />
         </button>
       </div>
-      <label style={labelCol}>
-        Map image
-        <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} style={{ fontSize: 12 }} />
+      <label style={{ ...labelCol, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        Feet per square
+        <input type="number" min={1} className="gb-input" value={map.feetPerCell} onChange={(e) => onChange({ ...map, feetPerCell: Math.max(1, Number(e.target.value) || 5) })} style={{ ...field, width: 64 }} />
       </label>
-      {map.image && (
-        <button type="button" className="gb-btn gb-btn--ghost" style={btn} onClick={() => onChange({ ...map, image: null })}>
-          Remove the image (plain grid)
-        </button>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-        <label style={labelCol}>
-          Squares across
-          <input type="number" min={4} max={120} className="gb-input" value={map.cols} onChange={(e) => onChange({ ...map, cols: Math.max(4, Math.min(120, Number(e.target.value) || 4)) })} style={field} />
-        </label>
-        <label style={labelCol}>
-          Squares down
-          <input type="number" min={4} max={120} className="gb-input" value={map.rows} onChange={(e) => onChange({ ...map, rows: Math.max(4, Math.min(120, Number(e.target.value) || 4)) })} style={field} />
-        </label>
-        <label style={labelCol}>
-          Feet each
-          <input type="number" min={1} className="gb-input" value={map.feetPerCell} onChange={(e) => onChange({ ...map, feetPerCell: Math.max(1, Number(e.target.value) || 5) })} style={field} />
-        </label>
-      </div>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>With an image, set squares across to match the grid drawn on it; squares down follows the image’s shape.</p>
+      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>The grid goes on for ever. Add map images with the Map images tool on the left, then line them up with the grid.</p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
         <span style={{ flex: 1, color: 'var(--text-secondary)' }} title="Where players' tokens appear when they join this battle — drag the P1, P2… squares on the map. Only you see them.">
           Party start spots: {map.partyStarts.length}
@@ -735,8 +848,8 @@ function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m:
           type="button"
           className="gs-chip"
           onClick={() => {
-            // The next free square down the left edge; drag it into place from there.
-            for (let x = 0; x < map.cols; x++)
+            // The next free square down the starting area's left edge; drag it into place from there.
+            for (let x = 0; x < 200; x++)
               for (let y = 0; y < map.rows; y++)
                 if (!map.partyStarts.some((q) => q.x === x && q.y === y) && canStand(map, { x, y, size: 1 })) {
                   onChange({ ...map, partyStarts: [...map.partyStarts, { x, y }] })
@@ -748,6 +861,34 @@ function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m:
           +
         </button>
       </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={labelCol}>Lighting</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['bright', 'dim', 'dark'] as Ambient[]).map((a) => (
+            <button key={a} type="button" style={{ ...toolButton(map.ambient === a), border: '1px solid var(--border-subtle)' }} onClick={() => onChange({ ...map, ambient: a })} title={AMBIENT_HINT[a]}>
+              {a === 'bright' ? 'Bright' : a === 'dim' ? 'Dim' : 'Dark'}
+            </button>
+          ))}
+        </div>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
+          {AMBIENT_HINT[map.ambient]} Once a map has walls or is dark, players only see what their party has line of sight to (darkvision comes from their sheets).
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={map.sharedVision !== false} onChange={(e) => onChange({ ...map, sharedVision: e.target.checked ? undefined : false })} />
+          Players share what the party sees
+        </label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, explored: {} })} disabled={Object.keys(map.explored).length === 0} title="Players' maps go dark again everywhere they can't see right now">
+            Forget explored
+          </button>
+          <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, walls: map.walls.filter((w) => w.locked) })} disabled={!map.walls.some((w) => !w.locked)}>
+            Remove walls
+          </button>
+          <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, lights: map.lights.filter((l) => l.locked) })} disabled={!map.lights.some((l) => !l.locked)}>
+            Remove lights
+          </button>
+        </div>
+      </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, fog: [fogEverything(map)] })} title="Cover the whole map, then cut away what the party can see">
           Fog everything
@@ -758,12 +899,18 @@ function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m:
         <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, templates: [] })} disabled={map.templates.length === 0}>
           Clear templates
         </button>
-        <button type="button" className="gb-btn gb-btn--ghost" style={{ ...btn, color: 'var(--danger)' }} onClick={() => onChange({ ...emptyBattleMap(), tokens: map.tokens })}>
-          Reset map
+        <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, images: map.images.filter((i) => i.locked) })} disabled={!map.images.some((i) => !i.locked)}>
+          Remove images
         </button>
       </div>
     </div>
   )
+}
+
+const AMBIENT_HINT: Record<Ambient, string> = {
+  bright: 'Daylight: everything in sight is seen.',
+  dim: 'Twilight or a dim room: everything in sight is seen, dimly.',
+  dark: 'Night or a dungeon: only lit places, and what darkvision reaches, are seen.'
 }
 
 const btn = { fontSize: 12, padding: '4px 10px' } as const
@@ -771,25 +918,6 @@ const pill = { border: '1px solid var(--accent)', color: 'var(--accent-hover)', 
 const iconBtn = { background: 'none', border: 0, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, display: 'inline-flex' } as const
 const labelCol = { display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--text-muted)' } as const
 const field = { fontSize: 12, padding: '3px 6px' } as const
-const toolbar = {
-  position: 'absolute',
-  top: 12,
-  left: '50%',
-  transform: 'translateX(-50%)',
-  zIndex: 5,
-  display: 'flex',
-  flexWrap: 'wrap',
-  justifyContent: 'center',
-  // In a narrow window the tools wrap onto a second line rather than running off the map.
-  width: 'max-content',
-  maxWidth: 'calc(100% - 24px)',
-  gap: 2,
-  padding: 4,
-  borderRadius: 10,
-  background: 'var(--bg-surface)',
-  border: '1px solid var(--border-subtle)',
-  boxShadow: '0 6px 20px rgba(0,0,0,0.45)'
-} as const
 const toolButton = (on: boolean): React.CSSProperties => ({
   whiteSpace: 'nowrap',
   border: 0,

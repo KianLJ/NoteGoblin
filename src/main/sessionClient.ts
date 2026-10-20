@@ -6,6 +6,8 @@ import type {
   CampaignChangedFrame,
   DiceRollFrame,
   ForceRollFrame,
+  CharacterHpFrame,
+  BattleMapDragFrame,
   InitiativeFrame,
   MessageFrame,
   PresenceFrame,
@@ -256,6 +258,14 @@ function handleFrame(raw: WebSocket.RawData): void {
     clientWindow.webContents.send('ws:message', { sessionId: currentSessionId, message: frame.message })
   }
 
+  if (payload.type === 'battle-map-drag' && clientWindow) {
+    const frame = payload as BattleMapDragFrame
+    clientWindow.webContents.send('ws:battle-map-drag', { sessionId: currentSessionId, combatantId: frame.combatantId, x: frame.x, y: frame.y })
+  }
+  if (payload.type === 'character-hp' && clientWindow) {
+    const frame = payload as CharacterHpFrame
+    clientWindow.webContents.send('ws:character-hp', { currentHp: frame.currentHp, tempHp: frame.tempHp })
+  }
   if (payload.type === 'force-roll' && clientWindow) {
     const frame = payload as ForceRollFrame
     clientWindow.webContents.send('ws:force-roll', frame.request)

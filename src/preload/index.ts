@@ -102,8 +102,15 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('ws:battle-map-player-move', listener)
     },
     fetch: (sessionId) => ipcRenderer.invoke('battleMap:fetch', sessionId),
-    fetchImage: (sessionId) => ipcRenderer.invoke('battleMap:fetch-image', sessionId),
+    fetchImage: (sessionId, imageId) => ipcRenderer.invoke('battleMap:fetch-image', sessionId, imageId),
     moveToken: (sessionId, combatantId, x, y) => ipcRenderer.invoke('battleMap:move-token', sessionId, combatantId, x, y),
+    drag: (combatantId, x, y) => ipcRenderer.invoke('battleMap:drag', combatantId, x, y),
+    dragToken: (sessionId, combatantId, x, y) => ipcRenderer.invoke('battleMap:drag-token', sessionId, combatantId, x, y),
+    onDrag: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, drag: { sessionId: string | null; combatantId: string; x: number | null; y: number | null }): void => callback(drag)
+      ipcRenderer.on('ws:battle-map-drag', listener)
+      return () => ipcRenderer.removeListener('ws:battle-map-drag', listener)
+    },
     onUpdate: (callback) => {
       const listener = (_e: Electron.IpcRendererEvent, update: Parameters<typeof callback>[0]): void => callback(update)
       ipcRenderer.on('ws:battle-map', listener)
@@ -191,6 +198,12 @@ const api: AppApi = {
       const listener = (_event: Electron.IpcRendererEvent, update: PlayerCharacterUpdate): void => callback(update)
       ipcRenderer.on('ws:player-character', listener)
       return () => ipcRenderer.removeListener('ws:player-character', listener)
+    },
+    setPlayerHp: (userId, hp) => ipcRenderer.invoke('characters:set-player-hp', userId, hp),
+    onHpFromDm: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, hp: { currentHp?: number; tempHp?: number }): void => callback(hp)
+      ipcRenderer.on('ws:character-hp', listener)
+      return () => ipcRenderer.removeListener('ws:character-hp', listener)
     }
   },
   presence: {

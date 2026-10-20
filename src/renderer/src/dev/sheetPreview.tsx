@@ -1,7 +1,7 @@
 // Dev-only: the character sheet on its own, with window.goblin stubbed, for
 // checking its layout in a plain browser (see vite.sheet-preview.config.ts).
 // Never imported by the app.
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import type { CharacterSheet } from '@shared/ipc'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
@@ -14,9 +14,11 @@ import { VehicleEditor } from '../features/workshop/form/vehicle'
 import { CombatView } from '../features/combat/CombatView'
 import { PlayerCombatView } from '../features/combat/PlayerCombatView'
 import { useBattleMapSync } from '../features/combat/useBattleMapSync'
+import { useCombatSheetSync } from '../features/combat/useCombatSheetSync'
+import { useTestPlayerSheets } from '../features/combat/useTestPlayerSheets'
 import { getBattleMap, getEncounter, setBattleMap, setEncounter } from '../features/combat/encounterStore'
 import { emptyCombatant, emptyInitiativeState, sanitizeForPlayer } from '@shared/encounter'
-import { emptyBattleLibrary, emptyBattleMap, mapForPlayer } from '@shared/battleMap'
+import { emptyBattleMap, hiddenCombatantIds, mapForPlayer } from '@shared/battleMap'
 import { trackVehicle } from '@shared/vehicles'
 import { vehicleDefSchema } from '@shared/content/schema'
 import { CalendarPanel } from '../features/campaigns/CalendarPanel'
@@ -26,13 +28,46 @@ import { rollInlineDice } from '../features/dice/inlineDice'
 import { RollAnimationOverlay } from '../features/dice/RollAnimationOverlay'
 import { getDiceLog, subscribeDiceLog } from '../features/dice/diceLogStore'
 
-function DmSync(): null {
+/** The DM's side as the app shell runs it: the battle synced, and the party's sheets (test players' too) in the fight. */
+function DmCombat(): JSX.Element {
   useBattleMapSync('camp', null)
-  return null
+  const tests = useTestPlayerSheets(true)
+  const players = useMemo(() => new Map([['u1', sample], ...tests]), [tests])
+  useCombatSheetSync(players, false)
+  return <CombatView sessionId={null} campaignId="camp" playerCharacters={players} />
 }
 
-// ?playercombat: the DM's map laid out first (tokens placed, a goblin ambushing under fog), then shown as the player gets it.
-if (new URLSearchParams(location.search).has('playercombat')) {
+/** A drawn stone floor (70 pixels to a square, 20 by 12 squares), standing in for a map image. */
+function demoFloor(): string {
+  const c = document.createElement('canvas')
+  c.width = 1400
+  c.height = 840
+  const g = c.getContext('2d')!
+  g.fillStyle = '#5b5348'
+  g.fillRect(0, 0, c.width, c.height)
+  for (let x = 0; x < 20; x++)
+    for (let y = 0; y < 12; y++) {
+      g.fillStyle = (x + y) % 2 ? '#6a6154' : '#625a4e'
+      g.fillRect(x * 70 + 2, y * 70 + 2, 66, 66)
+    }
+  g.fillStyle = '#2d6a8a'
+  g.fillRect(15 * 70, 8 * 70, 4 * 70, 3 * 70)
+  return c.toDataURL('image/png')
+}
+
+// &walls: a dark dungeon instead — two rooms with a closed door between, the party's torch, a brazier lighting the ogre's room.
+if (new URLSearchParams(location.search).has('walls')) {
+  const w = (id: string, ax: number, ay: number, bx: number, by: number, door = false) => ({ id, a: { x: ax, y: ay }, b: { x: bx, y: by }, ...(door ? { door: true } : {}) })
+  setBattleMap({
+    ...emptyBattleMap(),
+    ambient: 'dark',
+    tokens: { pc: { x: 3, y: 7, size: 1, light: { bright: 20, dim: 20 } }, ogre: { x: 13, y: 7, size: 2 }, gob1: { x: 21, y: 13, size: 1 }, gob2: { x: 6, y: 10, size: 1 }, ship: { x: 20, y: 0, size: 4 } },
+    walls: [w('a1', 1, 3, 10, 3), w('a2', 10, 3, 10, 7), w('door', 10, 7, 10, 9, true), w('a3', 10, 9, 10, 12), w('a4', 10, 12, 1, 12), w('a5', 1, 12, 1, 3), w('b1', 10, 3, 18, 3), w('b2', 18, 3, 18, 12), w('b3', 18, 12, 10, 12)],
+    lights: [{ id: 'brazier', x: 15, y: 5, bright: 10, dim: 10 }],
+    images: [{ id: 'floor', src: demoFloor(), x: 0, y: 2, w: 20, h: 12, naturalW: 1400, naturalH: 840 }]
+  })
+} else if (new URLSearchParams(location.search).has('playercombat')) {
+  // ?playercombat: the DM's map laid out first (tokens placed, a goblin ambushing under fog), then shown as the player gets it.
   setBattleMap({
     ...emptyBattleMap(),
     tokens: { pc: { x: 3, y: 5, size: 1 }, ogre: { x: 12, y: 4, size: 2 }, gob1: { x: 20, y: 12, size: 1 }, gob2: { x: 14, y: 9, size: 1 }, ship: { x: 0, y: 0, size: 4 } },
@@ -184,7 +219,7 @@ const vehiclesApi = {
 // ?combat / ?playercombat: the battle map store, in memory; a player's moves are accepted as they'd be by the DM's app.
 const noop = (): (() => void) => () => {}
 const battleMapApi = {
-  get: async () => ({ ok: true, data: emptyBattleLibrary() }),
+  get: async () => ({ ok: true, data: { activeId: 'battle-1', battles: [{ id: 'battle-1', name: 'Battle map', encounterId: null, map: getBattleMap() }] } }),
   save: async () => ({ ok: true, data: undefined }),
   broadcast: async () => {},
   onPlayerMove: noop,
@@ -192,12 +227,21 @@ const battleMapApi = {
   fetchImage: async () => ({ ok: true, data: { imageId: null } }),
   moveToken: async () => ({ ok: true, data: undefined }),
   onUpdate: noop,
-  onImage: noop
+  onImage: noop,
+  drag: async () => {},
+  dragToken: async () => {},
+  // Someone else's drag, for trying it out: window.fakeDrag('ogre', 13.4, 6.2) (null, null lets go).
+  onDrag: (cb: (d: { sessionId: string | null; combatantId: string; x: number | null; y: number | null }) => void) => {
+    ;(window as unknown as { fakeDrag: unknown }).fakeDrag = (combatantId: string, x: number | null, y: number | null) => cb({ sessionId: new URLSearchParams(location.search).has('playercombat') ? 's' : null, combatantId, x, y })
+    return () => {}
+  }
 }
+// The DM's own characters (for test players): just the sample.
+const charactersApi = { list: async () => ({ ok: true, data: [sample] }), setPlayerHp: async () => {}, onHpFromDm: noop, onPlayerCharacterChanged: noop, getPlayerCharacter: async () => ({ ok: true, data: null }) }
 const initiativeApi = { onUpdate: noop, broadcast: async () => {}, setMine: async () => {}, onPlayerInitiative: noop }
 ;(window as unknown as { goblin: unknown }).goblin = new Proxy(
   {},
-  { get: (_t, key) => (key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : base[key]) }
+  { get: (_t, key) => (key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : base[key]) }
 )
 
 // A demo pack with a starship, for the vehicles preview's "Add a vehicle".
@@ -230,7 +274,7 @@ const demoVehicle = {
 }
 /** What the DM's app would send this player: the map without fogged tokens, and their view of the turn order. */
 function playerSide(): { map: ReturnType<typeof mapForPlayer>; initiative: ReturnType<typeof sanitizeForPlayer> } {
-  return { map: mapForPlayer(getBattleMap()), initiative: sanitizeForPlayer(getEncounter(), 'u1') }
+  return { map: mapForPlayer(getBattleMap(), hiddenCombatantIds(getEncounter().combatants), { combatants: getEncounter().combatants, userId: 'u1' }), initiative: sanitizeForPlayer(getEncounter(), 'u1') }
 }
 
 // ?combat: a fight already set up — the sample character, an ogre, two goblins and the party's corvette.
@@ -241,7 +285,7 @@ if (new URLSearchParams(location.search).has('combat') || new URLSearchParams(lo
   setEncounter({
     ...emptyInitiativeState(),
     combatants: [
-      mk('pc', 'Elowen Brightwood', 'player', 19, 44, 14, { userId: 'u1', currentHp: 31 }),
+      mk('pc', 'Elowen Brightwood', 'player', 19, 44, 14, { userId: 'u1', currentHp: 31, darkvision: 60 }),
       mk('ogre', 'Ogre', 'monster', 12, 68, 11, { monsterIndex: 'ogre' }),
       mk('gob1', 'Goblin', 'monster', 17, 7, 15, { monsterIndex: 'goblin' }),
       mk('gob2', 'Goblin', 'monster', 9, 7, 15, { monsterIndex: 'goblin', currentHp: 0 }),
@@ -284,6 +328,11 @@ const sample: CharacterSheet = {
   currency: { cp: 7, sp: 30, ep: 0, gp: 12, pp: 0 }
 }
 
+function PlayerPreview(): JSX.Element {
+  const [character, setCharacter] = useState<CharacterSheet>(sample)
+  return <PlayerCombatView sessionId="s" character={character} onSaveCharacter={(patch) => setCharacter((c) => ({ ...c, ...patch }))} />
+}
+
 function Preview(): JSX.Element {
   const [character, setCharacter] = useState<CharacterSheet>(sample)
   return (
@@ -302,12 +351,11 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     {new URLSearchParams(location.search).has('combat') ? (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <DmSync />
-        <CombatView sessionId={null} campaignId="camp" playerCharacters={new Map([['u1', sample]])} />
+        <DmCombat />
       </div>
     ) : new URLSearchParams(location.search).has('playercombat') ? (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <PlayerCombatView sessionId="s" character={sample} />
+        <PlayerPreview />
       </div>
     ) : new URLSearchParams(location.search).has('vehicles') ? (
       <VehiclesPreview />

@@ -42,6 +42,8 @@ import {
   broadcastSfxPlayed,
   broadcastMessage,
   pushForceRoll,
+  pushCharacterHp,
+  broadcastTokenDrag,
   startPresentingDeck,
   setLiveScene,
   stopPresentingDeck,
@@ -1507,10 +1509,18 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
   // Player: asks for the map image (it arrives as ws:battle-map-image once all its pieces are in).
-  ipcMain.handle('battleMap:fetch-image', async (_event, sessionId: string): Promise<ApiResult<{ imageId: string | null }>> => {
+  ipcMain.handle('battleMap:fetch-image', async (_event, sessionId: string, imageId?: string): Promise<ApiResult<{ imageIds: string[] }>> => {
     const err = requireJoinedSession(sessionId)
     if (err) return err
-    return sendSessionRequest('battleMap.image', {})
+    return sendSessionRequest('battleMap.image', imageId ? { imageId } : {})
+  })
+  // DM: a token being dragged right now, shown live to the players who can see it.
+  ipcMain.handle('battleMap:drag', (_event, combatantId: string, x: number | null, y: number | null): void => {
+    if (getHostedSession()) broadcastTokenDrag(combatantId, x, y)
+  })
+  // Player: their own token being dragged right now (no answer needed; the move itself comes after).
+  ipcMain.handle('battleMap:drag-token', (_event, sessionId: string, combatantId: string, x: number | null, y: number | null): void => {
+    if (!requireJoinedSession(sessionId)) void sendSessionRequest('battleMap.dragToken', { combatantId, x, y })
   })
   // Player: moves their own token (the DM's app checks it).
   ipcMain.handle('battleMap:move-token', async (_event, sessionId: string, combatantId: string, x: number, y: number): Promise<ApiResult<void>> => {
@@ -1650,6 +1660,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // DM-only — pushes a "roll this" prompt to one connected player, targeted
   // (not a broadcast). Only meaningful while hosting; a no-op otherwise
   // since a player has no one to force a roll on.
+  // DM: a player's hit points changed in the fight — sent to that player's sheet.
+  ipcMain.handle('characters:set-player-hp', (_event, targetUserId: string, hp: { currentHp?: number; tempHp?: number }): void => {
+    if (getHostedSession()) pushCharacterHp(targetUserId, hp)
+  })
   ipcMain.handle('dice:force-roll', (_event, sessionId: string, targetUserId: string, request: ForceRollRequest): void => {
     if (getHostedSession()?.sessionId === sessionId) pushForceRoll(targetUserId, request)
   })

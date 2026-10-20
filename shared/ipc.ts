@@ -339,8 +339,15 @@ export interface AppApi {
     /** DM: a connected player moved their own token (already checked). */
     onPlayerMove: (callback: (move: { combatantId: string; x: number; y: number }) => void) => () => void
     fetch: (sessionId: string) => Promise<ApiResult<{ map: PlayerBattleMap | null; initiative: PlayerVisibleInitiativeState | null }>>
-    fetchImage: (sessionId: string) => Promise<ApiResult<{ imageId: string | null }>>
+    /** Asks for the map's images (or one of them); they arrive through onImage. */
+    fetchImage: (sessionId: string, imageId?: string) => Promise<ApiResult<{ imageIds: string[] }>>
     moveToken: (sessionId: string, combatantId: string, x: number, y: number) => Promise<ApiResult<void>>
+    /** DM, while hosting: a token being dragged right now (x null: let go), shown live to the players who can see it. */
+    drag: (combatantId: string, x: number | null, y: number | null) => Promise<void>
+    /** Player: your own token being dragged right now (x null: let go). */
+    dragToken: (sessionId: string, combatantId: string, x: number | null, y: number | null) => Promise<void>
+    /** Someone else dragging a token right now (the DM hears players' drags; players hear the DM's and each other's). */
+    onDrag: (callback: (drag: { sessionId: string | null; combatantId: string; x: number | null; y: number | null }) => void) => () => void
     onUpdate: (callback: (update: { sessionId: string | null; map: PlayerBattleMap | null }) => void) => () => void
     onImage: (callback: (image: { imageId: string; image: string }) => void) => () => void
   }
@@ -481,6 +488,10 @@ export interface AppApi {
     getPlayerCharacter: (userId: string) => Promise<ApiResult<CharacterSheet | null>>
     /** DM-side: fires whenever a connected player's synced character changes — selection, an edit, or them disconnecting (character: null). Only meaningful while hosting. */
     onPlayerCharacterChanged: (callback: (update: PlayerCharacterUpdate) => void) => () => void
+    /** DM-side, while hosting: a player's hit points changed in the fight — their own sheet takes the new numbers. */
+    setPlayerHp: (userId: string, hp: { currentHp?: number; tempHp?: number }) => Promise<void>
+    /** Player-side: the DM changed your hit points in the fight (see setPlayerHp). */
+    onHpFromDm: (callback: (hp: { currentHp?: number; tempHp?: number }) => void) => () => void
   }
   // Live "who's here" for a campaign. Only meaningful once you're hosting or
   // have joined a session — sessionId identifies which one.

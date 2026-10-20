@@ -90,15 +90,15 @@ describe('the battle map players are sent', () => {
     const { mapForPlayer, imageIdOf } = await import('@shared/battleMap')
     const map = {
       ...emptyBattleMap(),
-      image: 'data:image/png;base64,AAAA',
+      images: [{ id: 'i', src: 'data:image/png;base64,AAAA', x: -3, y: 2, w: 10, h: 8 }, { id: 'h', src: 'data:image/png;base64,SECRET', x: 0, y: 0, w: 4, h: 4, hidden: true }],
       tokens: { pc: { x: 0, y: 0, size: 1 }, ambusher: { x: 10, y: 10, size: 1 } },
       fog: [{ id: 'f', op: 'add', kind: 'rect', x: 8, y: 8, w: 5, h: 5 }] as FogShape[]
     }
     const seen = mapForPlayer(map)
     expect(Object.keys(seen.tokens)).toEqual(['pc'])
-    expect(seen).not.toHaveProperty('image')
-    expect(seen.imageId).toBe(imageIdOf(map.image))
-    expect(imageIdOf('data:image/png;base64,AAAB')).not.toBe(seen.imageId)
+    expect(seen.images).toEqual([{ id: 'i', imageId: imageIdOf('data:image/png;base64,AAAA'), x: -3, y: 2, w: 10, h: 8 }])
+    expect(JSON.stringify(seen)).not.toContain('base64')
+    expect(imageIdOf('data:image/png;base64,AAAB')).not.toBe(seen.images[0].imageId)
     expect(imageIdOf(null)).toBeNull()
   })
 })
@@ -141,5 +141,20 @@ describe('battles: remembered positions, party starts and hiding', () => {
     const lib = normalizeBattleLibrary({ cols: 30, rows: 20, fog: [], templates: [], tokens: {} })
     expect(lib.battles).toHaveLength(1)
     expect(lib.battles[0].map.cols).toBe(30)
+  })
+})
+
+describe('an endless map', () => {
+  it('reaches as far as what is on it', async () => {
+    const { mapBounds, normalizeBattleMap } = await import('@shared/battleMap')
+    const map = { ...emptyBattleMap(), images: [{ id: 'i', src: 'data:image/png;base64,AA', x: -10, y: -4, w: 5, h: 5 }], tokens: { a: { x: 40, y: 3, size: 2 } } }
+    expect(mapBounds(map)).toEqual({ x0: -10, y0: -4, x1: 42, y1: 16 })
+    expect(mapBounds(map, 2)).toEqual({ x0: -12, y0: -6, x1: 44, y1: 18 })
+    // An old map's background image becomes a placed image over the grid it had.
+    expect(normalizeBattleMap({ cols: 30, rows: 20, image: 'data:image/png;base64,AA' }).images).toEqual([{ id: 'background', src: 'data:image/png;base64,AA', x: 0, y: 0, w: 30, h: 20 }])
+  })
+
+  it('lets tokens stand anywhere, even off the starting area', () => {
+    expect(canStand(emptyBattleMap(), { x: -5, y: 200, size: 1 })).toBe(true)
   })
 })
