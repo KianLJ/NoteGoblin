@@ -1,6 +1,7 @@
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
 import type { ForceRollRequest, Message } from '@shared/ipc'
+import type { PlayerBattleMap } from '@shared/battleMap'
 
 /**
  * Frame shapes carried opaquely by the relay's session room (relay/src/session.ts,
@@ -25,6 +26,9 @@ export type RequestKind =
   | 'calendar.save'
   | 'calendar.remove'
   | 'vehicles.get'
+  | 'battleMap.get'
+  | 'battleMap.image'
+  | 'battleMap.moveToken'
   | 'campaignPacks.list'
   | 'folders.list'
   | 'folders.create'
@@ -181,6 +185,25 @@ export interface MusicChangedFrame {
  * since the relay never stores anything and a player might join or
  * reconnect mid-session with no earlier copy to fall back on.
  */
+/**
+ * Pushed to every connected player whenever the DM's battle map changes
+ * (see shared/battleMap.ts's mapForPlayer: tokens under fog are already left
+ * out, and the image is only an id). `map: null` means the DM has no map up.
+ */
+export interface BattleMapFrame {
+  type: 'battle-map'
+  map: PlayerBattleMap | null
+}
+
+/** The map image, in pieces under the relay's 1 MiB message cap — sent when it changes, or when a player asks ('battleMap.image'). */
+export interface BattleMapImageChunkFrame {
+  type: 'battle-map-image-chunk'
+  imageId: string
+  index: number
+  total: number
+  chunk: string
+}
+
 export interface MusicTrackChunkFrame {
   type: 'music-track-chunk'
   trackId: string

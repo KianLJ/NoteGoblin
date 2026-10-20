@@ -27,6 +27,8 @@ import type { BestiaryMonster } from '../../data/bestiary'
 // Loaded the first time they open, so the app starts without their code.
 const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
 import { CombatView } from '../combat/CombatView'
+import { PlayerCombatView } from '../combat/PlayerCombatView'
+import { useBattleMapSync } from '../combat/useBattleMapSync'
 const Workshop = lazy(() => import('../workshop/Workshop').then((m) => ({ default: m.Workshop })))
 
 // Discord presence line shown while the app is open but not actively DMing
@@ -127,6 +129,10 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   // hosted or joined game — DM is locked while you've joined someone else's
   // session, Player is locked while you're hosting your own.
   const lockedMode: Mode | undefined = hostedSessionId ? 'player' : joinedSession ? 'dm' : undefined
+  // Combat is the DM's map in DM mode, or the DM's map as shared with you while you're in their session.
+  const combatShown = combatOpen && (mode === 'dm' || !!joinedSession)
+  // The DM's battle map is loaded, saved and shared behind the scenes, whether or not the Combat tab is open.
+  useBattleMapSync(mode === 'dm' ? (activeCampaign?.id ?? null) : null, mode === 'dm' ? hostedSessionId : null)
   const lockedReason = hostedSessionId
     ? 'Stop hosting to switch to Player mode.'
     : joinedSession
@@ -394,9 +400,9 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               setCombatOpen(false)
               setWorkshopOpen(true)
             }}
-            combat={combatOpen && mode === 'dm'}
+            combat={combatShown}
             onCombat={
-              mode === 'dm'
+              mode === 'dm' || joinedSession
                 ? () => {
                     setWorkshopOpen(false)
                     setCombatOpen(true)
@@ -405,7 +411,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             }
           />
 
-          {!workshopOpen && !combatOpen && mode === 'dm' && activeCampaign && (
+          {!workshopOpen && !combatShown && mode === 'dm' && activeCampaign && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
               <WorkspaceHeaderBar
@@ -421,7 +427,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             </>
           )}
 
-          {!workshopOpen && mode === 'player' && playerWorkspace.tabItems.length > 0 && (
+          {!workshopOpen && !combatShown && mode === 'player' && playerWorkspace.tabItems.length > 0 && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
               <PlayerWorkspaceHeaderBar workspace={playerWorkspace} />
@@ -514,12 +520,16 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           </Suspense>
         </main>
       )}
-      {combatOpen && mode === 'dm' && !workshopOpen && (
+      {combatShown && !workshopOpen && (
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <CombatView sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} playerCharacters={playerCharacters} />
+          {mode === 'dm' ? (
+            <CombatView sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} playerCharacters={playerCharacters} />
+          ) : (
+            joinedSession && <PlayerCombatView sessionId={joinedSession.sessionId} character={playerWorkspace.lastActiveCharacter} />
+          )}
         </main>
       )}
-      <main style={{ flex: 1, display: workshopOpen || (combatOpen && mode === 'dm') ? 'none' : 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <main style={{ flex: 1, display: workshopOpen || combatShown ? 'none' : 'flex', flexDirection: 'column', minHeight: 0 }}>
         {mode === 'dm' ? (
           <CampaignWorkspace
             campaign={activeCampaign}

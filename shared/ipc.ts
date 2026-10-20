@@ -7,6 +7,7 @@ import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
 import type { CampaignVehicles } from './vehicles'
+import type { BattleLibrary, BattleMap, PlayerBattleMap } from './battleMap'
 import type { ContentPack } from './content/schema'
 import type { PackIssue } from './content/validate'
 import type { SessionDeck, SessionScene, LiveSceneState } from './sessionDeck'
@@ -327,6 +328,22 @@ export interface AppApi {
   // the whole config and is rejected server-side for anyone but the DM.
   // Reuses campaigns.onChanged (not a dedicated event) to tell other windows
   // to re-fetch after a save, same as notes/folders.
+  // The Combat tab's battle map (shared/battleMap.ts). The DM saves it locally
+  // and pushes it to players while hosting; players fetch and receive a
+  // stripped copy, and move only their own token.
+  battleMap: {
+    /** The campaign's battles (each a map, its linked encounter and remembered positions). */
+    get: (campaignId: string) => Promise<ApiResult<BattleLibrary>>
+    save: (campaignId: string, battles: BattleLibrary) => Promise<ApiResult<void>>
+    broadcast: (map: BattleMap | null, encounter: InitiativeState) => Promise<void>
+    /** DM: a connected player moved their own token (already checked). */
+    onPlayerMove: (callback: (move: { combatantId: string; x: number; y: number }) => void) => () => void
+    fetch: (sessionId: string) => Promise<ApiResult<{ map: PlayerBattleMap | null; initiative: PlayerVisibleInitiativeState | null }>>
+    fetchImage: (sessionId: string) => Promise<ApiResult<{ imageId: string | null }>>
+    moveToken: (sessionId: string, combatantId: string, x: number, y: number) => Promise<ApiResult<void>>
+    onUpdate: (callback: (update: { sessionId: string | null; map: PlayerBattleMap | null }) => void) => () => void
+    onImage: (callback: (image: { imageId: string; image: string }) => void) => () => void
+  }
   // The vehicles a campaign tracks (see shared/vehicles.ts) — every member
   // reads them (minus ones the DM has hidden); only the DM saves, locally.
   vehicles: {

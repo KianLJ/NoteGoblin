@@ -195,6 +195,15 @@ CREATE INDEX IF NOT EXISTS idx_calendars_campaign ON campaign_calendars(campaign
 -- The vehicles a campaign is tracking (see shared/vehicles.ts): one JSON
 -- document per campaign, DM-written and member-read, like campaign_calendars
 -- (and, like it, campaign_id is deliberately not a foreign key).
+-- The Combat tab's battle map for a campaign (see shared/battleMap.ts): grid,
+-- map image (a data URL), token positions, fog and spell shapes, as one JSON
+-- document. DM-only; players are sent a stripped copy live while hosting.
+CREATE TABLE IF NOT EXISTS campaign_battlemaps (
+  campaign_id TEXT PRIMARY KEY,
+  map_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS campaign_vehicles (
   campaign_id TEXT PRIMARY KEY,
   vehicles_json TEXT NOT NULL DEFAULT '{"vehicles":[]}',

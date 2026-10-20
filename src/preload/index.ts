@@ -92,6 +92,29 @@ const api: AppApi = {
     remove: (campaignId, noteId, sessionId) =>
       ipcRenderer.invoke('notes:remove', campaignId, noteId, sessionId)
   },
+  battleMap: {
+    get: (campaignId) => ipcRenderer.invoke('battleMap:get', campaignId),
+    save: (campaignId, map) => ipcRenderer.invoke('battleMap:save', campaignId, map),
+    broadcast: (map, encounter) => ipcRenderer.invoke('battleMap:broadcast', map, encounter),
+    onPlayerMove: (callback) => {
+      const listener = (_e: Electron.IpcRendererEvent, move: { combatantId: string; x: number; y: number }): void => callback(move)
+      ipcRenderer.on('ws:battle-map-player-move', listener)
+      return () => ipcRenderer.removeListener('ws:battle-map-player-move', listener)
+    },
+    fetch: (sessionId) => ipcRenderer.invoke('battleMap:fetch', sessionId),
+    fetchImage: (sessionId) => ipcRenderer.invoke('battleMap:fetch-image', sessionId),
+    moveToken: (sessionId, combatantId, x, y) => ipcRenderer.invoke('battleMap:move-token', sessionId, combatantId, x, y),
+    onUpdate: (callback) => {
+      const listener = (_e: Electron.IpcRendererEvent, update: Parameters<typeof callback>[0]): void => callback(update)
+      ipcRenderer.on('ws:battle-map', listener)
+      return () => ipcRenderer.removeListener('ws:battle-map', listener)
+    },
+    onImage: (callback) => {
+      const listener = (_e: Electron.IpcRendererEvent, image: { imageId: string; image: string }): void => callback(image)
+      ipcRenderer.on('ws:battle-map-image', listener)
+      return () => ipcRenderer.removeListener('ws:battle-map-image', listener)
+    }
+  },
   vehicles: {
     get: (campaignId, sessionId) => ipcRenderer.invoke('vehicles:get', campaignId, sessionId),
     save: (campaignId, vehicles) => ipcRenderer.invoke('vehicles:save', campaignId, vehicles)

@@ -33,6 +33,12 @@ interface Props {
   /** Snap shapes and fog to square corners and centres (and sizes to whole squares). */
   snap: boolean
   onHint: (text: string) => void
+  /**
+   * A player's view: fog is solid, shapes and fog can't be changed, and only
+   * the tokens `canDrag` allows can be moved — the move goes to `onMoveToken`
+   * (the DM's app has the final say) instead of `onChange`.
+   */
+  viewer?: { canDrag: (combatantId: string) => boolean; onMoveToken: (combatantId: string, x: number, y: number) => void }
 }
 
 type Pt = { x: number; y: number }
@@ -47,6 +53,7 @@ type Drag =
   /** Drawing fog: a brush stroke's points, or a line, square or circle from where the drag started. */
   | { kind: 'fog'; shape: FogShape }
   | { kind: 'fogMove'; id: string; grab: Pt; at: Pt }
+  | { kind: 'start'; index: number; at: Pt }
 
 /** A shape's size from how far it's been dragged: whole squares when snapping, else whole feet (at least one). */
 function sizeFromDrag(kind: TemplateKind, origin: Pt, to: Pt, feetPerCell: number, snap: boolean): number {
@@ -80,7 +87,7 @@ function handlePoint(t: MapTemplate, feetPerCell: number): Pt {
   return { x: t.origin.x + Math.cos(ang) * L, y: t.origin.y + Math.sin(ang) * L }
 }
 
-export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, fogTool, snap, onHint }: Props): JSX.Element {
+export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, fogTool, snap, onHint, viewer }: Props): JSX.Element {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState({ x: 40, y: 70, zoom: 1 })
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -202,12 +209,12 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     const shapeId = target.closest('[data-template]')?.getAttribute('data-template')
     const handleId = target.closest('[data-handle]')?.getAttribute('data-handle')
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    if (handleId) {
+    if (handleId && !viewer) {
       const t = map.templates.find((x) => x.id === handleId)
       if (t && !t.locked) setDrag({ kind: 'shape', t, existing: true, moved: false })
       return
     }
-    if (e.button === 1 || (tool === 'move' && !tokenId && !shapeId)) {
+    if (e.button === 1 || (tool === 'move' && !tokenId && (!shapeId || viewer) && !target.closest('[data-start]'))) {
       setDrag({ kind: 'pan', x: e.clientX, y: e.clientY, px: view.x, py: view.y })
       if (e.button !== 1) {
         onSelect(null)
@@ -215,11 +222,19 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       }
       return
     }
+    const startIndex = target.closest('[data-start]')?.getAttribute('data-start')
+    if (tool === 'move' && startIndex != null && !viewer) {
+      const i = Number(startIndex)
+      setDrag({ kind: 'start', index: i, at: map.partyStarts[i] })
+      onHint('Drag the start spot to where that party member should begin.')
+      return
+    }
     if (tool === 'move' && tokenId) {
       const t = map.tokens[tokenId]
       onSelect(tokenId)
       setSelectedShape(null)
-      if (t?.locked) onHint('This token is locked in place. Unlock it in the side panel to move it.')
+      if (viewer && !viewer.canDrag(tokenId)) return
+      if (t?.locked) onHint(viewer ? 'The DM has locked your token in place.' : 'This token is locked in place. Unlock it in the side panel to move it.')
       else if (t) setDrag({ kind: 'token', id: tokenId, from: t, at: t })
       return
     }
@@ -235,6 +250,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       }
       return
     }
+    if (viewer && tool !== 'ruler') return
     if (tool === 'fog' && fogTool.draw === 'move') {
       const f = fogShapeAt(map, p)
       setSelectedFog(f?.id ?? null)
@@ -296,6 +312,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       setDrag({ ...drag, moved: true, t: { ...drag.t, toward: p, sizeFt } })
       onHint(templateLabel({ ...drag.t, sizeFt }))
     } else if (drag.kind === 'shapeMove' || drag.kind === 'fogMove') setDrag({ ...drag, at: p })
+    else if (drag.kind === 'start') setDrag({ ...drag, at: { x: Math.max(0, Math.min(map.cols - 1, Math.floor(p.x))), y: Math.max(0, Math.min(map.rows - 1, Math.floor(p.y))) } })
     else if (drag.kind === 'fog') {
       const s = drag.shape
       const q = at(p)
@@ -316,7 +333,10 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     if (!drag) return
     if (drag.kind === 'token') {
       const moved = drag.at.x !== drag.from.x || drag.at.y !== drag.from.y
-      if (moved && canStand(map, drag.at, drag.id)) onChange({ ...map, tokens: { ...map.tokens, [drag.id]: drag.at } })
+      if (moved && canStand(map, drag.at, drag.id)) {
+        if (viewer) viewer.onMoveToken(drag.id, drag.at.x, drag.at.y)
+        else onChange({ ...map, tokens: { ...map.tokens, [drag.id]: drag.at } })
+      }
       else if (moved) onHint('Something’s already standing there.')
     } else if (drag.kind === 'shape') {
       if (drag.existing) {
@@ -330,6 +350,9 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       const dx = snap ? Math.round((drag.at.x - drag.grab.x) * 2) / 2 : drag.at.x - drag.grab.x
       const dy = snap ? Math.round((drag.at.y - drag.grab.y) * 2) / 2 : drag.at.y - drag.grab.y
       if (dx || dy) updateShape({ ...drag.t, origin: { x: drag.t.origin.x + dx, y: drag.t.origin.y + dy }, toward: { x: drag.t.toward.x + dx, y: drag.t.toward.y + dy } })
+    } else if (drag.kind === 'start') {
+      const from = map.partyStarts[drag.index]
+      if (from && (from.x !== drag.at.x || from.y !== drag.at.y)) onChange({ ...map, partyStarts: map.partyStarts.map((q, i) => (i === drag.index ? drag.at : q)) })
     } else if (drag.kind === 'fogMove') {
       const { dx, dy } = offset(drag)
       const f = map.fog.find((x) => x.id === drag.id)
@@ -416,8 +439,22 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
           <rect width={W} height={H} fill="none" stroke="var(--border-strong)" strokeWidth={2} />
 
           {shown.map((t) => (
-            <Template key={t.id} t={t} feetPerCell={map.feetPerCell} selected={t.id === selectedShape} movable={tool === 'move'} />
+            <Template key={t.id} t={t} feetPerCell={map.feetPerCell} selected={t.id === selectedShape} movable={tool === 'move' && !viewer} />
           ))}
+
+          {!viewer &&
+            map.partyStarts.map((q0, i) => {
+              const q = drag?.kind === 'start' && drag.index === i ? drag.at : q0
+              return (
+                <g key={`start${i}`} data-start={i} style={{ cursor: tool === 'move' ? 'grab' : undefined }} pointerEvents={tool === 'move' ? undefined : 'none'}>
+                  <title>{`Party start ${i + 1} — players begin here (only you can see this)`}</title>
+                  <rect x={q.x * CELL + 3} y={q.y * CELL + 3} width={CELL - 6} height={CELL - 6} rx={8} fill="rgba(63,127,181,0.18)" stroke="#7fbad6" strokeWidth={2} strokeDasharray="5 4" />
+                  <text x={q.x * CELL + CELL / 2} y={q.y * CELL + CELL / 2 + 5} textAnchor="middle" fontSize={14} fontWeight={700} fill="#7fbad6" pointerEvents="none">
+                    P{i + 1}
+                  </text>
+                </g>
+              )
+            })}
 
           {combatants.map((c) => {
             const t = drag?.kind === 'token' && drag.id === c.id ? drag.at : map.tokens[c.id]
@@ -432,7 +469,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
                   <FogShapeSvg key={f.id} f={f} />
                 ))}
               </mask>
-              <rect width={W} height={H} fill="#0b0907" opacity={0.6} mask="url(#bm-fog)" pointerEvents="none" />
+              <rect width={W} height={H} fill="#0b0907" opacity={viewer ? 1 : 0.6} mask="url(#bm-fog)" pointerEvents="none" />
             </>
           )}
           {draftFog && <FogOutline f={draftFog} />}
@@ -513,6 +550,7 @@ function ShapeOptions({ t, feetPerCell, onChange, onRemove, onClose }: { t: MapT
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <LockToggle locked={!!t.locked} onChange={(locked) => onChange({ ...t, locked: locked || undefined })} />
+        <HideToggle hidden={!!t.hidden} onChange={(hidden) => onChange({ ...t, hidden: hidden || undefined })} />
         <button type="button" className="gb-btn gb-btn--ghost" onClick={onRemove} disabled={t.locked} style={{ fontSize: 12, padding: '3px 8px', color: 'var(--danger)', marginLeft: 'auto', opacity: t.locked ? 0.4 : 1 }}>
           Delete
         </button>
@@ -559,6 +597,32 @@ export function LockIcon({ locked, size = 12 }: { locked: boolean; size?: number
       <rect x="3" y="7" width="10" height="7" rx="1.5" />
       <path d={locked ? 'M5.5 7V5a2.5 2.5 0 0 1 5 0v2' : 'M5.5 7V5a2.5 2.5 0 0 1 4.9-.7'} />
     </svg>
+  )
+}
+
+/** An eye, open or struck through. */
+export function EyeIcon({ open, size = 12 }: { open: boolean; size?: number }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" />
+      <circle cx="8" cy="8" r="2" />
+      {!open && <path d="M2.5 13.5l11-11" />}
+    </svg>
+  )
+}
+
+/** "Hidden" / "Hide" — keeps something off the players' map (and a creature out of their turn order) until revealed. */
+export function HideToggle({ hidden, onChange }: { hidden: boolean; onChange: (hidden: boolean) => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!hidden)}
+      title={hidden ? 'Hidden from players — click to reveal it' : 'Hide it from players until you reveal it'}
+      style={{ ...presetBtn, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', ...(hidden ? { borderColor: 'var(--accent)', color: 'var(--accent-hover)' } : {}) }}
+    >
+      <EyeIcon open={!hidden} />
+      {hidden ? 'Hidden' : 'Hide'}
+    </button>
   )
 }
 
@@ -624,8 +688,9 @@ function Token({ c, t, turn, selected, blocked }: { c: Combatant; t: MapToken; t
   const r = size / 2 - 3
   const len = 2 * Math.PI * r
   return (
-    <g data-token={c.id} style={{ cursor: 'grab' }} opacity={dead ? 0.45 : 1}>
-      <title>{`${c.name} — ${c.currentHp}/${c.maxHp} HP, AC ${c.ac}`}</title>
+    <g data-token={c.id} style={{ cursor: 'grab' }} opacity={dead ? 0.45 : c.hidden ? 0.55 : 1}>
+      <title>{`${c.name} — ${c.currentHp}/${c.maxHp} HP, AC ${c.ac}${c.hidden ? ' (hidden from players)' : ''}`}</title>
+      {c.hidden && <circle cx={cx} cy={cy} r={size / 2 + 4} fill="none" stroke="var(--text-muted)" strokeWidth={2} strokeDasharray="3 4" />}
       {turn && <circle cx={cx} cy={cy} r={size / 2 + 2} fill="none" stroke="var(--accent)" strokeWidth={3} />}
       {selected && <circle cx={cx} cy={cy} r={size / 2 + 6} fill="none" stroke="var(--text-primary)" strokeWidth={1.5} strokeDasharray="4 3" />}
       {c.kind === 'vehicle' ? (
@@ -693,7 +758,12 @@ function Template({ t, feetPerCell, selected, movable }: { t: MapTemplate; feetP
   const o = { x: t.origin.x * CELL, y: t.origin.y * CELL }
   const ang = Math.atan2(t.toward.y * CELL - o.y, t.toward.x * CELL - o.x)
   const L = px(t.sizeFt)
-  const style = { fill: selected ? 'rgba(209,116,72,0.32)' : 'rgba(209,116,72,0.22)', stroke: selected ? 'var(--text-primary)' : 'var(--accent)', strokeWidth: selected ? 3 : 2 }
+  const style = {
+    fill: t.hidden ? 'rgba(209,116,72,0.1)' : selected ? 'rgba(209,116,72,0.32)' : 'rgba(209,116,72,0.22)',
+    stroke: selected ? 'var(--text-primary)' : 'var(--accent)',
+    strokeWidth: selected ? 3 : 2,
+    ...(t.hidden ? { strokeDasharray: '6 5' } : {})
+  }
   let shape: JSX.Element
   if (t.kind === 'sphere') shape = <circle cx={o.x} cy={o.y} r={L} {...style} />
   else if (t.kind === 'cube') {

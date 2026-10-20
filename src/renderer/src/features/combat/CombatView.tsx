@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { nextTurnState, previousTurnState, sortedByInitiative, withCombatantHp, type Combatant } from '@shared/encounter'
-import { emptyBattleMap, fogEverything, placeTokens, sizeInSquares, type BattleMap } from '@shared/battleMap'
+import { activeBattle, canStand, emptyBattleMap, fogEverything, newBattle, type BattleMap } from '@shared/battleMap'
 import { diceGroups } from '@shared/dice'
 import { deriveSheet } from '@shared/content/sheet'
 import { formatModifier } from '@shared/dnd5e'
@@ -19,9 +19,12 @@ import { getDiceLog, subscribeDiceLog } from '../dice/diceLogStore'
 import { playTurnFlowSfx } from '../audio/sfxBoardEngine'
 import { useVehicles } from '../vehicles/useVehicles'
 import { XIcon } from '../../ui/icons'
-import { canRedoBattleMap, canUndoBattleMap, redoBattleMap, undoBattleMap, useBattleMap, useEncounter } from './encounterStore'
+import { canRedoBattleMap, canUndoBattleMap, redoBattleMap, setLibrary, switchBattle, undoBattleMap, useBattleLibrary, useBattleMap, useEncounter } from './encounterStore'
+import { loadSavedEncounters } from '../../data/savedEncounters'
+import { monsterToCombatant } from '../campaigns/InitiativeTracker'
+import { ConfirmButton } from '../../ui/ConfirmButton'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { BattleMapView, LockToggle, type FogDraw, type FogTool, type MapTool } from './BattleMapView'
+import { BattleMapView, EyeIcon, HideToggle, LockToggle, type FogDraw, type FogTool, type MapTool } from './BattleMapView'
 
 interface CombatViewProps {
   /** The session the DM is hosting — rolls and turn cues go to the table. */
@@ -105,20 +108,7 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
   const vehicleOf = (c: Combatant): TrackedVehicle | undefined => (c.kind === 'vehicle' ? vehicles.doc.vehicles.find((v) => v.id === c.vehicleId) : undefined)
   const characterOf = (c: Combatant): CharacterSheet | undefined => (c.kind === 'player' && c.userId ? playerCharacters.get(c.userId) : undefined)
 
-  // Every combatant gets a token: the party on the left, enemies on the right, sized by what they are.
-  useEffect(() => {
-    // Automatic, so not an undo step of its own.
-    setMap(
-      (m) =>
-        placeTokens(m, encounter.combatants, (c) => {
-          if (c.kind === 'vehicle') return sizeInSquares(vehicleOf(c)?.def.size)
-          if (c.kind === 'monster') return sizeInSquares(monsterOf(c)?.size)
-          return 1
-        }),
-      { record: false }
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encounter.combatants, monsters, vehicles.doc])
+  // Tokens are placed (and the map saved and shared) by useBattleMapSync, mounted in the app shell.
 
   const selected = encounter.combatants.find((c) => c.id === selectedId) ?? null
 
@@ -146,6 +136,14 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 var(--space-4)', borderBottom: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontFamily: 'var(--font-display)', fontSize: 17 }}>Combat</strong>
+        <BattleMenu
+          onLoadEnemies={(indexes) => {
+            // The encounter's monsters replace whatever monsters are in the fight; the party and vehicles stay.
+            const added = indexes.map((i) => monsters.find((m) => m.index === i)).filter((m): m is BestiaryMonster => !!m).map(monsterToCombatant)
+            setEncounter((s) => ({ ...s, turnIndex: -1, round: 1, combatants: [...s.combatants.filter((c) => c.kind !== 'monster'), ...added] }))
+            setHint(`${added.length} enem${added.length === 1 ? 'y' : 'ies'} loaded where they stood on this map last time. Roll initiative in the Initiative tab.`)
+          }}
+        />
         {encounter.turnIndex >= 0 && <span className="gb-badge gb-badge--accent">Round {encounter.round}</span>}
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{encounter.combatants.length === 0 ? 'Add combatants in the Initiative tab (right panel), or load an encounter from a session scene.' : ''}</span>
         <div style={{ flex: 1 }} />
@@ -269,6 +267,7 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
                 character={characterOf(selected)}
                 onHp={(amount, kind) => changeHp(selected, amount, kind)}
                 onConditions={(list) => setConditions(selected, list)}
+                onHidden={(hidden) => setEncounter((s) => ({ ...s, combatants: s.combatants.map((x) => (x.id === selected.id ? { ...x, hidden: hidden || undefined } : x)) }))}
                 locked={!!map.tokens[selected.id]?.locked}
                 onLock={(locked) => {
                   const t = map.tokens[selected.id]
@@ -286,6 +285,153 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     </div>
   )
 }
+
+/**
+ * The battle that's up, as one button in the header (its name, and the
+ * encounter it's for). It opens a small menu: switch, add, rename or delete
+ * battles, link a saved encounter, and load that encounter's enemies.
+ */
+function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[]) => void }): JSX.Element {
+  const library = useBattleLibrary()
+  const battle = activeBattle(library)
+  const [open, setOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [encounters, setEncounters] = useState(loadSavedEncounters)
+  const linked = encounters.find((e) => e.id === battle.encounterId)
+  const patch = (fields: Partial<typeof battle>): void => setLibrary((l) => ({ ...l, battles: l.battles.map((b) => (b.id === battle.id ? { ...b, ...fields } : b)) }))
+
+  // Closes on Escape; saved encounters are read fresh each time it opens (the builder may have saved more).
+  useEffect(() => {
+    if (!open) return
+    setEncounters(loadSavedEncounters())
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        title="Change battle, its encounter, or load its enemies"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 320, padding: '3px 10px', borderRadius: 999, border: `1px solid ${open ? 'var(--accent)' : 'var(--border-strong)'}`, background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', font: 'inherit', fontSize: 12, cursor: 'pointer' }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{battle.name}</span>
+        {linked && <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {linked.name}</span>}
+        <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>▾</span>
+      </button>
+      {open && (
+        <>
+          {/* A click outside closes it. */}
+          <div style={{ position: 'fixed', inset: 0, zIndex: 19 }} onClick={() => setOpen(false)} />
+          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, width: 300, padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12 }}>
+            <div className="gb-label" style={{ margin: 0 }}>
+              Battles
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 180, overflowY: 'auto' }}>
+              {library.battles.map((b) => {
+                const on = b.id === battle.id
+                const enc = encounters.find((e) => e.id === b.encounterId)
+                return (
+                  <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 'var(--radius-md)', background: on ? 'var(--accent-subtle)' : 'transparent' }}>
+                    {on && renaming ? (
+                      <input
+                        className="gb-input"
+                        autoFocus
+                        defaultValue={b.name}
+                        onBlur={(e) => {
+                          patch({ name: e.target.value.trim() || b.name })
+                          setRenaming(false)
+                        }}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                        style={{ flex: 1, fontSize: 12, padding: '2px 6px' }}
+                      />
+                    ) : (
+                      <button type="button" onClick={() => switchBattle(b.id)} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, color: on ? 'var(--accent-hover)' : 'var(--text-primary)', font: 'inherit', cursor: 'pointer' }}>
+                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: on ? 600 : 400 }}>{b.name}</span>
+                        {enc && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{enc.name}</span>}
+                      </button>
+                    )}
+                    {on && !renaming && (
+                      <button type="button" className="gb-btn gb-btn--ghost" style={tiny} onClick={() => setRenaming(true)}>
+                        Rename
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                className="gb-btn gb-btn--secondary"
+                style={tiny}
+                onClick={() => {
+                  const b = newBattle(`Battle ${library.battles.length + 1}`, crypto.randomUUID())
+                  setLibrary((l) => ({ ...l, battles: [...l.battles, b] }))
+                  switchBattle(b.id)
+                }}
+                title="A new map, with its own positions and start spots"
+              >
+                + New battle
+              </button>
+              {library.battles.length > 1 && (
+                <ConfirmButton
+                  label="Delete this one"
+                  confirmLabel="Delete it?"
+                  variant="ghost"
+                  danger
+                  style={tiny}
+                  title="Deletes this battle's map and everything placed on it"
+                  onConfirm={() => {
+                    const rest = library.battles.filter((b) => b.id !== battle.id)
+                    switchBattle(rest[0].id)
+                    setLibrary((l) => ({ ...l, battles: l.battles.filter((b) => b.id !== battle.id) }))
+                  }}
+                />
+              )}
+            </div>
+            <div style={{ height: 1, background: 'var(--border-subtle)' }} />
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span className="gb-label" style={{ margin: 0 }}>
+                Encounter for this map
+              </span>
+              <select className="gb-input" value={battle.encounterId ?? ''} onChange={(e) => patch({ encounterId: e.target.value || null })} style={{ fontSize: 12, padding: '3px 6px' }} title="Loading this encounter from a session scene switches to this battle">
+                <option value="">None</option>
+                {encounters.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} ({e.monsterIndexes.length})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {encounters.length === 0 && <span style={{ color: 'var(--text-muted)' }}>Save encounters in the Initiative tab’s Build Encounter to link them here.</span>}
+            {linked && (
+              <button
+                type="button"
+                className="gb-btn gb-btn--primary"
+                style={{ ...tiny, alignSelf: 'flex-start' }}
+                onClick={() => {
+                  onLoadEnemies(linked.monsterIndexes)
+                  setOpen(false)
+                }}
+                title="Puts this encounter's monsters in the fight (replacing any already there), where they stood on this map last time"
+              >
+                Load enemies
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+const tiny = { fontSize: 12, padding: '2px 8px' } as const
 
 function OrderRow({ c, turn, selected, onClick }: { c: Combatant; turn: boolean; selected: boolean; onClick: () => void }): JSX.Element {
   const frac = Math.max(0, c.currentHp / Math.max(1, c.maxHp))
@@ -314,6 +460,11 @@ function OrderRow({ c, turn, selected, onClick }: { c: Combatant; turn: boolean;
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <strong style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</strong>
+          {c.hidden && (
+            <span title="Hidden from players" style={{ color: 'var(--text-muted)', display: 'inline-flex' }}>
+              <EyeIcon open={false} />
+            </span>
+          )}
           {c.currentHp <= 0 && (
             <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)' }}>
               {c.kind === 'vehicle' ? 'Wrecked' : 'Down'}
@@ -367,6 +518,7 @@ function Detail({
   character,
   onHp,
   onConditions,
+  onHidden,
   locked,
   onLock
 }: {
@@ -377,6 +529,7 @@ function Detail({
   character?: CharacterSheet
   onHp: (amount: number, kind: 'damage' | 'heal') => void
   onConditions: (list: string[]) => void
+  onHidden: (hidden: boolean) => void
   /** Its token is locked in place on the map. */
   locked: boolean
   onLock: (locked: boolean) => void
@@ -402,8 +555,10 @@ function Detail({
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, lineHeight: 1.2 }}>{c.kind === 'vehicle' && vehicle ? vehicleName(vehicle) : c.name}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <span style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>{kindLabel}</span>
+          <HideToggle hidden={!!c.hidden} onChange={onHidden} />
           <LockToggle locked={locked} onChange={onLock} />
         </div>
+        {c.hidden && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Players can’t see it on the map or in the turn order.</div>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
         <Stat value={`${c.currentHp}`} label={`HP / ${c.maxHp}`} />
@@ -569,6 +724,30 @@ function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m:
         </label>
       </div>
       <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>With an image, set squares across to match the grid drawn on it; squares down follows the image’s shape.</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+        <span style={{ flex: 1, color: 'var(--text-secondary)' }} title="Where players' tokens appear when they join this battle — drag the P1, P2… squares on the map. Only you see them.">
+          Party start spots: {map.partyStarts.length}
+        </span>
+        <button type="button" className="gs-chip" disabled={map.partyStarts.length === 0} onClick={() => onChange({ ...map, partyStarts: map.partyStarts.slice(0, -1) })} aria-label="One fewer start spot">
+          −
+        </button>
+        <button
+          type="button"
+          className="gs-chip"
+          onClick={() => {
+            // The next free square down the left edge; drag it into place from there.
+            for (let x = 0; x < map.cols; x++)
+              for (let y = 0; y < map.rows; y++)
+                if (!map.partyStarts.some((q) => q.x === x && q.y === y) && canStand(map, { x, y, size: 1 })) {
+                  onChange({ ...map, partyStarts: [...map.partyStarts, { x, y }] })
+                  return
+                }
+          }}
+          aria-label="Another start spot"
+        >
+          +
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, fog: [fogEverything(map)] })} title="Cover the whole map, then cut away what the party can see">
           Fog everything
@@ -599,6 +778,11 @@ const toolbar = {
   transform: 'translateX(-50%)',
   zIndex: 5,
   display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
+  // In a narrow window the tools wrap onto a second line rather than running off the map.
+  width: 'max-content',
+  maxWidth: 'calc(100% - 24px)',
   gap: 2,
   padding: 4,
   borderRadius: 10,

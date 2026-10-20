@@ -17,7 +17,9 @@ import type {
   MusicTrackChunkFrame,
   MusicVolumeChangedFrame,
   AmbientLevelChangedFrame,
-  SfxPlayedFrame
+  SfxPlayedFrame,
+  BattleMapFrame,
+  BattleMapImageChunkFrame
 } from '@server/relay/sessionProtocol'
 import type { ApiResult } from '@shared/ipc'
 
@@ -39,6 +41,8 @@ const pending = new Map<string, { resolve: (response: ResponseFrame) => void; ti
 // (see that frame's doc comment) before the MusicChangedFrame that actually
 // names it — reassembled here, keyed by trackId, and handed to the renderer
 // only once the corresponding music-changed frame arrives.
+/** Battle map images being received in pieces, by image id. */
+const pendingBattleImages = new Map<string, { chunks: string[]; received: number }>()
 const pendingCustomTrackChunks = new Map<string, { title: string; mimeType: string; chunks: string[]; received: number }>()
 const assembledCustomTracks = new Map<string, { title: string; mimeType: string; dataBase64: string }>()
 
@@ -217,6 +221,29 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'initiative' && clientWindow) {
     const frame = payload as InitiativeFrame
     clientWindow.webContents.send('ws:initiative', { sessionId: currentSessionId, state: frame.state })
+  }
+
+  if (payload.type === 'battle-map' && clientWindow) {
+    const frame = payload as BattleMapFrame
+    clientWindow.webContents.send('ws:battle-map', { sessionId: currentSessionId, map: frame.map })
+  }
+
+  // The map image arrives in pieces; once they're all in, the renderer gets it whole.
+  if (payload.type === 'battle-map-image-chunk') {
+    const frame = payload as BattleMapImageChunkFrame
+    let entry = pendingBattleImages.get(frame.imageId)
+    if (!entry) {
+      entry = { chunks: new Array(frame.total), received: 0 }
+      pendingBattleImages.set(frame.imageId, entry)
+    }
+    if (entry.chunks[frame.index] === undefined) {
+      entry.chunks[frame.index] = frame.chunk
+      entry.received++
+    }
+    if (entry.received >= frame.total) {
+      pendingBattleImages.delete(frame.imageId)
+      clientWindow?.webContents.send('ws:battle-map-image', { imageId: frame.imageId, image: entry.chunks.join('') })
+    }
   }
 
   if (payload.type === 'dice-roll' && clientWindow) {

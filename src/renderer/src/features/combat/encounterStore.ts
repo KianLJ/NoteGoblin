@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { emptyInitiativeState, type InitiativeState } from '@shared/encounter'
-import { emptyBattleMap, type BattleMap } from '@shared/battleMap'
+import { activeBattle, emptyBattleLibrary, emptyBattleMap, type BattleLibrary, type BattleMap } from '@shared/battleMap'
 
 /**
  * The DM's live encounter — the initiative order and the battle map — held
@@ -10,6 +10,8 @@ import { emptyBattleMap, type BattleMap } from '@shared/battleMap'
  */
 let encounter: InitiativeState = emptyInitiativeState()
 let battleMap: BattleMap = emptyBattleMap()
+// The campaign's battles; the active one's map is `battleMap` above while it's open (written back on switching and saving).
+let library: BattleLibrary = emptyBattleLibrary()
 const listeners = new Set<() => void>()
 const notify = (): void => listeners.forEach((l) => l())
 const subscribe = (l: () => void): (() => void) => {
@@ -65,6 +67,55 @@ export function redoBattleMap(): boolean {
   notify()
   return true
 }
+
+/** A different map entirely (another campaign's, just loaded): replaces it with a fresh undo history. */
+export function resetBattleMap(next: BattleMap): void {
+  past = []
+  future = []
+  battleMap = next
+  notify()
+}
+
+/** The library as it should be saved: the open battle's map is the live one. */
+export function currentLibrary(): BattleLibrary {
+  return { ...library, battles: library.battles.map((b) => (b.id === library.activeId ? { ...b, map: battleMap } : b)) }
+}
+
+/** Battles added, renamed, linked to an encounter or deleted (not the map itself). */
+export function setLibrary(update: Update<BattleLibrary>): void {
+  const next = typeof update === 'function' ? update(library) : update
+  if (next === library) return
+  library = next
+  notify()
+}
+
+/** A campaign's battles just loaded: the active one's map goes up. */
+export function loadLibrary(next: BattleLibrary): void {
+  library = next
+  resetBattleMap(activeBattle(next).map)
+}
+
+/** Opens another battle: the current map is kept in its battle, the other's map goes up (with a fresh undo history). */
+export function switchBattle(id: string): void {
+  if (id === library.activeId || !library.battles.some((b) => b.id === id)) return
+  library = { ...currentLibrary(), activeId: id }
+  resetBattleMap(activeBattle(library).map)
+}
+
+/** Opens the battle made for this saved encounter, if there is one (a session scene loading its encounter). */
+export function switchToEncounterBattle(encounterId: string): boolean {
+  const b = library.battles.find((x) => x.encounterId === encounterId)
+  if (!b) return false
+  switchBattle(b.id)
+  return true
+}
+
+export function useBattleLibrary(): BattleLibrary {
+  return useSyncExternalStore(subscribe, () => library)
+}
+
+export const getBattleMap = (): BattleMap => battleMap
+export const getEncounter = (): InitiativeState => encounter
 
 export const canUndoBattleMap = (): boolean => past.length > 0
 export const canRedoBattleMap = (): boolean => future.length > 0

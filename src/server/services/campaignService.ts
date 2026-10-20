@@ -6,6 +6,7 @@ import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
 import { CalendarRepo, type CalendarRow } from '../repositories/calendarRepo'
 import { VehiclesRepo } from '../repositories/vehiclesRepo'
 import { campaignVehiclesSchema, vehiclesForPlayer, type CampaignVehicles } from '@shared/vehicles'
+import { normalizeBattleLibrary, type BattleLibrary } from '@shared/battleMap'
 import { CampaignPackRepo, type EnabledPack } from '../repositories/packRepo'
 import { dependents, enableProblems } from '@shared/content/packFiles'
 import { contentPackSchema } from '@shared/content/schema'
@@ -363,6 +364,7 @@ export function deleteCampaign(db: DatabaseType, campaignId: string, userId: str
   db.prepare('DELETE FROM messages WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM campaign_calendars WHERE campaign_id = ?').run(campaignId)
   new VehiclesRepo(db).remove(campaignId)
+  db.prepare('DELETE FROM campaign_battlemaps WHERE campaign_id = ?').run(campaignId)
   new CampaignPackRepo(db).removeAll(campaignId)
   db.prepare('DELETE FROM session_decks WHERE campaign_id = ?').run(campaignId)
   return { ok: true, data: undefined }
@@ -1372,6 +1374,28 @@ export function getVehicles(db: DatabaseType, campaignId: string, userId: string
     if (parsed.success) doc = parsed.data
   }
   return { ok: true, data: campaign.dm_user_id === userId ? doc : vehiclesForPlayer(doc) }
+}
+
+/** The DM's battles for a campaign — each a map, its linked encounter and remembered positions (one empty battle if none is saved yet). */
+export function getBattleMap(db: DatabaseType, campaignId: string, userId: string): ServiceResult<BattleLibrary> {
+  const campaign = makeCampaignRepo(db).findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can open the battle map.' }
+  const row = db.prepare('SELECT map_json FROM campaign_battlemaps WHERE campaign_id = ?').get(campaignId) as { map_json: string } | undefined
+  return { ok: true, data: normalizeBattleLibrary(row ? JSON.parse(row.map_json) : null) }
+}
+
+/** Saves the DM's battles — the whole library each time. */
+export function saveBattleMap(db: DatabaseType, campaignId: string, userId: string, input: unknown): ServiceResult<BattleLibrary> {
+  const campaign = makeCampaignRepo(db).findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change the battle map.' }
+  const map = normalizeBattleLibrary(input)
+  db.prepare(
+    `INSERT INTO campaign_battlemaps (campaign_id, map_json) VALUES (?, ?)
+     ON CONFLICT(campaign_id) DO UPDATE SET map_json = excluded.map_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+  ).run(campaignId, JSON.stringify(map))
+  return { ok: true, data: map }
 }
 
 /** Only the DM changes the vehicles (players roll from their stations, which doesn't need a save) — replaces the whole list. */

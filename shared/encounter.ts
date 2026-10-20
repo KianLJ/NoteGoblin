@@ -42,6 +42,8 @@ export type Combatant = {
   ac: number
   /** kind 'monster' only — links back to a bestiary/custom entry for hover/restat purposes. */
   monsterIndex?: string
+  /** Hidden from players — off their map and out of their turn order — until the DM reveals it (an ambush, something invisible). */
+  hidden?: boolean
   /** kind 'vehicle' only — the campaign's tracked vehicle (shared/vehicles.ts) whose hull this is; its hit points stay in step with it. */
   vehicleId?: string
   /** kind 'vehicle' only — the party's own: players see its real hit points, like a fellow player's. */
@@ -173,7 +175,8 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
   // ever meaningful against the initiative-sorted view, so both the DM's
   // own UI and this player-facing view have to derive that same sort from
   // the same deterministic function to agree on what index N means.
-  const ordered = sortedByInitiative(state.combatants)
+  // Hidden combatants (an ambush the DM hasn't sprung) aren't in a player's turn order at all.
+  const ordered = sortedByInitiative(state.combatants.filter((c) => !c.hidden))
 
   // A monster's exact initiative number is already hidden from players
   // (see PlayerVisibleCombatant.initiative being real only for player
@@ -185,7 +188,7 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
   // broadcast/request, independently per viewer, so there's no stable
   // pattern to correlate against, and it fixes up turnIndex to still point
   // at whoever's actually active after the reorder.
-  const activeId = state.turnIndex >= 0 ? ordered[state.turnIndex]?.id : undefined
+  const activeId = state.turnIndex >= 0 ? sortedByInitiative(state.combatants)[state.turnIndex]?.id : undefined
   const monsterSlots = ordered.reduce<number[]>((slots, c, i) => {
     if (c.kind === 'monster' || (c.kind === 'vehicle' && !c.party)) slots.push(i)
     return slots

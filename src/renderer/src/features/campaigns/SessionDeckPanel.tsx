@@ -26,7 +26,8 @@ interface SessionDeckPanelProps {
   onSceneCreated?: (note: Note) => void
   onSceneRemoved?: (noteId: string) => void
   /** DM-only — "Load Encounter" on the live scene resolves the saved encounter to its monster list and hands it up to whichever sibling owns the Initiative Tracker (see RightPanel.tsx). Omitted for a player, who never sees the button. */
-  onLoadEncounter?: (monsters: BestiaryMonster[]) => void
+  /** `encounterId`: the saved encounter, so a battle linked to it can come up on the battle map. */
+  onLoadEncounter?: (monsters: BestiaryMonster[], encounterId: string) => void
   /** Non-null while browsing a cached offline snapshot — decks come from that snapshot instead of a live IPC fetch, and there's never a live cursor to follow (see useSessionDecks.ts). Always undefined/null for the DM, who never has an offline view of their own campaign. */
   offlineDecks?: SessionDeck[] | null
 }
@@ -322,7 +323,7 @@ export function SessionDeckPanel({
           }}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Encounter: {currentEncounter.name}</span>
-          <Button variant="secondary" style={{ fontSize: 11, flexShrink: 0 }} onClick={() => onLoadEncounter(resolveEncounterMonsters(currentEncounter))}>
+          <Button variant="secondary" style={{ fontSize: 11, flexShrink: 0 }} onClick={() => onLoadEncounter(resolveEncounterMonsters(currentEncounter), currentEncounter.id)}>
             Load Encounter
           </Button>
         </div>

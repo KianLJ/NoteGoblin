@@ -94,7 +94,7 @@ function playerToCombatant(userId: string, character: CharacterSheet): Combatant
   }
 }
 
-function monsterToCombatant(monster: BestiaryMonster): Combatant {
+export function monsterToCombatant(monster: BestiaryMonster): Combatant {
   const hpMatch = /^(\d+)/.exec(monster.hp ?? '')
   const acMatch = /^(\d+)/.exec(monster.ac ?? '')
   const maxHp = hpMatch ? Number(hpMatch[1]) : 10

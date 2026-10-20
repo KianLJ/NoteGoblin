@@ -7,6 +7,7 @@ import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon, VehicleIcon } from './panelIcons'
 import { VehiclesPanel } from '../vehicles/VehiclesPanel'
 import { useVehicles } from '../vehicles/useVehicles'
+import { switchToEncounterBattle } from '../combat/encounterStore'
 import type { TrackedVehicle } from '@shared/vehicles'
 import { DiceTray } from '../dice/DiceTray'
 import { useDiceRollToast } from '../dice/useDiceRollToast'
@@ -156,7 +157,9 @@ export function RightPanel({
               onOpenScene={onOpenNote}
               onSceneCreated={onSceneCreated}
               onSceneRemoved={onSceneRemoved}
-              onLoadEncounter={(monsters) => {
+              onLoadEncounter={(monsters, encounterId) => {
+                // A battle made for this encounter comes up on the battle map, so its enemies land where they were placed.
+                switchToEncounterBattle(encounterId)
                 setPendingEncounterMonsters(monsters)
                 setTab('initiative')
               }}

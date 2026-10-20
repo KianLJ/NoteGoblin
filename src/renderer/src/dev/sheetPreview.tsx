@@ -12,8 +12,11 @@ import { srdPack } from '@shared/content/srd'
 import { VehiclesPanel } from '../features/vehicles/VehiclesPanel'
 import { VehicleEditor } from '../features/workshop/form/vehicle'
 import { CombatView } from '../features/combat/CombatView'
-import { setEncounter } from '../features/combat/encounterStore'
-import { emptyCombatant, emptyInitiativeState } from '@shared/encounter'
+import { PlayerCombatView } from '../features/combat/PlayerCombatView'
+import { useBattleMapSync } from '../features/combat/useBattleMapSync'
+import { getBattleMap, getEncounter, setBattleMap, setEncounter } from '../features/combat/encounterStore'
+import { emptyCombatant, emptyInitiativeState, sanitizeForPlayer } from '@shared/encounter'
+import { emptyBattleLibrary, emptyBattleMap, mapForPlayer } from '@shared/battleMap'
 import { trackVehicle } from '@shared/vehicles'
 import { vehicleDefSchema } from '@shared/content/schema'
 import { CalendarPanel } from '../features/campaigns/CalendarPanel'
@@ -22,6 +25,21 @@ import { blankAttack, blankMonster, blankSave, monsterToEntry } from '@shared/co
 import { rollInlineDice } from '../features/dice/inlineDice'
 import { RollAnimationOverlay } from '../features/dice/RollAnimationOverlay'
 import { getDiceLog, subscribeDiceLog } from '../features/dice/diceLogStore'
+
+function DmSync(): null {
+  useBattleMapSync('camp', null)
+  return null
+}
+
+// ?playercombat: the DM's map laid out first (tokens placed, a goblin ambushing under fog), then shown as the player gets it.
+if (new URLSearchParams(location.search).has('playercombat')) {
+  setBattleMap({
+    ...emptyBattleMap(),
+    tokens: { pc: { x: 3, y: 5, size: 1 }, ogre: { x: 12, y: 4, size: 2 }, gob1: { x: 20, y: 12, size: 1 }, gob2: { x: 14, y: 9, size: 1 }, ship: { x: 0, y: 0, size: 4 } },
+    fog: [{ id: 'f', op: 'add', kind: 'rect', x: 17, y: 8, w: 7, h: 8 }],
+    templates: [{ id: 't', kind: 'cone', origin: { x: 4, y: 5.5 }, toward: { x: 7, y: 5.5 }, sizeFt: 15 }]
+  })
+}
 
 /** ?vehicles: the DM's Vehicles panel (300px, like the right panel) beside the Workshop's vehicle form. */
 function VehiclesPreview(): JSX.Element {
@@ -163,7 +181,24 @@ const vehiclesApi = {
     return { ok: true, data: doc }
   }
 }
-;(window as unknown as { goblin: unknown }).goblin = new Proxy({}, { get: (_t, key) => (key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : base[key]) })
+// ?combat / ?playercombat: the battle map store, in memory; a player's moves are accepted as they'd be by the DM's app.
+const noop = (): (() => void) => () => {}
+const battleMapApi = {
+  get: async () => ({ ok: true, data: emptyBattleLibrary() }),
+  save: async () => ({ ok: true, data: undefined }),
+  broadcast: async () => {},
+  onPlayerMove: noop,
+  fetch: async () => ({ ok: true, data: playerSide() }),
+  fetchImage: async () => ({ ok: true, data: { imageId: null } }),
+  moveToken: async () => ({ ok: true, data: undefined }),
+  onUpdate: noop,
+  onImage: noop
+}
+const initiativeApi = { onUpdate: noop, broadcast: async () => {}, setMine: async () => {}, onPlayerInitiative: noop }
+;(window as unknown as { goblin: unknown }).goblin = new Proxy(
+  {},
+  { get: (_t, key) => (key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : base[key]) }
+)
 
 // A demo pack with a starship, for the vehicles preview's "Add a vehicle".
 const demoVehicle = {
@@ -193,8 +228,13 @@ const demoVehicle = {
   ],
   actions: [{ name: 'Evasive Roll', desc: 'The pilot rolls `dice: 1d20 + 5` against the attacker; on a 15 or higher the attack misses.' }]
 }
+/** What the DM's app would send this player: the map without fogged tokens, and their view of the turn order. */
+function playerSide(): { map: ReturnType<typeof mapForPlayer>; initiative: ReturnType<typeof sanitizeForPlayer> } {
+  return { map: mapForPlayer(getBattleMap()), initiative: sanitizeForPlayer(getEncounter(), 'u1') }
+}
+
 // ?combat: a fight already set up — the sample character, an ogre, two goblins and the party's corvette.
-if (new URLSearchParams(location.search).has('combat')) {
+if (new URLSearchParams(location.search).has('combat') || new URLSearchParams(location.search).has('playercombat')) {
   const ship = trackVehicle(vehicleDefSchema.parse(demoVehicle), { id: 'ship', name: 'The Wandering Star' })
   vehiclesDoc = { vehicles: [ship] }
   const mk = (id: string, name: string, kind: 'player' | 'monster' | 'vehicle', initiative: number, hp: number, ac: number, extra: Record<string, unknown> = {}) => ({ id, name, kind, initiative, maxHp: hp, currentHp: hp, ac, ...emptyCombatant(), ...extra })
@@ -262,7 +302,12 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     {new URLSearchParams(location.search).has('combat') ? (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <DmSync />
         <CombatView sessionId={null} campaignId="camp" playerCharacters={new Map([['u1', sample]])} />
+      </div>
+    ) : new URLSearchParams(location.search).has('playercombat') ? (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <PlayerCombatView sessionId="s" character={sample} />
       </div>
     ) : new URLSearchParams(location.search).has('vehicles') ? (
       <VehiclesPreview />

@@ -33,6 +33,7 @@ import {
   broadcastCampaignChanged,
   broadcastActiveCampaignChanged,
   broadcastInitiative,
+  broadcastBattleMap,
   broadcastDiceRoll,
   broadcastMusic,
   broadcastMusicTrackData,
@@ -84,6 +85,8 @@ import type {
 } from '@shared/ipc'
 import type { CalendarConfig } from '@shared/calendar'
 import type { CampaignVehicles } from '@shared/vehicles'
+import type { BattleLibrary, BattleMap, PlayerBattleMap } from '@shared/battleMap'
+import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 import { normalizeSheet } from '@shared/content/migrate'
 import { packFileName, readPackFile, writePackFile } from '@shared/content/packFiles'
@@ -1470,6 +1473,50 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // solo DM still uses the tracker locally without an audience).
   ipcMain.handle('initiative:broadcast', (_event, state: InitiativeState): void => {
     if (getHostedSession()) broadcastInitiative(state)
+  })
+
+  // --- Battle map (Combat tab) -------------------------------------------------
+  // DM: the saved map for a campaign, always local.
+  ipcMain.handle('battleMap:get', async (_event, campaignId: string): Promise<ApiResult<BattleLibrary>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = campaignService.getBattleMap(me.db, campaignId, me.userId)
+    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+  })
+  ipcMain.handle('battleMap:save', async (_event, campaignId: string, map: BattleLibrary): Promise<ApiResult<void>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    try {
+      const result = campaignService.saveBattleMap(me.db, campaignId, me.userId, map)
+      return result.ok ? { ok: true, data: undefined } : { ok: false, error: result.error }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+    }
+  })
+  // DM: pushes the map (and the encounter it shows) to every player while hosting; a no-op otherwise.
+  ipcMain.handle('battleMap:broadcast', (_event, map: BattleMap | null, encounter: InitiativeState): void => {
+    if (getHostedSession()) broadcastBattleMap(map, encounter)
+  })
+  // Player: the DM's current map and turn order, asked for when the Combat tab opens.
+  ipcMain.handle(
+    'battleMap:fetch',
+    async (_event, sessionId: string): Promise<ApiResult<{ map: PlayerBattleMap | null; initiative: PlayerVisibleInitiativeState | null }>> => {
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest('battleMap.get', {})
+    }
+  )
+  // Player: asks for the map image (it arrives as ws:battle-map-image once all its pieces are in).
+  ipcMain.handle('battleMap:fetch-image', async (_event, sessionId: string): Promise<ApiResult<{ imageId: string | null }>> => {
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest('battleMap.image', {})
+  })
+  // Player: moves their own token (the DM's app checks it).
+  ipcMain.handle('battleMap:move-token', async (_event, sessionId: string, combatantId: string, x: number, y: number): Promise<ApiResult<void>> => {
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest('battleMap.moveToken', { combatantId, x, y })
   })
 
   // Player-only — a joined player rolling/entering their own initiative,

@@ -84,3 +84,62 @@ describe('moving fog', () => {
     expect(moveFogShape({ id: 'p', op: 'add', kind: 'poly', points: [{ x: 1, y: 1 }] }, 1, 1)).toMatchObject({ points: [{ x: 2, y: 2 }] })
   })
 })
+
+describe('the battle map players are sent', () => {
+  it('leaves out tokens under fog and the image itself', async () => {
+    const { mapForPlayer, imageIdOf } = await import('@shared/battleMap')
+    const map = {
+      ...emptyBattleMap(),
+      image: 'data:image/png;base64,AAAA',
+      tokens: { pc: { x: 0, y: 0, size: 1 }, ambusher: { x: 10, y: 10, size: 1 } },
+      fog: [{ id: 'f', op: 'add', kind: 'rect', x: 8, y: 8, w: 5, h: 5 }] as FogShape[]
+    }
+    const seen = mapForPlayer(map)
+    expect(Object.keys(seen.tokens)).toEqual(['pc'])
+    expect(seen).not.toHaveProperty('image')
+    expect(seen.imageId).toBe(imageIdOf(map.image))
+    expect(imageIdOf('data:image/png;base64,AAAB')).not.toBe(seen.imageId)
+    expect(imageIdOf(null)).toBeNull()
+  })
+})
+
+describe('battles: remembered positions, party starts and hiding', () => {
+  it('puts enemies back where they stood and players on the start spots', async () => {
+    const { withPlacements } = await import('@shared/battleMap')
+    const gobA = c('g1', 'monster', { monsterIndex: 'goblin' })
+    const gobB = c('g2', 'monster', { monsterIndex: 'goblin' })
+    let map = placeTokens(emptyBattleMap(), [gobA, gobB], () => 1)
+    map = { ...map, tokens: { ...map.tokens, g1: { x: 10, y: 5, size: 1 }, g2: { x: 11, y: 6, size: 1 } } }
+    map = withPlacements(map, [gobA, gobB])
+    expect(Object.keys(map.placements)).toEqual(['goblin#1', 'goblin#2'])
+    // Loaded again later: new combatant ids, same spots; a player lands on the first start spot.
+    const fresh = { ...map, tokens: {}, partyStarts: [{ x: 3, y: 12 }, { x: 4, y: 12 }] }
+    const again = placeTokens(fresh, [c('n1', 'monster', { monsterIndex: 'goblin' }), c('n2', 'monster', { monsterIndex: 'goblin' }), c('pc', 'player', { userId: 'u1' })], () => 1)
+    expect([again.tokens.n1, again.tokens.n2, again.tokens.pc]).toEqual([
+      { x: 10, y: 5, size: 1 },
+      { x: 11, y: 6, size: 1 },
+      { x: 3, y: 12, size: 1 }
+    ])
+  })
+
+  it('keeps hidden creatures and shapes from players, map and turn order alike', async () => {
+    const { mapForPlayer, hiddenCombatantIds } = await import('@shared/battleMap')
+    const { sanitizeForPlayer } = await import('@shared/encounter')
+    const ambusher = c('amb', 'monster', { hidden: true, initiative: 20 })
+    const combatants = [c('pc', 'player', { userId: 'u1' }), ambusher]
+    const map = { ...placeTokens(emptyBattleMap(), combatants, () => 1), templates: [{ id: 't', kind: 'sphere' as const, origin: { x: 1, y: 1 }, toward: { x: 2, y: 1 }, sizeFt: 10, hidden: true }] }
+    const seen = mapForPlayer(map, hiddenCombatantIds(combatants))
+    expect(Object.keys(seen.tokens)).toEqual(['pc'])
+    expect(seen.templates).toEqual([])
+    const order = sanitizeForPlayer({ ...emptyInitiativeState(), turnIndex: 0, combatants }, 'u1')
+    expect(order.combatants.map((x) => x.id)).toEqual(['pc'])
+    expect(order.turnIndex).toBe(-1)
+  })
+
+  it('reads a campaign saved before battles as a library of one', async () => {
+    const { normalizeBattleLibrary } = await import('@shared/battleMap')
+    const lib = normalizeBattleLibrary({ cols: 30, rows: 20, fog: [], templates: [], tokens: {} })
+    expect(lib.battles).toHaveLength(1)
+    expect(lib.battles[0].map.cols).toBe(30)
+  })
+})

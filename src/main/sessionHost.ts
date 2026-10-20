@@ -21,11 +21,14 @@ import type {
   MusicTrackChunkFrame,
   MusicVolumeChangedFrame,
   AmbientLevelChangedFrame,
-  SfxPlayedFrame
+  SfxPlayedFrame,
+  BattleMapFrame,
+  BattleMapImageChunkFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
+import { canStand, hiddenCombatantIds, imageIdOf, isFogged, mapForPlayer, type BattleMap } from '@shared/battleMap'
 import type { DiceRollLogEntry } from '@shared/dice'
 import type { LiveSceneState } from '@shared/sessionDeck'
 
@@ -227,6 +230,31 @@ export function broadcastInitiative(state: InitiativeState): void {
     const frame: InitiativeFrame = { type: 'initiative', state: sanitizeForPlayer(state, p.userId) }
     sendToRelay(p.userId, frame)
   }
+}
+
+// --- The battle map (Combat tab) ---------------------------------------------
+// The DM's renderer pushes its map and encounter here on every change while
+// hosting; players get mapForPlayer's stripped copy, and the image separately.
+let battle: { map: BattleMap; encounter: InitiativeState } | null = null
+const IMAGE_CHUNK_CHARS = 500_000
+
+function sendBattleImage(userIds: string[], image: string): void {
+  const imageId = imageIdOf(image)!
+  const total = Math.max(1, Math.ceil(image.length / IMAGE_CHUNK_CHARS))
+  for (let index = 0; index < total; index++) {
+    const frame: BattleMapImageChunkFrame = { type: 'battle-map-image-chunk', imageId, index, total, chunk: image.slice(index * IMAGE_CHUNK_CHARS, (index + 1) * IMAGE_CHUNK_CHARS) }
+    for (const id of userIds) sendToRelay(id, frame)
+  }
+}
+
+/** The DM's map changed (or the encounter it shows did): every player gets the new view, and the image too if it changed. */
+export function broadcastBattleMap(map: BattleMap | null, encounter: InitiativeState): void {
+  const before = imageIdOf(battle?.map.image ?? null)
+  battle = map ? { map, encounter } : null
+  const userIds = [...players.keys()]
+  if (map?.image && imageIdOf(map.image) !== before) sendBattleImage(userIds, map.image)
+  const frame: BattleMapFrame = { type: 'battle-map', map: map ? mapForPlayer(map, hiddenCombatantIds(encounter.combatants)) : null }
+  for (const id of userIds) sendToRelay(id, frame)
 }
 
 /**
@@ -544,6 +572,28 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
     // DM's own renderer (which owns the actual tracker state, see
     // InitiativeTracker.tsx) so it can update that combatant and rebroadcast,
     // same shape as characters.sync above.
+    // A player opening their Combat tab (or joining mid-fight): the map as they may see it, and the turn order.
+    case 'battleMap.get':
+      return { reqId: frame.reqId, ok: true, data: battle ? { map: mapForPlayer(battle.map, hiddenCombatantIds(battle.encounter.combatants)), initiative: sanitizeForPlayer(battle.encounter, userId) } : { map: null, initiative: null } }
+    // The map image, pushed to just this player in pieces.
+    case 'battleMap.image':
+      if (battle?.map.image) sendBattleImage([userId], battle.map.image)
+      return { reqId: frame.reqId, ok: true, data: { imageId: imageIdOf(battle?.map.image ?? null) } }
+    // A player moving their own token: checked here (theirs, not locked, free, not into fog), then handed to the DM's map.
+    case 'battleMap.moveToken': {
+      const combatantId = typeof p.combatantId === 'string' ? p.combatantId : ''
+      const x = typeof p.x === 'number' ? Math.round(p.x) : NaN
+      const y = typeof p.y === 'number' ? Math.round(p.y) : NaN
+      const c = battle?.encounter.combatants.find((k) => k.id === combatantId)
+      const token = battle?.map.tokens[combatantId]
+      if (!battle || !c || !token || c.kind !== 'player' || c.userId !== userId) return { reqId: frame.reqId, ok: false, error: 'That isn’t your token.' }
+      if (token.locked) return { reqId: frame.reqId, ok: false, error: 'The DM has locked your token in place.' }
+      const moved = { ...token, x, y }
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !canStand(battle.map, moved, combatantId)) return { reqId: frame.reqId, ok: false, error: 'You can’t stand there.' }
+      if (isFogged(battle.map, { x: x + token.size / 2, y: y + token.size / 2 })) return { reqId: frame.reqId, ok: false, error: 'You can’t see that far.' }
+      if (dmWindow) dmWindow.webContents.send('ws:battle-map-player-move', { combatantId, x, y })
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
     case 'initiative.setMine': {
       const initiative = typeof p.initiative === 'number' ? p.initiative : null
       if (dmWindow) dmWindow.webContents.send('ws:player-initiative', { userId, initiative })
