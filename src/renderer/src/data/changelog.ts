@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.1',
+    title: 'Walls, light and sight on the battle map',
+    highlights: [
+      'Walls, doors and windows: draw whole rooms by dragging, or walls corner by corner. Corners snap to other walls and to the grid, rooms sit flush and share walls, and doors and windows drop straight into a wall. Click a door or window with Move to open or close it',
+      'Walls and closed doors stop tokens — they stop at the wall and slide along it, even mid-drag (the DM can hold Alt to drag through). Windows are glass: you can see through them, and climb through once they’re open',
+      'Line of sight and lighting: once a map has walls or is dark, players only see what their party can see. Set the map to bright, dim or dark, place lights, and give tokens a torch or lantern; darkvision comes from character sheets. Rooms they’ve explored stay on their map, dimmed',
+      'Live play: everyone sees tokens being dragged, light and sight follow them as they move, enemies come into view the moment they’re in sight, and tokens glide to new spots instead of jumping',
+      'The map goes on for ever: add as many map images as you like, then move and size them to line up with the grid. A marker shows the map’s centre, with a button to get back to it',
+      'A tidier toolbar: tools down the left (with keys — V, R, S, F, W, L, I), each tool’s options along the top, and undo, redo, snapping and map settings in the corner',
+      'The Combat tab’s side panel: initiative to type or roll, hit points (temporary hit points first), and a character’s actions and spells from their sheet; monsters’ traits and actions with dice to click. Players get the same for their own character, and can look at the rest of the party’s',
+      'Players’ hit points follow their character sheets both ways — the DM’s damage lands on the sheet, and healing on the sheet shows in the fight',
+      'Test players: add stand-ins (playing one of your own characters) to try a map out, and use “Play as” to see and move as any player or the whole party'
+    ]
+  },
+  {
     version: '0.7.0',
     title: 'Combat on a battle map, and vehicles of every kind',
     highlights: [
