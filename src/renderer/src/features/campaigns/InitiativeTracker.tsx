@@ -207,8 +207,15 @@ export function InitiativeTracker({
     if (sessionId) void window.goblin.initiative.broadcast(state)
   }, [state, sessionId])
 
+  // Each hand-off is taken once. The fight is a shared store, so adding to it re-renders this straight away —
+  // before the parent has cleared what it handed over — and without this the same vehicle (or encounter) was
+  // added again on every one of those re-renders until React gave up.
+  const takenVehicle = useRef<TrackedVehicle | null>(null)
+  const takenEncounter = useRef<BestiaryMonster[] | null>(null)
+
   useEffect(() => {
-    if (!pendingVehicle) return
+    if (!pendingVehicle || takenVehicle.current === pendingVehicle) return
+    takenVehicle.current = pendingVehicle
     setState((prev) => ({ ...prev, combatants: [...prev.combatants, vehicleToCombatant(pendingVehicle)] }))
     setView('tracker')
     onPendingVehicleConsumed?.()
@@ -230,7 +237,8 @@ export function InitiativeTracker({
   }, [vehicles])
 
   useEffect(() => {
-    if (!pendingEncounterMonsters || pendingEncounterMonsters.length === 0) return
+    if (!pendingEncounterMonsters || pendingEncounterMonsters.length === 0 || takenEncounter.current === pendingEncounterMonsters) return
+    takenEncounter.current = pendingEncounterMonsters
     setState((prev) => ({ ...prev, combatants: [...prev.combatants, ...pendingEncounterMonsters.map(monsterToCombatant)] }))
     setView('tracker')
     onPendingEncounterConsumed?.()

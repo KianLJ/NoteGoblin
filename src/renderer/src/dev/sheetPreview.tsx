@@ -12,6 +12,8 @@ import { srdPack } from '@shared/content/srd'
 import { VehiclesPanel } from '../features/vehicles/VehiclesPanel'
 import { VehicleEditor } from '../features/workshop/form/vehicle'
 import { CombatView } from '../features/combat/CombatView'
+import { InitiativeTracker } from '../features/campaigns/InitiativeTracker'
+import { useVehicles } from '../features/vehicles/useVehicles'
 import { PlayerCombatView } from '../features/combat/PlayerCombatView'
 import { useBattleMapSync } from '../features/combat/useBattleMapSync'
 import { useCombatSheetSync } from '../features/combat/useCombatSheetSync'
@@ -19,7 +21,7 @@ import { useTestPlayerSheets } from '../features/combat/useTestPlayerSheets'
 import { getBattleMap, getEncounter, setBattleMap, setEncounter } from '../features/combat/encounterStore'
 import { emptyCombatant, emptyInitiativeState, sanitizeForPlayer } from '@shared/encounter'
 import { emptyBattleMap, hiddenCombatantIds, mapForPlayer } from '@shared/battleMap'
-import { trackVehicle } from '@shared/vehicles'
+import { trackVehicle, type TrackedVehicle } from '@shared/vehicles'
 import { vehicleDefSchema } from '@shared/content/schema'
 import { CalendarPanel } from '../features/campaigns/CalendarPanel'
 import { renderStatblockHtml, type StatblockData } from '../statblock'
@@ -87,6 +89,33 @@ function VehiclesPreview(): JSX.Element {
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
         <VehicleEditor value={entry} onChange={setEntry} />
+      </div>
+    </div>
+  )
+}
+
+/** ?tracker: the right panel's Vehicles tab and initiative tracker side by side, with the DM's background syncing running — as in the app. */
+function TrackerPreview(): JSX.Element {
+  useBattleMapSync('camp', null)
+  const players = useMemo(() => new Map([['u1', sample]]), [])
+  useCombatSheetSync(players, false)
+  const [pending, setPending] = useState<TrackedVehicle | null>(null)
+  const vehicles = useVehicles(null, 'camp')
+  return (
+    <div style={{ display: 'flex', height: '100vh' }}>
+      <div style={{ width: 300, borderRight: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
+        <VehiclesPanel sessionId={null} rollSessionId={null} campaignId="camp" readOnly={false} playerCharacters={players} onAddToInitiative={setPending} />
+      </div>
+      <div style={{ width: 320, borderRight: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
+        <InitiativeTracker
+          sessionId={null}
+          playerCharacters={players}
+          onSelectMonster={() => {}}
+          pendingVehicle={pending}
+          onPendingVehicleConsumed={() => setPending(null)}
+          vehicles={vehicles.doc.vehicles}
+          onVehicleHp={(id, hp) => void vehicles.save({ vehicles: vehicles.doc.vehicles.map((v) => (v.id === id ? { ...v, hp } : v)) })}
+        />
       </div>
     </div>
   )
@@ -238,7 +267,7 @@ const battleMapApi = {
 }
 // The DM's own characters (for test players): just the sample.
 const charactersApi = { list: async () => ({ ok: true, data: [sample] }), setPlayerHp: async () => {}, onHpFromDm: noop, onPlayerCharacterChanged: noop, getPlayerCharacter: async () => ({ ok: true, data: null }) }
-const initiativeApi = { onUpdate: noop, broadcast: async () => {}, setMine: async () => {}, onPlayerInitiative: noop }
+const initiativeApi = { onUpdate: noop, broadcast: async () => {}, setMine: async () => {}, onPlayerInitiative: noop, onPlayerSet: noop }
 ;(window as unknown as { goblin: unknown }).goblin = new Proxy(
   {},
   { get: (_t, key) => (key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : base[key]) }
@@ -278,7 +307,7 @@ function playerSide(): { map: ReturnType<typeof mapForPlayer>; initiative: Retur
 }
 
 // ?combat: a fight already set up — the sample character, an ogre, two goblins and the party's corvette.
-if (new URLSearchParams(location.search).has('combat') || new URLSearchParams(location.search).has('playercombat')) {
+if (['combat', 'playercombat', 'tracker'].some((k) => new URLSearchParams(location.search).has(k))) {
   const ship = trackVehicle(vehicleDefSchema.parse(demoVehicle), { id: 'ship', name: 'The Wandering Star' })
   vehiclesDoc = { vehicles: [ship] }
   const mk = (id: string, name: string, kind: 'player' | 'monster' | 'vehicle', initiative: number, hp: number, ac: number, extra: Record<string, unknown> = {}) => ({ id, name, kind, initiative, maxHp: hp, currentHp: hp, ac, ...emptyCombatant(), ...extra })
@@ -357,6 +386,8 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <PlayerPreview />
       </div>
+    ) : new URLSearchParams(location.search).has('tracker') ? (
+      <TrackerPreview />
     ) : new URLSearchParams(location.search).has('vehicles') ? (
       <VehiclesPreview />
     ) : new URLSearchParams(location.search).has('statblock') ? (
