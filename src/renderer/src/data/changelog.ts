@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.0',
+    title: 'Combat on a battle map, and vehicles of every kind',
+    highlights: [
+      'A new Combat tab (the crossed swords, top left): a battle map with a token for everyone in the initiative order, sized to match. Move tokens, measure with the ruler, and drop spell areas (cone, sphere, line, cube) sized by dragging, from a square’s corner or centre, with snapping you can turn off',
+      'Click anyone on the map to see their hit points, deal damage or heal, add conditions and roll their attacks — monsters straight from their statblocks, players from their character sheets',
+      'Fog of war: paint it with a brush, lines, point-by-point shapes, squares or circles, cut holes out of it the same ways, and move or delete any piece of it',
+      'Upload a map image and set its grid; Ctrl+Z and Ctrl+Y undo and redo anything on the map; tokens, spell areas and fog can be locked in place; the side panels resize and fold away',
+      'Players see the map live when they join: fog is solid for them, anything under it stays secret, and they can move their own token and roll their own attacks',
+      'Battles: give each encounter its own map. Enemies go back where you left them every time you load it, and party start spots you set while prepping are where players appear — loading the encounter from a session scene brings its map up too',
+      'Hide creatures and spell areas from players and reveal them mid-fight; a hidden creature is missing from their turn order as well',
+      'Vehicles: make mounts, carts, ships or starships in the Workshop — hit points, components, crew stations, weapons, fuel and other resources — then track them in a campaign’s new Vehicles tab. Crew fire their station’s weapons, and vehicles can join initiative',
+      'Unsaved changes in the Homebrew Workshop are kept when you switch away, until NoteGoblin closes'
+    ]
+  },
+  {
     version: '0.6.11',
     title: 'Homebrew fixes: crits, repeated features and +2/+1',
     highlights: [
