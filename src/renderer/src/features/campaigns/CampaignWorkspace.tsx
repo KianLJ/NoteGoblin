@@ -22,6 +22,8 @@ interface CampaignWorkspaceProps {
   onHostedSessionChange: (sessionId: string | null) => void
   /** Every connected player's currently-selected character, kept live — passed through to RightPanel's ConnectedPlayersList so clicking a player opens their sheet below. */
   playerCharacters: Map<string, CharacterSheet>
+  /** The connected players' characters plus the DM's test players' — who can join a fight or crew a vehicle. */
+  partyCharacters?: Map<string, CharacterSheet>
   /** Whose character is being viewed (read-only) instead of a note, if anyone — takes over the main pane until closed or a note is opened. Deliberately just the id, not the character itself: deriving it fresh from playerCharacters on every render (below) is what keeps the read-only view live instead of frozen at whatever it looked like at the moment you clicked. */
   viewedPlayerUserId: string | null
   onViewPlayerUserId: (userId: string | null) => void
@@ -41,6 +43,7 @@ export function CampaignWorkspace({
   hostedSessionId,
   onHostedSessionChange,
   playerCharacters,
+  partyCharacters,
   viewedPlayerUserId,
   onViewPlayerUserId,
   monsterTabs,
@@ -161,6 +164,8 @@ export function CampaignWorkspace({
                 key={viewedPlayerCharacter.id}
                 character={viewedPlayerCharacter}
                 readOnly
+                canRoll
+                sessionId={hostedSessionId ?? null}
                 onSave={() => {}}
               />
             </div>
@@ -218,6 +223,7 @@ export function CampaignWorkspace({
         sessionId={hostedSessionId ?? null}
         campaignId={campaign?.id ?? null}
         playerCharacters={playerCharacters}
+        partyCharacters={partyCharacters}
         onSelectPlayer={(userId) => {
           onSelectMonsterTab(null)
           onViewPlayerUserId(userId)

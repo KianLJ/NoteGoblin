@@ -31,6 +31,8 @@ export interface PendingCheckRoll {
   sessionId: string | null
   rollerId: string
   rollerName: string
+  /** Called once it's rolled: the total, and whether the d20 came up a critical hit (or a natural 1) — e.g. firing a ship's weapon goes on to its damage. */
+  onRolled?: (result: { total: number; natural: 'crit' | 'fumble' | null }) => void
 }
 
 export interface PendingDamageRoll {

@@ -336,12 +336,18 @@ export interface AppApi {
     get: (campaignId: string) => Promise<ApiResult<BattleLibrary>>
     save: (campaignId: string, battles: BattleLibrary) => Promise<ApiResult<void>>
     broadcast: (map: BattleMap | null, encounter: InitiativeState) => Promise<void>
+    /** DM, while hosting: map images, sent once each — broadcast maps then name them as "ref:<imageId>" instead of carrying the picture every time. */
+    storeImages: (images: Array<{ imageId: string; src: string }>) => Promise<void>
     /** DM: a connected player moved their own token (already checked). */
     onPlayerMove: (callback: (move: { combatantId: string; x: number; y: number }) => void) => () => void
     fetch: (sessionId: string) => Promise<ApiResult<{ map: PlayerBattleMap | null; initiative: PlayerVisibleInitiativeState | null }>>
     /** Asks for the map's images (or one of them); they arrive through onImage. */
     fetchImage: (sessionId: string, imageId?: string) => Promise<ApiResult<{ imageIds: string[] }>>
     moveToken: (sessionId: string, combatantId: string, x: number, y: number) => Promise<ApiResult<void>>
+    /** Player: turns your own token (one with facing shown); the DM's app checks it. */
+    faceToken: (sessionId: string, combatantId: string, facing: number) => Promise<ApiResult<void>>
+    /** DM: a player turned their own token (the host already checked it's theirs). */
+    onPlayerFace: (callback: (face: { combatantId: string; facing: number }) => void) => () => void
     /** DM, while hosting: a token being dragged right now (x null: let go), shown live to the players who can see it. */
     drag: (combatantId: string, x: number | null, y: number | null) => Promise<void>
     /** Player: your own token being dragged right now (x null: let go). */

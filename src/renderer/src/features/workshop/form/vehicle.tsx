@@ -16,6 +16,13 @@ const RECHARGES: Array<{ value: 'none' | 'short' | 'long' | 'dawn'; label: strin
 ]
 const SAVE_ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const
 const ABILITY_DEFAULTS = { str: 10, dex: 10, con: 10, int: 2, wis: 10, cha: 5 }
+const ARCS = [
+  { id: 'fore', label: 'Fore' },
+  { id: 'port', label: 'Port' },
+  { id: 'starboard', label: 'Starboard' },
+  { id: 'aft', label: 'Aft' }
+] as const
+const ABILITY_LABELS = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' } as const
 
 /** An id for a new row from its name, not clashing with the others in the list. */
 function rowId(name: string, list: Obj[], fallback: string): string {
@@ -127,7 +134,29 @@ export function VehicleEditor({ value, onChange, showName = true }: { value: Obj
         <Field label="Cost">
           <TextInput value={str(value.cost)} onChange={(v) => set('cost', v)} placeholder="20,000 gp" />
         </Field>
+        <Field label="Scale" hint="Ship scale: 1 of its damage is this many to a person (blank: the same)">
+          <NumberInput value={num(value.scale)} onChange={(v) => set('scale', v && v > 1 ? v : undefined)} min={1} placeholder="1" />
+        </Field>
       </Grid>
+      <Group title="Damage threshold by side" collapsible defaultOpen={!!value.thresholds}>
+        <Check
+          checked={!!value.thresholds}
+          onChange={(on) => {
+            const t = num(value.damageThreshold) ?? 0
+            set('thresholds', on ? { fore: t, flank: t, aft: t } : undefined)
+          }}
+          label="Armour differs by side: a hit counts against the side it strikes (worked out from where it faces on the battle map)"
+        />
+        {!!value.thresholds && (
+          <Grid min={90}>
+            {(['fore', 'flank', 'aft'] as const).map((side) => (
+              <Field key={side} label={side === 'fore' ? 'Bow' : side === 'aft' ? 'Stern' : 'Flank'}>
+                <NumberInput value={num((value.thresholds as Obj)[side])} onChange={(v) => req('thresholds', { ...(value.thresholds as Obj), [side]: v ?? 0 })} min={0} />
+              </Field>
+            ))}
+          </Grid>
+        )}
+      </Group>
       <Field label="Description">
         <TextArea value={str(value.description)} onChange={(v) => set('description', v)} rows={3} placeholder="What it looks like and what it’s for." />
       </Field>
@@ -188,29 +217,50 @@ export function VehicleEditor({ value, onChange, showName = true }: { value: Obj
               <Field label="Threshold">
                 <NumberInput value={num(row.threshold)} onChange={(v) => patch({ threshold: v ?? 0 })} min={0} />
               </Field>
+              <Field label="Critical hit" hint="Its number on the critical-hit table (blank: not on it)">
+                <NumberInput value={num(row.crit)} onChange={(v) => patch({ crit: v || undefined })} min={1} />
+              </Field>
             </Grid>
             <TextInput value={str(row.notes)} onChange={(v) => patch({ notes: v })} placeholder="At 0 hit points: the ship can’t move" />
           </>
         )}
       </Rows>
 
-      <Rows title="Crew stations" singular="Station" list={stations} onChange={setList('stations')} blank={() => ({ name: 'Station', count: 1 })} hint="Where crew sit: Pilot, Gunner, Engineer. Weapons can be fired from a station.">
-        {(row, patch) => (
-          <Grid min={140}>
-            <Field label="Name">
-              <TextInput value={str(row.name)} onChange={(v) => patch({ name: v })} placeholder="Gunner" />
-            </Field>
-            <Field label="Crew it takes">
-              <NumberInput value={num(row.count)} onChange={(v) => patch({ count: Math.max(1, v ?? 1) })} min={1} />
-            </Field>
-            <Field label="What it does">
-              <TextInput value={str(row.notes)} onChange={(v) => patch({ notes: v })} placeholder="Fires the forward lasers" />
-            </Field>
-          </Grid>
-        )}
+      <Rows title="Crew stations" singular="Station" list={stations} onChange={setList('stations')} blank={() => ({ name: 'Station', count: 1 })} hint="Where crew sit: Pilot, Gunner, Engineer. Weapons can be fired from a station. Its actions are buttons that roll for whoever’s there: an NPC’s tier bonus, or a character’s modifier for its ability plus proficiency.">
+        {(row, patch) => {
+          const actions = arr<Obj>(row.actions)
+          const setActions = (next: Obj[]): void => patch({ actions: next.length ? next : undefined })
+          return (
+            <>
+              <Grid min={140}>
+                <Field label="Name">
+                  <TextInput value={str(row.name)} onChange={(v) => patch({ name: v })} placeholder="Gunner" />
+                </Field>
+                <Field label="Crew it takes">
+                  <NumberInput value={num(row.count)} onChange={(v) => patch({ count: Math.max(1, v ?? 1) })} min={1} />
+                </Field>
+                <Field label="Rolls with">
+                  <Select value={(str(row.ability) || 'dex') as 'dex'} onChange={(v) => patch({ ability: v && v !== 'dex' ? v : undefined })} options={SAVE_ABILITIES.map((a) => ({ value: a, label: ABILITY_LABELS[a] }))} />
+                </Field>
+                <Field label="What it does">
+                  <TextInput value={str(row.notes)} onChange={(v) => patch({ notes: v })} placeholder="Fires the forward lasers" />
+                </Field>
+              </Grid>
+              {actions.map((a, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <TextInput value={str(a.name)} onChange={(v) => setActions(actions.map((x, j) => (j === i ? { ...x, name: v } : x)))} placeholder="Evasive" style={{ width: 140 }} />
+                  <TextInput value={str(a.desc)} onChange={(v) => setActions(actions.map((x, j) => (j === i ? { ...x, desc: v } : x)))} placeholder="+2 AC until your next turn, at half speed" />
+                  <Check checked={a.roll !== false} onChange={(on) => setActions(actions.map((x, j) => (j === i ? { ...x, roll: on ? undefined : false } : x)))} label="Rolls" />
+                  <RowActions label="action" onRemove={() => setActions(actions.filter((_, j) => j !== i))} />
+                </div>
+              ))}
+              <AddButton onClick={() => setActions([...actions, { name: 'Action', desc: '' }])}>station action</AddButton>
+            </>
+          )
+        }}
       </Rows>
 
-      <Rows title="Weapons" singular="Weapon" list={list('weapons')} onChange={setList('weapons')} blank={() => ({ name: 'Weapon', attackBonus: 5, damage: '2d10', damageType: 'Piercing' })}>
+      <Rows title="Weapons" singular="Weapon" list={list('weapons')} onChange={setList('weapons')} blank={() => ({ name: 'Weapon', damage: '2d10', damageType: 'Piercing' })}>
         {(row, patch) => {
           const usesSave = num(row.saveDc) !== undefined
           return (
@@ -225,7 +275,7 @@ export function VehicleEditor({ value, onChange, showName = true }: { value: Obj
                 <Field label="Hits with">
                   <Select
                     value={usesSave ? 'save' : 'attack'}
-                    onChange={(v) => patch(v === 'save' ? { saveDc: 13, saveAbility: 'dex', attackBonus: undefined } : { attackBonus: 5, saveDc: undefined, saveAbility: undefined })}
+                    onChange={(v) => patch(v === 'save' ? { saveDc: 13, saveAbility: 'dex', attackBonus: undefined } : { attackBonus: undefined, saveDc: undefined, saveAbility: undefined })}
                     options={[
                       { value: 'attack', label: 'An attack roll' },
                       { value: 'save', label: 'A saving throw' }
@@ -242,8 +292,8 @@ export function VehicleEditor({ value, onChange, showName = true }: { value: Obj
                     </Field>
                   </>
                 ) : (
-                  <Field label="Attack bonus">
-                    <NumberInput value={num(row.attackBonus)} onChange={(v) => patch({ attackBonus: v ?? 0 })} />
+                  <Field label="Attack bonus" hint="Leave blank for the crew to roll: an NPC's tier bonus, or a character's Dex modifier + proficiency">
+                    <NumberInput value={num(row.attackBonus)} onChange={(v) => patch({ attackBonus: v })} placeholder="Crew" />
                   </Field>
                 )}
                 <Field label="Damage">
@@ -258,7 +308,34 @@ export function VehicleEditor({ value, onChange, showName = true }: { value: Obj
                 <Field label="Ammo" hint="Blank: unlimited">
                   <NumberInput value={num(row.ammo)} onChange={(v) => patch({ ammo: v || undefined })} min={1} />
                 </Field>
+                <Field label="Reach (squares)" hint="On the battle map (blank: read from the range)">
+                  <NumberInput value={num(row.reach)} onChange={(v) => patch({ reach: v ?? undefined })} min={0} />
+                </Field>
+                <Field label="Cooldown" hint="Rounds to wait after firing (1: every other round)">
+                  <NumberInput value={num(row.cooldown)} onChange={(v) => patch({ cooldown: v || undefined })} min={0} />
+                </Field>
+                <Field label="Pierces" hint="Points of damage threshold it ignores">
+                  <NumberInput value={num(row.pierce)} onChange={(v) => patch({ pierce: v || undefined })} min={0} />
+                </Field>
               </Grid>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-secondary)' }}>
+                Fires into
+                {ARCS.map((a) => {
+                  const arcs = arr<string>(row.arcs)
+                  return (
+                    <Check
+                      key={a.id}
+                      checked={!arcs.length || arcs.includes(a.id)}
+                      onChange={(on) => {
+                        const now = arcs.length ? arcs : ARCS.map((x) => x.id)
+                        const next = on ? [...now, a.id] : now.filter((x) => x !== a.id)
+                        patch({ arcs: next.length === ARCS.length || !next.length ? undefined : ARCS.map((x) => x.id).filter((x) => next.includes(x)) })
+                      }}
+                      label={a.label}
+                    />
+                  )
+                })}
+              </div>
               <TextInput value={str(row.notes)} onChange={(v) => patch({ notes: v })} placeholder="Takes a full round to reload" />
             </>
           )

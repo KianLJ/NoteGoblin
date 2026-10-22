@@ -477,7 +477,8 @@ export function VitalsRow({ s }: { s: SheetState }): JSX.Element {
       <button
         type="button"
         className="gs-vital"
-        disabled={s.readOnly}
+        data-roll=""
+        disabled={!s.canRoll}
         onClick={() => rollCheck(terms.t('initiative'), derived.initiative, { advantage: derived.initiativeMode ?? 'normal' })}
         title={`Roll ${terms.t('initiative').toLowerCase()}`}
       >
@@ -628,7 +629,8 @@ export function AbilityTiles({ s }: { s: SheetState }): JSX.Element {
                 <button
                   type="button"
                   className="gs-ability-check"
-                  disabled={s.readOnly || editing}
+                  data-roll=""
+                  disabled={!s.canRoll || editing}
                   onClick={() => rollCheck(`${label} Check`, a.mod, { advantage: checkMode ?? 'normal' })}
                   title={`Roll a ${label} check`}
                 >
@@ -664,7 +666,8 @@ export function AbilityTiles({ s }: { s: SheetState }): JSX.Element {
                 />
                 <button
                   type="button"
-                  disabled={s.readOnly}
+                  data-roll=""
+                  disabled={!s.canRoll}
                   onClick={() => rollCheck(`${label} Saving Throw`, save.bonus, { advantage: save.mode ?? 'normal' })}
                   title={`Roll a ${label} saving throw`}
                 >
@@ -734,7 +737,7 @@ export function SkillsCard({ s }: { s: SheetState }): JSX.Element {
               onClick={() => s.cycleSkillProficiency(id)}
               title={prof === 'none' ? 'Not proficient (click to cycle)' : prof === 'proficient' ? 'Proficient (click for expertise)' : 'Expertise (click to clear)'}
             />
-            <button type="button" className="gs-skill-roll" disabled={s.readOnly} onClick={() => rollCheck(`${id} Check`, bonus, { advantage: mode ?? 'normal' })} title={`Roll ${id}`}>
+            <button type="button" className="gs-skill-roll" data-roll="" disabled={!s.canRoll} onClick={() => rollCheck(`${id} Check`, bonus, { advantage: mode ?? 'normal' })} title={`Roll ${id}`}>
               {formatModifier(bonus)}
             </button>
             <span className="gs-skill-name">

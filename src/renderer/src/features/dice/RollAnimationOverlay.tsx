@@ -5,7 +5,7 @@ import { playSfxCue } from '../audio/sfxBoardEngine'
 import { findSfxCueByLabel } from '../../data/sfxLibrary'
 import { performCheckRoll, performRoll } from './diceLogStore'
 import { D20FacePaths, D12FacePaths, D10FacePaths, D8FacePaths, D6FacePaths, D4FacePaths } from '../player/characterSheetTabs/icons'
-import { dequeueRollAnimation, getRollAnimationQueue, resolvePendingRoll, subscribeRollAnimation } from './rollAnimationStore'
+import { dequeueRollAnimation, getRollAnimationQueue, resolvePendingRoll, subscribeRollAnimation, type PendingCheckRoll } from './rollAnimationStore'
 
 const SPIN_MS = 1300
 const FLICKER_INTERVAL_MS = 220
@@ -64,6 +64,13 @@ function rawD20Face(entry: DiceRollLogEntry): number | null {
   const group = entry.groups?.[0]
   if (!group || group.sides !== 20) return null
   return entry.advantage === 'disadvantage' ? Math.min(...group.results) : Math.max(...group.results)
+}
+
+/** Tells whoever asked for a check roll how it came out (see PendingCheckRoll's onRolled). */
+function reportCheck(roll: PendingCheckRoll, entry: DiceRollLogEntry): void {
+  if (!roll.onRolled || entry.total === null) return
+  const raw = rawD20Face(entry)
+  roll.onRolled({ total: entry.total, natural: raw !== null && isCritFace(raw, entry) ? 'crit' : raw === 1 ? 'fumble' : null })
 }
 
 /** Whether the die that actually counted toward the total came up its max/min face — only meaningful for a d20 check roll, which is the only thing that ever reaches this overlay (see useSheetRoller.ts/ForceRollPrompt.tsx). */
@@ -608,6 +615,7 @@ export function RollAnimationOverlay(): JSX.Element | null {
       current.critOn
     )
     setLocalEntry(entry)
+    reportCheck(current, entry)
     resolvePendingRoll(entry)
   }, [displayValue, secondDisplayValue])
 
@@ -829,6 +837,7 @@ export function RollAnimationOverlay(): JSX.Element | null {
     if (current.kind === 'pending-check') {
       pendingSessionIdRef.current = current.sessionId
       const entry = performCheckRoll(current.sessionId, current.rollerId, current.rollerName, current.modifier, current.advantage, false, current.label, current.dc, undefined, true, current.critOn)
+      reportCheck(current, entry)
       resolvePendingRoll(entry)
     } else if (current.kind === 'pending-damage') {
       pendingSessionIdRef.current = current.sessionId

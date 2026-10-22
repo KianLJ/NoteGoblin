@@ -259,6 +259,8 @@ const battleMapApi = {
   onImage: noop,
   drag: async () => {},
   dragToken: async () => {},
+  faceToken: async () => ({ ok: true, data: undefined }),
+  onPlayerFace: noop,
   // Someone else's drag, for trying it out: window.fakeDrag('ogre', 13.4, 6.2) (null, null lets go).
   onDrag: (cb: (d: { sessionId: string | null; combatantId: string; x: number | null; y: number | null }) => void) => {
     ;(window as unknown as { fakeDrag: unknown }).fakeDrag = (combatantId: string, x: number | null, y: number | null) => cb({ sessionId: new URLSearchParams(location.search).has('playercombat') ? 's' : null, combatantId, x, y })
@@ -294,7 +296,7 @@ const demoVehicle = {
     { id: 'pilot', name: 'Pilot', notes: 'Flies the ship' },
     { id: 'gunner', name: 'Gunner', count: 2, notes: 'Fires the lasers' }
   ],
-  weapons: [{ id: 'laser', name: 'Laser Battery', station: 'gunner', attackBonus: 7, damage: '4d10', damageType: 'Radiant', range: '1 mile', ammo: 6 }],
+  weapons: [{ id: 'laser', name: 'Laser Battery', station: 'gunner', attackBonus: 7, damage: '4d10', damageType: 'Radiant', range: '1 mile', ammo: 6 }, { id: 'rail', name: 'Heavy railgun', station: 'gunner', damage: '4d10', damageType: 'hull', range: '20 squares, fore' }],
   resources: [
     { id: 'fuel', name: 'Fuel', max: 10, recharge: 'none' },
     { id: 'boost', name: 'Boost', max: 2, recharge: 'short' }

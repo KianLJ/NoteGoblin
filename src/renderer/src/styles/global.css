@@ -94,6 +94,10 @@ button {
 .gb-readonly-sheet [draggable='true'] {
   pointer-events: none;
 }
+/* …except its rolls, when you may roll for them (the DM rolling for a player's character). */
+.gb-readonly-sheet.gb-can-roll button[data-roll] {
+  pointer-events: auto;
+}
 
 /* Workspace error toast and friends (see .gb-toast-fade's callers) — fades
    in quickly on arrival, stays fully readable, then fades over the last

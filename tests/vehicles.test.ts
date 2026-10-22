@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { vehicleDefSchema } from '@shared/content/schema'
-import { ammoLeft, damageVehicle, repairVehicle, resourceLeft, restVehicle, stationsFor, trackVehicle, vehicleCondition, vehiclesForPlayer } from '@shared/vehicles'
+import { ammoLeft, crewKey, damageVehicle, gunnerFor, weaponAttackBonus, repairVehicle, resourceLeft, restVehicle, stationsFor, trackVehicle, vehicleCondition, vehiclesForPlayer } from '@shared/vehicles'
 
 const corvette = vehicleDefSchema.parse({
   id: 'corvette',
@@ -82,5 +82,41 @@ describe('vehicles in initiative', () => {
     const theirs = seen.find((c) => c.id === 'theirs')!
     expect([ours.currentHp, ours.maxHp, ours.initiative]).toEqual([120, 200, 10])
     expect([theirs.currentHp, theirs.maxHp, theirs.initiative]).toEqual([null, null, null])
+  })
+})
+
+describe('gunners', () => {
+  const def = vehicleDefSchema.parse({
+    id: 'corvette',
+    name: 'Corvette',
+    hp: 60,
+    ac: 14,
+    stations: [{ id: 'gunnery', name: 'Gunnery', count: 2 }],
+    weapons: [
+      { id: 'rail-1', name: 'Light railgun', station: 'gunnery', damage: '2d10' },
+      { id: 'rail-2', name: 'Light railgun', station: 'gunnery', damage: '2d10' },
+      { id: 'missile', name: 'Missile rack', station: 'gunnery', damage: '3d6' },
+      { id: 'fixed', name: 'Point defence', attackBonus: 4, damage: '1d6' },
+      { id: 'flare', name: 'Flare', saveDc: 13, saveAbility: 'con', damage: '' }
+    ]
+  })
+  const ship = (crew: Array<{ name: string; userId?: string; tier?: 'green' | 'trained' | 'veteran' | 'elite' }>) => ({ ...trackVehicle(def, { id: 'v1' }), crew: { gunnery: crew } })
+  const sheets = (m: { userId?: string }) => (m.userId === 'u1' ? 6 : undefined)
+
+  it('rolls with an NPC tier, or a character’s Dex + proficiency', () => {
+    const v = ship([{ name: 'Vale', tier: 'veteran' }, { name: 'Elowen', userId: 'u1' }])
+    expect(weaponAttackBonus(v, 'rail-1', sheets)).toBe(7)
+    expect(weaponAttackBonus(v, 'rail-2', sheets)).toBe(6)
+    expect(gunnerFor(v, 'missile')?.name).toBe('Vale')
+  })
+
+  it('uses the one picked, a weapon’s own bonus, and nothing for a save or an empty station', () => {
+    const v = { ...ship([{ name: 'Vale', tier: 'green' }, { name: 'Mox', tier: 'elite' }]), gunners: { 'rail-1': 'npc:Mox' } }
+    expect(weaponAttackBonus(v, 'rail-1', sheets)).toBe(9)
+    expect(crewKey(gunnerFor(v, 'rail-1')!)).toBe('npc:Mox')
+    expect(weaponAttackBonus(v, 'fixed', sheets)).toBe(4)
+    expect(weaponAttackBonus(v, 'flare', sheets)).toBeUndefined()
+    expect(weaponAttackBonus(ship([]), 'rail-1', sheets)).toBeUndefined()
+    expect(weaponAttackBonus(ship([{ name: 'Old hand' }]), 'rail-1', sheets)).toBe(5)
   })
 })

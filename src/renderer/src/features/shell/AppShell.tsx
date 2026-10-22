@@ -573,6 +573,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             hostedSessionId={hostedSessionId}
             onHostedSessionChange={setHostedSessionId}
             playerCharacters={playerCharacters}
+            partyCharacters={combatCharacters}
             viewedPlayerUserId={viewedPlayerUserId}
             onViewPlayerUserId={setViewedPlayerUserId}
             monsterTabs={monsterTabs}

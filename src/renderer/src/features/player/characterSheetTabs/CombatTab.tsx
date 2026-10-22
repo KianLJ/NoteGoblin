@@ -55,6 +55,8 @@ interface CombatTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
+  /** Its rolls work even when it's read-only (the DM rolling for a player's character); defaults to not read-only. */
+  canRoll?: boolean
   /** Threaded down from CharacterSheetEditor — see its doc comment. */
   sessionId?: string | null
   /** The sheet's Actions tab: attacks then reactions, stacked, with no inner tab strip — Spells and Features are tabs of their own there. */
@@ -147,7 +149,7 @@ function customWeaponFields(attack: Attack): DetailField[] {
 }
 
 /** The sheet's Actions tab (actionsOnly: attacks, toggles, special and bonus actions, companions, then reactions). Without actionsOnly it's the older Attacks/Spells/Features/Reactions inner tab strip; AC, HP, speed and death saves live in the sheet's rail (see sheet/SheetParts.tsx). Spells only shows up once the character is actually a caster (see isCaster below); Features (class resources, feats, and freeform class features/traits — see FeaturesTab.tsx, which absorbed the old standalone Class Features tab) always shows, since it always has at least the "+ Add Feature" freeform section even with nothing else gained yet. Both reuse their own standalone tab components (each owns its own autosave draft). All inner panels stay mounted (hidden via CSS) when switching, for the same reason as the outer tab strip in CharacterSheetEditor — an in-flight debounced edit shouldn't get cancelled just because you looked at another panel. */
-export function CombatTab({ character, onSave, readOnly, sessionId = null, actionsOnly = false, compact = false }: CombatTabProps): JSX.Element {
+export function CombatTab({ character, onSave, readOnly, canRoll = !readOnly, sessionId = null, actionsOnly = false, compact = false }: CombatTabProps): JSX.Element {
   const { rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
   const terms = useTerms()
   // Attacks, resources, toggles, actions and spell DC/attack all come from
@@ -374,16 +376,16 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
 
   /** A weapon or unarmed attack crits on the character's lowered threshold (Improved Critical, a homebrew Critical Shot); pass 20 for one it doesn't cover (a cantrip, a companion's own attack). */
   function rollAttack(label: string, bonus: number, mode = attackAdvantage, critOn = derived.critThreshold): ((advantage: AdvantageMode) => void) | undefined {
-    return readOnly ? undefined : (advantage) => rollCheck(label, bonus, { advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal'), critOn })
+    return !canRoll ? undefined : (advantage) => rollCheck(label, bonus, { advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal'), critOn })
   }
   function rollDerivedDamage(attack: DerivedAttack): (() => void) | undefined {
-    if (readOnly || attack.damageDice.dice.length !== 1) return undefined
+    if (!canRoll || attack.damageDice.dice.length !== 1) return undefined
     const [{ count, sides }] = attack.damageDice.dice
     if (!(DIE_SIDES as readonly number[]).includes(sides)) return undefined
     return () => rollDamage([{ sides: sides as DieSides, count }], attack.damageDice.flat, `${attack.name} Damage`)
   }
   function rollWeaponDamage(label: string, dice: string, modifier: number): (() => void) | undefined {
-    if (readOnly) return undefined
+    if (!canRoll) return undefined
     const group = parseDamageDice(dice)
     return group ? () => rollDamage([group], modifier, label) : undefined
   }
@@ -779,7 +781,7 @@ export function CombatTab({ character, onSave, readOnly, sessionId = null, actio
 
       {isCaster && !actionsOnly && (
         <div style={{ display: innerTab === 'Spells' ? 'block' : 'none' }}>
-          <SpellsTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
+          <SpellsTab character={character} onSave={onSave} readOnly={readOnly} canRoll={canRoll} sessionId={sessionId} />
         </div>
       )}
 

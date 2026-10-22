@@ -42,6 +42,8 @@ interface SpellsTabProps {
   character: CharacterSheet
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly?: boolean
+  /** Its rolls work even when it's read-only (the DM rolling for a player's character); defaults to not read-only. */
+  canRoll?: boolean
   /** Threaded down from CombatTab, same as elsewhere — lets the Cast button play (and, at the table, broadcast) that spell's own cast cue. */
   sessionId?: string | null
 }
@@ -77,7 +79,7 @@ function customSpellFields(spell: Spell): DetailField[] {
   return fields
 }
 
-export function SpellsTab({ character, onSave, readOnly, sessionId = null }: SpellsTabProps): JSX.Element {
+export function SpellsTab({ character, onSave, readOnly, canRoll = !readOnly, sessionId = null }: SpellsTabProps): JSX.Element {
   const [draft, setDraft] = useAutosaveDraft<SpellsDraft>(
     {
       spellcastingAbility: character.spellcastingAbility,
@@ -275,7 +277,8 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
               type="button"
               className="gs-vital"
               style={{ flex: '0 0 auto', padding: '6px 14px' }}
-              disabled={readOnly}
+              data-roll=""
+              disabled={!canRoll}
               onClick={() => rollCheck('Spell Attack', casterAttackBonus ?? 0)}
               title="Roll a spell attack"
             >
@@ -394,7 +397,7 @@ export function SpellsTab({ character, onSave, readOnly, sessionId = null }: Spe
             const numbers = def ? spellNumbers(derived, def, castLevel) : {}
             const rollDice = (dice: string, label: string): (() => void) | undefined => {
               const split = splitDice(dice)
-              return readOnly || !split || !(DIE_SIDES as readonly number[]).includes(split.sides) ? undefined : () => rollDamage([{ sides: split.sides as DieSides, count: split.count }], split.flat, label)
+              return !canRoll || !split || !(DIE_SIDES as readonly number[]).includes(split.sides) ? undefined : () => rollDamage([{ sides: split.sides as DieSides, count: split.count }], split.flat, label)
             }
             return (
               <HoverDetailCard
@@ -548,7 +551,7 @@ const SLOT_ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '
 /** A spell's damage or healing dice; click to roll them. */
 function SpellRoll({ text, onRoll }: { text: string; onRoll?: () => void }): JSX.Element {
   return onRoll ? (
-    <button type="button" onClick={onRoll} title="Roll it" className="gb-badge" style={{ fontSize: 12, cursor: 'pointer', border: '1px solid var(--accent)', color: 'var(--accent)', background: 'transparent' }}>
+    <button type="button" data-roll="" onClick={onRoll} title="Roll it" className="gb-badge" style={{ fontSize: 12, cursor: 'pointer', border: '1px solid var(--accent)', color: 'var(--accent)', background: 'transparent' }}>
       {text}
     </button>
   ) : (

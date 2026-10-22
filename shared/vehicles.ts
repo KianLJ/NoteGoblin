@@ -23,8 +23,16 @@ export const trackedVehicleSchema = z.object({
   resourceUsed: z.record(z.number().int().min(0)).default({}),
   /** Weapon id → shots used. */
   ammoUsed: z.record(z.number().int().min(0)).default({}),
-  /** Station id → who's there: a character's id when it's a player character, else just a name. */
-  crew: z.record(z.array(z.object({ name: z.string().min(1), characterId: z.string().optional(), userId: z.string().optional() }))).default({}),
+  /** Station id → who's there: a character's id when it's a player character, else a name and how good they are (an NPC). */
+  crew: z
+    .record(z.array(z.object({ name: z.string().min(1), characterId: z.string().optional(), userId: z.string().optional(), tier: z.enum(['green', 'trained', 'veteran', 'elite']).optional() })))
+    .default({}),
+  /** Weapon id → the round it last fired (for a weapon that has to cool down). */
+  fired: z.record(z.number().int()).default({}),
+  /** Weapons knocked offline (a critical hit), until repaired. */
+  offline: z.array(z.string()).default([]),
+  /** Weapon id → who fires it (a crewKey), when not the first free hand at its station. */
+  gunners: z.record(z.string()).default({}),
   conditions: z.array(z.string()).default([]),
   cargo: z.array(z.object({ name: z.string().min(1), quantity: z.number().int().min(0).default(1) })).default([]),
   notes: z.string().default(''),
@@ -61,9 +69,10 @@ export function vehicleName(v: TrackedVehicle): string {
  * Damage to the hull (componentId undefined) or one component. A hit below
  * the threshold does nothing (vehicle rules: a damage threshold ignores any
  * single hit under it); temporary hit points go first on the hull. Returns
- * the vehicle unchanged when nothing happens.
+ * the vehicle unchanged when nothing happens. `threshold`: the hull's
+ * threshold for this hit, when it isn't the usual one (the side it struck).
  */
-export function damageVehicle(v: TrackedVehicle, amount: number, componentId?: string): TrackedVehicle {
+export function damageVehicle(v: TrackedVehicle, amount: number, componentId?: string, threshold = v.def.damageThreshold): TrackedVehicle {
   if (amount <= 0) return v
   if (componentId) {
     const c = v.def.components.find((x) => x.id === componentId)
@@ -71,7 +80,7 @@ export function damageVehicle(v: TrackedVehicle, amount: number, componentId?: s
     const now = v.components[componentId] ?? c.hp
     return { ...v, components: { ...v.components, [componentId]: Math.max(0, now - amount) } }
   }
-  if (amount < v.def.damageThreshold) return v
+  if (amount < threshold) return v
   const fromTemp = Math.min(v.tempHp, amount)
   return { ...v, tempHp: v.tempHp - fromTemp, hp: Math.max(0, v.hp - (amount - fromTemp)) }
 }
@@ -122,6 +131,63 @@ export function stationsFor(v: TrackedVehicle, who: { characterIds: string[]; us
 /** What a player sees: hidden vehicles left out entirely. Everything else is shared — the panel shows an enemy's hit points only as how hurt it looks. */
 export function vehiclesForPlayer(doc: CampaignVehicles): CampaignVehicles {
   return { vehicles: doc.vehicles.filter((v) => !v.hidden) }
+}
+
+/** How good an NPC crew member is, and the flat bonus they roll with (in place of an ability modifier and proficiency). */
+export const CREW_TIERS = [
+  { id: 'green', name: 'Green', bonus: 3 },
+  { id: 'trained', name: 'Trained', bonus: 5 },
+  { id: 'veteran', name: 'Veteran', bonus: 7 },
+  { id: 'elite', name: 'Elite', bonus: 9 }
+] as const
+export type CrewTier = (typeof CREW_TIERS)[number]['id']
+
+/** A crew member's tier (an NPC with none set counts as Trained); null for a player character. */
+export function crewTier(m: CrewMember): (typeof CREW_TIERS)[number] | null {
+  if (m.userId || m.characterId) return null
+  return CREW_TIERS.find((t) => t.id === (m.tier ?? 'trained'))!
+}
+
+/** Who someone at a station is, the same from one save to the next. */
+export const crewKey = (m: CrewMember): string => (m.userId ? `user:${m.userId}` : m.characterId ? `char:${m.characterId}` : `npc:${m.name}`)
+
+/** Who can fire a weapon: whoever's at its station (anyone aboard, for a weapon with no station). */
+export function weaponCrew(v: TrackedVehicle, weaponId: string): CrewMember[] {
+  const w = v.def.weapons.find((x) => x.id === weaponId)
+  if (!w) return []
+  return w.station ? (v.crew[w.station] ?? []) : Object.values(v.crew).flat()
+}
+
+/**
+ * Who fires a weapon: the one picked for it, else the station's crew shared
+ * out in order (two gunners, three guns: the first, the second, the first).
+ * Null: nobody's there.
+ */
+export function gunnerFor(v: TrackedVehicle, weaponId: string): CrewMember | null {
+  const crew = weaponCrew(v, weaponId)
+  if (!crew.length) return null
+  const picked = v.gunners[weaponId]
+  const chosen = picked ? crew.find((m) => crewKey(m) === picked) : undefined
+  if (chosen) return chosen
+  const w = v.def.weapons.find((x) => x.id === weaponId)!
+  const same = v.def.weapons.filter((x) => (x.station ?? '') === (w.station ?? ''))
+  return crew[same.indexOf(w) % crew.length]
+}
+
+/**
+ * A weapon's attack bonus: its own, if it has one; else its gunner's — an
+ * NPC's tier bonus, or a player character's Dexterity modifier plus
+ * proficiency bonus (`characterBonus`, when their sheet is to hand).
+ * Undefined: a save weapon, or nobody to fire it.
+ */
+export function weaponAttackBonus(v: TrackedVehicle, weaponId: string, characterBonus: (m: CrewMember) => number | undefined): number | undefined {
+  const w = v.def.weapons.find((x) => x.id === weaponId)
+  if (!w) return undefined
+  if (w.attackBonus !== undefined) return w.attackBonus
+  if (w.saveDc !== undefined) return undefined
+  const m = gunnerFor(v, weaponId)
+  if (!m) return undefined
+  return crewTier(m)?.bonus ?? characterBonus(m)
 }
 
 /** "Unhurt" … "Wrecked" — how damaged an enemy vehicle looks to players who can't see its numbers. */

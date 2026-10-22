@@ -5,14 +5,16 @@
  * selected tab survives a DM/player mode switch or an app restart instead
  * of each side tracking its own independently.
  */
-export type RightPanelTab = 'players' | 'initiative' | 'dice' | 'calendar' | 'vehicles' | 'sessions'
+export type RightPanelTab = 'players' | 'initiative' | 'dice' | 'calendar' | 'sessions'
 
 const STORAGE_KEY = 'gb-right-panel-tab'
 
 export function loadRightPanelTab(): RightPanelTab {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'players' || raw === 'initiative' || raw === 'dice' || raw === 'calendar' || raw === 'vehicles' || raw === 'sessions') return raw
+    if (raw === 'players' || raw === 'initiative' || raw === 'dice' || raw === 'calendar' || raw === 'sessions') return raw
+    // Vehicles were a tab of their own; they're in the Initiative tab now.
+    if (raw === 'vehicles') return 'initiative'
   } catch {
     /* fall through to the default */
   }

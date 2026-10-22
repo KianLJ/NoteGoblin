@@ -3,8 +3,9 @@
 // with the Move tool (or the middle mouse button), zoom with the wheel.
 // Shapes are sized by dragging as they're placed; a placed one, selected
 // with Move, can be dragged, resized from its handle, or sized exactly.
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { canStand, fogShapeAt, gridDistanceFt, mapBounds, moveFogShape, snapHalf, templateLabel, type BattleMap, type Bounds, type FogShape, type MapImage, type MapLight, type MapTemplate, type MapToken, type MapWall, type TemplateKind } from '@shared/battleMap'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { VehicleArc } from '@shared/content/schema'
+import { canStand, fogBox, normalizeFacing, tokenCentre, tokenH, tokenW, turnToken, fogShapeAt, gridDistanceFt, mapBounds, moveFogShape, snapHalf, templateLabel, type BattleMap, type Bounds, type FogShape, type MapImage, type MapLight, type MapTemplate, type MapToken, type MapWall, type TemplateKind } from '@shared/battleMap'
 import type { Combatant } from '@shared/encounter'
 import { blockingWalls, canReach, decodeExplored, slideMove, lightsOf, tokenSeen, visibleCells, LIGHT_PRESETS, sightBounds, visibilityPolygon, wallAt, type LightSource, type VisionSource } from '@shared/vision'
 import { doorSpan, insertDoor, isOpening, roomWalls, snapRoomCorner, snapWallPoint, wallUnder, withoutOverlaps, type SnapKind } from '@shared/walls'
@@ -49,7 +50,7 @@ interface Props {
    * the tokens `canDrag` allows can be moved — the move goes to `onMoveToken`
    * (the DM's app has the final say) instead of `onChange`.
    */
-  viewer?: { canDrag: (combatantId: string) => boolean; onMoveToken: (combatantId: string, x: number, y: number) => void }
+  viewer?: { canDrag: (combatantId: string) => boolean; onMoveToken: (combatantId: string, x: number, y: number) => void; onFaceToken?: (combatantId: string, facing: number) => void }
   wallDraw?: WallDraw
   /** Darkness beyond what can be seen (a player, or the DM viewing as one); null or left out: everything shows. */
   sight?: Sight | null
@@ -62,6 +63,10 @@ interface Props {
   remoteDrags?: Record<string, Pt>
   /** A token you're dragging, as it moves (x null: let go) — for showing it to everyone else. */
   onLiveDrag?: (id: string, x: number | null, y: number | null) => void
+  /** Aiming a vehicle's weapon: its reach and arcs are drawn round the shooter, and clicking a token picks the target. */
+  aim?: { from: string; label: string; arcs?: VehicleArc[]; reach: number | null; onPick: (targetId: string) => void; onCancel: () => void } | null
+  /** The DM's settings for the selected token (hide, lock, facing, size), shown beside it. */
+  tokenPopup?: (id: string) => ReactNode
 }
 
 type Pt = { x: number; y: number }
@@ -87,6 +92,8 @@ type Drag =
   | { kind: 'light'; id: string; grab: Pt; at: Pt }
   | { kind: 'imageMove'; id: string; grab: Pt; at: Pt }
   | { kind: 'imageSize'; id: string; at: Pt }
+  /** Turning a token by its facing handle. */
+  | { kind: 'rotate'; id: string; facing: number }
 
 /** A shape's size from how far it's been dragged: whole squares when snapping, else whole feet (at least one). */
 function sizeFromDrag(kind: TemplateKind, origin: Pt, to: Pt, feetPerCell: number, snap: boolean): number {
@@ -120,7 +127,7 @@ function handlePoint(t: MapTemplate, feetPerCell: number): Pt {
   return { x: t.origin.x + Math.cos(ang) * L, y: t.origin.y + Math.sin(ang) * L }
 }
 
-export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, fogTool, snap, onHint, viewer, wallDraw = 'wall', sight, centreRef, selectedImage = null, onSelectImage, remoteDrags = NO_DRAGS, onLiveDrag }: Props): JSX.Element {
+export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, fogTool, snap, onHint, viewer, wallDraw = 'wall', sight, centreRef, selectedImage = null, onSelectImage, remoteDrags = NO_DRAGS, onLiveDrag, aim = null, tokenPopup }: Props): JSX.Element {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState({ x: 40, y: 70, zoom: 1 })
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -289,6 +296,33 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     setView((v) => ({ ...v, x: size.w / 2, y: size.h / 2 }))
   }
 
+  /** Turns a token (whose facing is shown) to face `facing` degrees. */
+  function faceToken(id: string, facing: number): void {
+    const t = map.tokens[id]
+    if (!t || t.locked) return
+    const f = normalizeFacing(facing)
+    if (viewer) viewer.onFaceToken?.(id, f)
+    else onChange({ ...map, tokens: { ...map.tokens, [id]: turnToken(t, f) } })
+  }
+  const canTurn = (id: string | null): id is string => !!id && map.tokens[id]?.facing !== undefined && !map.tokens[id]?.locked && (!viewer || (viewer.canDrag(id) && !!viewer.onFaceToken))
+
+  // Q and E turn the selected token 45° (one with facing shown, that you're allowed to move).
+  useEffect(() => {
+    if (!canTurn(selectedId)) return
+    const onKey = (e: KeyboardEvent): void => {
+      const el = e.target as HTMLElement
+      if (e.ctrlKey || e.metaKey || e.altKey || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable) return
+      const k = e.key.toLowerCase()
+      if (k !== 'q' && k !== 'e') return
+      const next = (map.tokens[selectedId]!.facing ?? 0) + (k === 'e' ? 45 : -45)
+      faceToken(selectedId, next)
+      onHint(`Facing ${compass(normalizeFacing(next))}.`)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, map, viewer])
+
   /** A pointer position in map squares (fractional). */
   function toMap(e: { clientX: number; clientY: number }): Pt {
     const r = svgRef.current!.getBoundingClientRect()
@@ -303,7 +337,19 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     const tokenId = target.closest('[data-token]')?.getAttribute('data-token')
     const shapeId = target.closest('[data-template]')?.getAttribute('data-template')
     const handleId = target.closest('[data-handle]')?.getAttribute('data-handle')
+    // Aiming: a token is the target; anywhere else (or another button) stops aiming.
+    if (aim) {
+      if (e.button === 0 && tokenId && tokenId !== aim.from) aim.onPick(tokenId)
+      else if (e.button === 0) aim.onCancel()
+      if (e.button === 0) return
+    }
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    const rotateId = target.closest('[data-rotate]')?.getAttribute('data-rotate')
+    if (rotateId && map.tokens[rotateId]) {
+      if (map.tokens[rotateId].locked) onHint(viewer ? 'The DM has locked your token in place.' : 'This token is locked. Unlock it in the side panel to turn it.')
+      else setDrag({ kind: 'rotate', id: rotateId, facing: map.tokens[rotateId].facing ?? 0 })
+      return
+    }
     if (handleId && !viewer) {
       const t = map.templates.find((x) => x.id === handleId)
       if (t && !t.locked) setDrag({ kind: 'shape', t, existing: true, moved: false })
@@ -488,10 +534,11 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       setView((v) => ({ ...v, x: drag.px + e.clientX - drag.x, y: drag.py + e.clientY - drag.y }))
     } else if (drag.kind === 'token') {
       // Walls stop it (it slides along them) — unless the DM holds Alt to put it anywhere.
-      const half = drag.from.size / 2
+      const half = { x: tokenW(drag.from) / 2, y: tokenH(drag.from) / 2 }
       const through = e.altKey && !viewer
-      const centre = through ? p : slideMove(solidWalls, drag.from.size, { x: drag.free.x + half, y: drag.free.y + half }, p)
-      const free = { x: centre.x - half, y: centre.y - half }
+      // A long token collides as its narrow side (so it still fits down a corridor).
+      const centre = through ? p : slideMove(solidWalls, Math.min(tokenW(drag.from), tokenH(drag.from)), { x: drag.free.x + half.x, y: drag.free.y + half.y }, p)
+      const free = { x: centre.x - half.x, y: centre.y - half.y }
       const at = { ...drag.at, x: Math.round(free.x), y: Math.round(free.y) }
       const stopped = Math.hypot(centre.x - p.x, centre.y - p.y) > 0.5
       if (at.x !== drag.at.x || at.y !== drag.at.y || stopped !== drag.stopped)
@@ -511,6 +558,18 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     else if (drag.kind === 'start') setDrag({ ...drag, at: { x: Math.floor(p.x), y: Math.floor(p.y) } })
     else if (drag.kind === 'imageMove') setDrag({ ...drag, at: p })
     else if (drag.kind === 'imageSize') setDrag({ ...drag, at: p })
+    else if (drag.kind === 'rotate') {
+      const t = map.tokens[drag.id]
+      if (t) {
+        const mid = tokenCentre(t)
+        const raw = (Math.atan2(p.x - mid.x, -(p.y - mid.y)) * 180) / Math.PI
+        const facing = normalizeFacing(snap ? Math.round(raw / 45) * 45 : raw)
+        if (facing !== drag.facing) {
+          setDrag({ ...drag, facing })
+          onHint(`Facing ${compass(facing)}.`)
+        }
+      }
+    }
     else if (drag.kind === 'door') setDrag({ ...drag, b: drag.wallId ? p : wallPt(p).at })
     else if (drag.kind === 'room') setDrag({ ...drag, b: snapRoomCorner(map.walls, p, snap, snapR).at })
     else if (drag.kind === 'wallEnd') setDrag({ ...drag, at: wallPt(p, drag.id).at })
@@ -557,8 +616,12 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
   function onPointerUp(): void {
     if (!drag) return
     if (drag.kind === 'token') {
-      sendDrag(drag.id, null)
       const moved = drag.at.x !== drag.from.x || drag.at.y !== drag.from.y
+      // Where it was dropped goes out last (not the last position sent mid-drag), so everyone sees it land there.
+      lastSent.current = 0
+      if (moved) sendDrag(drag.id, drag.at)
+      sendDrag(drag.id, null)
+      setSettling(drag.id)
       // A player can't walk through walls or closed doors; the DM can put anything anywhere.
       if (moved && viewer && !canReach(map, drag.from, drag.at)) onHint('A wall (or a closed door) is in the way.')
       else if (moved && canStand(map, drag.at, drag.id)) {
@@ -601,6 +664,8 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     } else if (drag.kind === 'wallEnd') {
       const w = map.walls.find((x) => x.id === drag.id)
       if (w && (w[drag.end].x !== drag.at.x || w[drag.end].y !== drag.at.y)) updateWall({ ...w, [drag.end]: drag.at })
+    } else if (drag.kind === 'rotate') {
+      if (drag.facing !== map.tokens[drag.id]?.facing) faceToken(drag.id, drag.facing)
     } else if (drag.kind === 'imageMove' || drag.kind === 'imageSize') {
       const img = imagesShown.find((i) => i.id === drag.id)
       const was = map.images.find((i) => i.id === drag.id)
@@ -687,19 +752,28 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
   const lightsShown = drag?.kind === 'light' ? map.lights.map((l) => (l.id === drag.id ? { ...l, x: l.x + offset(drag).dx, y: l.y + offset(drag).dy } : l)) : map.lights
   // Where every token is right now: under your pointer while you drag one, where someone else is dragging one, else where it stands.
   const localDrag = drag?.kind === 'token' ? drag : null
+  // A token you just let go of drops onto its square at once (sight and light move with it); others' moves glide.
+  const [settling, setSettling] = useState<string | null>(null)
+  useEffect(() => {
+    if (!settling) return
+    const timer = setTimeout(() => setSettling(null), 300)
+    return () => clearTimeout(timer)
+  }, [settling])
   const liveTokens = useMemo(() => {
     const ids = [...Object.keys(remoteDrags), ...(localDrag ? [localDrag.id] : [])].filter((id) => map.tokens[id])
-    if (!ids.length) return map.tokens
+    const turning = drag?.kind === 'rotate' && map.tokens[drag.id] ? drag : null
+    if (!ids.length && !turning) return map.tokens
     const next = { ...map.tokens }
     for (const id of ids) next[id] = { ...next[id], ...(localDrag?.id === id ? localDrag.free : remoteDrags[id]) }
+    if (turning) next[turning.id] = turnToken(next[turning.id], turning.facing)
     return next
-  }, [map.tokens, remoteDrags, localDrag?.id, localDrag?.free.x, localDrag?.free.y])
+  }, [map.tokens, remoteDrags, localDrag?.id, localDrag?.free.x, localDrag?.free.y, drag])
   // Lights carried, and the eyes of whoever's seeing, move with their tokens.
   const liveSight: Sight | null | undefined = useMemo(() => {
     if (!sight || liveTokens === map.tokens) return sight
     const centre = (id: string | undefined): Pt | null => {
       const t = id ? liveTokens[id] : undefined
-      return t && t !== map.tokens[id!] ? { x: t.x + t.size / 2, y: t.y + t.size / 2 } : null
+      return t && t !== map.tokens[id!] ? tokenCentre(t) : null
     }
     return {
       ...sight,
@@ -711,20 +785,25 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
   const dmLighting = !viewer && !sight && map.ambient !== 'bright'
   const dmLights = useMemo(() => lightsOf({ lights: lightsShown, tokens: liveTokens }), [lightsShown, liveTokens])
   // Seeing through someone's eyes, an enemy shows only while it's in sight — worked out from where everyone is right now, mid-drag too.
-  const seen = useMemo(() => (liveSight ? visibleCells({ ...map, tokens: liveTokens }, liveSight.sources, liveSight.lights) : null), [liveSight, liveTokens, map])
+  // Only what sight depends on (not, say, the explored squares or where things were remembered, which change after every move).
+  const seen = useMemo(
+    () => (liveSight ? visibleCells({ ...map, tokens: liveTokens }, liveSight.sources, liveSight.lights) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [liveSight, liveTokens, map.walls, map.ambient, map.feetPerCell, map.cols, map.rows, map.images, map.fog, map.templates, map.partyStarts, map.lights]
+  )
   const inSight = (c: Combatant): boolean => !seen || c.kind === 'player' || (c.kind === 'vehicle' && !!c.party) || (!!liveTokens[c.id] && tokenSeen(liveTokens[c.id], seen))
   const tokens = combatants.filter(inSight).map((c) => {
     const t = liveTokens[c.id]
     const blocked = localDrag?.id === c.id && (!canStand(map, localDrag.at, c.id) || (!!viewer && !canReach(map, localDrag.from, localDrag.at)))
-    return t ? <Token key={c.id} c={c} t={t} turn={c.id === turnId} selected={c.id === selectedId} blocked={blocked} glide={localDrag?.id !== c.id} /> : null
+    return t ? <Token key={c.id} c={c} t={t} turn={c.id === turnId} selected={c.id === selectedId} blocked={blocked} glide={localDrag?.id !== c.id && settling !== c.id} /> : null
   })
   // Where a token you're dragging will land.
   const landing = localDrag && (localDrag.at.x !== localDrag.from.x || localDrag.at.y !== localDrag.from.y) && (
     <rect
       x={localDrag.at.x * CELL + 2}
       y={localDrag.at.y * CELL + 2}
-      width={localDrag.at.size * CELL - 4}
-      height={localDrag.at.size * CELL - 4}
+      width={tokenW(localDrag.at) * CELL - 4}
+      height={tokenH(localDrag.at) * CELL - 4}
       rx={8}
       fill="none"
       stroke={!canStand(map, localDrag.at, localDrag.id) || (!!viewer && !canReach(map, localDrag.from, localDrag.at)) ? 'var(--danger)' : 'var(--accent-hover)'}
@@ -812,6 +891,8 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
 
           {dmLighting && <Darkness map={map} sight={{ sources: NO_SOURCES, explored: null, lights: dmLights }} area={area} dmPreview />}
           {landing}
+          {aim && liveTokens[aim.from] && <AimOverlay t={liveTokens[aim.from]} arcs={aim.arcs} reach={aim.reach} zoom={view.zoom} />}
+          {canTurn(selectedId) && liveTokens[selectedId] && tool === 'move' && <TurnHandle id={selectedId} t={liveTokens[selectedId]} zoom={view.zoom} />}
           {!sight && tokens}
           {liveSight && <Darkness map={map} sight={liveSight} area={area} />}
           {sight && tokens}
@@ -848,11 +929,34 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
         </g>
       </svg>
 
-      {shape && <ShapeOptions t={shape} feetPerCell={map.feetPerCell} onChange={updateShape} onRemove={() => removeShape(shape.id)} onClose={() => setSelectedShape(null)} />}
-      {fogPicked && !shape && <FogOptions f={fogPicked} onChange={updateFog} onRemove={() => removeFog(fogPicked.id)} onClose={() => setSelectedFog(null)} />}
-      {wallPicked && <WallOptions w={wallPicked} onChange={updateWall} onRemove={() => removeWall(wallPicked.id)} onClose={() => setSelectedWall(null)} />}
-      {lightPicked && <LightOptions l={lightPicked} onChange={updateLight} onRemove={() => removeLight(lightPicked.id)} onClose={() => setSelectedLight(null)} />}
+      {/* Whatever's selected has its settings beside it. */}
+      {tokenPopup && selectedId && liveTokens[selectedId] && !viewer && !aim && drag?.kind !== 'token' && drag?.kind !== 'rotate' && (tool === 'move' || tool === 'ruler') && (
+        <Beside box={tokenBox(liveTokens[selectedId])} view={view} area={size} padPx={canTurn(selectedId) ? HANDLE_REACH + 6 : 6}>
+          {tokenPopup(selectedId)}
+        </Beside>
+      )}
+      {shape && (
+        <Beside box={shapeBox(shape, map.feetPerCell)} view={view} area={size}>
+          <ShapeOptions t={shape} feetPerCell={map.feetPerCell} onChange={updateShape} onRemove={() => removeShape(shape.id)} onClose={() => setSelectedShape(null)} />
+        </Beside>
+      )}
+      {fogPicked && !shape && (
+        <Beside box={fogBox(fogPicked)} view={view} area={size}>
+          <FogOptions f={fogPicked} onChange={updateFog} onRemove={() => removeFog(fogPicked.id)} onClose={() => setSelectedFog(null)} />
+        </Beside>
+      )}
+      {wallPicked && (
+        <Beside box={{ x0: Math.min(wallPicked.a.x, wallPicked.b.x), y0: Math.min(wallPicked.a.y, wallPicked.b.y), x1: Math.max(wallPicked.a.x, wallPicked.b.x), y1: Math.max(wallPicked.a.y, wallPicked.b.y) }} view={view} area={size}>
+          <WallOptions w={wallPicked} onChange={updateWall} onRemove={() => removeWall(wallPicked.id)} onClose={() => setSelectedWall(null)} />
+        </Beside>
+      )}
+      {lightPicked && (
+        <Beside box={{ x0: lightPicked.x - 0.5, y0: lightPicked.y - 0.5, x1: lightPicked.x + 0.5, y1: lightPicked.y + 0.5 }} view={view} area={size}>
+          <LightOptions l={lightPicked} onChange={updateLight} onRemove={() => removeLight(lightPicked.id)} onClose={() => setSelectedLight(null)} />
+        </Beside>
+      )}
       {imagePicked && tool === 'images' && !viewer && (
+        <Beside box={{ x0: imagePicked.x, y0: imagePicked.y, x1: imagePicked.x + imagePicked.w, y1: imagePicked.y + imagePicked.h }} view={view} area={size}>
         <ImageOptions
           i={imagePicked}
           snap={snap}
@@ -864,6 +968,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
             onChange({ ...map, images: dir === 'front' ? [...rest, imagePicked] : [imagePicked, ...rest] })
           }}
         />
+        </Beside>
       )}
 
       {/* The centre is off screen: an arrow at the edge points the way (click it to go there). */}
@@ -928,7 +1033,7 @@ function ShapeOptions({ t, feetPerCell, onChange, onRemove, onClose }: { t: MapT
   }
   const what = t.kind === 'sphere' ? 'Radius' : t.kind === 'cube' ? 'Side' : 'Length'
   return (
-    <div style={{ position: 'absolute', top: 60, right: 12, zIndex: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 190 }}>
+    <div style={panel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <strong style={{ flex: 1, fontSize: 13, textTransform: 'capitalize' }}>{t.kind}</strong>
         <button type="button" onClick={onClose} title="Done" style={iconBtn}>
@@ -969,7 +1074,7 @@ const FOG_NAMES: Record<FogShape['kind'], string> = { rect: 'Square', circle: 'C
 /** The picked fog: fog or cut, locked or not, and a way to remove it. */
 function FogOptions({ f, onChange, onRemove, onClose }: { f: FogShape; onChange: (f: FogShape) => void; onRemove: () => void; onClose: () => void }): JSX.Element {
   return (
-    <div style={{ position: 'absolute', top: 60, right: 12, zIndex: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 190 }}>
+    <div style={panel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <strong style={{ flex: 1, fontSize: 13 }}>
           {FOG_NAMES[f.kind]} ({f.op === 'add' ? 'fog' : 'cut'})
@@ -1496,10 +1601,141 @@ function FogOutline({ f }: { f: FogShape }): JSX.Element {
  * gliding there when it moves (a move made, or someone else's drag coming
  * in) — but not while you drag it yourself, so it stays under the pointer.
  */
+/** A facing as a compass point ("north-east") and degrees. */
+function compass(deg: number): string {
+  const names = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
+  return deg % 45 === 0 ? names[deg / 45] : `${deg}°`
+}
+
+/** The handle beside the selected token's facing pointer: drag it round to turn the token. */
+function TurnHandle({ id, t, zoom }: { id: string; t: MapToken; zoom: number }): JSX.Element {
+  const k = 1 / zoom
+  const a = (((t.facing ?? 0) - 90) * Math.PI) / 180
+  const r = edgeAt(tokenW(t) * CELL, tokenH(t) * CELL, t.facing ?? 0)
+  const cx = (t.x + tokenW(t) / 2) * CELL
+  const cy = (t.y + tokenH(t) / 2) * CELL
+  const d = r + HANDLE_OFFSET * k
+  return (
+    <g data-rotate={id} style={{ cursor: 'grab' }}>
+      <title>Drag to turn it (Q and E turn it 45°)</title>
+      <line x1={cx + Math.cos(a) * r} y1={cy + Math.sin(a) * r} x2={cx + Math.cos(a) * d} y2={cy + Math.sin(a) * d} stroke="var(--accent)" strokeWidth={2 * k} pointerEvents="none" />
+      <circle cx={cx + Math.cos(a) * d} cy={cy + Math.sin(a) * d} r={8 * k} fill="var(--bg-surface)" stroke="var(--accent)" strokeWidth={3 * k} />
+      <path d={`M${cx + Math.cos(a) * d - 3.5 * k} ${cy + Math.sin(a) * d}a${3.5 * k} ${3.5 * k} 0 1 1 ${3.5 * k} ${3.5 * k}`} fill="none" stroke="var(--accent)" strokeWidth={1.5 * k} pointerEvents="none" />
+    </g>
+  )
+}
+
+/**
+ * Which way a token faces: a pointer on its edge — and for a vehicle, its
+ * fore arc (the 90° it fires into) as a faint wedge, stronger when selected.
+ */
+function FacingMark({ t, vehicle, selected }: { t: MapToken; vehicle: boolean; selected: boolean }): JSX.Element {
+  const w = tokenW(t) * CELL
+  const h = tokenH(t) * CELL
+  const cx = w / 2
+  const cy = h / 2
+  const R = Math.max(w, h) * 0.95
+  const d = edgeAt(w, h, t.facing ?? 0)
+  const s45 = Math.SQRT1_2
+  return (
+    <g transform={`translate(${cx} ${cy}) rotate(${t.facing ?? 0})`} pointerEvents="none">
+      {vehicle && <path d={`M0 0L${-R * s45} ${-R * s45}A${R} ${R} 0 0 1 ${R * s45} ${-R * s45}Z`} fill="var(--accent)" fillOpacity={selected ? 0.18 : 0.08} stroke="var(--accent)" strokeOpacity={selected ? 0.6 : 0.25} strokeWidth={1.5} strokeDasharray="5 4" />}
+      <path d={`M-8 ${3 - d}L0 ${-9 - d}L8 ${3 - d}Z`} fill="var(--accent-hover)" stroke="rgba(0,0,0,0.7)" strokeWidth={1.5} strokeLinejoin="round" />
+    </g>
+  )
+}
+
+/**
+ * Where a weapon being aimed can reach: a ring at its reach (from the
+ * shooter's edge), with the arcs it fires into filled — or all round when it
+ * fires anywhere or the shooter has no facing.
+ */
+function AimOverlay({ t, arcs, reach, zoom }: { t: MapToken; arcs?: VehicleArc[]; reach: number | null; zoom: number }): JSX.Element {
+  const c = tokenCentre(t)
+  const cx = c.x * CELL
+  const cy = c.y * CELL
+  const R = ((reach ?? 30) + Math.max(tokenW(t), tokenH(t)) / 2) * CELL
+  const k = 1 / zoom
+  const all = !arcs?.length || t.facing === undefined
+  const CENTRES: Record<VehicleArc, number> = { fore: 0, starboard: 90, aft: 180, port: 270 }
+  const wedge = (centre: number): string => {
+    const a0 = ((t.facing! + centre - 45 - 90) * Math.PI) / 180
+    const a1 = ((t.facing! + centre + 45 - 90) * Math.PI) / 180
+    return `M${cx} ${cy}L${cx + Math.cos(a0) * R} ${cy + Math.sin(a0) * R}A${R} ${R} 0 0 1 ${cx + Math.cos(a1) * R} ${cy + Math.sin(a1) * R}Z`
+  }
+  return (
+    <g pointerEvents="none">
+      {all ? <circle cx={cx} cy={cy} r={R} fill="var(--danger)" fillOpacity={0.08} /> : arcs!.map((a) => <path key={a} d={wedge(CENTRES[a])} fill="var(--danger)" fillOpacity={0.12} stroke="var(--danger)" strokeOpacity={0.5} strokeWidth={1.5 * k} />)}
+      {reach !== null && <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--danger)" strokeWidth={2 * k} strokeDasharray={`${8 * k} ${6 * k}`} />}
+    </g>
+  )
+}
+
+type Box = { x0: number; y0: number; x1: number; y1: number }
+
+/** The turn handle sits this far (on screen) past the token's edge; with its knob, it reaches HANDLE_REACH. */
+const HANDLE_OFFSET = 22
+const HANDLE_REACH = HANDLE_OFFSET + 10
+
+/**
+ * A settings panel beside something on the map (`box`, in squares): to its
+ * right, else its left, else below or above it — never over it if there's
+ * any room — and kept inside the map's view.
+ */
+function Beside({ box, view, area, padPx = 0, children }: { box: Box; view: { x: number; y: number; zoom: number }; area: { w: number; h: number }; /** Room to leave round it, in pixels (a token's turn handle). */ padPx?: number; children: ReactNode }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const [own, setOwn] = useState({ w: 230, h: 120 })
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect()
+    if (r && (Math.abs(r.width - own.w) > 1 || Math.abs(r.height - own.h) > 1)) setOwn({ w: r.width, h: r.height })
+  })
+  const s = CELL * view.zoom
+  const left = view.x + box.x0 * s - padPx
+  const right = view.x + box.x1 * s + padPx
+  const top = view.y + box.y0 * s - padPx
+  const bottom = view.y + box.y1 * s + padPx
+  const gap = 12
+  const pad = 8
+  const clampX = (x: number): number => Math.max(pad, Math.min(area.w - own.w - pad, x))
+  const clampY = (y: number): number => Math.max(52, Math.min(area.h - own.h - pad, y))
+  let x: number
+  let y: number
+  if (right + gap + own.w <= area.w - pad) [x, y] = [right + gap, clampY(top)]
+  else if (left - gap - own.w >= pad) [x, y] = [left - gap - own.w, clampY(top)]
+  else if (bottom + gap + own.h <= area.h - pad) [x, y] = [clampX(left), bottom + gap]
+  else [x, y] = [clampX(left), Math.max(pad, top - gap - own.h)]
+  return (
+    <div ref={ref} style={{ position: 'absolute', left: x, top: y, zIndex: 6, maxWidth: 260 }}>
+      {children}
+    </div>
+  )
+}
+
+const tokenBox = (t: MapToken): Box => ({ x0: t.x, y0: t.y, x1: t.x + tokenW(t), y1: t.y + tokenH(t) })
+
+/** Roughly where a spell area lies, in squares. */
+function shapeBox(t: MapTemplate, feetPerCell: number): Box {
+  if (t.kind === 'sphere') {
+    const r = t.sizeFt / feetPerCell
+    return { x0: t.origin.x - r, y0: t.origin.y - r, x1: t.origin.x + r, y1: t.origin.y + r }
+  }
+  return { x0: Math.min(t.origin.x, t.toward.x), y0: Math.min(t.origin.y, t.toward.y), x1: Math.max(t.origin.x, t.toward.x), y1: Math.max(t.origin.y, t.toward.y) }
+}
+
+/** How far it is from the middle of a w × h box to its edge, heading `deg` (clockwise from up). */
+function edgeAt(w: number, h: number, deg: number): number {
+  const a = (deg * Math.PI) / 180
+  const dx = Math.abs(Math.sin(a))
+  const dy = Math.abs(Math.cos(a))
+  return Math.min(dx > 1e-6 ? w / 2 / dx : Infinity, dy > 1e-6 ? h / 2 / dy : Infinity)
+}
+
 function Token({ c, t, turn, selected, blocked, glide }: { c: Combatant; t: MapToken; turn: boolean; selected: boolean; blocked: boolean; glide: boolean }): JSX.Element {
-  const size = t.size * CELL
+  const size = tokenW(t) * CELL
+  const height = tokenH(t) * CELL
   const cx = size / 2
-  const cy = size / 2
+  const cy = height / 2
+  const small = Math.min(size, height)
   const dead = c.currentHp <= 0
   const color = c.kind === 'player' ? '#3f7fb5' : c.kind === 'vehicle' ? (c.party ? '#8a6d3b' : '#7a3d2a') : '#a9473a'
   const initials =
@@ -1510,25 +1746,29 @@ function Token({ c, t, turn, selected, blocked, glide }: { c: Combatant; t: MapT
       .map((w) => w[0]!.toUpperCase())
       .join('') || '?'
   const frac = Math.max(0, Math.min(1, c.currentHp / Math.max(1, c.maxHp)))
-  const r = size / 2 - 3
+  const r = small / 2 - 3
   const len = 2 * Math.PI * r
+  // Rings round the whole token (an oval for a long one).
+  const ring = (pad: number, props: React.SVGProps<SVGEllipseElement>): JSX.Element => <ellipse cx={cx} cy={cy} rx={size / 2 + pad} ry={height / 2 + pad} fill="none" {...props} />
   return (
     <g data-token={c.id} style={{ cursor: 'grab', transform: `translate(${t.x * CELL}px, ${t.y * CELL}px)`, transition: glide ? 'transform 0.16s linear' : 'none' }} opacity={dead ? 0.45 : c.hidden ? 0.55 : 1}>
       <title>{`${c.name} — ${c.currentHp}/${c.maxHp} HP, AC ${c.ac}${c.hidden ? ' (hidden from players)' : ''}`}</title>
-      {c.hidden && <circle cx={cx} cy={cy} r={size / 2 + 4} fill="none" stroke="var(--text-muted)" strokeWidth={2} strokeDasharray="3 4" />}
-      {turn && <circle cx={cx} cy={cy} r={size / 2 + 2} fill="none" stroke="var(--accent)" strokeWidth={3} />}
-      {selected && <circle cx={cx} cy={cy} r={size / 2 + 6} fill="none" stroke="var(--text-primary)" strokeWidth={1.5} strokeDasharray="4 3" />}
+      {c.hidden && ring(4, { stroke: 'var(--text-muted)', strokeWidth: 2, strokeDasharray: '3 4' })}
+      {turn && ring(2, { stroke: 'var(--accent)', strokeWidth: 3 })}
+      {selected && ring(6, { stroke: 'var(--text-primary)', strokeWidth: 1.5, strokeDasharray: '4 3' })}
+      {t.facing !== undefined && c.kind === 'vehicle' && <FacingMark t={t} vehicle selected={selected} />}
       {c.kind === 'vehicle' ? (
-        <rect x={4} y={4} width={size - 8} height={size - 8} rx={12} fill={color} stroke={blocked ? 'var(--danger)' : 'rgba(0,0,0,0.55)'} strokeWidth={2} />
+        <rect x={4} y={4} width={size - 8} height={height - 8} rx={12} fill={color} stroke={blocked ? 'var(--danger)' : 'rgba(0,0,0,0.55)'} strokeWidth={2} />
       ) : (
-        <circle cx={cx} cy={cy} r={size / 2 - 5} fill={color} stroke={blocked ? 'var(--danger)' : 'rgba(0,0,0,0.55)'} strokeWidth={2} />
+        <ellipse cx={cx} cy={cy} rx={size / 2 - 5} ry={height / 2 - 5} fill={color} stroke={blocked ? 'var(--danger)' : 'rgba(0,0,0,0.55)'} strokeWidth={2} />
       )}
       {!dead && <circle cx={cx} cy={cy} r={r} fill="none" stroke={frac > 0.5 ? 'var(--success)' : frac > 0.25 ? 'var(--accent)' : 'var(--danger)'} strokeWidth={3} strokeDasharray={`${len * frac} ${len}`} transform={`rotate(-90 ${cx} ${cy})`} />}
-      <text x={cx} y={cy + 5} textAnchor="middle" fill="#fff" fontSize={Math.min(16, 10 + t.size * 3)} fontWeight={700} pointerEvents="none">
+      <text x={cx} y={cy + 5} textAnchor="middle" fill="#fff" fontSize={Math.min(16, 10 + Math.min(tokenW(t), tokenH(t)) * 3)} fontWeight={700} pointerEvents="none">
         {dead ? 'X' : initials}
       </text>
+      {t.facing !== undefined && c.kind !== 'vehicle' && <FacingMark t={t} vehicle={false} selected={selected} />}
       {t.locked && (
-        <g transform={`translate(${size - 16} ${size - 16})`} pointerEvents="none" color="var(--text-primary)">
+        <g transform={`translate(${size - 16} ${height - 16})`} pointerEvents="none" color="var(--text-primary)">
           <circle cx={7} cy={7} r={9} fill="var(--bg-surface)" stroke="var(--border-strong)" />
           <g transform="translate(1 1) scale(0.75)">
             <LockIcon locked size={16} />
@@ -1619,7 +1859,7 @@ const NO_SOURCES: VisionSource[] = []
 const NO_DRAGS: Record<string, Pt> = {}
 const optRow = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' } as const
 const numBox = { width: 64, padding: '2px 4px', fontSize: 12, textAlign: 'center' } as const
-const panel = { position: 'absolute', top: 60, right: 12, zIndex: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 190 } as const
+const panel = { padding: '8px 10px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 190 } as const
 const zoomButton = { width: 34, height: 30, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: 'pointer', font: 'inherit' } as const
 const iconBtn = { background: 'none', border: 0, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, display: 'inline-flex' } as const
 const stepBtn = { padding: '0 7px', cursor: 'pointer' } as const

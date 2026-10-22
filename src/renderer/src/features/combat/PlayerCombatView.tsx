@@ -48,6 +48,13 @@ function asCombatant(c: PlayerVisibleCombatant): Combatant {
 }
 
 /** The map as the player was sent it, in the shape the map view draws (an image shows once its picture has arrived). */
+/** The entries still waiting (`wait` true); the same object when none are done. */
+function keepWaiting<T>(pending: Record<string, T>, wait: (id: string, v: T) => boolean): Record<string, T> {
+  const ids = Object.keys(pending)
+  const kept = ids.filter((id) => wait(id, pending[id]))
+  return kept.length === ids.length ? pending : Object.fromEntries(kept.map((id) => [id, pending[id]]))
+}
+
 function toBattleMap(map: PlayerBattleMap, pictures: Record<string, string>, pending: Record<string, { x: number; y: number }>): BattleMap {
   return {
     cols: map.cols,
@@ -77,6 +84,7 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter }: Prop
   const [tool, setTool] = useState<MapTool>('move')
   const [hint, setHint] = useState('Drag your own token to move it. Scroll to zoom.')
   const [pending, setPending] = useState<Record<string, { x: number; y: number }>>({})
+  const [pendingFacing, setPendingFacing] = useState<Record<string, number>>({})
   // The DM and the rest of the party dragging tokens right now.
   const remoteDrags = useRemoteDrags(sessionId)
 
@@ -93,7 +101,11 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter }: Prop
     const offMap = window.goblin.battleMap.onUpdate((u) => {
       if (u.sessionId === sessionId) {
         setMap(u.map)
-        setPending({})
+        // A move (or turn) waiting on the DM is done once the map shows it; a map sent before then
+        // (sight rechecked mid-drag) mustn't put the token back where it was for a moment.
+        const tokens = u.map?.tokens ?? {}
+        setPending((p) => keepWaiting(p, (id, at) => !!tokens[id] && (tokens[id].x !== at.x || tokens[id].y !== at.y)))
+        setPendingFacing((p) => keepWaiting(p, (id, f) => !!tokens[id] && tokens[id].facing !== f))
       }
     })
     const offImage = window.goblin.battleMap.onImage(({ imageId, image }) => setPictures((p) => ({ ...p, [imageId]: image })))
@@ -121,7 +133,12 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter }: Prop
   const mine = useMemo(() => new Set((initiative?.combatants ?? []).filter((c) => c.isSelf).map((c) => c.id)), [initiative])
   const selfId = (initiative?.combatants ?? []).find((c) => c.isSelf)?.id ?? null
   const turnId = initiative && initiative.turnIndex >= 0 ? (initiative.combatants[initiative.turnIndex]?.id ?? null) : null
-  const fullMap = useMemo(() => (map ? toBattleMap(map, pictures, pending) : null), [map, pictures, pending])
+  const fullMap = useMemo(() => {
+    if (!map) return null
+    const m = toBattleMap(map, pictures, pending)
+    if (!Object.keys(pendingFacing).length) return m
+    return { ...m, tokens: Object.fromEntries(Object.entries(m.tokens).map(([id, t]) => [id, pendingFacing[id] !== undefined ? { ...t, facing: pendingFacing[id] } : t])) }
+  }, [map, pictures, pending, pendingFacing])
   const sight: Sight | null = useMemo(() => (map?.vision ? { sources: map.vision.sources, explored: map.vision.explored, lights: map.lights ?? [] } : null), [map])
 
   // Your own character is what's shown until you pick something else.
@@ -139,17 +156,27 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter }: Prop
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  async function move(combatantId: string, x: number, y: number): Promise<void> {
-    setPending((p) => ({ ...p, [combatantId]: { x, y } }))
-    const result = await window.goblin.battleMap.moveToken(sessionId, combatantId, x, y)
+  /** Turning your own token: shown straight away, then the DM's app confirms it (or puts it back). */
+  async function face(combatantId: string, facing: number): Promise<void> {
+    setPendingFacing((p) => ({ ...p, [combatantId]: facing }))
+    const result = await window.goblin.battleMap.faceToken(sessionId, combatantId, facing)
+    const done = (): void => setPendingFacing((p) => keepWaiting(p, (id, f) => id !== combatantId || f !== facing))
     if (!result.ok) {
-      setPending((p) => {
-        const next = { ...p }
-        delete next[combatantId]
-        return next
-      })
+      done()
       setHint(result.error)
-    }
+    } else setTimeout(done, 3000)
+  }
+
+  async function move(combatantId: string, x: number, y: number): Promise<void> {
+    const at = { x, y }
+    setPending((p) => ({ ...p, [combatantId]: at }))
+    const result = await window.goblin.battleMap.moveToken(sessionId, combatantId, x, y)
+    // Failed: back where it was; accepted: the DM's map shows it soon (forgotten anyway after a few seconds, in case it never does).
+    const done = (): void => setPending((p) => keepWaiting(p, (id, v) => id !== combatantId || v !== at))
+    if (!result.ok) {
+      done()
+      setHint(result.error)
+    } else setTimeout(done, 3000)
   }
 
   const selected = initiative?.combatants.find((c) => c.id === selectedId) ?? null
@@ -220,7 +247,7 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter }: Prop
                 fogTool={{ op: 'add', draw: 'rect', width: 1 }}
                 snap
                 onHint={setHint}
-                viewer={{ canDrag: (id) => mine.has(id), onMoveToken: (id, x, y) => void move(id, x, y) }}
+                viewer={{ canDrag: (id) => mine.has(id), onMoveToken: (id, x, y) => void move(id, x, y), onFaceToken: (id, facing) => void face(id, facing) }}
                 remoteDrags={remoteDrags}
                 onLiveDrag={(id, x, y) => void window.goblin.battleMap.dragToken(sessionId, id, x, y)}
                 sight={sight}

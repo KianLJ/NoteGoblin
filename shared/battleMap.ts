@@ -9,12 +9,18 @@ export interface MapToken {
   /** The top-left square it covers. */
   x: number
   y: number
-  /** Squares across: 1 for Medium, 2 Large, 3 Huge, 4 Gargantuan. */
+  /** Squares across: 1 for Medium, 2 Large, 3 Huge, 4 Gargantuan, 6 Colossal. */
   size: number
+  /** Squares down, when set apart from across (a long ship); left out: the same as `size`. */
+  h?: number
+  /** Its size was set by hand: kept, not reset from its creature or vehicle size. */
+  sized?: boolean
   /** Locked in place: can't be dragged until unlocked. */
   locked?: boolean
   /** A light it carries (a torch, a lantern), in feet: bright light, then dim light beyond it. */
   light?: { bright: number; dim: number }
+  /** Which way it faces, in degrees clockwise from the top of the map (0 = up); left out: no facing shown. */
+  facing?: number
 }
 
 /** A wall (or door) along the map, from one point to another, in squares — it stops tokens and sight. */
@@ -93,7 +99,11 @@ export interface Placement {
   x: number
   y: number
   size: number
+  h?: number
+  /** The size was set by hand. */
+  sized?: boolean
   hidden?: boolean
+  facing?: number
 }
 
 export type Pt = { x: number; y: number }
@@ -142,7 +152,7 @@ export function emptyBattleMap(): BattleMap {
 }
 
 /** A fog shape's outer edges. */
-function fogBox(f: FogShape): Bounds {
+export function fogBox(f: FogShape): Bounds {
   if (f.kind === 'rect') return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.h }
   if (f.kind === 'circle') return { x0: f.cx - f.r, y0: f.cy - f.r, x1: f.cx + f.r, y1: f.cy + f.r }
   const pad = f.kind === 'stroke' ? f.width / 2 : 0
@@ -170,7 +180,7 @@ export function mapBounds(map: Pick<BattleMap, 'cols' | 'rows' | 'images' | 'tok
     y1 = Math.max(y1, b.y1)
   }
   for (const i of map.images) add({ x0: i.x, y0: i.y, x1: i.x + i.w, y1: i.y + i.h })
-  for (const t of Object.values(map.tokens)) add({ x0: t.x, y0: t.y, x1: t.x + t.size, y1: t.y + t.size })
+  for (const t of Object.values(map.tokens)) add({ x0: t.x, y0: t.y, x1: t.x + tokenW(t), y1: t.y + tokenH(t) })
   for (const w of map.walls) add({ x0: Math.min(w.a.x, w.b.x), y0: Math.min(w.a.y, w.b.y), x1: Math.max(w.a.x, w.b.x), y1: Math.max(w.a.y, w.b.y) })
   for (const l of map.lights) add({ x0: l.x, y0: l.y, x1: l.x, y1: l.y })
   for (const f of map.fog) if (!f.id.startsWith('all-')) add(fogBox(f))
@@ -186,23 +196,41 @@ export function gridDistanceFt(a: { x: number; y: number }, b: { x: number; y: n
   return Math.max(Math.abs(Math.round(a.x) - Math.round(b.x)), Math.abs(Math.round(a.y) - Math.round(b.y))) * feetPerCell
 }
 
-/** Squares across for a creature size ("Large" → 2); unknown sizes take one square. */
+type Footprint = Pick<MapToken, 'size' | 'h' | 'facing'>
+/** A long token (`h` set) facing nearer east or west than north or south lies on its side. */
+const onItsSide = (t: Footprint): boolean => t.h !== undefined && t.h !== t.size && t.facing !== undefined && Math.round(normalizeFacing(t.facing) / 90) % 2 === 1
+/** Squares across a token covers on the map (`size` and `h` are across and down when it faces north). */
+export const tokenW = (t: Footprint): number => (onItsSide(t) ? (t.h ?? t.size) : t.size)
+/** Squares down a token covers on the map. */
+export const tokenH = (t: Footprint): number => (onItsSide(t) ? t.size : (t.h ?? t.size))
+
+/** The middle of a token, in squares. */
+export const tokenCentre = (t: Pick<MapToken, 'x' | 'y' | 'size' | 'h' | 'facing'>): Pt => ({ x: t.x + tokenW(t) / 2, y: t.y + tokenH(t) / 2 })
+
+/** A token turned to face `facing` — a long one swings round its middle when it ends up on its side (or back). */
+export function turnToken<T extends MapToken>(t: T, facing: number | undefined): T {
+  const next = { ...t, facing: facing === undefined ? undefined : normalizeFacing(facing) }
+  if (facing === undefined) delete next.facing
+  const dx = Math.round((tokenW(t) - tokenW(next)) / 2)
+  const dy = Math.round((tokenH(t) - tokenH(next)) / 2)
+  return dx || dy ? { ...next, x: t.x + dx, y: t.y + dy } : next
+}
+
+/** The most squares across (or down) a token can be. */
+export const MAX_TOKEN_SIZE = 20
+
+/** Squares across for a creature or vehicle size ("Large" → 2, "Colossal (dreadnought)" → 6); unknown sizes take one square. */
 export function sizeInSquares(size: string | undefined): number {
-  switch ((size ?? '').toLowerCase()) {
-    case 'large':
-      return 2
-    case 'huge':
-      return 3
-    case 'gargantuan':
-    case 'colossal':
-      return 4
-    default:
-      return 1
-  }
+  const s = (size ?? '').toLowerCase()
+  if (/\bcolossal\b/.test(s)) return 6
+  if (/\bgargantuan\b/.test(s)) return 4
+  if (/\bhuge\b/.test(s)) return 3
+  if (/\blarge\b/.test(s)) return 2
+  return 1
 }
 
 function overlaps(a: MapToken, b: MapToken): boolean {
-  return a.x < b.x + b.size && b.x < a.x + a.size && a.y < b.y + b.size && b.y < a.y + a.size
+  return a.x < b.x + tokenW(b) && b.x < a.x + tokenW(a) && a.y < b.y + tokenH(b) && b.y < a.y + tokenH(a)
 }
 
 /** Whether a token can stand here: not on top of another token (`ignore`: the token being moved). The grid has no edge; walls are checked by vision.ts's canReach. */
@@ -230,8 +258,8 @@ export function withPlacements(map: BattleMap, combatants: Combatant[]): BattleM
     if (!t) continue
     const slot = slotOf(c, combatants)
     const was = placements[slot]
-    if (was && was.x === t.x && was.y === t.y && was.size === t.size && !!was.hidden === !!c.hidden) continue
-    placements = { ...placements, [slot]: { x: t.x, y: t.y, size: t.size, ...(c.hidden ? { hidden: true } : {}) } }
+    if (was && was.x === t.x && was.y === t.y && was.size === t.size && was.h === t.h && !!was.sized === !!t.sized && !!was.hidden === !!c.hidden && was.facing === t.facing) continue
+    placements = { ...placements, [slot]: { x: t.x, y: t.y, size: t.size, ...(t.h !== undefined ? { h: t.h } : {}), ...(t.sized ? { sized: true } : {}), ...(c.hidden ? { hidden: true } : {}), ...(t.facing !== undefined ? { facing: t.facing } : {}) } }
   }
   return placements === map.placements ? map : { ...map, placements }
 }
@@ -246,27 +274,34 @@ export function placeTokens(map: BattleMap, combatants: Combatant[], sizeOf: (c:
   const live = new Set(combatants.map((c) => c.id))
   let next: BattleMap = { ...map, tokens: Object.fromEntries(Object.entries(map.tokens).filter(([id]) => live.has(id))) }
   for (const c of combatants) {
-    const size = Math.max(1, Math.min(4, sizeOf(c)))
     const have = next.tokens[c.id]
     if (have) {
-      // Its size became known later (a vehicle or monster still loading): grow or shrink it in place when there's room.
-      const resized = { ...have, size }
-      if (have.size !== size && canStand(next, resized, c.id)) next = { ...next, tokens: { ...next.tokens, [c.id]: resized } }
+      // Its size became known later (a vehicle or monster still loading): grow or shrink it where it stands, unless the DM sized it by hand.
+      const size = Math.max(1, Math.min(MAX_TOKEN_SIZE, sizeOf(c)))
+      if (!have.sized && (have.size !== size || have.h !== undefined)) {
+        const { h: _h, ...square } = have
+        next = { ...next, tokens: { ...next.tokens, [c.id]: { ...square, size } } }
+      }
       continue
     }
     const party = c.kind === 'player' || (c.kind === 'vehicle' && !!c.party)
     let spot: MapToken | null = null
     // Where it stood last time on this map, then (a player) the next free party start, then the edge of the map.
     const remembered = next.placements[slotOf(c, combatants)]
-    if (remembered && canStand(next, { x: remembered.x, y: remembered.y, size })) spot = { x: remembered.x, y: remembered.y, size }
+    const size = remembered?.sized ? remembered.size : Math.max(1, Math.min(MAX_TOKEN_SIZE, sizeOf(c)))
+    const sized = remembered?.sized ? { sized: true, ...(remembered.h !== undefined ? { h: remembered.h } : {}) } : {}
+    const h = remembered?.sized ? (remembered.h ?? size) : size
+    if (remembered && canStand(next, { x: remembered.x, y: remembered.y, size, ...sized })) spot = { x: remembered.x, y: remembered.y, size, ...sized, ...(remembered.facing !== undefined ? { facing: remembered.facing } : {}) }
     if (!spot && c.kind === 'player') {
-      const start = next.partyStarts.find((p) => canStand(next, { x: p.x, y: p.y, size }))
-      if (start) spot = { x: start.x, y: start.y, size }
+      const start = next.partyStarts.find((p) => canStand(next, { x: p.x, y: p.y, size, ...sized }))
+      if (start) spot = { x: start.x, y: start.y, size, ...sized }
     }
-    for (let i = 0; i < next.cols && !spot; i++) {
+    // Something bigger than the starting area still fits along its edge (the grid goes on).
+    const rows = Math.max(next.rows, h)
+    for (let i = 0; i < Math.max(next.cols, size) && !spot; i++) {
       const x = party ? i : next.cols - size - i
-      for (let y = 0; y + size <= next.rows; y++) {
-        const t = { x, y, size }
+      for (let y = 0; y + h <= rows; y++) {
+        const t = { x, y, size, ...sized }
         if (canStand(next, t)) {
           spot = t
           break
@@ -296,6 +331,9 @@ export function fogShapeAt(map: BattleMap, p: Pt): FogShape | null {
   for (let i = map.fog.length - 1; i >= 0; i--) if (inFogShape(map.fog[i], p)) return map.fog[i]
   return null
 }
+
+/** An angle in degrees turned to 0–359. */
+export const normalizeFacing = (deg: number): number => ((Math.round(deg) % 360) + 360) % 360
 
 /** Fog over the whole map — everything on it and well beyond. */
 export function fogEverything(map: BattleMap): FogShape {
@@ -373,11 +411,16 @@ export interface PlayerBattleMap {
   vision: { sources: VisionSource[]; explored: string | null } | null
 }
 
+/** Stands in for a map image's picture in a broadcast map, followed by its imageIdOf: the picture itself went separately. */
+export const IMAGE_REF = 'ref:'
+
 /** A short fingerprint of a map image, so players only download it when it changes. */
 export function imageIdOf(image: string): string
 export function imageIdOf(image: string | null): string | null
 export function imageIdOf(image: string | null): string | null {
   if (!image) return null
+  // A reference to an image sent separately (see the DM's broadcast): its id is in it.
+  if (image.startsWith(IMAGE_REF)) return image.slice(IMAGE_REF.length)
   let h = 0
   // Sampling keeps this quick for a multi-megabyte data URL; the length guards against near-misses.
   const step = Math.max(1, Math.floor(image.length / 4096))
@@ -394,7 +437,7 @@ export function imageIdOf(image: string | null): string | null {
  */
 export function mapForPlayer(map: BattleMap, hiddenIds: ReadonlySet<string> = new Set(), viewer?: { combatants: Combatant[]; userId: string }): PlayerBattleMap {
   const unseen = new Set(hiddenIds)
-  for (const [id, t] of Object.entries(map.tokens)) if (isFogged(map, { x: t.x + t.size / 2, y: t.y + t.size / 2 })) unseen.add(id)
+  for (const [id, t] of Object.entries(map.tokens)) if (isFogged(map, tokenCentre(t))) unseen.add(id)
   let vision: PlayerBattleMap['vision'] = null
   if (viewer && visionActive(map)) {
     const sources = viewerSources(map, viewer.combatants, viewer.userId)
@@ -448,6 +491,8 @@ export interface TestPlayer {
   characterId: string | null
   /** Darkvision in feet, when not playing a character. */
   darkvision?: number
+  /** A quick stand-in, when not playing one of the DM's characters: a class, a level and ability scores, made into a bare sheet (hit points, AC, proficiency) so it can fight and crew a vehicle. */
+  quick?: { className: string; level: number; scores: { str: number; dex: number; con: number; int: number; wis: number; cha: number } }
 }
 
 /** The relay-style user id a test player's combatant goes by. */

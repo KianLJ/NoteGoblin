@@ -19,6 +19,8 @@ interface CharacterSheetEditorProps {
   onSave: (patch: Partial<CharacterSheetData> & { name?: string }) => void
   /** DM viewing a connected player's synced character — tabs stay switchable, but every field/button underneath is inert (native `inert`, not just visually disabled, so nothing can be typed/dragged/clicked into it) and there's no name field, since this isn't your character to rename. Deletion lives in CharacterSwitcher now, not here — see its own doc comment for why. */
   readOnly?: boolean
+  /** Its rolls still work while read-only — the DM rolling for a player's character. */
+  canRoll?: boolean
   /** The joined/hosted session id — threaded down to every roll button so a check/save/skill/attack roll broadcasts to the table the same way the Dice Tray does. Omitted entirely for a readOnly mount (viewing someone else's sheet isn't your roll to make). */
   sessionId?: string | null
 }
@@ -54,12 +56,13 @@ interface PendingLevelUp {
  * deciding anything loses nothing, since the same choice is still sitting
  * there, inline, in Features.
  */
-export function CharacterSheetEditor({ character, onSave, readOnly, sessionId = null }: CharacterSheetEditorProps): JSX.Element {
+export function CharacterSheetEditor({ character, onSave, readOnly, canRoll = !readOnly, sessionId = null }: CharacterSheetEditorProps): JSX.Element {
   const [tab, setTab] = useState<Tab>('Actions')
   const [nameDraft, setNameDraft] = useAutosaveDraft(character.name, (name) => onSave({ name }))
   const [pendingLevelUp, setPendingLevelUp] = useState<PendingLevelUp | null>(null)
   const s = useSheetState(character, onSave, {
     readOnly,
+    canRoll,
     sessionId,
     onLevelUp: (className, fromLevel, toLevel) => setPendingLevelUp({ className, fromLevel, toLevel })
   })
@@ -67,7 +70,7 @@ export function CharacterSheetEditor({ character, onSave, readOnly, sessionId = 
   const panel = (t: Tab): { display: string } => ({ display: tab === t ? 'block' : 'none' })
 
   return (
-    <div className={`gs-root${readOnly ? ' gb-readonly-sheet' : ''}`}>
+    <div className={`gs-root${readOnly ? ' gb-readonly-sheet' : ''}${readOnly && canRoll ? ' gb-can-roll' : ''}`}>
       {pendingLevelUp && !readOnly && (
         <LevelUpPopup
           character={character}
@@ -104,10 +107,10 @@ export function CharacterSheetEditor({ character, onSave, readOnly, sessionId = 
           </div>
           <div className="gs-panel">
             <div style={panel('Actions')}>
-              <CombatTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} actionsOnly />
+              <CombatTab character={character} onSave={onSave} readOnly={readOnly} canRoll={canRoll} sessionId={sessionId} actionsOnly />
             </div>
             <div style={panel('Spells')}>
-              <SpellsTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />
+              <SpellsTab character={character} onSave={onSave} readOnly={readOnly} canRoll={canRoll} sessionId={sessionId} />
             </div>
             <div style={panel('Features')}>
               <FeaturesTab character={character} onSave={onSave} readOnly={readOnly} sessionId={sessionId} />

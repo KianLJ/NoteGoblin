@@ -96,6 +96,7 @@ const api: AppApi = {
     get: (campaignId) => ipcRenderer.invoke('battleMap:get', campaignId),
     save: (campaignId, map) => ipcRenderer.invoke('battleMap:save', campaignId, map),
     broadcast: (map, encounter) => ipcRenderer.invoke('battleMap:broadcast', map, encounter),
+    storeImages: (images) => ipcRenderer.invoke('battleMap:store-images', images),
     onPlayerMove: (callback) => {
       const listener = (_e: Electron.IpcRendererEvent, move: { combatantId: string; x: number; y: number }): void => callback(move)
       ipcRenderer.on('ws:battle-map-player-move', listener)
@@ -105,6 +106,12 @@ const api: AppApi = {
     fetchImage: (sessionId, imageId) => ipcRenderer.invoke('battleMap:fetch-image', sessionId, imageId),
     moveToken: (sessionId, combatantId, x, y) => ipcRenderer.invoke('battleMap:move-token', sessionId, combatantId, x, y),
     drag: (combatantId, x, y) => ipcRenderer.invoke('battleMap:drag', combatantId, x, y),
+    faceToken: (sessionId, combatantId, facing) => ipcRenderer.invoke('battleMap:face-token', sessionId, combatantId, facing),
+    onPlayerFace: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, face: { combatantId: string; facing: number }): void => callback(face)
+      ipcRenderer.on('ws:battle-map-player-face', listener)
+      return () => ipcRenderer.removeListener('ws:battle-map-player-face', listener)
+    },
     dragToken: (sessionId, combatantId, x, y) => ipcRenderer.invoke('battleMap:drag-token', sessionId, combatantId, x, y),
     onDrag: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, drag: { sessionId: string | null; combatantId: string; x: number | null; y: number | null }): void => callback(drag)

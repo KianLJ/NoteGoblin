@@ -34,6 +34,7 @@ import {
   broadcastActiveCampaignChanged,
   broadcastInitiative,
   broadcastBattleMap,
+  storeBattleImages,
   broadcastDiceRoll,
   broadcastMusic,
   broadcastMusicTrackData,
@@ -1499,6 +1500,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('battleMap:broadcast', (_event, map: BattleMap | null, encounter: InitiativeState): void => {
     if (getHostedSession()) broadcastBattleMap(map, encounter)
   })
+  // DM: map images, once each (broadcast maps then refer to them by id).
+  ipcMain.handle('battleMap:store-images', (_event, images: Array<{ imageId: string; src: string }>): void => {
+    if (Array.isArray(images)) storeBattleImages(images.filter((i) => i && typeof i.imageId === 'string' && typeof i.src === 'string'))
+  })
   // Player: the DM's current map and turn order, asked for when the Combat tab opens.
   ipcMain.handle(
     'battleMap:fetch',
@@ -1521,6 +1526,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // Player: their own token being dragged right now (no answer needed; the move itself comes after).
   ipcMain.handle('battleMap:drag-token', (_event, sessionId: string, combatantId: string, x: number | null, y: number | null): void => {
     if (!requireJoinedSession(sessionId)) void sendSessionRequest('battleMap.dragToken', { combatantId, x, y })
+  })
+  // Player: turns their own token (the DM's app checks it).
+  ipcMain.handle('battleMap:face-token', async (_event, sessionId: string, combatantId: string, facing: number): Promise<ApiResult<void>> => {
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest('battleMap.faceToken', { combatantId, facing })
   })
   // Player: moves their own token (the DM's app checks it).
   ipcMain.handle('battleMap:move-token', async (_event, sessionId: string, combatantId: string, x: number, y: number): Promise<ApiResult<void>> => {

@@ -30,6 +30,7 @@ export type RequestKind =
   | 'battleMap.image'
   | 'battleMap.moveToken'
   | 'battleMap.dragToken'
+  | 'battleMap.faceToken'
   | 'campaignPacks.list'
   | 'folders.list'
   | 'folders.create'

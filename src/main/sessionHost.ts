@@ -30,7 +30,7 @@ import type {
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
-import { canStand, hiddenCombatantIds, imageIdOf, isFogged, mapForPlayer, type BattleMap } from '@shared/battleMap'
+import { canStand, hiddenCombatantIds, IMAGE_REF, imageIdOf, isFogged, mapForPlayer, tokenCentre, type BattleMap } from '@shared/battleMap'
 import { canReach, visionActive } from '@shared/vision'
 import type { DiceRollLogEntry } from '@shared/dice'
 import type { LiveSceneState } from '@shared/sessionDeck'
@@ -250,9 +250,18 @@ function sendBattleImage(userIds: string[], image: string): void {
   }
 }
 
-/** The map images players may see (hidden ones stay on the DM's computer). */
+/** Map images the DM's app has sent, by imageIdOf — broadcast maps name them ("ref:<id>") rather than carry them each time. */
+const storedImages = new Map<string, string>()
+export function storeBattleImages(images: Array<{ imageId: string; src: string }>): void {
+  for (const i of images) storedImages.set(i.imageId, i.src)
+}
+
+/** The map images players may see (hidden ones stay on the DM's computer), as pictures. */
 function shownImages(map: BattleMap | undefined): string[] {
-  return (map?.images ?? []).filter((i) => !i.hidden).map((i) => i.src)
+  return (map?.images ?? [])
+    .filter((i) => !i.hidden)
+    .map((i) => (i.src.startsWith(IMAGE_REF) ? (storedImages.get(i.src.slice(IMAGE_REF.length)) ?? '') : i.src))
+    .filter(Boolean)
 }
 
 /** The DM's map changed (or the encounter it shows did): every player gets the new view, and any image they haven't had yet. */
@@ -653,6 +662,18 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       broadcastTokenDrag(combatantId, x, y, userId)
       return { reqId: frame.reqId, ok: true, data: undefined }
     }
+    // A player turning their own token (facing shown, not locked): handed to the DM's map.
+    case 'battleMap.faceToken': {
+      const combatantId = typeof p.combatantId === 'string' ? p.combatantId : ''
+      const facing = typeof p.facing === 'number' && Number.isFinite(p.facing) ? ((Math.round(p.facing) % 360) + 360) % 360 : NaN
+      const c = battle?.encounter.combatants.find((k) => k.id === combatantId)
+      const token = battle?.map.tokens[combatantId]
+      if (!battle || !c || !token || c.kind !== 'player' || c.userId !== userId) return { reqId: frame.reqId, ok: false, error: 'That isn’t your token.' }
+      if (token.locked) return { reqId: frame.reqId, ok: false, error: 'The DM has locked your token in place.' }
+      if (Number.isNaN(facing) || token.facing === undefined) return { reqId: frame.reqId, ok: false, error: 'Your token has no facing to turn.' }
+      if (dmWindow) dmWindow.webContents.send('ws:battle-map-player-face', { combatantId, facing })
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
     case 'battleMap.moveToken': {
       const combatantId = typeof p.combatantId === 'string' ? p.combatantId : ''
       const x = typeof p.x === 'number' ? Math.round(p.x) : NaN
@@ -663,7 +684,7 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (token.locked) return { reqId: frame.reqId, ok: false, error: 'The DM has locked your token in place.' }
       const moved = { ...token, x, y }
       if (!Number.isFinite(x) || !Number.isFinite(y) || !canStand(battle.map, moved, combatantId)) return { reqId: frame.reqId, ok: false, error: 'You can’t stand there.' }
-      if (isFogged(battle.map, { x: x + token.size / 2, y: y + token.size / 2 })) return { reqId: frame.reqId, ok: false, error: 'You can’t see that far.' }
+      if (isFogged(battle.map, tokenCentre({ ...token, x, y }))) return { reqId: frame.reqId, ok: false, error: 'You can’t see that far.' }
       if (!canReach(battle.map, token, { x, y })) return { reqId: frame.reqId, ok: false, error: 'A wall (or a closed door) is in the way.' }
       if (dmWindow) dmWindow.webContents.send('ws:battle-map-player-move', { combatantId, x, y })
       return { reqId: frame.reqId, ok: true, data: undefined }

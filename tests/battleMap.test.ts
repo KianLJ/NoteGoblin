@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canStand, emptyBattleMap, fogEverything, gridDistanceFt, isFogged, placeTokens, sizeInSquares, snapHalf, type FogShape } from '@shared/battleMap'
+import { canStand, emptyBattleMap, fogEverything, gridDistanceFt, isFogged, placeTokens, sizeInSquares, snapHalf, withPlacements, type FogShape } from '@shared/battleMap'
 import { emptyCombatant, emptyInitiativeState, nextTurnState, previousTurnState, withCombatantHp, type Combatant } from '@shared/encounter'
 
 const c = (id: string, kind: Combatant['kind'], extra: Partial<Combatant> = {}): Combatant => ({ id, name: id, kind, initiative: 10, maxHp: 10, currentHp: 10, ac: 12, ...emptyCombatant(), ...extra })
@@ -156,5 +156,66 @@ describe('an endless map', () => {
 
   it('lets tokens stand anywhere, even off the starting area', () => {
     expect(canStand(emptyBattleMap(), { x: -5, y: 200, size: 1 })).toBe(true)
+  })
+})
+
+describe('facing', () => {
+  it('is remembered with where a token stood, and comes back when the battle is loaded again', async () => {
+    const { withPlacements, placeTokens, normalizeFacing } = await import('@shared/battleMap')
+    const ship = c('ship-1', 'vehicle', { vehicleId: 'corvette' })
+    const placed = placeTokens(emptyBattleMap(), [ship], () => 2)
+    const turned = { ...placed, tokens: { ...placed.tokens, 'ship-1': { ...placed.tokens['ship-1'], facing: 135 } } }
+    const remembered = withPlacements(turned, [ship])
+    expect(remembered.placements['vehicle:corvette'].facing).toBe(135)
+    // Loaded again (a new combatant id): it faces the same way.
+    const again = placeTokens({ ...remembered, tokens: {} }, [{ ...ship, id: 'ship-2' }], () => 2)
+    expect(again.tokens['ship-2'].facing).toBe(135)
+    expect([normalizeFacing(-45), normalizeFacing(405), normalizeFacing(360)]).toEqual([315, 45, 0])
+  })
+})
+
+describe('token sizes', () => {
+  const ship = c('ship-1', 'vehicle', { vehicleId: 'dreadnought' })
+
+  it('reads a size inside longer text, Colossal biggest', () => {
+    expect(['Colossal', 'colossal (dreadnought)', 'Gargantuan', 'Huge', 'Large', 'Medium', '~5 km', undefined].map(sizeInSquares)).toEqual([6, 6, 4, 3, 2, 1, 1, 1])
+  })
+
+  it('grows a token once its size is known, even when it now overlaps something', () => {
+    const placed = placeTokens(emptyBattleMap(), [ship, c('pc', 'player')], () => 1)
+    const grown = placeTokens(placed, [ship, c('pc', 'player')], (x) => (x.id === 'ship-1' ? 6 : 1))
+    expect(grown.tokens['ship-1'].size).toBe(6)
+  })
+
+  it('keeps a size set by hand, and remembers it for next time', () => {
+    const placed = placeTokens(emptyBattleMap(), [ship], () => 6)
+    const sized = { ...placed, tokens: { 'ship-1': { ...placed.tokens['ship-1'], size: 10, sized: true } } }
+    expect(placeTokens(sized, [ship], () => 6).tokens['ship-1'].size).toBe(10)
+    const remembered = withPlacements(sized, [ship])
+    const again = placeTokens({ ...remembered, tokens: {} }, [{ ...ship, id: 'ship-2' }], () => 6)
+    expect(again.tokens['ship-2']).toMatchObject({ size: 10, sized: true })
+  })
+
+  it('places something bigger than the starting area', () => {
+    const placed = placeTokens({ ...emptyBattleMap(), rows: 8 }, [ship], () => 12)
+    expect(placed.tokens['ship-1'].size).toBe(12)
+  })
+})
+
+describe('long tokens', () => {
+  const ship = c('ship-1', 'vehicle', { vehicleId: 'dreadnought' })
+
+  it('covers its own width and height', () => {
+    const map = { ...emptyBattleMap(), tokens: { ship: { x: 0, y: 0, size: 2, h: 6, sized: true } } }
+    expect(canStand(map, { x: 0, y: 5, size: 1 })).toBe(false)
+    expect(canStand(map, { x: 2, y: 5, size: 1 })).toBe(true)
+  })
+
+  it('keeps and remembers a height set by hand', () => {
+    const placed = placeTokens(emptyBattleMap(), [ship], () => 6)
+    const long = { ...placed, tokens: { 'ship-1': { ...placed.tokens['ship-1'], size: 2, h: 8, sized: true } } }
+    expect(placeTokens(long, [ship], () => 6).tokens['ship-1']).toMatchObject({ size: 2, h: 8 })
+    const again = placeTokens({ ...withPlacements(long, [ship]), tokens: {} }, [{ ...ship, id: 'ship-2' }], () => 6)
+    expect(again.tokens['ship-2']).toMatchObject({ size: 2, h: 8, sized: true })
   })
 })

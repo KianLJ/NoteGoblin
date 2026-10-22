@@ -34,6 +34,7 @@ export function RollButton({ value, onRoll, supportsAdvantage = true, size = 'md
     <>
       <button
         type="button"
+        data-roll=""
         onClick={() => onRoll('normal')}
         onContextMenu={
           supportsAdvantage

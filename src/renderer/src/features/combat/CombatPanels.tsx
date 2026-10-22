@@ -18,7 +18,7 @@ import { SpellsTab } from '../player/characterSheetTabs/SpellsTab'
  * character) using one spends its uses and slots on the sheet; without, it's
  * for looking at.
  */
-export function CharacterTabs({ character, sessionId, onSave }: { character: CharacterSheet; sessionId: string | null; onSave?: (patch: Partial<CharacterSheetData>) => void }): JSX.Element {
+export function CharacterTabs({ character, sessionId, onSave, canRoll = !!onSave }: { character: CharacterSheet; sessionId: string | null; onSave?: (patch: Partial<CharacterSheetData>) => void; /** Its rolls work without editing (the DM rolling for a player). */ canRoll?: boolean }): JSX.Element {
   const { derived } = useMemo(() => deriveSheet(character), [character])
   const caster = character.spellcastingAbility !== null || derived.spellcasting.sources.length > 0 || character.spells.length > 0
   const [tab, setTab] = useState<'actions' | 'spells'>('actions')
@@ -37,11 +37,11 @@ export function CharacterTabs({ character, sessionId, onSave }: { character: Cha
       )}
       {/* Both stay mounted, so an edit waiting to save isn't lost by looking at the other. */}
       <div style={{ display: tab === 'actions' || !caster ? 'block' : 'none' }}>
-        <CombatTab character={character} onSave={save} readOnly={readOnly} sessionId={sessionId} actionsOnly compact />
+        <CombatTab character={character} onSave={save} readOnly={readOnly} canRoll={canRoll} sessionId={sessionId} actionsOnly compact />
       </div>
       {caster && (
         <div style={{ display: tab === 'spells' ? 'block' : 'none' }}>
-          <SpellsTab character={character} onSave={save} readOnly={readOnly} sessionId={sessionId} />
+          <SpellsTab character={character} onSave={save} readOnly={readOnly} canRoll={canRoll} sessionId={sessionId} />
         </div>
       )}
     </div>

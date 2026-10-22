@@ -16,9 +16,9 @@ const mod = (score: number): string => {
 }
 
 export function weaponLine(w: VehicleDef['weapons'][number], stations: VehicleDef['stations']): string {
-  const hit = w.saveDc !== undefined ? `DC ${w.saveDc} ${(w.saveAbility ?? 'dex').toUpperCase()} save` : w.attackBonus !== undefined ? `${w.attackBonus >= 0 ? '+' : ''}${w.attackBonus} to hit` : ''
+  const hit = w.saveDc !== undefined ? `DC ${w.saveDc} ${(w.saveAbility ?? 'dex').toUpperCase()} save` : w.attackBonus !== undefined ? `${w.attackBonus >= 0 ? '+' : ''}${w.attackBonus} to hit` : 'gunner’s bonus to hit'
   const station = w.station ? stations.find((s) => s.id === w.station)?.name : undefined
-  return [hit, w.range && `range ${w.range}`, w.damage && `${w.damage}${w.damageType ? ` ${w.damageType.toLowerCase()}` : ''}`, w.ammo !== undefined && `${w.ammo} shots`, station && `fired by the ${station}`].filter(Boolean).join(' · ')
+  return [hit, w.range && `range ${w.range}`, w.damage && `${w.damage}${w.damageType ? ` ${w.damageType.toLowerCase()}` : ''}`, w.ammo !== undefined && `${w.ammo} shots`, w.arcs?.length && `${w.arcs.join(' or ')} arc`, w.cooldown && (w.cooldown === 1 ? 'fires every other round' : `fires every ${w.cooldown + 1} rounds`), w.pierce && `ignores ${w.pierce} threshold`, station && `fired by the ${station}`].filter(Boolean).join(' · ')
 }
 
 export function VehicleCard({ vehicle }: { vehicle: VehicleDef }): JSX.Element {
@@ -49,7 +49,7 @@ export function VehicleCard({ vehicle }: { vehicle: VehicleDef }): JSX.Element {
       </div>
       <hr className="gb-statblock-rule" />
       {line('Armor Class', v.ac)}
-      {line('Hit Points', `${v.hp}${v.damageThreshold ? `; damage threshold ${v.damageThreshold}` : ''}`)}
+      {line('Hit Points', `${v.hp}${v.thresholds ? `; damage threshold bow ${v.thresholds.fore}, flank ${v.thresholds.flank}, stern ${v.thresholds.aft}` : v.damageThreshold ? `; damage threshold ${v.damageThreshold}` : ''}${v.scale ? ` (ship scale: ×${v.scale} against people)` : ''}`)}
       {line('Speed', v.speeds.map((s) => (s.mode === 'walk' ? s.value : `${s.mode} ${s.value}`)).join(', '))}
       {line('Crew', v.crew || undefined)}
       {line('Passengers', v.passengers || undefined)}

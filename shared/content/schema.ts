@@ -654,14 +654,23 @@ export const vehicleComponentSchema = z.object({
   /** Damage below this from one hit does nothing (0: none). */
   threshold: z.number().int().min(0).default(0),
   /** What happens as it's damaged or destroyed ("At 0 HP the ship can't move"). */
-  notes: z.string().default('')
+  notes: z.string().default(''),
+  /** Its number on the vehicle's critical-hit table (rolled on a die as big as the highest number): a critical hit knocks it out. */
+  crit: z.number().int().min(1).optional()
 })
+/** Which way from a vehicle's bow: ahead, behind, its left, its right. */
+export const vehicleArcSchema = z.enum(['fore', 'aft', 'port', 'starboard'])
+export type VehicleArc = z.infer<typeof vehicleArcSchema>
 export const vehicleStationSchema = z.object({
   id: vehicleIdSchema,
   name: nameSchema,
   /** How many crew it takes. */
   count: z.number().int().min(1).default(1),
-  notes: z.string().default('')
+  notes: z.string().default(''),
+  /** What its crew rolls with: a character's modifier for this plus their proficiency bonus (an NPC rolls their tier bonus). */
+  ability: abilitySchema.optional(),
+  /** What its crew can do, each a button (a roll with the crew's bonus, unless `roll` is false). */
+  actions: z.array(z.object({ name: nameSchema, desc: z.string().default(''), roll: z.boolean().default(true) })).default([])
 })
 export const vehicleWeaponSchema = z.object({
   id: vehicleIdSchema,
@@ -678,7 +687,15 @@ export const vehicleWeaponSchema = z.object({
   range: z.string().default(''),
   /** Shots before it needs reloading or resupply (none: unlimited). */
   ammo: z.number().int().min(1).optional(),
-  notes: z.string().default('')
+  notes: z.string().default(''),
+  /** The arcs it can fire into (left out: any). */
+  arcs: z.array(vehicleArcSchema).optional(),
+  /** How far it reaches on the battle map, in squares (left out: read from `range` — "20 squares", "120 ft."). */
+  reach: z.number().min(0).optional(),
+  /** Rounds it has to wait after firing (1: every other round). */
+  cooldown: z.number().int().min(0).optional(),
+  /** Points of the target's damage threshold it ignores. */
+  pierce: z.number().int().min(0).optional()
 })
 export const vehicleResourceSchema = z.object({
   id: vehicleIdSchema,
@@ -697,6 +714,10 @@ export const vehicleDefSchema = z.object({
   ac: z.number().int().default(10),
   hp: z.number().int().min(1).default(10),
   damageThreshold: z.number().int().min(0).default(0),
+  /** A different damage threshold depending on which side is hit (where it faces on the battle map); `damageThreshold` is used when its side isn't known. */
+  thresholds: z.object({ fore: z.number().int().min(0), flank: z.number().int().min(0), aft: z.number().int().min(0) }).optional(),
+  /** Ship scale: 1 point of its damage is this many to a person (and a person's damage to it is divided by this). Left out: the same as a person's. */
+  scale: z.number().int().min(1).optional(),
   /** A creature's scores, for a mount or beast of burden; left out for a machine. */
   abilities: z.object({ str: z.number().int(), dex: z.number().int(), con: z.number().int(), int: z.number().int(), wis: z.number().int(), cha: z.number().int() }).optional(),
   crew: z.number().int().min(0).default(0),

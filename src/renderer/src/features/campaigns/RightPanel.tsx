@@ -4,7 +4,7 @@ import { InitiativeTracker } from './InitiativeTracker'
 import { CalendarPanel } from './CalendarPanel'
 import { SessionDeckPanel } from './SessionDeckPanel'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon, VehicleIcon } from './panelIcons'
+import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from './panelIcons'
 import { VehiclesPanel } from '../vehicles/VehiclesPanel'
 import { useVehicles } from '../vehicles/useVehicles'
 import { switchToEncounterBattle } from '../combat/encounterStore'
@@ -15,6 +15,7 @@ import { DiceRollToast } from '../dice/DiceRollToast'
 import { loadRightPanelTab, saveRightPanelTab } from './rightPanelTab'
 import type { CharacterSheet, Note } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
+import { TestPlayersMenu } from '../combat/TestPlayersMenu'
 
 
 
@@ -24,6 +25,8 @@ interface RightPanelProps {
   /** null before the DM has any campaign open — the panel still renders (Dice/Initiative work standalone; Players just shows an empty state until one exists). */
   campaignId: string | null
   playerCharacters: Map<string, CharacterSheet>
+  /** The connected players' characters and the DM's test players' (see useTestPlayerSheets): who can join a fight or crew a vehicle. */
+  partyCharacters?: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
   onSelectMonster: (monster: BestiaryMonster) => void
   /** For CalendarPanel's event editor, and SessionDeckPanel's scene title lookups — lets either pair with/open an existing note. */
@@ -40,6 +43,7 @@ export function RightPanel({
   sessionId,
   campaignId,
   playerCharacters,
+  partyCharacters = playerCharacters,
   onSelectPlayer,
   onSelectMonster,
   notes,
@@ -88,7 +92,6 @@ export function RightPanel({
           </div>
           <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
           <TabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
-          <TabButton icon={<VehicleIcon />} label="Vehicles" active={tab === 'vehicles'} onClick={() => setTab('vehicles')} />
           <TabButton icon={<SessionIcon />} label="Sessions" active={tab === 'sessions'} onClick={() => setTab('sessions')} />
         </div>
 
@@ -97,12 +100,16 @@ export function RightPanel({
               in particular owns its own live combat state locally, which used to reset to empty every time you
               switched away from this tab and back, since unmounting threw the whole thing away. */}
           <div style={{ display: tab === 'players' ? 'block' : 'none', height: '100%', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: 'var(--space-2) var(--space-3) 0' }}>
+              <span style={{ flex: 1, fontSize: 11, color: 'var(--text-muted)' }}>Stand-ins for testing, as party members:</span>
+              <TestPlayersMenu />
+            </div>
             <ConnectedPlayersList sessionId={sessionId} campaignId={campaignId} playerCharacters={playerCharacters} onSelectPlayer={onSelectPlayer} />
           </div>
           <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
             <InitiativeTracker
               sessionId={sessionId}
-              playerCharacters={playerCharacters}
+              playerCharacters={partyCharacters}
               onSelectMonster={onSelectMonster}
               pendingEncounterMonsters={pendingEncounterMonsters}
               onPendingEncounterConsumed={() => setPendingEncounterMonsters(null)}
@@ -110,10 +117,19 @@ export function RightPanel({
               onPendingVehicleConsumed={() => setPendingVehicle(null)}
               vehicles={vehicles.doc.vehicles}
               onVehicleHp={(id, hp) => void vehicles.save({ vehicles: vehicles.doc.vehicles.map((v) => (v.id === id ? { ...v, hp } : v)) })}
-              onSelectVehicle={(id) => {
-                setFocusVehicle({ id })
-                setTab('vehicles')
-              }}
+              onSelectVehicle={(id) => setFocusVehicle({ id })}
+              vehiclesView={
+                // Read and saved locally like the calendar; rolls go to the hosted session.
+                <VehiclesPanel
+                  sessionId={null}
+                  rollSessionId={sessionId}
+                  campaignId={campaignId}
+                  readOnly={false}
+                  playerCharacters={partyCharacters}
+                  focus={focusVehicle}
+                  onAddToInitiative={setPendingVehicle}
+                />
+              }
             />
           </div>
           <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
@@ -128,21 +144,6 @@ export function RightPanel({
                 still broadcast to connected players regardless — see registerIpc.ts's calendar:save
                 handler, which already checks getHostedSession() server-side. */}
             <CalendarPanel sessionId={null} campaignId={campaignId} readOnly={false} notes={notes} />
-          </div>
-          <div style={{ display: tab === 'vehicles' ? 'block' : 'none', height: '100%' }}>
-            {/* Read and saved locally like the calendar; rolls go to the hosted session. */}
-            <VehiclesPanel
-              sessionId={null}
-              rollSessionId={sessionId}
-              campaignId={campaignId}
-              readOnly={false}
-              playerCharacters={playerCharacters}
-              focus={focusVehicle}
-              onAddToInitiative={(v) => {
-                setPendingVehicle(v)
-                setTab('initiative')
-              }}
-            />
           </div>
           <div style={{ display: tab === 'sessions' ? 'block' : 'none', height: '100%' }}>
             {/* Same reasoning as Calendar above: always the local/direct path, never the hosted

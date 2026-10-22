@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon, VehicleIcon } from '../campaigns/panelIcons'
+import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from '../campaigns/panelIcons'
 import { VehiclesPanel } from '../vehicles/VehiclesPanel'
 import { CalendarPanel } from '../campaigns/CalendarPanel'
 import { SessionDeckPanel } from '../campaigns/SessionDeckPanel'
@@ -51,6 +51,7 @@ export function PartySidebar({
     saveRightPanelTab(next)
   }
   const diceToast = useDiceRollToast(tab === 'dice')
+  const [initView, setInitView] = useState<'order' | 'vehicles'>('order')
 
   useEffect(() => {
     if (!sessionId || !campaignId) {
@@ -95,24 +96,34 @@ export function PartySidebar({
                 </div>
                 <PartyTabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
                 <PartyTabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
-                <PartyTabButton icon={<VehicleIcon />} label="Vehicles" active={tab === 'vehicles'} onClick={() => setTab('vehicles')} />
                 <PartyTabButton icon={<SessionIcon />} label="Sessions" active={tab === 'sessions'} onClick={() => setTab('sessions')} />
               </div>
 
               {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — both PlayerInitiativeView
                   and DiceTray only accumulate their state from live pushes (no fetch-on-mount), so unmounting on every
                   tab switch used to throw away whatever they'd seen until the next push arrived. */}
-              <div style={{ display: tab === 'initiative' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                <PlayerInitiativeView sessionId={sessionId} />
+              <div style={{ display: tab === 'initiative' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                {/* The turn order, and the party's vehicles beside it. */}
+                <div style={{ display: 'flex', gap: 4, padding: 'var(--space-2)', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+                  <button type="button" onClick={() => setInitView('order')} style={innerTab(initView === 'order')}>
+                    Turn order
+                  </button>
+                  <button type="button" onClick={() => setInitView('vehicles')} style={innerTab(initView === 'vehicles')}>
+                    Vehicles
+                  </button>
+                </div>
+                <div style={{ display: initView === 'order' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <PlayerInitiativeView sessionId={sessionId} />
+                </div>
+                <div style={{ display: initView === 'vehicles' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
+                  <VehiclesPanel sessionId={sessionId} rollSessionId={sessionId} campaignId={campaignId} readOnly myUserId={myUserId} />
+                </div>
               </div>
               <div style={{ display: tab === 'dice' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
                 <DiceTray sessionId={sessionId} />
               </div>
               <div style={{ display: tab === 'calendar' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <CalendarPanel sessionId={sessionId} campaignId={campaignId} readOnly />
-              </div>
-              <div style={{ display: tab === 'vehicles' ? 'block' : 'none', flex: 1, minHeight: 0 }}>
-                <VehiclesPanel sessionId={sessionId} rollSessionId={sessionId} campaignId={campaignId} readOnly myUserId={myUserId} />
               </div>
               <div style={{ display: tab === 'sessions' ? 'block' : 'none', flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <SessionDeckPanel
@@ -260,4 +271,9 @@ function PartyTabButton({
       {icon}
     </button>
   )
+}
+
+/** A tab inside a tab (the Initiative tab's turn order and vehicles). */
+function innerTab(active: boolean): CSSProperties {
+  return { flex: 1, padding: '4px 0', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: active ? 'var(--accent-subtle)' : 'transparent', color: active ? 'var(--accent-hover)' : 'var(--text-secondary)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }
 }

@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { AdvantageMode, DiceGroup } from '@shared/dice'
-import { queuePendingCheck, queuePendingDamage } from './rollAnimationStore'
+import { queuePendingCheck, queuePendingDamage, type PendingCheckRoll } from './rollAnimationStore'
+
+export interface CheckOptions {
+  advantage?: AdvantageMode
+  dc?: number | null
+  critOn?: number
+  onRolled?: PendingCheckRoll['onRolled']
+}
 
 /**
  * The hook every character sheet roll button uses — resolves "who am I" once
@@ -23,7 +30,7 @@ export function useSheetRoller(
 ): {
   myId: string
   myName: string
-  rollCheck: (label: string, modifier: number, options?: { advantage?: AdvantageMode; dc?: number | null; critOn?: number }) => void
+  rollCheck: (label: string, modifier: number, options?: CheckOptions) => void
   rollDamage: (groups: DiceGroup[], modifier: number, label?: string, onRolled?: (total: number) => void) => void
 } {
   const [myId, setMyId] = useState('me')
@@ -40,13 +47,14 @@ export function useSheetRoller(
 
   const rollerName = characterName || myName
 
-  function rollCheck(label: string, modifier: number, options?: { advantage?: AdvantageMode; dc?: number | null; critOn?: number }): void {
+  function rollCheck(label: string, modifier: number, options?: CheckOptions): void {
     queuePendingCheck({
       label,
       modifier,
       advantage: options?.advantage ?? 'normal',
       dc: options?.dc ?? null,
       critOn: options?.critOn,
+      onRolled: options?.onRolled,
       sessionId,
       rollerId: myId,
       rollerName

@@ -52,6 +52,8 @@ interface InitiativeTrackerProps {
   onVehicleHp?: (vehicleId: string, hp: number) => void
   /** Clicking a vehicle combatant's name shows it in the Vehicles tab. */
   onSelectVehicle?: (vehicleId: string) => void
+  /** The campaign's vehicles, shown in the tab beside the tracker (a vehicle clicked in the order opens there). */
+  vehiclesView?: ReactNode
 }
 
 const STATUS_EFFECT_PRESETS = [
@@ -174,11 +176,12 @@ export function InitiativeTracker({
   onPendingVehicleConsumed,
   vehicles,
   onVehicleHp,
-  onSelectVehicle
+  onSelectVehicle,
+  vehiclesView
 }: InitiativeTrackerProps): JSX.Element {
   // Shared with the Combat tab (features/combat/encounterStore.ts), so both edit the same fight.
   const [state, setState] = useEncounter()
-  const [view, setView] = useState<'tracker' | 'build'>('tracker')
+  const [view, setView] = useState<'tracker' | 'build' | 'vehicles'>('tracker')
   const [monsterQuery, setMonsterQuery] = useState('')
   const [savedEncounters, setSavedEncounters] = useState(() => loadSavedEncounters())
   const [encounterDraft, setEncounterDraft] = useState<Record<string, number>>({})
@@ -525,9 +528,14 @@ export function InitiativeTracker({
         <button type="button" onClick={() => setView('tracker')} style={innerTabStyle(view === 'tracker')}>
           Tracker
         </button>
-        <button type="button" onClick={() => setView('build')} style={innerTabStyle(view === 'build')}>
-          Build Encounter
+        <button type="button" onClick={() => setView('build')} style={innerTabStyle(view === 'build')} title="Build an encounter">
+          Build
         </button>
+        {vehiclesView && (
+          <button type="button" onClick={() => setView('vehicles')} style={innerTabStyle(view === 'vehicles')}>
+            Vehicles
+          </button>
+        )}
       </div>
 
       {view === 'tracker' ? (
@@ -684,13 +692,16 @@ export function InitiativeTracker({
                         type="button"
                         onClick={() => {
                           if (c.kind === 'vehicle') {
-                            if (c.vehicleId) onSelectVehicle?.(c.vehicleId)
+                            if (c.vehicleId) {
+                              onSelectVehicle?.(c.vehicleId)
+                              if (vehiclesView) setView('vehicles')
+                            }
                             return
                           }
                           const monster = allMonstersForQuickAdd.find((m) => m.index === c.monsterIndex)
                           if (monster) onSelectMonster(monster)
                         }}
-                        title={c.kind === 'vehicle' ? 'Open in the Vehicles tab' : 'View statblock'}
+                        title={c.kind === 'vehicle' ? 'Open it under Vehicles' : 'View statblock'}
                         style={{
                           display: 'block',
                           width: '100%',
@@ -793,6 +804,8 @@ export function InitiativeTracker({
             </div>
           ))}
         </div>
+      ) : view === 'vehicles' ? (
+        <div style={{ flex: 1, minHeight: 0 }}>{vehiclesView}</div>
       ) : (
         <EncounterBuilder
           playerCharacters={playerCharacters}

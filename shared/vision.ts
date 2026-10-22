@@ -4,7 +4,7 @@
 // throughout (a square's centre is x + 0.5). Pure math, shared by the DM's
 // app (what to remember as explored), the host (what a player may be sent)
 // and the player's map (drawing it).
-import { mapBounds, type BattleMap, type Bounds, type MapToken, type Pt } from './battleMap'
+import { mapBounds, tokenCentre, tokenH, tokenW, type BattleMap, type Bounds, type MapToken, type Pt } from './battleMap'
 import type { Combatant } from './encounter'
 
 export interface Seg {
@@ -108,8 +108,8 @@ function wallThrough(t: MapToken, walls: Seg[]): boolean {
   const m = 0.05
   const x0 = t.x + m
   const y0 = t.y + m
-  const x1 = t.x + t.size - m
-  const y1 = t.y + t.size - m
+  const x1 = t.x + tokenW(t) - m
+  const y1 = t.y + tokenH(t) - m
   const inside = (p: Pt): boolean => p.x > x0 && p.x < x1 && p.y > y0 && p.y < y1
   const edges: Seg[] = [
     { a: { x: x0, y: y0 }, b: { x: x1, y: y0 } },
@@ -129,14 +129,16 @@ function wallThrough(t: MapToken, walls: Seg[]): boolean {
 export function canReach(map: BattleMap, from: MapToken, to: Pt): boolean {
   const walls = blockingWalls(map, 'move')
   if (walls.length === 0) return true
-  const size = from.size
-  const centre = (x: number, y: number): Pt => ({ x: x + size / 2, y: y + size / 2 })
+  const size = tokenW(from)
+  const h = tokenH(from)
+  const centre = (x: number, y: number): Pt => ({ x: x + size / 2, y: y + h / 2 })
   // The way round has to stay near the map (past its walls, anywhere's reachable anyway).
   const mb = mapBounds(map, 6)
-  const b = { x0: Math.min(mb.x0, from.x, to.x) - 1, y0: Math.min(mb.y0, from.y, to.y) - 1, x1: Math.max(mb.x1, from.x + size, to.x + size) + 1, y1: Math.max(mb.y1, from.y + size, to.y + size) + 1 }
-  const fits = (x: number, y: number): boolean => x >= b.x0 && y >= b.y0 && x + size <= b.x1 && y + size <= b.y1 && (size === 1 || !wallThrough({ x, y, size }, walls))
+  const b = { x0: Math.min(mb.x0, from.x, to.x) - 1, y0: Math.min(mb.y0, from.y, to.y) - 1, x1: Math.max(mb.x1, from.x + size, to.x + size) + 1, y1: Math.max(mb.y1, from.y + h, to.y + h) + 1 }
+  const small = size === 1 && h === 1
+  const fits = (x: number, y: number): boolean => x >= b.x0 && y >= b.y0 && x + size <= b.x1 && y + h <= b.y1 && (small || !wallThrough({ x, y, size, h }, walls))
   if (!fits(to.x, to.y)) return false
-  if (!moveBlocked(centre(from.x, from.y), centre(to.x, to.y), walls) && size === 1) return true
+  if (!moveBlocked(centre(from.x, from.y), centre(to.x, to.y), walls) && small) return true
   const width = b.x1 - b.x0
   const key = (x: number, y: number): number => (y - b.y0) * width + (x - b.x0)
   const seen = new Uint8Array(width * (b.y1 - b.y0))
@@ -263,7 +265,7 @@ export function lightsOf(map: Pick<BattleMap, 'lights' | 'tokens'>, skip: Readon
   const placed = map.lights.filter((l) => !l.off).map((l) => ({ x: l.x, y: l.y, bright: l.bright, dim: l.dim }))
   const carried = Object.entries(map.tokens)
     .filter(([id, t]) => t.light && !skip.has(id))
-    .map(([id, t]) => ({ x: t.x + t.size / 2, y: t.y + t.size / 2, bright: t.light!.bright, dim: t.light!.dim, id }))
+    .map(([id, t]) => ({ ...tokenCentre(t), bright: t.light!.bright, dim: t.light!.dim, id }))
   return [...placed, ...carried]
 }
 
@@ -303,7 +305,7 @@ export function visibleCells(map: BattleMap, sources: VisionSource[], lights: Li
 
 /** Whether any square a token covers (even partly, mid-drag) is in the region. */
 export function tokenSeen(t: MapToken, r: Region): boolean {
-  for (let x = Math.floor(t.x); x < Math.ceil(t.x + t.size); x++) for (let y = Math.floor(t.y); y < Math.ceil(t.y + t.size); y++) if (inRegion(r, x, y)) return true
+  for (let x = Math.floor(t.x); x < Math.ceil(t.x + tokenW(t)); x++) for (let y = Math.floor(t.y); y < Math.ceil(t.y + tokenH(t)); y++) if (inRegion(r, x, y)) return true
   return false
 }
 
@@ -320,7 +322,7 @@ export function viewerSources(map: Pick<BattleMap, 'tokens' | 'sharedVision'>, c
     .filter((c) => (shared ? isParty(c) : c.kind === 'player' && c.userId === userId) && map.tokens[c.id])
     .map((c) => {
       const t = map.tokens[c.id]
-      return { x: t.x + t.size / 2, y: t.y + t.size / 2, darkvision: c.darkvision ?? 0, id: c.id }
+      return { ...tokenCentre(t), darkvision: c.darkvision ?? 0, id: c.id }
     })
 }
 

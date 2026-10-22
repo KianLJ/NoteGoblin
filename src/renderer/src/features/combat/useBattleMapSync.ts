@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { emptyBattleLibrary, hiddenCombatantIds, isTestUser, placeTokens, sizeInSquares, slotOf, testUserId, withPlacements } from '@shared/battleMap'
+import { turnToken, IMAGE_REF, imageIdOf, emptyBattleLibrary, hiddenCombatantIds, isTestUser, placeTokens, sizeInSquares, slotOf, testUserId, withPlacements } from '@shared/battleMap'
 import { addExplored, lightsOf, viewerSources, visibleCells, visionActive } from '@shared/vision'
 import { emptyCombatant, type Combatant } from '@shared/encounter'
 import { useAllMonsters } from '../../data/useAllMonsters'
@@ -117,11 +117,42 @@ export function useBattleMapSync(campaignId: string | null, hostedSessionId: str
   }, [map, library, campaignId])
 
   // While hosting, players see every change (batched briefly so a drag doesn't flood the table).
+  // Each map image goes to the host once; after that the map only names it, so a token moving doesn't resend every picture.
+  const sentImages = useRef(new Set<string>())
+  const imageIds = useRef(new Map<string, { src: string; imageId: string }>())
+  useEffect(() => {
+    sentImages.current = new Set()
+  }, [hostedSessionId])
   useEffect(() => {
     if (!hostedSessionId) return
-    const timer = setTimeout(() => void window.goblin.battleMap.broadcast(map, encounter), 120)
+    const timer = setTimeout(() => {
+      const fresh: Array<{ imageId: string; src: string }> = []
+      const images = map.images.map((i) => {
+        let known = imageIds.current.get(i.id)
+        if (!known || known.src !== i.src) {
+          known = { src: i.src, imageId: imageIdOf(i.src) }
+          imageIds.current.set(i.id, known)
+        }
+        if (!sentImages.current.has(known.imageId)) {
+          sentImages.current.add(known.imageId)
+          fresh.push({ imageId: known.imageId, src: i.src })
+        }
+        return { ...i, src: IMAGE_REF + known.imageId }
+      })
+      if (fresh.length) void window.goblin.battleMap.storeImages(fresh)
+      void window.goblin.battleMap.broadcast({ ...map, images }, encounter)
+    }, 120)
     return () => clearTimeout(timer)
   }, [map, encounter, hostedSessionId])
+
+  // A player turned their own token (the host already checked it's theirs).
+  useEffect(
+    () =>
+      window.goblin.battleMap.onPlayerFace(({ combatantId, facing }) =>
+        setBattleMap((m) => (m.tokens[combatantId] ? { ...m, tokens: { ...m.tokens, [combatantId]: turnToken(m.tokens[combatantId], facing) } } : m), { record: false })
+      ),
+    []
+  )
 
   // A player moved their own token (the host already checked it's theirs and allowed).
   useEffect(

@@ -47,6 +47,8 @@ export interface SheetState {
   patch: (fields: Partial<SheetDraft>) => void
   onSave: (patch: Partial<CharacterSheetData>) => void
   readOnly: boolean
+  /** Its rolls work (even read-only, for the DM rolling for a player's character). */
+  canRoll: boolean
   sessionId: string | null
   derivedSheet: DerivedSheet
   maxHp: number
@@ -74,7 +76,7 @@ function resetAllSlots(slots: Record<number, { total: number; used: number }>): 
 export function useSheetState(
   character: CharacterSheet,
   onSave: (patch: Partial<CharacterSheetData>) => void,
-  options: { readOnly?: boolean; sessionId?: string | null; onLevelUp?: (className: string, fromLevel: number, toLevel: number) => void }
+  options: { readOnly?: boolean; canRoll?: boolean; sessionId?: string | null; onLevelUp?: (className: string, fromLevel: number, toLevel: number) => void }
 ): SheetState {
   const readOnly = !!options.readOnly
   const [draft, setDraft] = useAutosaveDraft<SheetDraft>(
@@ -204,6 +206,7 @@ export function useSheetState(
     patch,
     onSave,
     readOnly,
+    canRoll: options.canRoll ?? !readOnly,
     sessionId: options.sessionId ?? null,
     derivedSheet,
     maxHp,
