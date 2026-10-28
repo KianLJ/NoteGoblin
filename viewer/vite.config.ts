@@ -20,9 +20,13 @@ export default defineConfig({
       { find: '@shared', replacement: here('../shared') },
       { find: '@renderer', replacement: here('../src/renderer/src') },
       // The real sfxLibrary eagerly bundles every soundboard MP3 (hundreds of
-      // MB) — markdown.ts only uses it to recognise `oneshot:` cue buttons,
-      // which a read-only phone view has no way to play anyway.
-      { find: /^\.\/data\/sfxLibrary$/, replacement: here('./src/stubs/sfxLibrary.ts') }
+      // MB); the viewer's keeps only the two cues the roll popup plays. The
+      // dice log and Sound Board engine broadcast to a session over the
+      // desktop's IPC — the viewer's versions roll and play locally only.
+      // RollAnimationOverlay.tsx itself is used unchanged.
+      { find: /^.*\/data\/sfxLibrary$/, replacement: here('./src/stubs/sfxLibrary.ts') },
+      { find: /^.*\/audio\/sfxBoardEngine$/, replacement: here('./src/stubs/sfxBoardEngine.ts') },
+      { find: /^\.\/diceLogStore$/, replacement: here('./src/stubs/diceLogStore.ts') }
     ]
   },
   // `npm run viewer:dev` talks to the real relay (or NOTEGOBLIN_RELAY_URL, e.g.

@@ -38,4 +38,13 @@ describe('buildCloudCharacter', () => {
     expect(cloud.derived.skills.find((s) => s.name === 'Medicine')).toMatchObject({ bonus: 9, proficiency: 'expertise' })
     expect(cloud.derived.saves.wis).toMatchObject({ bonus: 6, proficiency: 'proficient' })
   })
+
+  it('carries what the viewer needs to roll exactly like the desktop sheet', () => {
+    const sheet = cleric()
+    const cloud = buildCloudCharacter(sheet, deriveSheet(sheet).derived)
+    expect(cloud.derived.critThreshold).toBe(20)
+    const unarmed = cloud.derived.attacks.find((a) => a.name === 'Unarmed Strike')
+    expect(unarmed?.damageDice).toEqual({ dice: [], flat: 3 })
+    expect(cloud.derived.checkModes).toBeDefined()
+  })
 })

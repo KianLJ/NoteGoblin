@@ -693,3 +693,161 @@ details.v-entry[open] > summary .v-entry-title::after {
     grid-template-columns: repeat(6, 1fr);
   }
 }
+
+/* --- Rolling ---------------------------------------------------------
+   Anything tappable to roll looks like the desktop sheet's RollButton: an
+   accent-tinted pill. Taps open the shared roll popup (RollAnimationOverlay). */
+
+.v-roll {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+.v-roll:active {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.v-entry-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.v-adv-tag {
+  display: inline-block;
+  margin-left: 4px;
+  width: 14px;
+  height: 14px;
+  line-height: 14px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 50%;
+  color: #fff;
+  vertical-align: middle;
+}
+
+.v-adv-tag--advantage {
+  background: var(--success);
+}
+
+.v-adv-tag--disadvantage {
+  background: var(--danger);
+}
+
+/* Stats, ability cards, saves and skill rows double as roll buttons — same
+   look as before, just tappable. */
+button.v-stat,
+.v-ability-check,
+.v-ability-save,
+button.v-skill {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+button.v-stat:active,
+.v-ability:active,
+button.v-skill:active {
+  background: var(--bg-sunken);
+}
+
+.v-ability {
+  padding: 0;
+  overflow: hidden;
+}
+
+.v-ability-check {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2) var(--space-1) var(--space-1);
+  background: none;
+  border: none;
+}
+
+.v-ability-save {
+  width: 100%;
+  margin: 0;
+  padding: var(--space-1) 0 var(--space-2);
+  background: none;
+  border: none;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+button.v-skill {
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+button.v-skill:first-child {
+  border-top: none;
+}
+
+.v-skill-bonus {
+  color: var(--accent-hover);
+}
+
+.v-spell-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.v-spell-num {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.v-granted {
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.v-cast-level {
+  padding: 2px 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+/* The roll popup is sized for a desktop window (a 260px die, 420px for an
+   advantage/disadvantage pair) — scaled down to fit a phone. */
+@media (max-width: 460px) {
+  .gb-roll-backdrop-in > * {
+    zoom: 0.84;
+  }
+}
+
+@media (max-width: 380px) {
+  .gb-roll-backdrop-in > * {
+    zoom: 0.76;
+  }
+}

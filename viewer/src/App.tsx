@@ -8,6 +8,7 @@ import { HomeView } from './views/HomeView'
 import { CampaignView } from './views/CampaignView'
 import { NoteView } from './views/NoteView'
 import { CharacterView } from './views/CharacterView'
+import { RollAnimationOverlay } from '@renderer/features/dice/RollAnimationOverlay'
 
 export function App(): JSX.Element {
   const [signedIn, setSignedIn] = useState(isSignedIn)
@@ -74,6 +75,7 @@ export function App(): JSX.Element {
         {route.view === 'note' && <NoteView campaignId={route.campaignId} noteId={route.noteId} setTitle={setTitle} />}
         {route.view === 'character' && <CharacterView characterId={route.characterId} setTitle={setTitle} />}
       </main>
+      <RollAnimationOverlay />
     </div>
   )
 }

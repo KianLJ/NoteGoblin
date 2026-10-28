@@ -1,9 +1,11 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ABILITIES, formatModifier } from '@shared/dnd5e'
 import type { CloudCharacter } from '@shared/cloudCharacter'
+import type { KnownSpell } from '@shared/content/sheet'
 import { getCharacter } from '../api'
 import { useLoad } from '../data'
 import { Status } from './Status'
+import { AdvantageTag, RollChip, damageRoll, rollCheck, rollDamage } from '../roll'
 
 const PROFICIENCY_MARK: Record<string, string> = { half: '½', proficient: '●', expertise: '◆' }
 const PROFICIENCY_LABEL = { armor: 'Armor', weapon: 'Weapons', tool: 'Tools', language: 'Languages' } as const
@@ -24,13 +26,84 @@ function Section({ title, children, open = false }: { title: string; children: R
   )
 }
 
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }): JSX.Element {
-  return (
-    <div className="v-stat">
+function Stat({ label, value, sub, onRoll }: { label: string; value: ReactNode; sub?: ReactNode; onRoll?: () => void }): JSX.Element {
+  const body = (
+    <>
       <span className="v-stat-label">{label}</span>
       <span className="v-stat-value">{value}</span>
       {sub && <span className="v-stat-sub">{sub}</span>}
-    </div>
+    </>
+  )
+  return onRoll ? (
+    <button type="button" className="v-stat v-stat--roll" onClick={onRoll} title={`Roll ${label.toLowerCase()}`}>
+      {body}
+    </button>
+  ) : (
+    <div className="v-stat">{body}</div>
+  )
+}
+
+/**
+ * One known spell, as the desktop Spells tab card rolls it: its damage or
+ * healing at the slot level you'd cast it with — the lowest one with slots
+ * by default, any higher one you pick to upcast.
+ */
+function SpellEntry({ spell, numbersByLevel, roller }: { spell: KnownSpell; numbersByLevel?: Record<number, NonNullable<CloudCharacter['derived']['spellNumbers']>[string][number]>; roller: string }): JSX.Element {
+  const castLevels = Object.keys(numbersByLevel ?? {})
+    .map(Number)
+    .sort((a, b) => a - b)
+  const [castAt, setCastAt] = useState<number | undefined>(undefined)
+  const level = castAt !== undefined && castLevels.includes(castAt) ? castAt : castLevels[0]
+  const numbers = level !== undefined ? numbersByLevel?.[level] : undefined
+  const dice = numbers?.damage ?? numbers?.healing
+  const roll = dice ? damageRoll(dice) : null
+  const rollLabel = `${spell.name} ${numbers?.damage ? 'Damage' : 'Healing'}`
+
+  const meta = (
+    <>
+      {[spell.castingTime, spell.range, spell.concentration && 'Concentration', spell.ritual && 'Ritual'].filter(Boolean).join(' · ')}
+      {numbers?.attackBonus !== undefined && <span className="v-spell-num">Atk {formatModifier(numbers.attackBonus)}</span>}
+      {numbers?.saveDc !== undefined && (
+        <span className="v-spell-num">
+          {(numbers.saveAbility ?? '').toUpperCase()} DC {numbers.saveDc}
+        </span>
+      )}
+      {dice &&
+        (roll ? (
+          <RollChip onRoll={() => rollDamage(roller, [roll.group], roll.flat, rollLabel)}>
+            {numbers?.damage ? `${dice}${numbers.damageType ? ` ${numbers.damageType.toLowerCase()}` : ''}` : `Heals ${dice}`}
+          </RollChip>
+        ) : (
+          <span className="v-spell-num">{numbers?.damage ? dice : `Heals ${dice}`}</span>
+        ))}
+      {castLevels.length > 1 && (
+        <select
+          className="v-cast-level"
+          value={level}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => setCastAt(Number(e.target.value))}
+          aria-label={`Cast ${spell.name} at level`}
+        >
+          {castLevels.map((l) => (
+            <option key={l} value={l}>
+              Lvl {l}
+            </option>
+          ))}
+        </select>
+      )}
+    </>
+  )
+  return (
+    <Entry
+      title={
+        <>
+          {spell.name}
+          {spell.grantedBy && <span className="v-muted v-granted"> · {spell.grantedBy}</span>}
+        </>
+      }
+      meta={meta}
+      description={[spell.description, spell.higherLevel && `At higher levels: ${spell.higherLevel}`].filter(Boolean).join('\n\n')}
+    />
   )
 }
 
@@ -57,6 +130,8 @@ function Entry({ title, meta, description }: { title: ReactNode; meta?: ReactNod
 
 function Body({ character }: { character: CloudCharacter }): JSX.Element {
   const { sheet, derived } = character
+  const roller = character.name || 'You'
+  const knownSpells: KnownSpell[] = derived.knownSpells ?? sheet.spells
   const walk = derived.speeds.walk ?? Object.values(derived.speeds)[0]
   const otherSpeeds = Object.entries(derived.speeds).filter(([name]) => name !== 'walk')
   const perception = derived.skills.find((s) => s.name === 'Perception')
@@ -66,8 +141,8 @@ function Body({ character }: { character: CloudCharacter }): JSX.Element {
   for (const pool of Object.values(derived.spellcasting.slots)) {
     for (const [level, count] of Object.entries(pool)) slotLevels.set(Number(level), (slotLevels.get(Number(level)) ?? 0) + count)
   }
-  const spellsByLevel = new Map<number, typeof sheet.spells>()
-  for (const spell of [...sheet.spells].sort((a, b) => a.name.localeCompare(b.name))) {
+  const spellsByLevel = new Map<number, KnownSpell[]>()
+  for (const spell of [...knownSpells].sort((a, b) => a.name.localeCompare(b.name))) {
     spellsByLevel.set(spell.level, [...(spellsByLevel.get(spell.level) ?? []), spell])
   }
 
@@ -114,7 +189,16 @@ function Body({ character }: { character: CloudCharacter }): JSX.Element {
           sub={sheet.tempHp ? `+${sheet.tempHp} temp` : undefined}
         />
         <Stat label="Armor class" value={derived.armorClass} />
-        <Stat label="Initiative" value={formatModifier(derived.initiative)} />
+        <Stat
+          label="Initiative"
+          value={
+            <>
+              {formatModifier(derived.initiative)}
+              <AdvantageTag kind={derived.initiativeMode} label="Initiative" />
+            </>
+          }
+          onRoll={() => rollCheck(roller, 'Initiative', derived.initiative, { advantage: derived.initiativeMode ?? 'normal' })}
+        />
         <Stat label="Speed" value={`${walk ?? 30} ft`} sub={otherSpeeds.map(([name, ft]) => `${name} ${ft}`).join(', ') || undefined} />
         <Stat label="Proficiency" value={formatModifier(derived.proficiencyBonus)} />
         {perception && <Stat label="Passive Perception" value={perception.passive} />}
@@ -136,13 +220,32 @@ function Body({ character }: { character: CloudCharacter }): JSX.Element {
         {ABILITIES.map((a) => {
           const score = derived.abilities[a.id]
           const save = derived.saves[a.id]
+          const checkMode = derived.checkModes?.[a.id]
           return (
             <div key={a.id} className="v-ability">
-              <span className="v-ability-name">{a.id.toUpperCase()}</span>
-              <span className="v-ability-mod">{formatModifier(score?.mod ?? 0)}</span>
-              <span className="v-ability-score">{score?.score ?? '—'}</span>
+              <button
+                type="button"
+                className="v-ability-check"
+                onClick={() => rollCheck(roller, `${a.label} Check`, score?.mod ?? 0, { advantage: checkMode ?? 'normal' })}
+                title={`Roll a ${a.label} check`}
+              >
+                <span className="v-ability-name">
+                  {a.id.toUpperCase()}
+                  <AdvantageTag kind={checkMode} label={`${a.label} checks`} />
+                </span>
+                <span className="v-ability-mod">{formatModifier(score?.mod ?? 0)}</span>
+                <span className="v-ability-score">{score?.score ?? '—'}</span>
+              </button>
               {save && (
-                <span className={save.proficiency ? 'v-ability-save v-ability-save--prof' : 'v-ability-save'}>Save {formatModifier(save.bonus)}</span>
+                <button
+                  type="button"
+                  className={save.proficiency ? 'v-ability-save v-ability-save--prof' : 'v-ability-save'}
+                  onClick={() => rollCheck(roller, `${a.label} Saving Throw`, save.bonus, { advantage: save.mode ?? 'normal' })}
+                  title={`Roll a ${a.label} saving throw`}
+                >
+                  Save {formatModifier(save.bonus)}
+                  <AdvantageTag kind={save.mode} label={`${a.label} saves`} />
+                </button>
               )}
             </div>
           )
@@ -151,19 +254,48 @@ function Body({ character }: { character: CloudCharacter }): JSX.Element {
 
       {derived.attacks.length > 0 && (
         <Section title="Attacks" open>
-          {derived.attacks.map((a, i) => (
-            <Entry
-              key={`${a.name}-${i}`}
-              title={a.name}
-              meta={
-                <>
-                  <strong>{formatModifier(a.attackBonus)}</strong> · {a.damage} {a.damageType}
-                  {a.extraDamage.map((x) => ` + ${x.damage}${x.damageType ? ` ${x.damageType}` : ''}`).join('')}
-                </>
-              }
-              description={a.description}
-            />
-          ))}
+          {derived.attacks.map((a, i) => {
+            // Same rule as the desktop's rollDerivedDamage: one kind of standard die plus a flat amount.
+            const single = a.damageDice && a.damageDice.dice.length === 1 ? a.damageDice : null
+            const damage = single
+              ? damageRoll(`${single.dice[0].count}d${single.dice[0].sides}${single.flat ? (single.flat > 0 ? ` + ${single.flat}` : ` - ${-single.flat}`) : ''}`)
+              : a.damageDice
+                ? null
+                : damageRoll(a.damage)
+            const damageText = [`${a.damage} ${a.damageType}`.trim(), ...a.extraDamage.map((x) => `${x.damage}${x.damageType ? ` ${x.damageType}` : ''}`)].join(' + ')
+            const mode = a.mode ?? derived.attackMode
+            return (
+              <Entry
+                key={`${a.name}-${i}`}
+                title={
+                  <>
+                    {a.name}
+                    <AdvantageTag kind={mode} label={`${a.name} attacks`} />
+                  </>
+                }
+                meta={
+                  <>
+                    <RollChip
+                      onRollWith={(advantage) =>
+                        rollCheck(roller, `${a.name} Attack`, a.attackBonus, {
+                          advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal'),
+                          critOn: derived.critThreshold
+                        })
+                      }
+                    >
+                      {formatModifier(a.attackBonus)}
+                    </RollChip>
+                    {damage ? (
+                      <RollChip onRoll={() => rollDamage(roller, [damage.group], damage.flat, `${a.name} Damage`)}>{damageText}</RollChip>
+                    ) : (
+                      <span>{damageText}</span>
+                    )}
+                  </>
+                }
+                description={a.description}
+              />
+            )
+          })}
         </Section>
       )}
 
@@ -173,27 +305,35 @@ function Body({ character }: { character: CloudCharacter }): JSX.Element {
             .slice()
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((s) => (
-              <div key={s.name} className="v-skill">
+              <button
+                key={s.name}
+                type="button"
+                className="v-skill"
+                onClick={() => rollCheck(roller, `${s.name} Check`, s.bonus, { advantage: s.mode ?? 'normal' })}
+                title={`Roll ${s.name}`}
+              >
                 <span className="v-skill-prof">{s.proficiency ? PROFICIENCY_MARK[s.proficiency] : ''}</span>
                 <span className="v-skill-name">
                   {s.name} <span className="v-muted">({s.ability.toUpperCase()})</span>
+                  <AdvantageTag kind={s.mode} label={`${s.name} checks`} />
                 </span>
                 <span className="v-skill-bonus">{formatModifier(s.bonus)}</span>
-              </div>
+              </button>
             ))}
         </div>
       </Section>
 
-      {(sheet.spells.length > 0 || derived.spellcasting.dc !== null) && (
+      {(knownSpells.length > 0 || derived.spellcasting.dc !== null) && (
         <Section title="Spells">
           {derived.spellcasting.dc !== null && (
-            <p className="v-muted">
-              Save DC <strong>{derived.spellcasting.dc}</strong>
+            <p className="v-spell-summary">
+              <span className="v-muted">
+                Save DC <strong>{derived.spellcasting.dc}</strong>
+              </span>
               {derived.spellcasting.attackBonus !== null && (
-                <>
-                  {' '}
-                  · Attack <strong>{formatModifier(derived.spellcasting.attackBonus)}</strong>
-                </>
+                <RollChip onRoll={() => rollCheck(roller, 'Spell Attack', derived.spellcasting.attackBonus ?? 0)} title="Roll a spell attack">
+                  Spell attack {formatModifier(derived.spellcasting.attackBonus)}
+                </RollChip>
               )}
             </p>
           )}
@@ -215,12 +355,7 @@ function Body({ character }: { character: CloudCharacter }): JSX.Element {
                     )}
                   </h3>
                   {spells.map((s) => (
-                    <Entry
-                      key={s.id}
-                      title={s.name}
-                      meta={[s.castingTime, s.range, s.concentration && 'Concentration', s.ritual && 'Ritual'].filter(Boolean).join(' · ')}
-                      description={[s.description, s.higherLevel && `At higher levels: ${s.higherLevel}`].filter(Boolean).join('\n\n')}
-                    />
+                    <SpellEntry key={s.id} spell={s} numbersByLevel={derived.spellNumbers?.[s.id]} roller={roller} />
                   ))}
                 </div>
               )
