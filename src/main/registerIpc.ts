@@ -19,6 +19,8 @@ import { CampaignPackRepo, PackLibraryRepo } from '@server/repositories/packRepo
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { syncRelayAccount, changeRelayPassword, clearRelaySession, pullAndSendPrefs } from './relaySync'
 import { pullCampaignIfNewer, schedulePushCampaign, discoverAndSyncCampaigns } from './campaignContentSync'
+import { queueCloudCharacter, queueCloudCharacterRemoval } from './characterCloudSync'
+import type { CloudCharacter } from '@shared/cloudCharacter'
 import * as relayClient from '@server/relay/relayClient'
 import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId, setRelaySession } from './relayState'
 import { queryOnline, connectPresence } from './relaySocket'
@@ -1390,7 +1392,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (!identity) return { ok: false, error: 'Log in first.' }
     const removed = characterRepo.remove(id, identity.id)
     if (!removed) return { ok: false, error: 'Character not found.' }
+    queueCloudCharacterRemoval(id)
     return { ok: true, data: undefined }
+  })
+
+  ipcMain.handle('characters:push-cloud', (_event, character: CloudCharacter): void => {
+    const identity = getCurrentIdentity()
+    // Only this identity's own sheets — never a test player or a DM's copy of someone else's.
+    if (!identity || !characterRepo.listByOwner(identity.id).some((c) => c.id === character.id)) return
+    queueCloudCharacter(character)
   })
 
   ipcMain.handle(

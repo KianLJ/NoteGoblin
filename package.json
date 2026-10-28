@@ -1,6 +1,6 @@
 {
   "name": "notegoblin",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "A D&D campaign companion for DMs and players — notes, character sheets, initiative, and live party chat with friends over the internet.",
   "main": "./out/main/index.js",
   "author": "NoteGoblin",
@@ -11,10 +11,12 @@
     "build": "electron-vite build",
     "build:win": "electron-vite build && electron-builder --win",
     "release:win": "electron-vite build && electron-builder --win --publish always",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc -p tsconfig.viewer.json",
     "postinstall": "electron-builder install-app-deps",
-    "relay:dev": "cd relay && npx wrangler dev",
-    "relay:deploy": "cd relay && npx wrangler deploy",
+    "viewer:dev": "vite --config viewer/vite.config.ts",
+    "viewer:build": "vite build --config viewer/vite.config.ts",
+    "relay:dev": "npm run viewer:build && cd relay && npx wrangler dev",
+    "relay:deploy": "npm run viewer:build && cd relay && npx wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest"
   },

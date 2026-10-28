@@ -1,4 +1,5 @@
 import type { AdminAccountSummary, FriendRequest, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
+import type { CloudCharacter } from '@shared/cloudCharacter'
 import { RELAY_URL, RELAY_DIRECTORY_PATH } from './relayConfig'
 
 /** {userId, username} only — the directory doesn't know who's online, that's presence.ts's job. Callers merge in online status separately (see registerIpc.ts). */
@@ -85,6 +86,15 @@ export function setCampaignSnapshot(
   snapshot: CampaignSnapshot
 ): Promise<ClientResult<{ ok: true }>> {
   return call(`/campaigns/${encodeURIComponent(campaignId)}`, 'POST', token, snapshot)
+}
+
+/** A character sheet plus its derived numbers, for the read-only web viewer — see shared/cloudCharacter.ts. */
+export function setCloudCharacter(token: string, character: CloudCharacter): Promise<ClientResult<{ ok: true }>> {
+  return call(`/characters/${encodeURIComponent(character.id)}`, 'POST', token, character)
+}
+
+export function removeCloudCharacter(token: string, characterId: string): Promise<ClientResult<{ ok: true }>> {
+  return call(`/characters-delete/${encodeURIComponent(characterId)}`, 'POST', token, {})
 }
 
 export function getFriends(

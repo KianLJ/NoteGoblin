@@ -20,6 +20,7 @@ userdata/
 # relay (separate project, see relay/) — local dev/build state, not source
 relay/.partykit/
 relay/.wrangler/
+relay/viewer-dist/
 
 # TypeScript incremental build cache
 *.tsbuildinfo

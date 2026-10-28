@@ -20,6 +20,13 @@
       "new_sqlite_classes": ["Session"]
     }
   ],
+  // The read-only web viewer (viewer/, built by `npm run viewer:build` from
+  // the repo root into ./viewer-dist/viewer/) — served at /viewer/ from this
+  // same worker, so it calls the directory API same-origin with no CORS.
+  // Any path that isn't a built file falls through to the worker as before.
+  "assets": {
+    "directory": "./viewer-dist"
+  },
   "routes": [
     { "pattern": "relay.notegoblin.uk", "custom_domain": true }
   ]

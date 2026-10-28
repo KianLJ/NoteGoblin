@@ -1,0 +1,695 @@
+/* The phone viewer's own layout — colours, type, cards, badges, and note
+   markdown all come from the desktop's theme.css/primitives.css (imported
+   in main.tsx), so it wears the same parchment-and-ember look, and the
+   account's synced colours if it has any. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+/* iOS zooms into any focused input under 16px. */
+.gb-input {
+  font-size: 16px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+p {
+  margin: 0 0 var(--space-2);
+}
+
+.v-muted {
+  color: var(--text-muted);
+}
+
+.v-error {
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.v-empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: var(--space-2) 0;
+}
+
+.v-prewrap {
+  white-space: pre-wrap;
+}
+
+.v-link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --- Login ---------------------------------------------------------- */
+
+.v-login {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) var(--space-4);
+}
+
+.v-login-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.v-login-card img {
+  align-self: center;
+  border-radius: var(--radius-lg);
+}
+
+.v-login-card h1 {
+  margin: var(--space-2) 0 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.v-login-card > p {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: var(--space-3);
+}
+
+.v-login-card .gb-label {
+  margin: var(--space-2) 0 0;
+}
+
+.v-login-card .gb-btn {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  font-size: 16px;
+}
+
+/* --- App shell ------------------------------------------------------ */
+
+.v-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 44px 1fr 72px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--space-3) var(--space-2);
+  background: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.v-topbar-title {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v-back {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.v-back:active {
+  background: var(--bg-sunken);
+}
+
+.v-back-spacer {
+  display: block;
+}
+
+.v-signout {
+  justify-self: end;
+  background: none;
+  border: none;
+  padding: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.v-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) calc(env(safe-area-inset-bottom) + var(--space-8));
+}
+
+.v-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.v-hello {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.v-section-title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+/* --- Lists ---------------------------------------------------------- */
+
+.v-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.v-list:empty {
+  display: none;
+}
+
+.v-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+}
+
+.v-row:active {
+  background: var(--bg-sunken);
+}
+
+.v-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.v-row-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-row-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-row-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.v-row--note .v-row-title {
+  font-weight: 500;
+}
+
+.v-badge-dm {
+  color: var(--accent-hover);
+  background: var(--accent-subtle);
+}
+
+/* Folders live inside .v-list, so they sit flush like rows. */
+.v-folder {
+  background: var(--bg-surface);
+}
+
+.v-folder > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 52px;
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.v-folder > summary::-webkit-details-marker {
+  display: none;
+}
+
+.v-folder > summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+  flex-shrink: 0;
+}
+
+.v-folder[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.v-folder-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
+  padding-left: var(--space-4);
+}
+
+.v-folder-body > .v-row,
+.v-folder-body > .v-folder {
+  background: var(--bg-surface);
+}
+
+.v-search {
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+/* --- Notes ---------------------------------------------------------- */
+
+.v-note-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.v-markdown {
+  font-size: 16px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.v-markdown .gb-statblock {
+  max-width: none;
+}
+
+.v-markdown table {
+  display: block;
+  overflow-x: auto;
+}
+
+.v-markdown .gb-wikilink--broken {
+  pointer-events: none;
+}
+
+.v-roll-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + var(--space-5));
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 0 var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.v-roll-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.v-roll-total {
+  grid-row: span 2;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.v-roll-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- Character ------------------------------------------------------ */
+
+.v-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.v-portrait {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+  flex-shrink: 0;
+}
+
+.v-hero-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.v-hero-sub {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.v-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.v-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3) var(--space-1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.v-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.v-stat-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-stat-of {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.v-stat-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.v-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.v-abilities {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.v-ability {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-2) var(--space-1) var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+
+.v-ability-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.v-ability-mod {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.v-ability-score {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.v-ability-save {
+  margin-top: var(--space-1);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.v-ability-save--prof {
+  color: var(--accent-hover);
+  font-weight: 700;
+}
+
+/* Collapsible sheet sections. */
+.v-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.v-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.v-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.v-section > summary::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 120ms ease;
+}
+
+.v-section[open] > summary::after {
+  transform: rotate(-135deg);
+}
+
+.v-section-body {
+  padding: 0 var(--space-4) var(--space-4);
+  font-size: 15px;
+}
+
+.v-entry {
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-2) 0;
+}
+
+.v-entry:first-child {
+  border-top: none;
+}
+
+div.v-entry,
+.v-entry > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--space-3);
+}
+
+.v-entry > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.v-entry > summary::-webkit-details-marker {
+  display: none;
+}
+
+.v-entry-title {
+  font-weight: 600;
+}
+
+details.v-entry > summary .v-entry-title::after {
+  content: ' ›';
+  color: var(--text-muted);
+}
+
+details.v-entry[open] > summary .v-entry-title::after {
+  content: ' ‹';
+}
+
+.v-entry-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.v-entry-text {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--accent-subtle);
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.v-skills {
+  display: flex;
+  flex-direction: column;
+}
+
+.v-skill {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.v-skill:first-child {
+  border-top: none;
+}
+
+.v-skill-prof {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.v-skill-bonus {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-spell-level h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-4) 0 var(--space-1);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.v-slots {
+  display: flex;
+  gap: 4px;
+}
+
+.v-slot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+}
+
+.v-slot--full {
+  background: var(--accent);
+}
+
+.v-currency {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-prose h3 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.v-footnote {
+  text-align: center;
+  font-size: 12px;
+}
+
+@media (min-width: 560px) {
+  .v-stats,
+  .v-abilities {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}

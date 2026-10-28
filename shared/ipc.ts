@@ -11,6 +11,7 @@ import type { BattleLibrary, BattleMap, PlayerBattleMap } from './battleMap'
 import type { ContentPack } from './content/schema'
 import type { PackIssue } from './content/validate'
 import type { SessionDeck, SessionScene, LiveSceneState } from './sessionDeck'
+import type { CloudCharacter } from './cloudCharacter'
 
 /**
  * A DM's "make this player roll" prompt — sent as a targeted push (see
@@ -484,6 +485,8 @@ export interface AppApi {
     remove: (id: string) => Promise<ApiResult<void>>
     /** Player-side: pushes your currently-selected character (or null) to the DM you're connected to — call whenever it changes, selection or edits alike. No-op while hosting (nothing to sync to yourself) or not in a joined session. */
     syncSelected: (sessionId: string, character: CharacterSheet | null) => Promise<void>
+    /** Uploads one of your own sheets (with its derived numbers) to your relay account for the read-only web viewer — debounced, and queued until a relay session exists. Deletions are handled by `remove`. */
+    pushCloud: (character: CloudCharacter) => Promise<void>
     /** Player-side: a one-off fetch of another connected party member's currently-selected character, for PartySidebar's "view sheet" action — a snapshot at the moment you ask, not a live subscription (see sessionHost.ts's 'characters.getPlayerCharacter' case for why). null if they don't have one selected, aren't connected, or you're not in a joined session. */
     getPlayerCharacter: (userId: string) => Promise<ApiResult<CharacterSheet | null>>
     /** DM-side: fires whenever a connected player's synced character changes — selection, an edit, or them disconnecting (character: null). Only meaningful while hosting. */

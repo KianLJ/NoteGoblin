@@ -7,6 +7,16 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.0',
+    title: 'Read your notes and character sheets on your phone',
+    highlights: [
+      'New read-only web viewer at relay.notegoblin.uk/viewer — log in with your NoteGoblin name and password from any phone or browser, and add it to your home screen like an app',
+      'Your character sheets now sync to your account and show up there in full: hit points, armour class, abilities and saves, skills, attacks, spells and slots, resources, features, equipment and backstory — with every number worked out exactly as the app does, homebrew content included',
+      'Campaigns you run are there too: pinned notes, folders, search, links between notes, and dice buttons you can roll right on your phone. DM-only and private notes are labelled',
+      'The viewer wears your account’s colours from the desktop app'
+    ]
+  },
+  {
     version: '0.7.2',
     title: 'Fix: adding a vehicle to initiative',
     highlights: [
