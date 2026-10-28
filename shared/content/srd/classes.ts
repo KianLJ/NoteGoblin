@@ -27,6 +27,7 @@ import {
   FAVORED_ENEMY_OPTIONS,
   FAVORED_TERRAIN_OPTIONS,
   METAMAGIC_OPTIONS,
+  PREPARED_SPELLS_BY_LEVEL,
   RESOURCE_ACTIONS,
   TOGGLE_FEATURES,
   eldritchInvocationSlotCountAtLevel,
@@ -363,14 +364,6 @@ const CLASS_FEATURES: Record<string, Record<string, Effect[]>> = {
 /** compendium.ts's CANTRIPS_KNOWN_AT_LEVEL_1 — +1 at 4th level and again at 10th. */
 const CANTRIPS_AT_1: Record<string, number> = { bard: 2, cleric: 3, druid: 2, sorcerer: 4, warlock: 2, wizard: 3 }
 
-/** dnd5e.ts's PREPARED_CASTER_FORMULA. */
-const PREPARED: Record<string, string> = {
-  cleric: 'max(1, @wis.mod + @classLevel)',
-  druid: 'max(1, @wis.mod + @classLevel)',
-  wizard: 'max(1, @int.mod + @classLevel)',
-  paladin: 'max(1, @cha.mod + floor(@classLevel / 2))'
-}
-
 function columns(cls: Class): ColumnInput[] {
   const cols: ColumnInput[] = []
   const add = (id: string, label: string, values: Array<number | string>): void => void cols.push({ id, label, values })
@@ -387,6 +380,8 @@ function columns(cls: Class): ColumnInput[] {
   if (cls.id === 'warlock') add('invocations', 'Eldritch Invocations', byLevel(eldritchInvocationSlotCountAtLevel))
   if (CANTRIPS_AT_1[cls.id] !== undefined) add('cantrips', 'Cantrips', byLevel((l) => CANTRIPS_AT_1[cls.id] + (l >= 10 ? 2 : l >= 4 ? 1 : 0)))
   if (spellsKnownForClassLevel(cls.id, 1) !== null) add('spellsKnown', 'Spells Known', byLevel((l) => spellsKnownForClassLevel(cls.id, l) ?? 0))
+  const prepared = PREPARED_SPELLS_BY_LEVEL[cls.id]
+  if (prepared) add('prepared', 'Prepared Spells', prepared)
   return cols
 }
 
@@ -396,7 +391,7 @@ function spellcasting(cls: Class): ClassInput['spellcasting'] {
   return {
     ability: cls.spellcastingAbility,
     ...(rows.some((r) => r.length) ? { slots: { ...(cls.id === 'warlock' ? { pool: 'pact' } : {}), rows } } : {}),
-    ...(PREPARED[cls.id] ? { prepared: PREPARED[cls.id] } : {}),
+    ...(PREPARED_SPELLS_BY_LEVEL[cls.id] ? { prepared: '@table.prepared' } : {}),
     ...(spellsKnownForClassLevel(cls.id, 1) !== null ? { known: '@table.spellsKnown' } : {}),
     ...(CANTRIPS_AT_1[cls.id] !== undefined ? { cantrips: '@table.cantrips' } : {}),
     ...(cls.id === 'wizard' ? { ritualCasting: true, spellbook: true } : {})

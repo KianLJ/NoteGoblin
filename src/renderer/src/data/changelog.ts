@@ -13,7 +13,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'New read-only web viewer at relay.notegoblin.uk/viewer — log in with your NoteGoblin name and password from any phone or browser, and add it to your home screen like an app',
       'Your character sheets now sync to your account and show up there in full: hit points, armour class, abilities and saves, skills, attacks, spells and slots, resources, features, equipment and backstory — with every number worked out exactly as the app does, homebrew content included',
       'Campaigns you run are there too: pinned notes, folders, search, links between notes, and dice buttons you can roll right on your phone. DM-only and private notes are labelled',
-      'The viewer wears your account’s colours from the desktop app'
+      'The viewer wears your account’s colours from the desktop app',
+      'Clerics, Druids, Wizards and Paladins now prepare the number of spells their 5.2.1 class table gives for their level, instead of the old ability-modifier formula'
     ]
   },
   {

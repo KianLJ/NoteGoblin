@@ -1904,25 +1904,24 @@ export function hitDicePools(classes: ClassLevel[], hitDiceUsed: Record<string, 
     .filter((p): p is HitDicePool => p !== null)
 }
 
-/** Prepared casters (Cleric/Druid/Wizard: ability mod + level; Paladin: ability mod + half level) prepare a limited number of spells each day. "Known" casters (Bard/Sorcerer/Warlock/Ranger) instead know a fixed set they can always cast — no daily prep limit — so this returns null for them, and for non-casters. Multiclass characters sum each prepared-type class's own limit, computed from that class's own level (not total character level), which is how the real rule works. */
-const PREPARED_CASTER_FORMULA: Partial<Record<string, { ability: Ability; halveLevel: boolean }>> = {
-  cleric: { ability: 'wis', halveLevel: false },
-  druid: { ability: 'wis', halveLevel: false },
-  wizard: { ability: 'int', halveLevel: false },
-  paladin: { ability: 'cha', halveLevel: true }
+/** Prepared casters (Cleric/Druid/Wizard/Paladin) prepare a limited number of spells each day, read from the Prepared Spells column of their 5.2.1 class table (index = class level - 1) — not from an ability modifier. "Known" casters (Bard/Sorcerer/Warlock/Ranger) instead know a fixed set they can always cast — no daily prep limit — so this returns null for them, and for non-casters. Multiclass characters sum each prepared-type class's own limit, computed from that class's own level (not total character level), which is how the real rule works. */
+export const PREPARED_SPELLS_BY_LEVEL: Partial<Record<string, number[]>> = {
+  cleric: [4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22],
+  druid: [4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22],
+  wizard: [4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 18, 19, 21, 22, 23, 24, 25],
+  paladin: [2, 3, 4, 5, 6, 6, 7, 7, 9, 9, 10, 10, 11, 11, 12, 12, 14, 14, 15, 15]
 }
 
-export function preparedSpellLimit(classes: ClassLevel[], abilityScores: AbilityScores): number | null {
+export function preparedSpellLimit(classes: ClassLevel[]): number | null {
   let total = 0
   let isPreparedCaster = false
   for (const c of classes) {
     const cls = CLASSES.find((k) => k.name.toLowerCase() === c.className.toLowerCase())
     if (!cls) continue
-    const formula = PREPARED_CASTER_FORMULA[cls.id]
-    if (!formula) continue
+    const table = PREPARED_SPELLS_BY_LEVEL[cls.id]
+    if (!table) continue
     isPreparedCaster = true
-    const levelContribution = formula.halveLevel ? Math.floor(c.level / 2) : c.level
-    total += Math.max(1, abilityModifier(abilityScores[formula.ability]) + levelContribution)
+    total += table[Math.min(20, Math.max(1, c.level)) - 1]
   }
   return isPreparedCaster ? total : null
 }

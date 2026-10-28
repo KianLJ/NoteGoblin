@@ -149,7 +149,7 @@ export function legacyDerive(sheet: CharacterSheetData): LegacyDerived {
   ]
 
   // SpellsTab.tsx
-  const spellCap = preparedSpellLimit(classes, effScores) ?? knownSpellsLimit(classes)
+  const spellCap = preparedSpellLimit(classes) ?? knownSpellsLimit(classes)
 
   const initiativeMode = effectiveInitiativeAdvantage(activeFeats)
   const attackMode = effectiveAttackAdvantage(activeFeats, activeBuffs, exhaustionLevel)

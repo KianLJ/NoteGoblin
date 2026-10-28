@@ -6564,7 +6564,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 3,
+    "spellCap": 4,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 2,
@@ -6717,7 +6717,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 14,
+    "spellCap": 15,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -6881,7 +6881,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 15,
+    "spellCap": 16,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -7040,7 +7040,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 9,
-    "spellCap": 17,
+    "spellCap": 16,
     "spellSaveDc": 17,
     "spellSlots": {
       "1": 4,
@@ -7206,7 +7206,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 18,
+    "spellCap": 17,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -7366,7 +7366,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 19,
+    "spellCap": 17,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -7528,7 +7528,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 10,
-    "spellCap": 20,
+    "spellCap": 18,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -7697,7 +7697,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 21,
+    "spellCap": 18,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -7855,7 +7855,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 22,
+    "spellCap": 19,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -8016,7 +8016,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 23,
+    "spellCap": 20,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -8177,7 +8177,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 24,
+    "spellCap": 21,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -8345,7 +8345,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 4,
+    "spellCap": 5,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 3,
@@ -8505,7 +8505,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 25,
+    "spellCap": 22,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -8667,7 +8667,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 5,
+    "spellCap": 6,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 4,
@@ -8979,7 +8979,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 8,
+    "spellCap": 9,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -9137,7 +9137,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 6,
-    "spellCap": 9,
+    "spellCap": 10,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -9301,7 +9301,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 10,
+    "spellCap": 11,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -9611,7 +9611,7 @@ exports[`SRD pack at every class level > cleric 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 13,
+    "spellCap": 14,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -9763,7 +9763,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 3,
+    "spellCap": 4,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 2,
@@ -9913,7 +9913,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 14,
+    "spellCap": 15,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -10074,7 +10074,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 15,
+    "spellCap": 16,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -10230,7 +10230,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 9,
-    "spellCap": 17,
+    "spellCap": 16,
     "spellSaveDc": 17,
     "spellSlots": {
       "1": 4,
@@ -10393,7 +10393,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 18,
+    "spellCap": 17,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -10550,7 +10550,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 19,
+    "spellCap": 17,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -10709,7 +10709,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 10,
-    "spellCap": 20,
+    "spellCap": 18,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -10876,7 +10876,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 21,
+    "spellCap": 18,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -11031,7 +11031,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 22,
+    "spellCap": 19,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -11189,7 +11189,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 23,
+    "spellCap": 20,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -11347,7 +11347,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 24,
+    "spellCap": 21,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -11512,7 +11512,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 4,
+    "spellCap": 5,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 3,
@@ -11669,7 +11669,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 11,
-    "spellCap": 25,
+    "spellCap": 22,
     "spellSaveDc": 19,
     "spellSlots": {
       "1": 4,
@@ -11828,7 +11828,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 5,
+    "spellCap": 6,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 4,
@@ -12134,7 +12134,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 8,
+    "spellCap": 9,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -12289,7 +12289,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 6,
-    "spellCap": 9,
+    "spellCap": 10,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -12451,7 +12451,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 10,
+    "spellCap": 11,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -12755,7 +12755,7 @@ exports[`SRD pack at every class level > druid 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 13,
+    "spellCap": 14,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -19720,7 +19720,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 7,
+    "spellCap": 9,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -19886,7 +19886,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 7,
+    "spellCap": 10,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -20046,7 +20046,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 8,
+    "spellCap": 10,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -20213,7 +20213,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 7,
-    "spellCap": 8,
+    "spellCap": 11,
     "spellSaveDc": 15,
     "spellSlots": {
       "1": 4,
@@ -20374,7 +20374,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 7,
-    "spellCap": 9,
+    "spellCap": 11,
     "spellSaveDc": 15,
     "spellSlots": {
       "1": 4,
@@ -20537,7 +20537,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 7,
-    "spellCap": 9,
+    "spellCap": 12,
     "spellSaveDc": 15,
     "spellSlots": {
       "1": 4,
@@ -20707,7 +20707,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 7,
-    "spellCap": 10,
+    "spellCap": 12,
     "spellSaveDc": 15,
     "spellSlots": {
       "1": 4,
@@ -20865,7 +20865,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 10,
+    "spellCap": 14,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -21026,7 +21026,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 11,
+    "spellCap": 14,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -21187,7 +21187,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 11,
+    "spellCap": 15,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -21519,7 +21519,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 12,
+    "spellCap": 15,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -21681,7 +21681,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 3,
+    "spellCap": 4,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 3,
@@ -21841,7 +21841,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 4,
+    "spellCap": 5,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 3,
@@ -21999,7 +21999,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 5,
-    "spellCap": 4,
+    "spellCap": 6,
     "spellSaveDc": 13,
     "spellSlots": {
       "1": 4,
@@ -22160,7 +22160,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 5,
-    "spellCap": 5,
+    "spellCap": 6,
     "spellSaveDc": 13,
     "spellSlots": {
       "1": 4,
@@ -22328,7 +22328,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 5,
-    "spellCap": 5,
+    "spellCap": 7,
     "spellSaveDc": 13,
     "spellSlots": {
       "1": 4,
@@ -22484,7 +22484,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 5,
-    "spellCap": 6,
+    "spellCap": 7,
     "spellSaveDc": 13,
     "spellSlots": {
       "1": 4,
@@ -22642,7 +22642,7 @@ exports[`SRD pack at every class level > paladin 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 6,
+    "spellCap": 9,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -35117,7 +35117,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 3,
+    "spellCap": 4,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 2,
@@ -35266,7 +35266,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 14,
+    "spellCap": 15,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -35426,7 +35426,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 15,
+    "spellCap": 16,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -35581,7 +35581,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 9,
-    "spellCap": 17,
+    "spellCap": 16,
     "spellSaveDc": 17,
     "spellSlots": {
       "1": 4,
@@ -35743,7 +35743,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 18,
+    "spellCap": 17,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -35899,7 +35899,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 10,
-    "spellCap": 19,
+    "spellCap": 18,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -36057,7 +36057,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 10,
-    "spellCap": 20,
+    "spellCap": 19,
     "spellSaveDc": 18,
     "spellSlots": {
       "1": 4,
@@ -36855,7 +36855,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 4,
+    "spellCap": 5,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 3,
@@ -37169,7 +37169,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 4,
-    "spellCap": 5,
+    "spellCap": 6,
     "spellSaveDc": 12,
     "spellSlots": {
       "1": 4,
@@ -37473,7 +37473,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 8,
+    "spellCap": 9,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -37627,7 +37627,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 35,
     "spellAttackBonus": 6,
-    "spellCap": 9,
+    "spellCap": 10,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -37788,7 +37788,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 6,
-    "spellCap": 10,
+    "spellCap": 11,
     "spellSaveDc": 14,
     "spellSlots": {
       "1": 4,
@@ -38090,7 +38090,7 @@ exports[`SRD pack at every class level > wizard 1`] = `
     },
     "speed": 30,
     "spellAttackBonus": 8,
-    "spellCap": 13,
+    "spellCap": 14,
     "spellSaveDc": 16,
     "spellSlots": {
       "1": 4,
@@ -43306,7 +43306,7 @@ exports[`SRD pack parity > cleric 1 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 3,
+  "spellCap": 4,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 2,
@@ -43465,7 +43465,7 @@ exports[`SRD pack parity > cleric 2 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 4,
+  "spellCap": 5,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 3,
@@ -43622,7 +43622,7 @@ exports[`SRD pack parity > cleric 3 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 5,
+  "spellCap": 6,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 4,
@@ -43943,7 +43943,7 @@ exports[`SRD pack parity > cleric 5 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 8,
+  "spellCap": 9,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -44099,7 +44099,7 @@ exports[`SRD pack parity > cleric 6 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 9,
+  "spellCap": 10,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -44264,7 +44264,7 @@ exports[`SRD pack parity > cleric 9 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 13,
+  "spellCap": 14,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -44432,7 +44432,7 @@ exports[`SRD pack parity > cleric 11 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 15,
+  "spellCap": 16,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -44602,7 +44602,7 @@ exports[`SRD pack parity > cleric 14 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 10,
-  "spellCap": 19,
+  "spellCap": 17,
   "spellSaveDc": 18,
   "spellSlots": {
     "1": 4,
@@ -44764,7 +44764,7 @@ exports[`SRD pack parity > cleric 17 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 11,
-  "spellCap": 22,
+  "spellCap": 19,
   "spellSaveDc": 19,
   "spellSlots": {
     "1": 4,
@@ -44930,7 +44930,7 @@ exports[`SRD pack parity > cleric 19 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 11,
-  "spellCap": 24,
+  "spellCap": 21,
   "spellSaveDc": 19,
   "spellSlots": {
     "1": 4,
@@ -45104,7 +45104,7 @@ exports[`SRD pack parity > cleric 20 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 11,
-  "spellCap": 25,
+  "spellCap": 22,
   "spellSaveDc": 19,
   "spellSlots": {
     "1": 4,
@@ -45262,7 +45262,7 @@ exports[`SRD pack parity > druid 1 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 3,
+  "spellCap": 4,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 2,
@@ -45416,7 +45416,7 @@ exports[`SRD pack parity > druid 2 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 4,
+  "spellCap": 5,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 3,
@@ -45567,7 +45567,7 @@ exports[`SRD pack parity > druid 3 1`] = `
   },
   "speed": 35,
   "spellAttackBonus": 4,
-  "spellCap": 5,
+  "spellCap": 6,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 4,
@@ -45883,7 +45883,7 @@ exports[`SRD pack parity > druid 5 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 8,
+  "spellCap": 9,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -46038,7 +46038,7 @@ exports[`SRD pack parity > druid 6 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 9,
+  "spellCap": 10,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -46194,7 +46194,7 @@ exports[`SRD pack parity > druid 9 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 13,
+  "spellCap": 14,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -46352,7 +46352,7 @@ exports[`SRD pack parity > druid 11 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 15,
+  "spellCap": 16,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -46508,7 +46508,7 @@ exports[`SRD pack parity > druid 14 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 10,
-  "spellCap": 19,
+  "spellCap": 17,
   "spellSaveDc": 18,
   "spellSlots": {
     "1": 4,
@@ -46674,7 +46674,7 @@ exports[`SRD pack parity > druid 17 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 11,
-  "spellCap": 22,
+  "spellCap": 19,
   "spellSaveDc": 19,
   "spellSlots": {
     "1": 4,
@@ -46845,7 +46845,7 @@ exports[`SRD pack parity > druid 19 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 11,
-  "spellCap": 24,
+  "spellCap": 21,
   "spellSaveDc": 19,
   "spellSlots": {
     "1": 4,
@@ -47009,7 +47009,7 @@ exports[`SRD pack parity > druid 20 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 11,
-  "spellCap": 25,
+  "spellCap": 22,
   "spellSaveDc": 19,
   "spellSlots": {
     "1": 4,
@@ -47180,7 +47180,7 @@ exports[`SRD pack parity > exhaustion 2 1`] = `
   },
   "speed": 15,
   "spellAttackBonus": 6,
-  "spellCap": 8,
+  "spellCap": 9,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -47352,7 +47352,7 @@ exports[`SRD pack parity > exhaustion 4 1`] = `
   },
   "speed": 15,
   "spellAttackBonus": 6,
-  "spellCap": 8,
+  "spellCap": 9,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -47524,7 +47524,7 @@ exports[`SRD pack parity > exhaustion 5 1`] = `
   },
   "speed": 0,
   "spellAttackBonus": 6,
-  "spellCap": 8,
+  "spellCap": 9,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -52992,7 +52992,7 @@ exports[`SRD pack parity > paladin 3 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 3,
+  "spellCap": 4,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 3,
@@ -53153,7 +53153,7 @@ exports[`SRD pack parity > paladin 4 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 4,
+  "spellCap": 5,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 3,
@@ -53321,7 +53321,7 @@ exports[`SRD pack parity > paladin 5 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 5,
-  "spellCap": 4,
+  "spellCap": 6,
   "spellSaveDc": 13,
   "spellSlots": {
     "1": 4,
@@ -53482,7 +53482,7 @@ exports[`SRD pack parity > paladin 6 / warlock 3 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 5,
+  "spellCap": 6,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -53645,7 +53645,7 @@ exports[`SRD pack parity > paladin 6 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 5,
-  "spellCap": 5,
+  "spellCap": 6,
   "spellSaveDc": 13,
   "spellSlots": {
     "1": 4,
@@ -53811,7 +53811,7 @@ exports[`SRD pack parity > paladin 9 1`] = `
   },
   "speed": 35,
   "spellAttackBonus": 6,
-  "spellCap": 6,
+  "spellCap": 9,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -53973,7 +53973,7 @@ exports[`SRD pack parity > paladin 11 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 7,
+  "spellCap": 10,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -54143,7 +54143,7 @@ exports[`SRD pack parity > paladin 14 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 7,
-  "spellCap": 9,
+  "spellCap": 11,
   "spellSaveDc": 15,
   "spellSlots": {
     "1": 4,
@@ -54309,7 +54309,7 @@ exports[`SRD pack parity > paladin 17 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 10,
+  "spellCap": 14,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -54486,7 +54486,7 @@ exports[`SRD pack parity > paladin 19 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 11,
+  "spellCap": 15,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -54651,7 +54651,7 @@ exports[`SRD pack parity > paladin 20 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 12,
+  "spellCap": 15,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -62773,7 +62773,7 @@ exports[`SRD pack parity > wizard 1 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 3,
+  "spellCap": 4,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 2,
@@ -62928,7 +62928,7 @@ exports[`SRD pack parity > wizard 2 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 4,
+  "spellCap": 5,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 3,
@@ -63081,7 +63081,7 @@ exports[`SRD pack parity > wizard 3 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 4,
-  "spellCap": 5,
+  "spellCap": 6,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 4,
@@ -63242,7 +63242,7 @@ exports[`SRD pack parity > wizard 3 in under-strength plate 1`] = `
   },
   "speed": 20,
   "spellAttackBonus": 4,
-  "spellCap": 5,
+  "spellCap": 6,
   "spellSaveDc": 12,
   "spellSlots": {
     "1": 4,
@@ -63561,7 +63561,7 @@ exports[`SRD pack parity > wizard 5 / cleric 2 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 11,
+  "spellCap": 14,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 7,
@@ -63725,7 +63725,7 @@ exports[`SRD pack parity > wizard 5 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 8,
+  "spellCap": 9,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -63877,7 +63877,7 @@ exports[`SRD pack parity > wizard 6 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 6,
-  "spellCap": 9,
+  "spellCap": 10,
   "spellSaveDc": 14,
   "spellSlots": {
     "1": 4,
@@ -64038,7 +64038,7 @@ exports[`SRD pack parity > wizard 9 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 13,
+  "spellCap": 14,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -64202,7 +64202,7 @@ exports[`SRD pack parity > wizard 11 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 8,
-  "spellCap": 15,
+  "spellCap": 16,
   "spellSaveDc": 16,
   "spellSlots": {
     "1": 4,
@@ -64369,7 +64369,7 @@ exports[`SRD pack parity > wizard 14 1`] = `
   },
   "speed": 30,
   "spellAttackBonus": 10,
-  "spellCap": 19,
+  "spellCap": 18,
   "spellSaveDc": 18,
   "spellSlots": {
     "1": 4,
