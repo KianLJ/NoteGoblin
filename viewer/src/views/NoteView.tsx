@@ -55,6 +55,8 @@ export function NoteView({ campaignId, noteId, setTitle }: { campaignId: string;
 
   return (
     <article className="v-note">
+      {/* The title on top, as the desktop note editor shows it. */}
+      <h1 className="v-note-title">{note.title || 'Untitled'}</h1>
       <div className="v-note-meta">
         <VisibilityBadge visibility={note.visibility} />
         <span>Updated {new Date(note.updated_at).toLocaleDateString()}</span>

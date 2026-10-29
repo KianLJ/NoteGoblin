@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ABILITIES, formatModifier } from '@shared/dnd5e'
+import '@renderer/features/player/sheet/sheet.css'
 import type { CloudCharacter } from '@shared/cloudCharacter'
 import type { KnownSpell } from '@shared/content/sheet'
 import { getCharacter } from '../api'
@@ -7,7 +8,6 @@ import { useLoad } from '../data'
 import { Status } from './Status'
 import { AdvantageTag, RollChip, damageRoll, rollCheck, rollDamage } from '../roll'
 
-const PROFICIENCY_MARK: Record<string, string> = { half: '½', proficient: '●', expertise: '◆' }
 const PROFICIENCY_LABEL = { armor: 'Armor', weapon: 'Weapons', tool: 'Tools', language: 'Languages' } as const
 const RECHARGE_LABEL: Record<string, string> = { long: 'long rest', short: 'short rest' }
 
@@ -16,32 +16,6 @@ function featureSource(source: string): string | undefined {
   return /^[a-z0-9.-]+$/.test(source) ? undefined : source
 }
 const SPELL_LEVEL_NAME = ['Cantrips', '1st level', '2nd level', '3rd level', '4th level', '5th level', '6th level', '7th level', '8th level', '9th level']
-
-function Section({ title, children, open = false }: { title: string; children: ReactNode; open?: boolean }): JSX.Element {
-  return (
-    <details className="v-section" open={open}>
-      <summary>{title}</summary>
-      <div className="v-section-body">{children}</div>
-    </details>
-  )
-}
-
-function Stat({ label, value, sub, onRoll }: { label: string; value: ReactNode; sub?: ReactNode; onRoll?: () => void }): JSX.Element {
-  const body = (
-    <>
-      <span className="v-stat-label">{label}</span>
-      <span className="v-stat-value">{value}</span>
-      {sub && <span className="v-stat-sub">{sub}</span>}
-    </>
-  )
-  return onRoll ? (
-    <button type="button" className="v-stat v-stat--roll" onClick={onRoll} title={`Roll ${label.toLowerCase()}`}>
-      {body}
-    </button>
-  ) : (
-    <div className="v-stat">{body}</div>
-  )
-}
 
 /**
  * One known spell, as the desktop Spells tab card rolls it: its damage or
@@ -128,8 +102,21 @@ function Entry({ title, meta, description }: { title: ReactNode; meta?: ReactNod
   )
 }
 
+type Tab = 'Actions' | 'Spells' | 'Features' | 'Inventory' | 'Story'
+
+// XP needed for each level (index = level - 1), for the identity card's bar.
+const XP_FOR_LEVEL = [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000]
+
+/**
+ * The sheet laid out as the desktop's: a rail (who they are, hit points,
+ * vitals, resources), ability tiles and tabs in the middle, skills and senses
+ * on the right — the same classes as the desktop sheet (sheet.css), so it
+ * reflows the same way, down to one column on a phone. Read-only; the dice
+ * still roll.
+ */
 function Body({ character }: { character: CloudCharacter }): JSX.Element {
   const { sheet, derived } = character
+  const [tab, setTab] = useState<Tab>('Actions')
   const roller = character.name || 'You'
   const knownSpells: KnownSpell[] = derived.knownSpells ?? sheet.spells
   const walk = derived.speeds.walk ?? Object.values(derived.speeds)[0]
@@ -162,296 +149,365 @@ function Body({ character }: { character: CloudCharacter }): JSX.Element {
     ['Backstory', sheet.backstory]
   ].filter(([, text]) => text.trim())
 
+  const initials =
+    (character.name || '?')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]!.toUpperCase())
+      .join('') || '?'
+  const xpNext = XP_FOR_LEVEL[Math.min(derived.level, 19)]
+  const xpPrev = XP_FOR_LEVEL[Math.max(0, Math.min(derived.level - 1, 19))]
+  const xpProgress = derived.level >= 20 ? 1 : Math.max(0, Math.min(1, (sheet.experiencePoints - xpPrev) / Math.max(1, xpNext - xpPrev)))
+  const hpTotal = Math.max(derived.maxHp, sheet.currentHp) + (sheet.tempHp ?? 0)
+  const hitDiceText = derived.hitDice.map((h) => `${h.count}d${h.die}`).join(' + ')
+  const caster = knownSpells.length > 0 || derived.spellcasting.dc !== null
+  const tabs: Tab[] = ['Actions', ...(caster ? (['Spells'] as const) : []), 'Features', 'Inventory', 'Story']
+  const shown = tabs.includes(tab) ? tab : 'Actions'
+  const panel = (t: Tab): { display: string } => ({ display: shown === t ? 'block' : 'none' })
+
   return (
-    <div className="v-stack">
-      <header className="v-hero">
-        {sheet.portraitDataUrl && <img className="v-portrait" src={sheet.portraitDataUrl} alt="" />}
-        <div>
-          <h2 className="v-hero-name">{character.name || 'Unnamed character'}</h2>
-          {character.subtitle && <p className="v-hero-sub">{character.subtitle}</p>}
-          <p className="v-hero-sub v-muted">
-            Level {derived.level}
-            {sheet.background && ` · ${sheet.background}`}
-            {sheet.alignment && ` · ${sheet.alignment}`}
-          </p>
-        </div>
-      </header>
-
-      <div className="v-stats">
-        <Stat
-          label="Hit points"
-          value={
-            <>
-              {sheet.currentHp}
-              <span className="v-stat-of">/{derived.maxHp}</span>
-            </>
-          }
-          sub={sheet.tempHp ? `+${sheet.tempHp} temp` : undefined}
-        />
-        <Stat label="Armor class" value={derived.armorClass} />
-        <Stat
-          label="Initiative"
-          value={
-            <>
-              {formatModifier(derived.initiative)}
-              <AdvantageTag kind={derived.initiativeMode} label="Initiative" />
-            </>
-          }
-          onRoll={() => rollCheck(roller, 'Initiative', derived.initiative, { advantage: derived.initiativeMode ?? 'normal' })}
-        />
-        <Stat label="Speed" value={`${walk ?? 30} ft`} sub={otherSpeeds.map(([name, ft]) => `${name} ${ft}`).join(', ') || undefined} />
-        <Stat label="Proficiency" value={formatModifier(derived.proficiencyBonus)} />
-        {perception && <Stat label="Passive Perception" value={perception.passive} />}
-      </div>
-
-      {(sheet.exhaustionLevel > 0 || sheet.inspiration || sheet.currentHp <= 0) && (
-        <div className="v-flags">
-          {sheet.inspiration && <span className="gb-badge gb-badge--accent">Inspired</span>}
-          {sheet.exhaustionLevel > 0 && <span className="gb-badge gb-badge--danger">Exhaustion {sheet.exhaustionLevel}</span>}
-          {sheet.currentHp <= 0 && (
-            <span className="gb-badge gb-badge--danger">
-              Death saves {sheet.deathSaves.successes}✓ {sheet.deathSaves.failures}✗
-            </span>
-          )}
-        </div>
-      )}
-
-      <div className="v-abilities">
-        {ABILITIES.map((a) => {
-          const score = derived.abilities[a.id]
-          const save = derived.saves[a.id]
-          const checkMode = derived.checkModes?.[a.id]
-          return (
-            <div key={a.id} className="v-ability">
-              <button
-                type="button"
-                className="v-ability-check"
-                onClick={() => rollCheck(roller, `${a.label} Check`, score?.mod ?? 0, { advantage: checkMode ?? 'normal' })}
-                title={`Roll a ${a.label} check`}
-              >
-                <span className="v-ability-name">
-                  {a.id.toUpperCase()}
-                  <AdvantageTag kind={checkMode} label={`${a.label} checks`} />
+    <div className="gs-root v-sheet">
+      <div className="gs">
+        <aside className="gs-rail">
+          {/* Who they are — as the desktop sheet's identity card. */}
+          <div className="gs-card gs-span">
+            <div className="gs-row" style={{ gap: 12, alignItems: 'flex-start' }}>
+              <div className="v-portrait-box">{sheet.portraitDataUrl ? <img src={sheet.portraitDataUrl} alt="" /> : initials}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="v-sheet-name">{character.name || 'Unnamed character'}</div>
+                <div className="gs-hint" style={{ marginTop: 2 }}>
+                  {character.subtitle || 'No species or class yet'}
+                </div>
+                {(sheet.background || sheet.alignment) && <div className="gs-hint">{[sheet.background, sheet.alignment].filter(Boolean).join(' · ')}</div>}
+              </div>
+              {sheet.inspiration && (
+                <span className="gb-badge gb-badge--accent" title="Inspiration">
+                  Inspired
                 </span>
-                <span className="v-ability-mod">{formatModifier(score?.mod ?? 0)}</span>
-                <span className="v-ability-score">{score?.score ?? '—'}</span>
-              </button>
-              {save && (
-                <button
-                  type="button"
-                  className={save.proficiency ? 'v-ability-save v-ability-save--prof' : 'v-ability-save'}
-                  onClick={() => rollCheck(roller, `${a.label} Saving Throw`, save.bonus, { advantage: save.mode ?? 'normal' })}
-                  title={`Roll a ${a.label} saving throw`}
-                >
-                  Save {formatModifier(save.bonus)}
-                  <AdvantageTag kind={save.mode} label={`${a.label} saves`} />
-                </button>
               )}
             </div>
-          )
-        })}
-      </div>
+            <div className="gs-row" style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+              <span>Level {derived.level}</span>
+              <div className="v-xpbar">
+                <div style={{ width: `${xpProgress * 100}%` }} />
+              </div>
+              <span>{derived.level >= 20 ? `${sheet.experiencePoints.toLocaleString()} XP` : `${sheet.experiencePoints.toLocaleString()} / ${xpNext.toLocaleString()} XP`}</span>
+            </div>
+          </div>
 
-      {derived.attacks.length > 0 && (
-        <Section title="Attacks" open>
-          {derived.attacks.map((a, i) => {
-            // Same rule as the desktop's rollDerivedDamage: one kind of standard die plus a flat amount.
-            const single = a.damageDice && a.damageDice.dice.length === 1 ? a.damageDice : null
-            const damage = single
-              ? damageRoll(`${single.dice[0].count}d${single.dice[0].sides}${single.flat ? (single.flat > 0 ? ` + ${single.flat}` : ` - ${-single.flat}`) : ''}`)
-              : a.damageDice
-                ? null
-                : damageRoll(a.damage)
-            const damageText = [`${a.damage} ${a.damageType}`.trim(), ...a.extraDamage.map((x) => `${x.damage}${x.damageType ? ` ${x.damageType}` : ''}`)].join(' + ')
-            const mode = a.mode ?? derived.attackMode
-            return (
-              <Entry
-                key={`${a.name}-${i}`}
-                title={
-                  <>
-                    {a.name}
-                    <AdvantageTag kind={mode} label={`${a.name} attacks`} />
-                  </>
-                }
-                meta={
-                  <>
-                    <RollChip
-                      onRollWith={(advantage) =>
-                        rollCheck(roller, `${a.name} Attack`, a.attackBonus, {
-                          advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal'),
-                          critOn: derived.critThreshold
-                        })
-                      }
-                    >
-                      {formatModifier(a.attackBonus)}
-                    </RollChip>
-                    {damage ? (
-                      <RollChip onRoll={() => rollDamage(roller, [damage.group], damage.flat, `${a.name} Damage`)}>{damageText}</RollChip>
-                    ) : (
-                      <span>{damageText}</span>
-                    )}
-                  </>
-                }
-                description={a.description}
-              />
-            )
-          })}
-        </Section>
-      )}
+          {/* Hit points, as the desktop card shows them (without the buttons — this is read-only). */}
+          <div className="gs-card gs-span">
+            <div className="gs-between">
+              <span className="gs-label">Hit points</span>
+              {hitDiceText && <span className="gs-chip">Hit dice {hitDiceText}</span>}
+            </div>
+            <div className="gs-row" style={{ alignItems: 'baseline', marginTop: 6 }}>
+              <span className="gs-hp-now">{sheet.currentHp}</span>
+              <span className="v-muted">/ {derived.maxHp}</span>
+              {sheet.tempHp > 0 && <span className="gs-chip gs-chip--blue">+ {sheet.tempHp} temp</span>}
+            </div>
+            <div className="gs-hpbar" aria-hidden="true">
+              <div className="gs-hp" style={{ width: `${(Math.max(0, sheet.currentHp) / hpTotal) * 100}%` }} />
+              <div className="gs-tmp" style={{ width: `${((sheet.tempHp ?? 0) / hpTotal) * 100}%` }} />
+            </div>
+            {sheet.currentHp <= 0 && (
+              <div className="gs-hint" style={{ marginTop: 8, color: 'var(--danger)' }}>
+                Down — death saves {sheet.deathSaves.successes} ✓ · {sheet.deathSaves.failures} ✗
+              </div>
+            )}
+            {sheet.exhaustionLevel > 0 && (
+              <div className="gs-hint" style={{ marginTop: 6, color: 'var(--danger)' }}>
+                Exhaustion {sheet.exhaustionLevel}
+              </div>
+            )}
+          </div>
 
-      <Section title="Skills">
-        <div className="v-skills">
-          {derived.skills
-            .slice()
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((s) => (
-              <button
-                key={s.name}
-                type="button"
-                className="v-skill"
-                onClick={() => rollCheck(roller, `${s.name} Check`, s.bonus, { advantage: s.mode ?? 'normal' })}
-                title={`Roll ${s.name}`}
-              >
-                <span className="v-skill-prof">{s.proficiency ? PROFICIENCY_MARK[s.proficiency] : ''}</span>
-                <span className="v-skill-name">
-                  {s.name} <span className="v-muted">({s.ability.toUpperCase()})</span>
-                  <AdvantageTag kind={s.mode} label={`${s.name} checks`} />
-                </span>
-                <span className="v-skill-bonus">{formatModifier(s.bonus)}</span>
-              </button>
-            ))}
-        </div>
-      </Section>
+          <div className="gs-vitals gs-span">
+            <div className="gs-vital" title="Armor class">
+              <b>{derived.armorClass}</b>
+              <span>AC</span>
+            </div>
+            <button type="button" className="gs-vital" onClick={() => rollCheck(roller, 'Initiative', derived.initiative, { advantage: derived.initiativeMode ?? 'normal' })} title="Roll initiative">
+              <b>
+                {formatModifier(derived.initiative)}
+                <AdvantageTag kind={derived.initiativeMode} label="Initiative" />
+              </b>
+              <span>Init</span>
+            </button>
+            <div className="gs-vital" title={otherSpeeds.length ? otherSpeeds.map(([k, v]) => `${k} ${v} ft`).join(', ') : 'Speed'}>
+              <b>{walk ?? 30}</b>
+              <span>{otherSpeeds.length ? 'Speed +' : 'Speed'}</span>
+            </div>
+            <div className="gs-vital" title="Proficiency bonus">
+              <b>{formatModifier(derived.proficiencyBonus)}</b>
+              <span>Prof</span>
+            </div>
+          </div>
 
-      {(knownSpells.length > 0 || derived.spellcasting.dc !== null) && (
-        <Section title="Spells">
-          {derived.spellcasting.dc !== null && (
-            <p className="v-spell-summary">
-              <span className="v-muted">
-                Save DC <strong>{derived.spellcasting.dc}</strong>
-              </span>
-              {derived.spellcasting.attackBonus !== null && (
-                <RollChip onRoll={() => rollCheck(roller, 'Spell Attack', derived.spellcasting.attackBonus ?? 0)} title="Roll a spell attack">
-                  Spell attack {formatModifier(derived.spellcasting.attackBonus)}
-                </RollChip>
-              )}
-            </p>
+          {derived.resources.length > 0 && (
+            <div className="gs-card gs-span">
+              <span className="gs-label">Resources</span>
+              <div className="v-cardlist">
+                {derived.resources.map((r) => (
+                  <Entry key={r.name} title={r.name} meta={`${Math.max(0, r.max - r.used)}/${r.max} · ${RECHARGE_LABEL[r.recharge] ?? r.recharge}`} description={r.description} />
+                ))}
+              </div>
+            </div>
           )}
-          {[...spellsByLevel.entries()]
-            .sort(([a], [b]) => a - b)
-            .map(([level, spells]) => {
-              const total = slotLevels.get(level) ?? 0
-              const used = Math.min(total, sheet.spellSlots[level]?.used ?? 0)
+        </aside>
+
+        <main className="gs-main">
+          <div className="gs-abilities">
+            {ABILITIES.map((a) => {
+              const score = derived.abilities[a.id]
+              const save = derived.saves[a.id]
+              const checkMode = derived.checkModes?.[a.id]
               return (
-                <div key={level} className="v-spell-level">
-                  <h3>
-                    {SPELL_LEVEL_NAME[level] ?? `Level ${level}`}
-                    {level > 0 && total > 0 && (
-                      <span className="v-slots" aria-label={`${total - used} of ${total} slots left`}>
-                        {Array.from({ length: total }, (_, i) => (
-                          <span key={i} className={i < total - used ? 'v-slot v-slot--full' : 'v-slot'} />
-                        ))}
-                      </span>
-                    )}
-                  </h3>
-                  {spells.map((s) => (
-                    <SpellEntry key={s.id} spell={s} numbersByLevel={derived.spellNumbers?.[s.id]} roller={roller} />
-                  ))}
+                <div key={a.id} className="gs-ability">
+                  <button type="button" className="gs-ability-check" onClick={() => rollCheck(roller, `${a.label} Check`, score?.mod ?? 0, { advantage: checkMode ?? 'normal' })} title={`Roll a ${a.label} check`}>
+                    <div className="gs-label">
+                      {a.id.toUpperCase()}
+                      <AdvantageTag kind={checkMode} label={`${a.label} checks`} />
+                    </div>
+                    <div className="gs-ability-mod">{formatModifier(score?.mod ?? 0)}</div>
+                    <div className="gs-hint">{score?.score ?? '—'}</div>
+                  </button>
+                  {save && (
+                    <div className={`gs-ability-save${save.proficiency ? ' gs-ability-save--prof' : ''}`}>
+                      <span className={`gs-dot${save.proficiency ? ' gs-dot--proficient' : ''}`} aria-label={save.proficiency ? 'Proficient' : undefined} />
+                      <button type="button" onClick={() => rollCheck(roller, `${a.label} Saving Throw`, save.bonus, { advantage: save.mode ?? 'normal' })} title={`Roll a ${a.label} saving throw`}>
+                        Save {formatModifier(save.bonus)}
+                      </button>
+                      <AdvantageTag kind={save.mode} label={`${a.label} saves`} />
+                    </div>
+                  )}
                 </div>
               )
             })}
-        </Section>
-      )}
+          </div>
 
-      {derived.resources.length > 0 && (
-        <Section title="Resources">
-          {derived.resources.map((r) => (
-            <Entry
-              key={r.name}
-              title={r.name}
-              meta={`${Math.max(0, r.max - r.used)}/${r.max} · ${RECHARGE_LABEL[r.recharge] ?? r.recharge}`}
-              description={r.description}
-            />
-          ))}
-        </Section>
-      )}
+          <div className="gs-tabs" role="tablist">
+            {tabs.map((t) => (
+              <button key={t} type="button" role="tab" aria-selected={shown === t} className={`gs-tab${shown === t ? ' gs-tab--on' : ''}`} onClick={() => setTab(t)}>
+                {t}
+              </button>
+            ))}
+          </div>
 
-      {(derived.features.length > 0 || extraFeatures.length > 0) && (
-        <Section title="Features & traits">
-          {derived.features.map((f, i) => (
-            <Entry key={`${f.name}-${i}`} title={f.name} meta={featureSource(f.source)} description={f.description} />
-          ))}
-          {extraFeatures.map((f) => (
-            <Entry key={f.id} title={f.name} meta={featureSource(f.source)} description={f.description} />
-          ))}
-        </Section>
-      )}
-
-      {(sheet.equipment.length > 0 || currency.length > 0) && (
-        <Section title="Equipment">
-          {currency.length > 0 && <p className="v-currency">{currency.map((c) => `${sheet.currency[c]} ${c}`).join(' · ')}</p>}
-          {sheet.equipment.map((item) => (
-            <Entry
-              key={item.id}
-              title={
-                <>
-                  {item.name}
-                  {item.quantity > 1 && <span className="v-muted"> ×{item.quantity}</span>}
-                </>
-              }
-              meta={[item.equipped && 'Equipped', item.attuned && 'Attuned'].filter(Boolean).join(' · ') || undefined}
-              description={item.notes}
-            />
-          ))}
-        </Section>
-      )}
-
-      <Section title="Proficiencies & defenses">
-        {relations
-          .filter(([, list]) => list.length > 0)
-          .map(([label, list]) => (
-            <p key={label}>
-              <strong>{label}:</strong> {list.join(', ')}
-            </p>
-          ))}
-        {derived.senses.length > 0 && (
-          <p>
-            <strong>Senses:</strong> {derived.senses.map((s) => `${s.name} ${s.range} ft`).join(', ')}
-          </p>
-        )}
-        {(['armor', 'weapon', 'tool', 'language'] as const)
-          .filter((k) => derived.proficiencies[k].length > 0)
-          .map((k) => (
-            <p key={k}>
-              <strong>{PROFICIENCY_LABEL[k]}:</strong> {derived.proficiencies[k].join(', ')}
-            </p>
-          ))}
-        {sheet.otherProficiencies.trim() && <p className="v-prewrap">{sheet.otherProficiencies}</p>}
-        {derived.hitDice.length > 0 && (
-          <p>
-            <strong>Hit dice:</strong> {derived.hitDice.map((h) => `${h.count}d${h.die}`).join(' + ')}
-          </p>
-        )}
-      </Section>
-
-      {personality.length > 0 && (
-        <Section title="Personality & backstory">
-          {personality.map(([label, text]) => (
-            <div key={label} className="v-prose">
-              <h3>{label}</h3>
-              <p className="v-prewrap">{text}</p>
+          <div className="gs-panel">
+            <div style={panel('Actions')}>
+              <div className="v-tabpanel">
+                <span className="gs-label">Attacks</span>
+                {derived.attacks.length === 0 && <p className="v-empty">No attacks.</p>}
+                <div className="v-attack-grid">
+                  {derived.attacks.map((a, i) => {
+                    // Same rule as the desktop's rollDerivedDamage: one kind of standard die plus a flat amount.
+                    const single = a.damageDice && a.damageDice.dice.length === 1 ? a.damageDice : null
+                    const damage = single
+                      ? damageRoll(`${single.dice[0].count}d${single.dice[0].sides}${single.flat ? (single.flat > 0 ? ` + ${single.flat}` : ` - ${-single.flat}`) : ''}`)
+                      : a.damageDice
+                        ? null
+                        : damageRoll(a.damage)
+                    const damageText = [a.damage, ...a.extraDamage.map((x) => `${x.damage}${x.damageType ? ` ${x.damageType}` : ''}`)].join(' + ')
+                    const mode = a.mode ?? derived.attackMode
+                    return (
+                      <div key={`${a.name}-${i}`} className="gb-card v-attack">
+                        <div className="gs-between" style={{ gap: 6 }}>
+                          <strong className="v-attack-name">
+                            {a.name}
+                            <AdvantageTag kind={mode} label={`${a.name} attacks`} />
+                          </strong>
+                          {a.damageType && <span className="gb-badge">{a.damageType}</span>}
+                        </div>
+                        <div className="gs-row" style={{ gap: 6, marginTop: 6 }}>
+                          <span className="v-attack-label">Atk</span>
+                          <RollChip
+                            onRollWith={(advantage) =>
+                              rollCheck(roller, `${a.name} Attack`, a.attackBonus, {
+                                advantage: advantage !== 'normal' ? advantage : (mode ?? 'normal'),
+                                critOn: derived.critThreshold
+                              })
+                            }
+                          >
+                            {formatModifier(a.attackBonus)}
+                          </RollChip>
+                          {damage ? <RollChip onRoll={() => rollDamage(roller, [damage.group], damage.flat, `${a.name} Damage`)}>{damageText}</RollChip> : <span className="v-muted">{damageText}</span>}
+                          {a.range && <span className="gs-hint">{a.range}</span>}
+                        </div>
+                        {a.description?.trim() && (
+                          <details className="v-attack-more">
+                            <summary>Details</summary>
+                            <p className="v-entry-text">{a.description}</p>
+                          </details>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
-          ))}
-        </Section>
-      )}
 
-      {sheet.notes.trim() && (
-        <Section title="Notes">
-          <p className="v-prewrap">{sheet.notes}</p>
-        </Section>
-      )}
+            {caster && (
+              <div style={panel('Spells')}>
+                <div className="v-tabpanel">
+                  {derived.spellcasting.dc !== null && (
+                    <div className="gs-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                      <div className="gs-vital" style={{ flex: '0 0 auto', padding: '6px 14px' }} title="Spell save DC">
+                        <b>{derived.spellcasting.dc}</b>
+                        <span>Save DC</span>
+                      </div>
+                      {derived.spellcasting.attackBonus !== null && (
+                        <button type="button" className="gs-vital" style={{ flex: '0 0 auto', padding: '6px 14px' }} onClick={() => rollCheck(roller, 'Spell Attack', derived.spellcasting.attackBonus ?? 0)} title="Roll a spell attack">
+                          <b>{formatModifier(derived.spellcasting.attackBonus)}</b>
+                          <span>Spell attack</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {[...spellsByLevel.entries()]
+                    .sort(([a], [b]) => a - b)
+                    .map(([level, spells]) => {
+                      const total = slotLevels.get(level) ?? 0
+                      const used = Math.min(total, sheet.spellSlots[level]?.used ?? 0)
+                      return (
+                        <div key={level} className="v-spell-level">
+                          <h3>
+                            {SPELL_LEVEL_NAME[level] ?? `Level ${level}`}
+                            {level > 0 && total > 0 && (
+                              <span className="v-slots" aria-label={`${total - used} of ${total} slots left`}>
+                                {Array.from({ length: total }, (_, i) => (
+                                  <span key={i} className={i < total - used ? 'v-slot v-slot--full' : 'v-slot'} />
+                                ))}
+                              </span>
+                            )}
+                          </h3>
+                          <div className="v-cardlist">
+                            {spells.map((sp) => (
+                              <SpellEntry key={sp.id} spell={sp} numbersByLevel={derived.spellNumbers?.[sp.id]} roller={roller} />
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              </div>
+            )}
 
-      <p className="v-muted v-footnote">Synced {new Date(character.updatedAt).toLocaleString()} · read-only</p>
+            <div style={panel('Features')}>
+              <div className="v-tabpanel">
+                {derived.features.length === 0 && extraFeatures.length === 0 && <p className="v-empty">No features yet.</p>}
+                <div className="v-cardlist">
+                  {derived.features.map((f, i) => (
+                    <Entry key={`${f.name}-${i}`} title={f.name} meta={featureSource(f.source)} description={f.description} />
+                  ))}
+                  {extraFeatures.map((f) => (
+                    <Entry key={f.id} title={f.name} meta={featureSource(f.source)} description={f.description} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={panel('Inventory')}>
+              <div className="v-tabpanel">
+                {currency.length > 0 && (
+                  <div className="v-coins">
+                    {currency.map((c) => (
+                      <span key={c} className="gs-vital" style={{ flex: '0 0 auto', padding: '6px 12px' }}>
+                        <b>{sheet.currency[c]}</b>
+                        <span>{c}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {sheet.equipment.length === 0 && <p className="v-empty">Nothing carried.</p>}
+                <div className="v-cardlist">
+                  {sheet.equipment.map((item) => (
+                    <Entry
+                      key={item.id}
+                      title={
+                        <>
+                          {item.name}
+                          {item.quantity > 1 && <span className="v-muted"> ×{item.quantity}</span>}
+                        </>
+                      }
+                      meta={[item.equipped && 'Equipped', item.attuned && 'Attuned'].filter(Boolean).join(' · ') || undefined}
+                      description={item.notes}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={panel('Story')}>
+              <div className="v-tabpanel">
+                {personality.length === 0 && !sheet.notes.trim() && <p className="v-empty">No story written yet.</p>}
+                {personality.map(([label, text]) => (
+                  <div key={label} className="v-prose">
+                    <span className="gs-label">{label}</span>
+                    <p className="v-prewrap">{text}</p>
+                  </div>
+                ))}
+                {sheet.notes.trim() && (
+                  <div className="v-prose">
+                    <span className="gs-label">Notes</span>
+                    <p className="v-prewrap">{sheet.notes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <aside className="gs-side">
+          <div className="gs-card">
+            <div className="gs-between" style={{ marginBottom: 6 }}>
+              <span className="gs-label">Skills</span>
+              <span className="gs-hint">Click to roll</span>
+            </div>
+            {derived.skills
+              .slice()
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((sk) => (
+                <div key={sk.name} className="gs-skill">
+                  <span className={`gs-dot${sk.proficiency === 'proficient' ? ' gs-dot--proficient' : sk.proficiency === 'expertise' ? ' gs-dot--expertise' : ''}`} />
+                  <button type="button" className="gs-skill-roll" onClick={() => rollCheck(roller, `${sk.name} Check`, sk.bonus, { advantage: sk.mode ?? 'normal' })} title={`Roll ${sk.name}`}>
+                    {formatModifier(sk.bonus)}
+                  </button>
+                  <span className="gs-skill-name">
+                    {sk.name}
+                    <AdvantageTag kind={sk.mode} label={`${sk.name} checks`} />
+                  </span>
+                  <span className="gs-skill-ab">{sk.ability.toUpperCase()}</span>
+                </div>
+              ))}
+          </div>
+
+          <div className="gs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span className="gs-label">Senses and defences</span>
+            <div className="gs-hint" style={{ color: 'var(--text-secondary)' }}>
+              {perception && <>Passive Perception {perception.passive}</>}
+              {derived.senses.length > 0 && <> · {derived.senses.map((x) => `${x.name} ${x.range} ft`).join(', ')}</>}
+            </div>
+            {relations
+              .filter(([, list]) => list.length > 0)
+              .map(([label, list]) => (
+                <div key={label} className="gs-hint" style={{ color: 'var(--text-secondary)' }}>
+                  <strong>{label}:</strong> {list.join(', ')}
+                </div>
+              ))}
+            {(['armor', 'weapon', 'tool', 'language'] as const)
+              .filter((k) => derived.proficiencies[k].length > 0)
+              .map((k) => (
+                <div key={k} className="gs-hint" style={{ color: 'var(--text-secondary)' }}>
+                  <strong>{PROFICIENCY_LABEL[k]}:</strong> {derived.proficiencies[k].join(', ')}
+                </div>
+              ))}
+            {sheet.otherProficiencies.trim() && <div className="gs-hint v-prewrap">{sheet.otherProficiencies}</div>}
+          </div>
+          <p className="v-muted v-footnote">Synced {new Date(character.updatedAt).toLocaleString()} · read-only</p>
+        </aside>
+      </div>
     </div>
   )
 }

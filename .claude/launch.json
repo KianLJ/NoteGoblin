@@ -4,8 +4,25 @@
     {
       "name": "sheet-preview",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--config", "vite.sheet-preview.config.ts"],
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "vite.sheet-preview.config.ts"
+      ],
       "port": 5180
+    },
+    {
+      "name": "viewer",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "viewer/vite.config.ts",
+        "--port",
+        "5190",
+        "--strictPort"
+      ],
+      "port": 5190
     }
   ]
 }

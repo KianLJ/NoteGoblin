@@ -11,7 +11,7 @@ import { SRD_PACK_ID } from '@shared/content/srd'
  * works out per card (see SpellsTab.tsx), precomputed because the viewer has
  * no rules engine to do it with.
  */
-function spellsForViewer({ derived, registry }: DerivedSheet, sheet: CharacterSheet): Parameters<typeof buildCloudCharacter>[2] {
+export function spellsForViewer({ derived, registry }: DerivedSheet, sheet: CharacterSheet): Parameters<typeof buildCloudCharacter>[2] {
   const slotTotals: Record<number, number> = {}
   for (const pool of Object.values(derived.spellcasting.slots)) {
     for (const [level, count] of Object.entries(pool)) slotTotals[Number(level)] = (slotTotals[Number(level)] ?? 0) + count

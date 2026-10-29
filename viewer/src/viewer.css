@@ -851,3 +851,269 @@ button.v-skill:first-child {
     zoom: 0.76;
   }
 }
+
+/* --- The character sheet, laid out as the desktop's (sheet.css) ------- */
+
+.v-main--wide {
+  max-width: none;
+  padding: 0 0 calc(env(safe-area-inset-bottom) + var(--space-6));
+}
+
+/* The page scrolls, not the sheet (the desktop sheet scrolls inside its pane). */
+.v-sheet.gs-root {
+  height: auto;
+  overflow: visible;
+}
+
+.v-portrait-box {
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+.v-portrait-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.v-sheet-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+
+.v-xpbar {
+  flex: 1;
+  height: 5px;
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.v-xpbar > div {
+  height: 100%;
+  background: var(--accent);
+}
+
+.v-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Entries (features, spells, items) as the desktop's cards, not a plain list. */
+.v-cardlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.v-cardlist > .v-entry {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+
+.v-attack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-2);
+}
+.v-attack {
+  padding: var(--space-2) var(--space-3);
+}
+.v-attack-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--accent-hover);
+}
+.v-attack-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.v-attack-more summary {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.v-coins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* --- A campaign's notes, laid out as the desktop's: tree beside the note --- */
+
+.v-pad {
+  padding: var(--space-4);
+}
+.v-pad-x {
+  padding: 0 var(--space-3);
+}
+
+.v-notes {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: calc(100dvh - 57px);
+}
+
+.v-notes-side {
+  position: sticky;
+  top: 57px;
+  align-self: start;
+  height: calc(100dvh - 57px);
+  overflow-y: auto;
+  background: var(--bg-sunken);
+  border-right: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-5);
+}
+
+.v-notes-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.v-notes-campaign {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+.v-notes-head .v-search {
+  font-size: 14px;
+  padding: 5px 8px;
+}
+
+.v-tree {
+  padding-top: var(--space-2);
+}
+.v-tree-heading {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Rows as the desktop tree draws them (NoteTreeSection.tsx). */
+.v-tree-folder,
+.v-tree-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px var(--space-3);
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.v-tree-folder {
+  gap: 4px;
+}
+.v-tree-folder:hover,
+.v-tree-note:hover {
+  background: var(--bg-surface-raised);
+}
+.v-tree-note--on,
+.v-tree-note--on:hover {
+  background: var(--accent-subtle);
+  border-left-color: var(--accent);
+  color: var(--accent-hover);
+}
+.v-tree-chevron {
+  display: flex;
+  flex-shrink: 0;
+  transition: transform 100ms;
+}
+.v-tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-notes-main {
+  min-width: 0;
+}
+.v-notes-main .v-note {
+  max-width: 900px;
+  padding: var(--space-5);
+}
+.v-note-title {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.v-notes-pick {
+  height: 100%;
+  min-height: 300px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* A phone: the tree, then the note you open from it — one at a time, full width. */
+@media (max-width: 860px) {
+  .v-notes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .v-notes-side {
+    position: static;
+    height: auto;
+    border-right: none;
+    background: transparent;
+  }
+  .v-notes--reading .v-notes-side,
+  .v-notes:not(.v-notes--reading) .v-notes-main {
+    display: none;
+  }
+  .v-notes-main .v-note {
+    padding: var(--space-4);
+  }
+  /* The top bar already names the campaign. */
+  .v-notes-campaign {
+    display: none;
+  }
+  .v-tree-folder,
+  .v-tree-note {
+    padding-top: 9px;
+    padding-bottom: 9px;
+    font-size: 15px;
+  }
+}
+
+/* A phone's sheet: three ability tiles to a row, so each has room for its save. */
+@media (max-width: 480px) {
+  .v-sheet .gs-abilities {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Loading and errors on the full-width screens, off the edge. */
+.v-main--wide > .v-status,
+.v-main--wide > p {
+  padding: var(--space-4);
+}

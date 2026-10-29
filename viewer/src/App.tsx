@@ -6,7 +6,6 @@ import { href, parentOf, useRoute } from './route'
 import { LoginView } from './views/LoginView'
 import { HomeView } from './views/HomeView'
 import { CampaignView } from './views/CampaignView'
-import { NoteView } from './views/NoteView'
 import { CharacterView } from './views/CharacterView'
 import { RollAnimationOverlay } from '@renderer/features/dice/RollAnimationOverlay'
 
@@ -69,10 +68,11 @@ export function App(): JSX.Element {
           <span className="v-back-spacer" />
         )}
       </header>
-      <main className="v-main">
+      {/* The character sheet (and a campaign's notes) use the whole width, laid out like the desktop app's. */}
+      <main className={route.view === 'home' ? 'v-main' : 'v-main v-main--wide'}>
         {route.view === 'home' && <HomeView username={getUsername()} setTitle={setTitle} />}
-        {route.view === 'campaign' && <CampaignView campaignId={route.campaignId} setTitle={setTitle} />}
-        {route.view === 'note' && <NoteView campaignId={route.campaignId} noteId={route.noteId} setTitle={setTitle} />}
+        {/* A campaign and its notes are one screen, as on the desktop: the tree beside the open note. */}
+        {(route.view === 'campaign' || route.view === 'note') && <CampaignView campaignId={route.campaignId} noteId={route.view === 'note' ? route.noteId : null} setTitle={setTitle} />}
         {route.view === 'character' && <CharacterView characterId={route.characterId} setTitle={setTitle} />}
       </main>
       <RollAnimationOverlay />

@@ -44,12 +44,17 @@ export interface CharacterSummary {
   updatedAt: string
 }
 
+/** Local development only: `/viewer/?demo` shows sample content without an account (see demo.ts — never in the built viewer). */
+const DEMO = import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo')
+// Behind import.meta.env.DEV too, so a production build leaves the sample content (and the rules engine it needs) out entirely.
+const demo = (): Promise<typeof import('./demo').demo> => (import.meta.env.DEV ? import('./demo').then((m) => m.demo) : Promise.reject(new Error('The demo is for local development only.')))
+
 export function getUsername(): string | null {
-  return localStorage.getItem(USERNAME_KEY)
+  return DEMO ? 'demo' : localStorage.getItem(USERNAME_KEY)
 }
 
 export function isSignedIn(): boolean {
-  return localStorage.getItem(TOKEN_KEY) !== null
+  return DEMO || localStorage.getItem(TOKEN_KEY) !== null
 }
 
 export function signOut(): void {
@@ -92,8 +97,8 @@ export async function logIn(username: string, password: string): Promise<void> {
   localStorage.setItem(USERNAME_KEY, result.username)
 }
 
-export const listCampaigns = (): Promise<CampaignSummary[]> => call('/campaigns')
-export const getCampaign = (id: string): Promise<CampaignSnapshot> => call(`/campaigns/${encodeURIComponent(id)}`)
-export const listCharacters = (): Promise<CharacterSummary[]> => call('/characters')
-export const getCharacter = (id: string): Promise<CloudCharacter> => call(`/characters/${encodeURIComponent(id)}`)
-export const getPrefs = (): Promise<{ prefs: unknown }> => call('/prefs')
+export const listCampaigns = (): Promise<CampaignSummary[]> => (DEMO ? demo().then((d) => d.listCampaigns()) : call('/campaigns'))
+export const getCampaign = (id: string): Promise<CampaignSnapshot> => (DEMO ? demo().then((d) => d.getCampaign()) : call(`/campaigns/${encodeURIComponent(id)}`))
+export const listCharacters = (): Promise<CharacterSummary[]> => (DEMO ? demo().then((d) => d.listCharacters()) : call('/characters'))
+export const getCharacter = (id: string): Promise<CloudCharacter> => (DEMO ? demo().then((d) => d.getCharacter()) : call(`/characters/${encodeURIComponent(id)}`))
+export const getPrefs = (): Promise<{ prefs: unknown }> => (DEMO ? demo().then((d) => d.getPrefs()) : call('/prefs'))
