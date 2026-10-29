@@ -4,6 +4,8 @@ import { addExplored, lightsOf, viewerSources, visibleCells, visionActive } from
 import { emptyCombatant, type Combatant } from '@shared/encounter'
 import { useAllMonsters } from '../../data/useAllMonsters'
 import { useVehicles } from '../vehicles/useVehicles'
+import { useActivePackRegistry } from '../content/pickerContent'
+import { withTemplates } from '@shared/vehicles'
 import { currentLibrary, loadLibrary, setBattleMap, setEncounter, useBattleLibrary, useBattleMap, useEncounter } from './encounterStore'
 
 /**
@@ -21,8 +23,18 @@ export function useBattleMapSync(campaignId: string | null, hostedSessionId: str
   const [encounter] = useEncounter()
   const { monsters } = useAllMonsters()
   const vehicles = useVehicles(null, campaignId)
+  const { registry } = useActivePackRegistry()
   const loaded = useRef<string | null>(null)
   const skipSave = useRef(true)
+
+  // The campaign's vehicles kept up to date: one made from a pack entry follows it when the pack is updated, and
+  // components get a quarter of the hull (a ship saved before that was the rule is corrected) — keeping damage, crew and cargo.
+  useEffect(() => {
+    if (!campaignId || !vehicles.doc.vehicles.length) return
+    const next = withTemplates(vehicles.doc, (id) => registry.get('vehicles', id)?.def)
+    if (next !== vehicles.doc) void vehicles.save(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicles.doc, registry, campaignId])
 
   // Load the campaign's battles (or a fresh one).
   useEffect(() => {

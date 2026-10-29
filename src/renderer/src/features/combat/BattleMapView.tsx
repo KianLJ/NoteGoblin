@@ -93,7 +93,8 @@ type Drag =
   | { kind: 'imageMove'; id: string; grab: Pt; at: Pt }
   | { kind: 'imageSize'; id: string; at: Pt }
   /** Turning a token by its facing handle. */
-  | { kind: 'rotate'; id: string; facing: number }
+  /** `t`: the token as turned so far (a long one's lying down or standing up depends on the way it went). */
+  | { kind: 'rotate'; id: string; facing: number; t: MapToken }
 
 /** A shape's size from how far it's been dragged: whole squares when snapping, else whole feet (at least one). */
 function sizeFromDrag(kind: TemplateKind, origin: Pt, to: Pt, feetPerCell: number, snap: boolean): number {
@@ -347,7 +348,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     const rotateId = target.closest('[data-rotate]')?.getAttribute('data-rotate')
     if (rotateId && map.tokens[rotateId]) {
       if (map.tokens[rotateId].locked) onHint(viewer ? 'The DM has locked your token in place.' : 'This token is locked. Unlock it in the side panel to turn it.')
-      else setDrag({ kind: 'rotate', id: rotateId, facing: map.tokens[rotateId].facing ?? 0 })
+      else setDrag({ kind: 'rotate', id: rotateId, facing: map.tokens[rotateId].facing ?? 0, t: map.tokens[rotateId] })
       return
     }
     if (handleId && !viewer) {
@@ -565,7 +566,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
         const raw = (Math.atan2(p.x - mid.x, -(p.y - mid.y)) * 180) / Math.PI
         const facing = normalizeFacing(snap ? Math.round(raw / 45) * 45 : raw)
         if (facing !== drag.facing) {
-          setDrag({ ...drag, facing })
+          setDrag({ ...drag, facing, t: turnToken(drag.t, facing) })
           onHint(`Facing ${compass(facing)}.`)
         }
       }
@@ -665,7 +666,12 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       const w = map.walls.find((x) => x.id === drag.id)
       if (w && (w[drag.end].x !== drag.at.x || w[drag.end].y !== drag.at.y)) updateWall({ ...w, [drag.end]: drag.at })
     } else if (drag.kind === 'rotate') {
-      if (drag.facing !== map.tokens[drag.id]?.facing) faceToken(drag.id, drag.facing)
+      const t = map.tokens[drag.id]
+      if (t && drag.facing !== t.facing) {
+        // The DM's token lands as it was turned; a player's turn goes to the host by its heading.
+        if (viewer) faceToken(drag.id, drag.facing)
+        else if (!t.locked) onChange({ ...map, tokens: { ...map.tokens, [drag.id]: drag.t } })
+      }
     } else if (drag.kind === 'imageMove' || drag.kind === 'imageSize') {
       const img = imagesShown.find((i) => i.id === drag.id)
       const was = map.images.find((i) => i.id === drag.id)
@@ -765,7 +771,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     if (!ids.length && !turning) return map.tokens
     const next = { ...map.tokens }
     for (const id of ids) next[id] = { ...next[id], ...(localDrag?.id === id ? localDrag.free : remoteDrags[id]) }
-    if (turning) next[turning.id] = turnToken(next[turning.id], turning.facing)
+    if (turning) next[turning.id] = turning.t
     return next
   }, [map.tokens, remoteDrags, localDrag?.id, localDrag?.free.x, localDrag?.free.y, drag])
   // Lights carried, and the eyes of whoever's seeing, move with their tokens.

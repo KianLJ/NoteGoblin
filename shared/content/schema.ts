@@ -650,7 +650,8 @@ export const vehicleComponentSchema = z.object({
   name: nameSchema,
   /** Defaults to the vehicle's own AC. */
   ac: z.number().int().optional(),
-  hp: z.number().int().min(1),
+  /** Not used any more: a component's hit points are a quarter of the vehicle's, rounded up (see componentMaxHp). Kept so older packs still load. */
+  hp: z.number().int().min(1).optional(),
   /** Damage below this from one hit does nothing (0: none). */
   threshold: z.number().int().min(0).default(0),
   /** What happens as it's damaged or destroyed ("At 0 HP the ship can't move"). */

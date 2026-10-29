@@ -3,6 +3,7 @@
 // points, crew, fuel) is TrackedVehicleCard in VehiclesPanel.tsx.
 import { vehicleDefSchema, type VehicleDef } from '@shared/content/schema'
 import { inlineTextHtml } from '../../markdown'
+import { componentMaxHp } from '@shared/vehicles'
 
 /** Any entry-shaped object as a full vehicle (defaults filled in) — null when it isn't one yet. */
 export function asVehicle(entry: unknown): VehicleDef | null {
@@ -80,7 +81,7 @@ export function VehicleCard({ vehicle }: { vehicle: VehicleDef }): JSX.Element {
       {v.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>{v.description}</p>}
       {section(
         'Components',
-        v.components.map((c) => ({ name: c.name, text: [`AC ${c.ac ?? v.ac}`, `${c.hp} hit points`, c.threshold ? `threshold ${c.threshold}` : '', c.notes].filter(Boolean).join('; ') }))
+        v.components.map((c) => ({ name: c.name, text: [`AC ${c.ac ?? v.ac}`, `${componentMaxHp(v, c)} hit points`, c.threshold ? `threshold ${c.threshold}` : '', c.notes].filter(Boolean).join('; ') }))
       )}
       {section(
         'Crew stations',

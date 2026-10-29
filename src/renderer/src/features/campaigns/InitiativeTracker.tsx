@@ -54,6 +54,10 @@ interface InitiativeTrackerProps {
   onSelectVehicle?: (vehicleId: string) => void
   /** The campaign's vehicles, shown in the tab beside the tracker (a vehicle clicked in the order opens there). */
   vehiclesView?: ReactNode
+  /** In the Combat screen: clicking a combatant's name picks it (on the map and in the side panel) instead of opening it elsewhere. */
+  onSelectCombatant?: (id: string) => void
+  /** The combatant picked in the Combat screen, marked in the order. */
+  selectedId?: string | null
 }
 
 const STATUS_EFFECT_PRESETS = [
@@ -177,7 +181,9 @@ export function InitiativeTracker({
   vehicles,
   onVehicleHp,
   onSelectVehicle,
-  vehiclesView
+  vehiclesView,
+  onSelectCombatant,
+  selectedId = null
 }: InitiativeTrackerProps): JSX.Element {
   // Shared with the Combat tab (features/combat/encounterStore.ts), so both edit the same fight.
   const [state, setState] = useEncounter()
@@ -641,7 +647,9 @@ export function InitiativeTracker({
                 padding: 'var(--space-2)',
                 borderColor: dragOverId === c.id ? 'var(--accent)' : inCombat && i === state.turnIndex ? 'var(--accent)' : undefined,
                 background: inCombat && i === state.turnIndex ? 'var(--accent-subtle)' : undefined,
-                opacity: dragFromId === c.id ? 0.5 : 1
+                opacity: dragFromId === c.id ? 0.5 : 1,
+                // Picked on the Combat screen's map.
+                boxShadow: selectedId === c.id ? '0 0 0 2px var(--text-primary)' : undefined
               }}
             >
               <button
@@ -691,6 +699,7 @@ export function InitiativeTracker({
                       <button
                         type="button"
                         onClick={() => {
+                          if (onSelectCombatant) return onSelectCombatant(c.id)
                           if (c.kind === 'vehicle') {
                             if (c.vehicleId) {
                               onSelectVehicle?.(c.vehicleId)

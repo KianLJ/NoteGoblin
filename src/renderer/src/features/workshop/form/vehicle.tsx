@@ -199,7 +199,7 @@ export function VehicleEditor({ value, onChange, showName = true }: { value: Obj
         singular="Component"
         list={list('components')}
         onChange={setList('components')}
-        blank={() => ({ name: 'Component', hp: 30 })}
+        blank={() => ({ name: 'Component' })}
         hint="Parts that take damage on their own: engines, shields, sails, a weapons bay. Leave empty if the vehicle is just one hit point pool."
       >
         {(row, patch) => (
@@ -208,8 +208,8 @@ export function VehicleEditor({ value, onChange, showName = true }: { value: Obj
               <Field label="Name">
                 <TextInput value={str(row.name)} onChange={(v) => patch({ name: v })} placeholder="Engines" />
               </Field>
-              <Field label="Hit points">
-                <NumberInput value={num(row.hp)} onChange={(v) => patch({ hp: Math.max(1, v ?? 1) })} min={1} />
+              <Field label="Hit points" hint="A quarter of the vehicle’s, rounded up">
+                <span style={{ fontSize: 13, padding: '4px 0', color: 'var(--text-secondary)' }}>{Math.ceil((num(value.hp) ?? 1) / 4)}</span>
               </Field>
               <Field label="AC" hint="Blank: the vehicle’s">
                 <NumberInput value={num(row.ac)} onChange={(v) => patch({ ac: v })} min={0} />

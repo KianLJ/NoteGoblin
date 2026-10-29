@@ -5,7 +5,7 @@ import { tokenCentre } from '@shared/battleMap'
 import { diceGroups, type DieSides } from '@shared/dice'
 import { withCombatantHp, type Combatant, type InitiativeState } from '@shared/encounter'
 import { ARC_NAMES, applyCrit, arcOf, critTable, fireWeapon, firesInto, scaleDamage, sideStruck, squaresBetween, thresholdFor, weaponReach, weaponReady } from '@shared/shipCombat'
-import { crewKey, crewTier, damageVehicle, gunnerFor, vehicleName, weaponCrew, type CampaignVehicles, type CrewMember, type TrackedVehicle } from '@shared/vehicles'
+import { crewKey, crewTier, damageVehicle, fixedBonus, gunnerFor, vehicleName, weaponCrew, type CampaignVehicles, type CrewMember, type TrackedVehicle } from '@shared/vehicles'
 import { queuePendingCheck, queuePendingDamage } from '../dice/rollAnimationStore'
 import { gunnerBonusFromSheet } from '../vehicles/crewBonus'
 
@@ -113,7 +113,7 @@ export function useShipFire(deps: Deps): {
 
     const ship = vehicleName(v)
     const gunner = (aim.gunnerKey ? weaponCrew(v, w.id).find((m) => crewKey(m) === aim.gunnerKey) : undefined) ?? gunnerFor(v, w.id)
-    const bonus = w.attackBonus ?? (w.saveDc !== undefined || !gunner ? undefined : (crewTier(gunner)?.bonus ?? characterBonus(gunner)))
+    const bonus = fixedBonus(v, w) ?? (w.saveDc !== undefined || !gunner ? undefined : (crewTier(gunner)?.bonus ?? characterBonus(gunner)))
     const shooterCentre = tokenCentre(from)
     const dice = diceGroups(w.damage)
     const damage = (crit: boolean): void => {

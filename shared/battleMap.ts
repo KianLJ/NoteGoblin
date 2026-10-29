@@ -21,6 +21,8 @@ export interface MapToken {
   light?: { bright: number; dim: number }
   /** Which way it faces, in degrees clockwise from the top of the map (0 = up); left out: no facing shown. */
   facing?: number
+  /** A long token lying on its side (turned to east or west, and not since back to north or south). */
+  side?: boolean
 }
 
 /** A wall (or door) along the map, from one point to another, in squares — it stops tokens and sight. */
@@ -104,6 +106,7 @@ export interface Placement {
   sized?: boolean
   hidden?: boolean
   facing?: number
+  side?: boolean
 }
 
 export type Pt = { x: number; y: number }
@@ -196,23 +199,43 @@ export function gridDistanceFt(a: { x: number; y: number }, b: { x: number; y: n
   return Math.max(Math.abs(Math.round(a.x) - Math.round(b.x)), Math.abs(Math.round(a.y) - Math.round(b.y))) * feetPerCell
 }
 
-type Footprint = Pick<MapToken, 'size' | 'h' | 'facing'>
-/** A long token (`h` set) facing nearer east or west than north or south lies on its side. */
-const onItsSide = (t: Footprint): boolean => t.h !== undefined && t.h !== t.size && t.facing !== undefined && Math.round(normalizeFacing(t.facing) / 90) % 2 === 1
+type Footprint = Pick<MapToken, 'size' | 'h' | 'facing' | 'side'>
+/** Which way a heading lays a long token: on its side toward east or west, upright toward north or south; null on a diagonal (it stays as it was). */
+function sideFor(facing: number): boolean | null {
+  const f = normalizeFacing(facing)
+  if (f % 90 === 45) return null
+  return (f > 45 && f < 135) || (f > 225 && f < 315)
+}
+
+/**
+ * A long token (`h` set) lies on its side once turned to east or west, and
+ * stays that way through the diagonals until it's turned to north or south
+ * again (and the other way round).
+ */
+function onItsSide(t: Footprint & { side?: boolean }): boolean {
+  if (t.h === undefined || t.h === t.size || t.facing === undefined) return false
+  return t.side ?? sideFor(t.facing) ?? false
+}
 /** Squares across a token covers on the map (`size` and `h` are across and down when it faces north). */
 export const tokenW = (t: Footprint): number => (onItsSide(t) ? (t.h ?? t.size) : t.size)
 /** Squares down a token covers on the map. */
 export const tokenH = (t: Footprint): number => (onItsSide(t) ? t.size : (t.h ?? t.size))
 
 /** The middle of a token, in squares. */
-export const tokenCentre = (t: Pick<MapToken, 'x' | 'y' | 'size' | 'h' | 'facing'>): Pt => ({ x: t.x + tokenW(t) / 2, y: t.y + tokenH(t) / 2 })
+export const tokenCentre = (t: Pick<MapToken, 'x' | 'y' | 'size' | 'h' | 'facing' | 'side'>): Pt => ({ x: t.x + tokenW(t) / 2, y: t.y + tokenH(t) / 2 })
 
 /** A token turned to face `facing` — a long one swings round its middle when it ends up on its side (or back). */
 export function turnToken<T extends MapToken>(t: T, facing: number | undefined): T {
   const next = { ...t, facing: facing === undefined ? undefined : normalizeFacing(facing) }
   if (facing === undefined) delete next.facing
-  const dx = Math.round((tokenW(t) - tokenW(next)) / 2)
-  const dy = Math.round((tokenH(t) - tokenH(next)) / 2)
+  // On a diagonal it keeps lying the way it was; north or south stands it up, east or west lays it down.
+  const side = facing !== undefined && t.h !== undefined && t.h !== t.size && (sideFor(facing) ?? onItsSide(t))
+  if (side) next.side = true
+  else delete next.side
+  // Half the difference, toward zero: turning one way and back again shifts it by exactly opposite amounts
+  // (a 6 × 7 ship would otherwise creep a square every full turn, from rounding the half square the same way each time).
+  const dx = Math.trunc((tokenW(t) - tokenW(next)) / 2)
+  const dy = Math.trunc((tokenH(t) - tokenH(next)) / 2)
   return dx || dy ? { ...next, x: t.x + dx, y: t.y + dy } : next
 }
 
@@ -258,8 +281,8 @@ export function withPlacements(map: BattleMap, combatants: Combatant[]): BattleM
     if (!t) continue
     const slot = slotOf(c, combatants)
     const was = placements[slot]
-    if (was && was.x === t.x && was.y === t.y && was.size === t.size && was.h === t.h && !!was.sized === !!t.sized && !!was.hidden === !!c.hidden && was.facing === t.facing) continue
-    placements = { ...placements, [slot]: { x: t.x, y: t.y, size: t.size, ...(t.h !== undefined ? { h: t.h } : {}), ...(t.sized ? { sized: true } : {}), ...(c.hidden ? { hidden: true } : {}), ...(t.facing !== undefined ? { facing: t.facing } : {}) } }
+    if (was && was.x === t.x && was.y === t.y && was.size === t.size && was.h === t.h && !!was.sized === !!t.sized && !!was.hidden === !!c.hidden && was.facing === t.facing && !!was.side === !!t.side) continue
+    placements = { ...placements, [slot]: { x: t.x, y: t.y, size: t.size, ...(t.h !== undefined ? { h: t.h } : {}), ...(t.sized ? { sized: true } : {}), ...(c.hidden ? { hidden: true } : {}), ...(t.facing !== undefined ? { facing: t.facing } : {}), ...(t.side ? { side: true } : {}) } }
   }
   return placements === map.placements ? map : { ...map, placements }
 }
@@ -291,7 +314,7 @@ export function placeTokens(map: BattleMap, combatants: Combatant[], sizeOf: (c:
     const size = remembered?.sized ? remembered.size : Math.max(1, Math.min(MAX_TOKEN_SIZE, sizeOf(c)))
     const sized = remembered?.sized ? { sized: true, ...(remembered.h !== undefined ? { h: remembered.h } : {}) } : {}
     const h = remembered?.sized ? (remembered.h ?? size) : size
-    if (remembered && canStand(next, { x: remembered.x, y: remembered.y, size, ...sized })) spot = { x: remembered.x, y: remembered.y, size, ...sized, ...(remembered.facing !== undefined ? { facing: remembered.facing } : {}) }
+    if (remembered && canStand(next, { x: remembered.x, y: remembered.y, size, ...sized })) spot = { x: remembered.x, y: remembered.y, size, ...sized, ...(remembered.facing !== undefined ? { facing: remembered.facing } : {}), ...(remembered.side ? { side: true } : {}) }
     if (!spot && c.kind === 'player') {
       const start = next.partyStarts.find((p) => canStand(next, { x: p.x, y: p.y, size, ...sized }))
       if (start) spot = { x: start.x, y: start.y, size, ...sized }

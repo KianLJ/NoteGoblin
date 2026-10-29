@@ -120,27 +120,51 @@ export function HpControls({ onHp, repair, temp }: { onHp: (amount: number, kind
 }
 
 /** An initiative number to type, and a d20 to roll it. */
+/**
+ * Initiative: the whole tile is a button that rolls the d20 (right-click it
+ * to type a number instead). Without a roll to make, it's just a number box.
+ */
 export function InitiativeField({ value, onChange, onRoll, rollTitle }: { value: number | null; onChange: (v: number | null) => void; onRoll?: () => void; rollTitle?: string }): JSX.Element {
-  return (
-    <div style={{ textAlign: 'center', padding: 6, borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border-subtle)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+  const [typing, setTyping] = useState(false)
+  const label = <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Init</div>
+  if (!onRoll || typing) {
+    return (
+      <div style={{ textAlign: 'center', padding: 6, borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-raised)', border: `1px solid ${typing ? 'var(--accent)' : 'var(--border-subtle)'}` }}>
         <input
           type="number"
           className="gb-input"
+          autoFocus={typing}
           value={value ?? ''}
           placeholder="–"
           onChange={(e) => onChange(e.target.value === '' ? null : Math.round(Number(e.target.value)))}
+          onBlur={() => setTyping(false)}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && setTyping(false)}
           aria-label="Initiative"
-          style={{ width: 46, padding: '1px 2px', fontFamily: 'var(--font-display)', fontSize: 18, textAlign: 'center', background: 'transparent', border: '1px solid transparent' }}
+          style={{ width: 52, padding: '1px 2px', fontFamily: 'var(--font-display)', fontSize: 18, textAlign: 'center', background: 'transparent', border: '1px solid transparent' }}
         />
-        {onRoll && (
-          <button type="button" onClick={onRoll} title={rollTitle ?? 'Roll initiative'} style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent-hover)', borderRadius: 999, fontSize: 10, padding: '1px 6px', cursor: 'pointer', font: 'inherit' }}>
-            d20
-          </button>
-        )}
+        {label}
       </div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Init</div>
-    </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={onRoll}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setTyping(true)
+      }}
+      title={`${rollTitle ?? 'Roll initiative'} — right-click to type a number`}
+      aria-label={`Initiative ${value ?? 'not rolled'}: roll a d20`}
+      className="gb-init-roll"
+      style={{ textAlign: 'center', padding: 6, borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-raised)', border: '1px solid var(--accent)', color: 'inherit', cursor: 'pointer', font: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>{value ?? '–'}</span>
+        <span style={{ fontSize: 10, color: 'var(--accent-hover)', border: '1px solid var(--accent)', borderRadius: 999, padding: '0 5px' }}>d20</span>
+      </div>
+      {label}
+    </button>
   )
 }
 

@@ -110,13 +110,88 @@ describe('gunners', () => {
     expect(gunnerFor(v, 'missile')?.name).toBe('Vale')
   })
 
-  it('uses the one picked, a weapon’s own bonus, and nothing for a save or an empty station', () => {
+  it('uses the one picked, a weapon’s own bonus, nothing for a save, and the hired crew at an empty station', () => {
     const v = { ...ship([{ name: 'Vale', tier: 'green' }, { name: 'Mox', tier: 'elite' }]), gunners: { 'rail-1': 'npc:Mox' } }
     expect(weaponAttackBonus(v, 'rail-1', sheets)).toBe(9)
     expect(crewKey(gunnerFor(v, 'rail-1')!)).toBe('npc:Mox')
     expect(weaponAttackBonus(v, 'fixed', sheets)).toBe(4)
     expect(weaponAttackBonus(v, 'flare', sheets)).toBeUndefined()
-    expect(weaponAttackBonus(ship([]), 'rail-1', sheets)).toBeUndefined()
+    expect(weaponAttackBonus(ship([]), 'rail-1', sheets)).toBe(5)
+    expect(weaponAttackBonus({ ...ship([]), crewTier: 'elite' }, 'rail-1', sheets)).toBe(9)
+    expect(gunnerFor(ship([]), 'rail-1')?.name).toBe('Crew')
     expect(weaponAttackBonus(ship([{ name: 'Old hand' }]), 'rail-1', sheets)).toBe(5)
+  })
+})
+
+describe('who is where', () => {
+  it('puts a party member at one station at a time, or takes them off', async () => {
+    const { placeCrew, trackVehicle } = await import('@shared/vehicles')
+    const def = vehicleDefSchema.parse({ id: 's', name: 'S', hp: 10, stations: [{ id: 'helm', name: 'Helm' }, { id: 'gunnery', name: 'Gunnery' }] })
+    const elowen = { name: 'Elowen', userId: 'u1', characterId: 'c1' }
+    let v = placeCrew(trackVehicle(def, { id: 'v' }), elowen, 'helm')
+    v = placeCrew(v, elowen, 'gunnery')
+    expect(v.crew.helm).toEqual([])
+    expect(v.crew.gunnery).toEqual([elowen])
+    expect(placeCrew(v, elowen, null).crew.gunnery).toEqual([])
+  })
+})
+
+describe('component hit points', () => {
+  it('are a quarter of the hull, rounded up', async () => {
+    const { componentMaxHp, componentHp, trackVehicle } = await import('@shared/vehicles')
+    const def = vehicleDefSchema.parse({ id: 'd', name: 'D', hp: 61, components: [{ id: 'engines', name: 'Engines' }, { id: 'sails', name: 'Sails', hp: 7 }] })
+    expect(componentMaxHp(def, def.components[0])).toBe(16)
+    expect(componentMaxHp(def, def.components[1])).toBe(16)
+    expect(componentHp(trackVehicle(def, { id: 'v' }), 'engines')).toBe(16)
+  })
+
+  it('follow a changed template: full stays full, hurt keeps its hit points', async () => {
+    const { trackVehicle, updateFromTemplate } = await import('@shared/vehicles')
+    const old = vehicleDefSchema.parse({ id: 'd', name: 'D', hp: 60, components: [{ id: 'engines', name: 'Engines', hp: 1 }, { id: 'bridge', name: 'Bridge', hp: 1 }] })
+    const v = { ...trackVehicle(old, { id: 'v' }), def: old, hp: 40, components: { engines: 1, bridge: 0 } }
+    const next = updateFromTemplate(v, vehicleDefSchema.parse({ ...old, components: [{ id: 'engines', name: 'Engines' }, { id: 'bridge', name: 'Bridge' }] }))
+    expect(next.components).toEqual({ engines: 15, bridge: 0 })
+    expect(next.hp).toBe(40)
+  })
+})
+
+describe('following a template', () => {
+  it('updates a vehicle when its pack entry changed, once', async () => {
+    const { campaignVehiclesSchema, trackVehicle, withTemplates } = await import('@shared/vehicles')
+    const old = vehicleDefSchema.parse({ id: 'd', name: 'D', hp: 60, components: [{ id: 'engines', name: 'Engines', hp: 1 }] })
+    const doc = { vehicles: [trackVehicle(old, { id: 'v', templateId: 'p:d' })] }
+    // The pack's entry as a pack holds it: no defaults filled in.
+    const raw = { id: 'd', name: 'D', hp: 60, components: [{ id: 'engines', name: 'Engines' }] } as never
+    const once = withTemplates(doc, () => raw)
+    expect(once.vehicles[0].components.engines).toBe(15)
+    // Saved and loaded again: nothing more to do.
+    const reloaded = campaignVehiclesSchema.parse(JSON.parse(JSON.stringify(once)))
+    expect(withTemplates(reloaded, () => raw)).toBe(reloaded)
+    // Unchanged template: the same document.
+    expect(withTemplates(doc, () => old)).toBe(doc)
+  })
+})
+
+describe('a ship saved before components were a quarter of the hull', () => {
+  it('gets them, even when its pack still has the old numbers', async () => {
+    const { trackedVehicleSchema, withTemplates } = await import('@shared/vehicles')
+    const oldPack = vehicleDefSchema.parse({ id: 'dreadnought', name: 'Dreadnought', hp: 800, components: [{ id: 'engines', name: 'Engines', hp: 1 }, { id: 'weapons', name: 'Weapons', hp: 1 }] })
+    const saved = trackedVehicleSchema.parse({ id: 'v', templateId: 'red-rising:dreadnought', def: oldPack, hp: 800, components: { engines: 1, weapons: 0 } })
+    const doc = { vehicles: [saved] }
+    const fixed = withTemplates(doc, () => oldPack)
+    expect(fixed.vehicles[0].components).toEqual({ engines: 200, weapons: 0 })
+    expect(withTemplates(fixed, () => oldPack)).toBe(fixed)
+  })
+})
+
+describe('a gun with a bonus of its own', () => {
+  it('fires at it, unless the crew is set to fire it anyway', async () => {
+    const { gunnerFor, trackVehicle, weaponAttackBonus } = await import('@shared/vehicles')
+    const def = vehicleDefSchema.parse({ id: 'd', name: 'D', hp: 800, stations: [{ id: 'gunnery', name: 'Gunnery' }], weapons: [{ id: 'heavy-1', name: 'Heavy railgun', station: 'gunnery', damage: '4d10' }, { id: 'heavy-2', name: 'Heavy railgun', station: 'gunnery', attackBonus: 5, damage: '4d10' }] })
+    const v = { ...trackVehicle(def, { id: 'v' }), crewTier: 'veteran' as const }
+    expect(weaponAttackBonus(v, 'heavy-2', () => undefined)).toBe(5)
+    const crewed = { ...v, crewFires: ['heavy-2'] }
+    expect(weaponAttackBonus(crewed, 'heavy-2', () => undefined)).toBe(7)
+    expect(gunnerFor(crewed, 'heavy-2')?.name).toBe('Crew')
   })
 })

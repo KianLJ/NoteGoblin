@@ -154,6 +154,8 @@ export interface PlayerVisibleCombatant {
   isSelf: boolean
   /** A fellow player's relay userId (never set for anything else), so their sheet can be looked at from the Combat tab. */
   userId?: string
+  /** The party's own vehicle: which tracked vehicle it is, so its panel (stations, weapons) can be shown. */
+  vehicleId?: string
   /** Armour class — only for the party (players and the party's vehicle). */
   ac: number | null
   statusEffects: string[]
@@ -230,6 +232,7 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
         dead: c.currentHp <= 0,
         isSelf,
         ...(c.kind === 'player' && c.userId ? { userId: c.userId } : {}),
+        ...(c.kind === 'vehicle' && c.party && c.vehicleId ? { vehicleId: c.vehicleId } : {}),
         ac: known ? c.ac : null,
         statusEffects: c.statusEffects,
         dismemberments: c.dismemberments,

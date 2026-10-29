@@ -11,6 +11,17 @@ import type { CharacterSheetData } from '@shared/dnd5e'
 import type { PlayerBattleMap, BattleMap } from '@shared/battleMap'
 import { emptyCombatant, type Combatant, type InjuryLevel, type PlayerVisibleCombatant, type PlayerVisibleInitiativeState } from '@shared/encounter'
 import { deriveSheet } from '@shared/content/sheet'
+import { diceGroups } from '@shared/dice'
+import type { TrackedVehicle } from '@shared/vehicles'
+import { useVehicles } from '../vehicles/useVehicles'
+import { Aboard } from '../vehicles/Aboard'
+import { ShipTabs } from '../vehicles/ShipTabs'
+import { StationList } from '../vehicles/StationActions'
+import { VehicleDamage } from '../vehicles/VehicleDamage'
+import { crewLabel, gunnerBonusFromSheet } from '../vehicles/crewBonus'
+import { formatModifier } from '@shared/dnd5e'
+import { weaponReady } from '@shared/shipCombat'
+import { fixedBonus, shipCrew, vehicleName } from '@shared/vehicles'
 import { useSheetRoller } from '../dice/useSheetRoller'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { BattleMapView, type MapTool, type Sight } from './BattleMapView'
@@ -24,6 +35,8 @@ interface Props {
   character: CharacterSheet | null
   /** Saves a change to that character (hit points, spent uses and slots). */
   onSaveCharacter: (patch: Partial<CharacterSheetData>) => void
+  /** The campaign the session is for, for the vehicles the player crews. */
+  campaignId?: string | null
 }
 
 const INJURY_FRACTION: Record<InjuryLevel, number> = { undamaged: 1, moderate: 0.7, bloodied: 0.45, severe: 0.2, critical: 0.05 }
@@ -74,7 +87,9 @@ function toBattleMap(map: PlayerBattleMap, pictures: Record<string, string>, pen
   }
 }
 
-export function PlayerCombatView({ sessionId, character, onSaveCharacter }: Props): JSX.Element {
+export function PlayerCombatView({ sessionId, character, onSaveCharacter, campaignId = null }: Props): JSX.Element {
+  // The party's vehicles (where they sit aboard comes with them).
+  const vehicles = useVehicles(sessionId, campaignId)
   const [map, setMap] = useState<PlayerBattleMap | null>(null)
   const [initiative, setInitiative] = useState<PlayerVisibleInitiativeState | null>(null)
   // Map pictures received so far, by fingerprint.
@@ -272,12 +287,21 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter }: Prop
           <aside style={{ height: '100%', borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', overflowY: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             {selected?.isSelf || (!selected && character) ? (
               character ? (
-                <MyCharacter character={character} sessionId={sessionId} combatant={selected} onSave={onSaveCharacter} />
+                <MyCharacter character={character} sessionId={sessionId} combatant={selected} onSave={onSaveCharacter} vehicles={vehicles.doc.vehicles} round={initiative && initiative.turnIndex >= 0 ? initiative.round : null} />
               ) : (
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Open your character to play them from here.</p>
               )
             ) : selected?.userId ? (
               <FellowPlayer key={selected.userId} c={selected} sessionId={sessionId} />
+            ) : selected?.vehicleId && vehicles.doc.vehicles.some((v) => v.id === selected.vehicleId) ? (
+              <PartyShip
+                key={selected.id}
+                c={selected}
+                vehicle={vehicles.doc.vehicles.find((v) => v.id === selected.vehicleId)!}
+                character={character}
+                sessionId={sessionId}
+                round={initiative && initiative.turnIndex >= 0 ? initiative.round : null}
+              />
             ) : selected ? (
               <OtherCombatant c={selected} />
             ) : (
@@ -315,9 +339,27 @@ function Conditions({ list }: { list: string[] }): JSX.Element | null {
 }
 
 /** The player's own character: hit points and initiative to change, then their actions and spells — everything saved to their sheet. */
-function MyCharacter({ character, sessionId, combatant, onSave }: { character: CharacterSheet; sessionId: string; combatant: PlayerVisibleCombatant | null; onSave: (patch: Partial<CharacterSheetData>) => void }): JSX.Element {
+function MyCharacter({
+  character,
+  sessionId,
+  combatant,
+  onSave,
+  vehicles,
+  round
+}: {
+  character: CharacterSheet
+  sessionId: string
+  combatant: PlayerVisibleCombatant | null
+  onSave: (patch: Partial<CharacterSheetData>) => void
+  vehicles: TrackedVehicle[]
+  round: number | null
+}): JSX.Element {
   const { derived } = useMemo(() => deriveSheet(character), [character])
-  const { rollDamage } = useSheetRoller(sessionId, character.name)
+  const { myId, rollCheck, rollDamage } = useSheetRoller(sessionId, character.name)
+  const rollDice = (expr: string, label: string): void => {
+    const parsed = diceGroups(expr)
+    if (parsed) rollDamage(parsed.groups, parsed.modifier, label)
+  }
   const [init, setInit] = useState<number | null>(combatant?.initiative ?? null)
   // The DM's turn order has the final word; it comes back with every update.
   useEffect(() => setInit(combatant?.initiative ?? null), [combatant?.initiative])
@@ -340,6 +382,8 @@ function MyCharacter({ character, sessionId, combatant, onSave }: { character: C
       <HpControls temp onHp={(amount, kind) => onSave(hpChange(character.currentHp, character.tempHp ?? 0, derived.maxHp, amount, kind))} />
       {character.currentHp <= 0 && <div style={{ fontSize: 12, color: 'var(--danger)' }}>You’re down — roll your death saves on your sheet.</div>}
       <Conditions list={combatant?.statusEffects ?? []} />
+      {/* Your own place aboard a vehicle, if you're at one of its stations: just your station and your guns. */}
+      <Aboard heading vehicles={vehicles} userId={myId} character={character} round={round} rollCheck={(label, modifier) => rollCheck(label, modifier)} rollDice={rollDice} />
       <CharacterTabs character={character} sessionId={sessionId} onSave={onSave} />
     </div>
   )
@@ -372,6 +416,79 @@ function FellowPlayer({ c, sessionId }: { c: PlayerVisibleCombatant; sessionId: 
 }
 
 /** Anyone else: how hurt they look, and their conditions. */
+/**
+ * The party's ship, as a player sees it: its hull and parts, every station
+ * and every gun. Nothing here changes the ship (that's the DM's) — the
+ * buttons roll, with your own character's numbers: a station's ability plus
+ * proficiency, Dexterity plus proficiency for a gun.
+ */
+function PartyShip({ c, vehicle: v, character, sessionId, round }: { c: PlayerVisibleCombatant; vehicle: TrackedVehicle; character: CharacterSheet | null; sessionId: string; round: number | null }): JSX.Element {
+  const { myId, rollCheck, rollDamage } = useSheetRoller(sessionId, character?.name)
+  const rollDice = (expr: string, label: string): void => {
+    const parsed = diceGroups(expr)
+    if (parsed) rollDamage(parsed.groups, parsed.modifier, label)
+  }
+  const me = character ? { member: { name: character.name || 'You', userId: myId, characterId: character.id }, sheet: character } : undefined
+  const gunBonus = character ? gunnerBonusFromSheet(character) : undefined
+  const noCharacter = <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>Open your character to roll with your own numbers.</p>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      <Heading name={vehicleName(v)} sub={`Party vehicle · ${v.def.size} ${v.def.category.toLowerCase()}`} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        <Stat value={c.currentHp !== null ? `${c.currentHp}` : INJURY_LABEL[c.injury]} label={c.maxHp !== null ? `HP / ${c.maxHp}` : 'HP'} />
+        <Stat value={c.ac !== null ? `${c.ac}` : '–'} label="AC" />
+        <Stat value={c.initiative === null ? '–' : `${c.initiative}`} label="Init" />
+      </div>
+      <ShipTabs
+        ship={
+          <>
+            <VehicleDamage vehicle={v} readOnly />
+            <Conditions list={c.statusEffects} />
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>Hired crew: {crewLabel(shipCrew(v))}. The DM looks after the ship’s damage.</p>
+          </>
+        }
+        stations={
+          <>
+            <StationList vehicle={v} sheets={(userId) => (userId === myId ? character : null)} actAs={me} rollCheck={(label, modifier) => rollCheck(label, modifier)} />
+            {!character && noCharacter}
+          </>
+        }
+        weapons={
+          <>
+            {v.def.weapons.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>It has no weapons.</span>}
+            {v.def.weapons.map((w) => {
+              const ready = weaponReady(v, w, round)
+              const bonus = w.saveDc !== undefined ? undefined : (fixedBonus(v, w) ?? gunBonus)
+              return (
+                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border-subtle)' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
+                    <strong>{w.name}</strong>
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>
+                      {[w.saveDc !== undefined ? `DC ${w.saveDc} ${(w.saveAbility ?? 'dex').toUpperCase()}` : w.damageType, w.range].filter(Boolean).join(' · ')}
+                    </span>
+                    {!ready.ok && <span style={{ display: 'block', fontSize: 11, color: 'var(--danger)' }}>{ready.why}</span>}
+                  </span>
+                  {bonus !== undefined && (
+                    <button type="button" className="gs-chip" disabled={!ready.ok} onClick={() => rollCheck(`${w.name} Attack`, bonus)} title={w.attackBonus !== undefined ? 'Roll the attack' : 'Roll the attack: your Dexterity + proficiency'}>
+                      {formatModifier(bonus)}
+                    </button>
+                  )}
+                  {w.damage && diceGroups(w.damage) && (
+                    <button type="button" className="gs-chip" onClick={() => rollDice(w.damage, `${w.name} Damage`)} title="Roll the damage">
+                      {w.damage}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+            {!character && noCharacter}
+          </>
+        }
+      />
+    </div>
+  )
+}
+
 function OtherCombatant({ c }: { c: PlayerVisibleCombatant }): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>

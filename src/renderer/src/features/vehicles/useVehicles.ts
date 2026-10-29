@@ -11,6 +11,14 @@ import type { CampaignVehicles } from '@shared/vehicles'
  * token's size) and the Combat tab.
  */
 const listeners = new Set<(campaignId: string, doc: CampaignVehicles, from: object) => void>()
+// The latest save per campaign: a save's result (or failure) that comes back after a newer change was made is
+// ignored, so clicking quickly doesn't flick the numbers back to an older state while the saves catch up.
+let saveCount = 0
+const latestSave = new Map<string, number>()
+// Saves still on their way, per campaign. Each save also has the app re-read the list (so other panels and players
+// catch up) — but a re-read that started before, or while, a save of ours was in flight is older than what's on
+// screen, and would put the hull or a component back for a moment (the jitter when clicking quickly). It's skipped.
+const inFlight = new Map<string, number>()
 function shareVehicles(campaignId: string, doc: CampaignVehicles, from: object): void {
   for (const l of listeners) l(campaignId, doc, from)
 }
@@ -35,8 +43,10 @@ export function useVehicles(sessionId: string | null, campaignId: string | null)
   }, [campaignId, self])
 
   function refresh(id: string): void {
+    const seqAtStart = latestSave.get(id)
     void window.goblin.vehicles.get(id, sessionId ?? undefined).then((result) => {
       if (!result.ok) return setError(result.error)
+      if ((inFlight.get(id) ?? 0) > 0 || latestSave.get(id) !== seqAtStart) return
       saved.current = result.data
       setDoc(result.data)
       setError(null)
@@ -56,15 +66,25 @@ export function useVehicles(sessionId: string | null, campaignId: string | null)
     if (!campaignId) return false
     setDoc(next)
     shareVehicles(campaignId, next, self)
-    const result = await window.goblin.vehicles.save(campaignId, next)
+    const mine = ++saveCount
+    latestSave.set(campaignId, mine)
+    inFlight.set(campaignId, (inFlight.get(campaignId) ?? 0) + 1)
+    const result = await window.goblin.vehicles.save(campaignId, next).finally(() => inFlight.set(campaignId, (inFlight.get(campaignId) ?? 1) - 1))
+    const latest = latestSave.get(campaignId) === mine
     if (!result.ok) {
-      setDoc(saved.current)
-      shareVehicles(campaignId, saved.current, self)
+      // Only the latest change puts the last saved list back; a newer one is already on its way.
+      if (latest) {
+        setDoc(saved.current)
+        shareVehicles(campaignId, saved.current, self)
+      }
       setError(result.error)
       return false
     }
     saved.current = result.data
-    shareVehicles(campaignId, result.data, self)
+    if (latest) {
+      setDoc(result.data)
+      shareVehicles(campaignId, result.data, self)
+    }
     setError(null)
     return true
   }

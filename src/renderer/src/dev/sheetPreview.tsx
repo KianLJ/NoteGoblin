@@ -293,7 +293,7 @@ const demoVehicle = {
     { id: 'engines', name: 'Engines', hp: 60, notes: 'At 0 HP the ship drifts' }
   ],
   stations: [
-    { id: 'pilot', name: 'Pilot', notes: 'Flies the ship' },
+    { id: 'pilot', name: 'Pilot', notes: 'Flies the ship', ability: 'dex', actions: [{ name: 'Evasive', desc: '+2 ship AC until your next turn, at half speed.' }, { name: 'Hard Burn', desc: 'Move double speed and make an otherwise impossible turn.', roll: false }] },
     { id: 'gunner', name: 'Gunner', count: 2, notes: 'Fires the lasers' }
   ],
   weapons: [{ id: 'laser', name: 'Laser Battery', station: 'gunner', attackBonus: 7, damage: '4d10', damageType: 'Radiant', range: '1 mile', ammo: 6 }, { id: 'rail', name: 'Heavy railgun', station: 'gunner', damage: '4d10', damageType: 'hull', range: '20 squares, fore' }],
@@ -361,7 +361,7 @@ const sample: CharacterSheet = {
 
 function PlayerPreview(): JSX.Element {
   const [character, setCharacter] = useState<CharacterSheet>(sample)
-  return <PlayerCombatView sessionId="s" character={character} onSaveCharacter={(patch) => setCharacter((c) => ({ ...c, ...patch }))} />
+  return <PlayerCombatView sessionId="s" campaignId="camp" character={character} onSaveCharacter={(patch) => setCharacter((c) => ({ ...c, ...patch }))} />
 }
 
 function Preview(): JSX.Element {

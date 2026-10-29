@@ -105,7 +105,8 @@ describe('stations', () => {
   it('gives each crew member their bonus: a tier, or ability + proficiency', () => {
     const v = { ...trackVehicle(def, { id: 'v' }), crew: { helm: [{ name: 'Vale', tier: 'elite' as const }, { name: 'Elowen', userId: 'u1' }] } }
     const crew = stationCrew(v, 'helm', (m, ability) => (m.userId === 'u1' && ability === 'dex' ? 7 : undefined))
-    expect(crew.map((x) => x.bonus)).toEqual([9, 7])
+    expect(crew.map((x) => x.bonus)).toEqual([9, 7, 5])
+    expect(crew[2].member.name).toBe('Crew')
   })
 })
 
@@ -120,5 +121,44 @@ describe('long ships turning', () => {
     const map = { ...emptyBattleMap(), tokens: { ship: east } }
     expect(canStand(map, { x: 13, y: 14, size: 1 })).toBe(true)
     expect(canStand(map, { x: 13, y: 13, size: 1 })).toBe(false)
+  })
+})
+
+describe('long ships on the diagonals', () => {
+  it('stay upright facing north-west, north or north-east (and south-ish), and lie on their side east or west', () => {
+    const ship = { x: 0, y: 0, size: 2, h: 6, sized: true }
+    const lies = (facing: number) => tokenW({ ...ship, facing }) === 6
+    expect([315, 0, 45, 135, 180, 225].map(lies)).toEqual([false, false, false, false, false, false])
+    expect([90, 270, 60, 300].map(lies)).toEqual([true, true, true, true])
+  })
+})
+
+describe('long ships keep lying the way they were through the diagonals', () => {
+  it('stays on its side from east to north-east, and stands up only at north', () => {
+    let ship = turnToken({ x: 10, y: 10, size: 2, h: 6, sized: true, facing: 0 }, 90)
+    expect(tokenW(ship)).toBe(6)
+    ship = turnToken(ship, 45)
+    expect(tokenW(ship)).toBe(6)
+    ship = turnToken(ship, 0)
+    expect(tokenW(ship)).toBe(2)
+    ship = turnToken(ship, 45)
+    expect(tokenW(ship)).toBe(2)
+    ship = turnToken(ship, 135)
+    expect(tokenW(ship)).toBe(2)
+    ship = turnToken(ship, 270)
+    expect(tokenW(ship)).toBe(6)
+    ship = turnToken(ship, 225)
+    expect([tokenW(ship), ship.x, ship.y]).toEqual([6, 8, 12])
+  })
+})
+
+describe('turning an odd-sized ship all the way round', () => {
+  it('ends where it started', () => {
+    const start = { x: 10, y: 10, size: 6, h: 7, sized: true, facing: 0 }
+    let ship = start
+    for (let turn = 0; turn < 3; turn++) for (let f = 45; f <= 360; f += 45) ship = turnToken(ship, f)
+    expect([ship.x, ship.y, tokenW(ship), tokenH(ship)]).toEqual([10, 10, 6, 7])
+    for (let f = 315; f >= 0; f -= 45) ship = turnToken(ship, f)
+    expect([ship.x, ship.y]).toEqual([10, 10])
   })
 })

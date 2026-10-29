@@ -1,20 +1,16 @@
 import { useState, type ReactNode } from 'react'
 import { ConnectedPlayersList } from './ConnectedPlayersList'
-import { InitiativeTracker } from './InitiativeTracker'
+import { monsterToCombatant } from './InitiativeTracker'
 import { CalendarPanel } from './CalendarPanel'
 import { SessionDeckPanel } from './SessionDeckPanel'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { PlayersIcon, DiceIcon, InitiativeIcon, CalendarIcon, SessionIcon } from './panelIcons'
-import { VehiclesPanel } from '../vehicles/VehiclesPanel'
-import { useVehicles } from '../vehicles/useVehicles'
-import { switchToEncounterBattle } from '../combat/encounterStore'
-import type { TrackedVehicle } from '@shared/vehicles'
+import { PlayersIcon, DiceIcon, CalendarIcon, SessionIcon } from './panelIcons'
+import { setEncounter, switchToEncounterBattle } from '../combat/encounterStore'
 import { DiceTray } from '../dice/DiceTray'
 import { useDiceRollToast } from '../dice/useDiceRollToast'
 import { DiceRollToast } from '../dice/DiceRollToast'
 import { loadRightPanelTab, saveRightPanelTab } from './rightPanelTab'
 import type { CharacterSheet, Note } from '@shared/ipc'
-import type { BestiaryMonster } from '../../data/bestiary'
 import { TestPlayersMenu } from '../combat/TestPlayersMenu'
 
 
@@ -25,10 +21,9 @@ interface RightPanelProps {
   /** null before the DM has any campaign open — the panel still renders (Dice/Initiative work standalone; Players just shows an empty state until one exists). */
   campaignId: string | null
   playerCharacters: Map<string, CharacterSheet>
-  /** The connected players' characters and the DM's test players' (see useTestPlayerSheets): who can join a fight or crew a vehicle. */
-  partyCharacters?: Map<string, CharacterSheet>
   onSelectPlayer: (userId: string) => void
-  onSelectMonster: (monster: BestiaryMonster) => void
+  /** Opens the Combat screen — where the initiative tracker, encounter building and vehicles now live. */
+  onOpenCombat?: () => void
   /** For CalendarPanel's event editor, and SessionDeckPanel's scene title lookups — lets either pair with/open an existing note. */
   notes: Note[]
   /** Opens a note (here, always a scene) as a tab in the main pane — same function CampaignWorkspace already passes its own sidebar. */
@@ -43,30 +38,23 @@ export function RightPanel({
   sessionId,
   campaignId,
   playerCharacters,
-  partyCharacters = playerCharacters,
   onSelectPlayer,
-  onSelectMonster,
+  onOpenCombat,
   notes,
   onOpenNote,
   onSceneCreated,
   onSceneRemoved
 }: RightPanelProps): JSX.Element {
-  const [tab, setTabState] = useState(loadRightPanelTab)
+  // The initiative tracker moved to the Combat screen; a DM whose last tab was Initiative lands on Players.
+  const [tab, setTabState] = useState(() => {
+    const t = loadRightPanelTab()
+    return t === 'initiative' ? 'players' : t
+  })
   function setTab(next: typeof tab): void {
     setTabState(next)
     saveRightPanelTab(next)
   }
   const diceToast = useDiceRollToast(tab === 'dice')
-  // "Load Encounter" on a presented scene (SessionDeckPanel) needs to reach
-  // the Initiative Tracker, a sibling tab's own component with its own local
-  // combat state — lifted just far enough (not into a global store) for the
-  // two to hand off through their shared parent.
-  const [pendingEncounterMonsters, setPendingEncounterMonsters] = useState<BestiaryMonster[] | null>(null)
-  // "Add to initiative" on a vehicle hands it to the tracker the same way.
-  const [pendingVehicle, setPendingVehicle] = useState<TrackedVehicle | null>(null)
-  // The tracker keeps vehicle combatants' hit points and the hull in step through this.
-  const vehicles = useVehicles(null, campaignId)
-  const [focusVehicle, setFocusVehicle] = useState<{ id: string } | null>(null)
 
   return (
     <ResizableSidebar
@@ -90,47 +78,18 @@ export function RightPanel({
             <TabButton icon={<DiceIcon />} label="Dice" active={tab === 'dice'} onClick={() => setTab('dice')} />
             {diceToast && <DiceRollToast key={diceToast.id} entry={diceToast} />}
           </div>
-          <TabButton icon={<InitiativeIcon />} label="Initiative" active={tab === 'initiative'} onClick={() => setTab('initiative')} />
           <TabButton icon={<CalendarIcon />} label="Calendar" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
           <TabButton icon={<SessionIcon />} label="Sessions" active={tab === 'sessions'} onClick={() => setTab('sessions')} />
         </div>
 
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          {/* All three stay mounted (hidden via CSS) rather than conditionally rendered — the initiative tracker
-              in particular owns its own live combat state locally, which used to reset to empty every time you
-              switched away from this tab and back, since unmounting threw the whole thing away. */}
+          {/* All stay mounted (hidden via CSS) rather than conditionally rendered, so nothing half-done is lost switching tabs. */}
           <div style={{ display: tab === 'players' ? 'block' : 'none', height: '100%', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: 'var(--space-2) var(--space-3) 0' }}>
               <span style={{ flex: 1, fontSize: 11, color: 'var(--text-muted)' }}>Stand-ins for testing, as party members:</span>
               <TestPlayersMenu />
             </div>
             <ConnectedPlayersList sessionId={sessionId} campaignId={campaignId} playerCharacters={playerCharacters} onSelectPlayer={onSelectPlayer} />
-          </div>
-          <div style={{ display: tab === 'initiative' ? 'block' : 'none', height: '100%' }}>
-            <InitiativeTracker
-              sessionId={sessionId}
-              playerCharacters={partyCharacters}
-              onSelectMonster={onSelectMonster}
-              pendingEncounterMonsters={pendingEncounterMonsters}
-              onPendingEncounterConsumed={() => setPendingEncounterMonsters(null)}
-              pendingVehicle={pendingVehicle}
-              onPendingVehicleConsumed={() => setPendingVehicle(null)}
-              vehicles={vehicles.doc.vehicles}
-              onVehicleHp={(id, hp) => void vehicles.save({ vehicles: vehicles.doc.vehicles.map((v) => (v.id === id ? { ...v, hp } : v)) })}
-              onSelectVehicle={(id) => setFocusVehicle({ id })}
-              vehiclesView={
-                // Read and saved locally like the calendar; rolls go to the hosted session.
-                <VehiclesPanel
-                  sessionId={null}
-                  rollSessionId={sessionId}
-                  campaignId={campaignId}
-                  readOnly={false}
-                  playerCharacters={partyCharacters}
-                  focus={focusVehicle}
-                  onAddToInitiative={setPendingVehicle}
-                />
-              }
-            />
           </div>
           <div style={{ display: tab === 'dice' ? 'block' : 'none', height: '100%' }}>
             <DiceTray sessionId={sessionId} />
@@ -161,8 +120,8 @@ export function RightPanel({
               onLoadEncounter={(monsters, encounterId) => {
                 // A battle made for this encounter comes up on the battle map, so its enemies land where they were placed.
                 switchToEncounterBattle(encounterId)
-                setPendingEncounterMonsters(monsters)
-                setTab('initiative')
+                setEncounter((s) => ({ ...s, combatants: [...s.combatants, ...monsters.map(monsterToCombatant)] }))
+                onOpenCombat?.()
               }}
             />
           </div>

@@ -134,8 +134,9 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   // hosted or joined game — DM is locked while you've joined someone else's
   // session, Player is locked while you're hosting your own.
   const lockedMode: Mode | undefined = hostedSessionId ? 'player' : joinedSession ? 'dm' : undefined
-  // Combat is the DM's map in DM mode, or the DM's map as shared with you while you're in their session.
-  const combatShown = combatOpen && (mode === 'dm' || !!joinedSession)
+  // Combat is the DM's map in DM mode, or the DM's map as shared with you while you're in their session
+  // (out of one, the tab's still there, saying how to get to the fight).
+  const combatShown = combatOpen
   // The DM's battle map is loaded, saved and shared behind the scenes, whether or not the Combat tab is open.
   useBattleMapSync(mode === 'dm' ? (activeCampaign?.id ?? null) : null, mode === 'dm' ? hostedSessionId : null)
   const lockedReason = hostedSessionId
@@ -426,14 +427,10 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               setWorkshopOpen(true)
             }}
             combat={combatShown}
-            onCombat={
-              mode === 'dm' || joinedSession
-                ? () => {
-                    setWorkshopOpen(false)
-                    setCombatOpen(true)
-                  }
-                : undefined
-            }
+            onCombat={() => {
+              setWorkshopOpen(false)
+              setCombatOpen(true)
+            }}
           />
 
           {!workshopOpen && !combatShown && mode === 'dm' && activeCampaign && (
@@ -549,17 +546,23 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {mode === 'dm' ? (
             <CombatView sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} playerCharacters={combatCharacters} />
+          ) : joinedSession ? (
+            <PlayerCombatView
+              sessionId={joinedSession.sessionId}
+              campaignId={playerWorkspace.activeCampaign?.id ?? null}
+              character={playerWorkspace.lastActiveCharacter}
+              onSaveCharacter={(patch) => {
+                const character = playerWorkspace.lastActiveCharacter
+                if (character) void playerWorkspace.saveCharacter(character.id, patch)
+              }}
+            />
           ) : (
-            joinedSession && (
-              <PlayerCombatView
-                sessionId={joinedSession.sessionId}
-                character={playerWorkspace.lastActiveCharacter}
-                onSaveCharacter={(patch) => {
-                  const character = playerWorkspace.lastActiveCharacter
-                  if (character) void playerWorkspace.saveCharacter(character.id, patch)
-                }}
-              />
-            )
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)' }}>
+              <div style={{ maxWidth: 380, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <strong style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>No fight to show yet</strong>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>The battle map is your DM’s. Join their session and it appears here, with your character and the party’s ship.</span>
+              </div>
+            </div>
           )}
         </main>
       )}
@@ -573,7 +576,10 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             hostedSessionId={hostedSessionId}
             onHostedSessionChange={setHostedSessionId}
             playerCharacters={playerCharacters}
-            partyCharacters={combatCharacters}
+            onOpenCombat={() => {
+              setWorkshopOpen(false)
+              setCombatOpen(true)
+            }}
             viewedPlayerUserId={viewedPlayerUserId}
             onViewPlayerUserId={setViewedPlayerUserId}
             monsterTabs={monsterTabs}

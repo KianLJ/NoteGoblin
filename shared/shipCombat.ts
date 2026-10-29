@@ -5,7 +5,7 @@
 // tab do the rolling.
 import { tokenCentre, tokenH, tokenW, type MapToken, type Pt } from './battleMap'
 import type { VehicleArc, VehicleDef } from './content/schema'
-import { crewTier, type CrewMember, type TrackedVehicle } from './vehicles'
+import { crewTier, shipCrew, type CrewMember, type TrackedVehicle } from './vehicles'
 
 type Weapon = VehicleDef['weapons'][number]
 
@@ -120,5 +120,6 @@ export function applyCrit(v: TrackedVehicle, roll: number, pick: number): { vehi
 /** Who's at a station, and the bonus each rolls with there: an NPC's tier, or a character's modifier (the station's ability, Dexterity by default) plus proficiency. */
 export function stationCrew(v: TrackedVehicle, stationId: string, characterBonus: (m: CrewMember, ability: NonNullable<VehicleDef['stations'][number]['ability']>) => number | undefined): Array<{ member: CrewMember; bonus: number | undefined }> {
   const station = v.def.stations.find((s) => s.id === stationId)
-  return (v.crew[stationId] ?? []).map((member) => ({ member, bonus: crewTier(member)?.bonus ?? characterBonus(member, station?.ability ?? 'dex') }))
+  // The people put there first, then the hired crew (who work it when nobody is).
+  return [...(v.crew[stationId] ?? []), shipCrew(v)].map((member) => ({ member, bonus: crewTier(member)?.bonus ?? characterBonus(member, station?.ability ?? 'dex') }))
 }

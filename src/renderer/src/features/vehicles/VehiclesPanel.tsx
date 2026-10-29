@@ -1,49 +1,24 @@
-// The campaign's Vehicles tab (DM right panel and players' party sidebar):
-// every vehicle the campaign tracks — mounts, carts, ships, starships — with
-// its hull and components, resources, weapons, crew, cargo and notes. The DM
-// changes everything; a player sees the vehicles the DM hasn't hidden and can
-// roll the weapons of the stations their character crews. Rolls go through
-// the dice roller like the character sheet's.
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+// The campaign's vehicles (the Initiative tab's Vehicles, for the DM and
+// players alike): every vehicle the campaign tracks — mounts, carts, ships,
+// starships — set up between fights: its hull and components, supplies, who's
+// aboard and where, how good its hired crew is, cargo and notes. The DM
+// changes everything; a player sees the vehicles the DM hasn't hidden, and
+// where they sit. Fighting with a vehicle happens in the Combat tab.
+import { useEffect, useState, type ReactNode } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { CharacterSheet } from '@shared/ipc'
-import { diceGroups } from '@shared/dice'
 import { vehicleDefSchema, type VehicleDef } from '@shared/content/schema'
-import {
-  ammoLeft,
-  CREW_TIERS,
-  crewKey,
-  crewTier,
-  damageVehicle,
-  gunnerFor,
-  weaponAttackBonus,
-  weaponCrew,
-  type CrewMember,
-  type CrewTier,
-  repairVehicle,
-  resourceLeft,
-  restVehicle,
-  stationsFor,
-  trackVehicle,
-  vehicleCondition,
-  vehicleName,
-  type TrackedVehicle
-} from '@shared/vehicles'
+import { CREW_TIERS, crewKey, resourceLeft, restVehicle, trackVehicle, vehicleCondition, vehicleName, type TrackedVehicle } from '@shared/vehicles'
+import { isTestUser } from '@shared/battleMap'
+import { formatModifier } from '@shared/dnd5e'
 import { useActivePackRegistry } from '../content/pickerContent'
-import { useSheetRoller } from '../dice/useSheetRoller'
 import { rollInlineDice } from '../dice/inlineDice'
-import { inlineTextHtml } from '../../markdown'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { XIcon } from '../../ui/icons'
-import { isTestUser } from '@shared/battleMap'
-import { VehicleCard, weaponLine } from './VehicleCard'
-import { crewLabel, gunnerBonusFromSheet, useOwnSheet } from './crewBonus'
-import { StationActions } from './StationActions'
+import { VehicleCard } from './VehicleCard'
+import { crewLabel } from './crewBonus'
 import { ComponentHealth } from './ComponentHealth'
-import { formatModifier } from '@shared/dnd5e'
 import { useVehicles } from './useVehicles'
-import { useEncounter } from '../combat/encounterStore'
-import { fireWeapon, weaponReady } from '@shared/shipCombat'
 import '../player/sheet/sheet.css'
 
 interface VehiclesPanelProps {
@@ -65,7 +40,7 @@ interface VehiclesPanelProps {
 
 const BLANK: VehicleDef = vehicleDefSchema.parse({ id: 'custom', name: 'New vehicle', speeds: [{ mode: 'walk', value: '30 ft.' }], hp: 50, ac: 12 })
 
-export function VehiclesPanel({ sessionId, rollSessionId, campaignId, readOnly, myUserId = null, playerCharacters, onAddToInitiative, focus }: VehiclesPanelProps): JSX.Element {
+export function VehiclesPanel({ sessionId, rollSessionId, campaignId, readOnly, myUserId = null, onAddToInitiative, focus }: VehiclesPanelProps): JSX.Element {
   const { doc, save, error } = useVehicles(sessionId, campaignId)
   const [openId, setOpenId] = useState<string | null>(null)
   useEffect(() => {
@@ -92,7 +67,6 @@ export function VehiclesPanel({ sessionId, rollSessionId, campaignId, readOnly, 
             readOnly={readOnly}
             rollSessionId={rollSessionId}
             myUserId={myUserId}
-            playerCharacters={playerCharacters}
             onChange={update}
             onRemove={() => remove(v.id)}
             onClose={() => setOpenId(null)}
@@ -220,13 +194,17 @@ function Section({ title, children, right }: { title: string; children: ReactNod
   )
 }
 
-/** The whole tracked vehicle: what the DM changes, and what crew roll. */
+/**
+ * One tracked vehicle, set up between fights: who's aboard and where, how
+ * good its hired crew is, its hull and parts, supplies, cargo and notes.
+ * Fighting with it — its weapons and station actions — happens in the Combat
+ * tab (the DM's panel for the ship; each player's for their own station).
+ */
 function TrackedVehicleCard({
   vehicle: v,
   readOnly,
   rollSessionId,
   myUserId,
-  playerCharacters,
   onChange,
   onRemove,
   onClose,
@@ -236,54 +214,14 @@ function TrackedVehicleCard({
   readOnly: boolean
   rollSessionId: string | null
   myUserId: string | null
-  playerCharacters?: Map<string, CharacterSheet>
   onChange: (v: TrackedVehicle) => void
   onRemove: () => void
   onClose: () => void
   onAddToInitiative?: (v: TrackedVehicle) => void
 }): JSX.Element {
-  const { rollCheck, rollDamage } = useSheetRoller(rollSessionId, vehicleName(v))
-  const [amount, setAmount] = useState('')
-  const [target, setTarget] = useState('')
   const [showBlock, setShowBlock] = useState(false)
-  const myStations = useMemo(() => (readOnly ? stationsFor(v, { characterIds: [], userId: myUserId }) : null), [v, readOnly, myUserId])
-  const canFire = (station?: string): boolean => !readOnly || (!!myStations && (!station ? myStations.length > 0 : myStations.includes(station)))
   const showNumbers = !readOnly || v.party
-  const [encounter] = useEncounter()
-  // The fight's round, for weapons cooling down (the DM's; a player's tab doesn't track it).
-  const round = !readOnly && encounter.turnIndex >= 0 ? encounter.round : null
-  const n = Number(amount)
-  // A player rolls with their own character's numbers (fetched from the session); the DM with the party's sheets.
-  const ownSheet = useOwnSheet(readOnly ? rollSessionId : null, readOnly ? myUserId : null, v.crew)
-  const characterBonus = (m: CrewMember): number | undefined => {
-    const sheet = m.userId ? (readOnly ? (m.userId === myUserId ? ownSheet : null) : playerCharacters?.get(m.userId)) : null
-    return sheet ? gunnerBonusFromSheet(sheet) : undefined
-  }
-  /** Who fires a weapon and with what bonus: a player at its station fires it themselves. */
-  const shooter = (w: VehicleDef['weapons'][number]): { who: CrewMember | null; bonus: number | undefined } => {
-    const mine = readOnly ? weaponCrew(v, w.id).find((m) => m.userId === myUserId) : undefined
-    if (mine) return { who: mine, bonus: w.attackBonus ?? (w.saveDc === undefined ? characterBonus(mine) : undefined) }
-    return { who: gunnerFor(v, w.id), bonus: weaponAttackBonus(v, w.id, characterBonus) }
-  }
-  const valid = Number.isFinite(n) && n > 0
   const d = v.def
-
-  function hit(fn: typeof damageVehicle): void {
-    if (!valid) return
-    onChange(fn(v, n, target || undefined))
-    setAmount('')
-  }
-  function rollDice(expr: string, label: string): void {
-    const parsed = diceGroups(expr)
-    if (parsed) rollDamage(parsed.groups, parsed.modifier, label)
-  }
-  function fire(w: VehicleDef['weapons'][number]): void {
-    const { who, bonus } = shooter(w)
-    if (bonus !== undefined) rollCheck(`${w.name} Attack${who && w.attackBonus === undefined ? ` (${who.name})` : ''}`, bonus)
-    if (w.damage) rollDice(w.damage, `${w.name} Damage`)
-    // The DM firing spends a shot and starts its cooldown; a player's roll doesn't change the vehicle (the DM keeps count).
-    if (!readOnly) onChange(fireWeapon(v, w, round))
-  }
   const setUsed = (key: 'resourceUsed' | 'ammoUsed', id: string, used: number): void => onChange({ ...v, [key]: { ...v[key], [id]: Math.max(0, used) } })
 
   return (
@@ -320,7 +258,21 @@ function TrackedVehicleCard({
         {showNumbers ? (
           <>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 24 }}>{v.hp}</span>
+              {readOnly ? (
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 24 }}>{v.hp}</span>
+              ) : (
+                <input
+                  type="number"
+                  min={0}
+                  max={d.hp}
+                  className="gb-input"
+                  value={v.hp}
+                  onChange={(e) => onChange({ ...v, hp: Math.max(0, Math.min(d.hp, Math.round(Number(e.target.value) || 0))) })}
+                  style={{ width: 70, fontFamily: 'var(--font-display)', fontSize: 18, padding: '1px 6px' }}
+                  aria-label="Hit points"
+                  title="Its hit points now (in a fight, damage it from the Combat tab)"
+                />
+              )}
               <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>/ {d.hp}</span>
               {v.tempHp > 0 && <span className="gb-badge" style={{ fontSize: 10 }}>+{v.tempHp} temp</span>}
               {v.hp <= 0 && <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)' }}>Wrecked</span>}
@@ -329,27 +281,6 @@ function TrackedVehicleCard({
           </>
         ) : (
           <span style={{ fontSize: 13 }}>{vehicleCondition(v.hp, d.hp)}</span>
-        )}
-        {!readOnly && (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-            <input type="number" min={1} className="gb-input" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && hit(damageVehicle)} placeholder="0" aria-label="Amount" style={{ width: 54, padding: '3px 6px' }} />
-            {d.components.length > 0 && (
-              <select className="gb-input" value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...fieldStyle, flex: 1, minWidth: 80 }} aria-label="What it hits">
-                <option value="">Hull</option>
-                {d.components.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            )}
-            <button type="button" className="gb-btn gb-btn--secondary" disabled={!valid} onClick={() => hit(damageVehicle)} style={{ ...smallButton, color: 'var(--danger)' }} title="Hits under the damage threshold do nothing">
-              Damage
-            </button>
-            <button type="button" className="gb-btn gb-btn--secondary" disabled={!valid} onClick={() => hit(repairVehicle)} style={{ ...smallButton, color: 'var(--success)' }}>
-              Repair
-            </button>
-          </div>
         )}
       </Section>
 
@@ -385,85 +316,11 @@ function TrackedVehicleCard({
         </Section>
       )}
 
-      {d.weapons.length > 0 && (
-        <Section title="Weapons">
-          {d.weapons.map((w) => {
-            const ammo = ammoLeft(v, w.id)
-            const can = canFire(w.station)
-            const ready = weaponReady(v, w, round)
-            return (
-              <div key={w.id} style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingBottom: 6, borderBottom: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <strong style={{ fontSize: 13, flex: 1 }}>{w.name}</strong>
-                  {ammo !== null && (
-                    <span style={{ fontSize: 11, color: ammo === 0 ? 'var(--danger)' : 'var(--text-muted)' }} title="Shots left">
-                      {ammo}/{w.ammo}
-                    </span>
-                  )}
-                  {!readOnly && ammo !== null && ammo < (w.ammo ?? 0) && (
-                    <button type="button" className="gs-chip" onClick={() => setUsed('ammoUsed', w.id, 0)} title="Reload">
-                      Reload
-                    </button>
-                  )}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{weaponLine(w, d.stations)}</div>
-                {w.notes && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{w.notes}</div>}
-                {!ready.ok && ammo !== 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--danger)' }}>
-                    {ready.why}
-                    {!readOnly && v.offline.includes(w.id) && (
-                      <button type="button" className="gs-chip" onClick={() => onChange({ ...v, offline: v.offline.filter((id) => id !== w.id) })}>
-                        Repaired
-                      </button>
-                    )}
-                  </div>
-                )}
-                {w.attackBonus === undefined && w.saveDc === undefined && <GunnerLine v={v} w={w} shooter={shooter(w)} readOnly={readOnly} onPick={(key) => onChange({ ...v, gunners: { ...v.gunners, [w.id]: key } })} />}
-                {can && (
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button type="button" className="gb-btn gb-btn--primary" style={smallButton} disabled={!ready.ok} onClick={() => fire(w)} title={!ready.ok ? ready.why : shooter(w).bonus === undefined && w.saveDc === undefined ? 'Nobody’s firing it: rolls just the damage' : 'Roll its attack and damage'}>
-                      Fire
-                    </button>
-                    {w.damage && (
-                      <button type="button" className="gb-btn gb-btn--secondary" style={smallButton} onClick={() => rollDice(w.damage, `${w.name} Damage`)} title="Roll just the damage">
-                        Damage only
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </Section>
-      )}
-
       {d.stations.length > 0 && (
         <Section title="Crew">
-          {d.stations.map((s) => (
-            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <StationRow station={s} people={v.crew[s.id] ?? []} readOnly={readOnly} playerCharacters={playerCharacters} onChange={(people) => onChange({ ...v, crew: { ...v.crew, [s.id]: people } })} />
-              <StationActions vehicle={v} station={s} sheets={(userId) => (readOnly ? (userId === myUserId ? ownSheet : null) : playerCharacters?.get(userId))} onlyUserId={readOnly ? myUserId : null} rollCheck={(label, modifier) => rollCheck(label, modifier)} />
-            </div>
-          ))}
-          {readOnly && myStations && myStations.length === 0 && <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>You’re not at a station. The DM puts crew in place.</p>}
+          <CrewSetup vehicle={v} readOnly={readOnly} myUserId={myUserId} />
         </Section>
       )}
-
-      {(d.traits.length > 0 || d.actions.length > 0) && (
-        <Section title="Traits and actions">
-          <div onClick={(e) => rollInlineDice(e, rollSessionId)} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {[...d.traits, ...d.actions].map((t, i) => (
-              <div key={i} style={{ fontSize: 12 }}>
-                <strong>{t.name}.</strong> <span dangerouslySetInnerHTML={{ __html: inlineTextHtml(t.desc) }} />
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      <Section title="Conditions">
-        <Tags values={v.conditions} readOnly={readOnly} placeholder="Add (Boarded, On fire…)" onChange={(conditions) => onChange({ ...v, conditions })} />
-      </Section>
 
       <Section title={`Cargo${d.cargo ? ` (holds ${d.cargo})` : ''}`}>
         {v.cargo.map((c, i) => (
@@ -527,137 +384,38 @@ function TrackedVehicleCard({
   )
 }
 
-/** One station and who's at it. The DM adds a party member's character or just types a name (a hired hand, an NPC). */
-function StationRow({
-  station,
-  people,
-  readOnly,
-  playerCharacters,
-  onChange
-}: {
-  station: VehicleDef['stations'][number]
-  people: TrackedVehicle['crew'][string]
-  readOnly: boolean
-  playerCharacters?: Map<string, CharacterSheet>
-  onChange: (people: TrackedVehicle['crew'][string]) => void
-}): JSX.Element {
-  const full = people.length >= station.count
-  const [newTier, setNewTier] = useState<CrewTier>('trained')
-  const party = [...(playerCharacters?.entries() ?? [])].filter(([userId]) => !people.some((p) => p.userId === userId))
-  return (
-    <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }} title={station.notes || undefined}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span>{station.name}</span>
-        <span style={{ color: full ? 'var(--text-muted)' : 'var(--accent)' }}>
-          {people.length}/{station.count}
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        {people.map((p, i) => (
-          <span key={i} className="gb-badge" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            {p.name}
-            {crewTier(p) &&
-              (readOnly ? (
-                <span style={{ color: 'var(--text-muted)' }}>
-                  {crewTier(p)!.name} {formatModifier(crewTier(p)!.bonus)}
-                </span>
-              ) : (
-                <select
-                  value={crewTier(p)!.id}
-                  onChange={(e) => onChange(people.map((x, j) => (j === i ? { ...x, tier: e.target.value as CrewTier } : x)))}
-                  style={tierSelect}
-                  title="How good they are: the bonus they roll with"
-                  aria-label={`${p.name}'s tier`}
-                >
-                  {CREW_TIERS.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} {formatModifier(t.bonus)}
-                    </option>
-                  ))}
-                </select>
-              ))}
-            {!readOnly && (
-              <button type="button" style={{ ...iconButton, padding: 0 }} onClick={() => onChange(people.filter((_, j) => j !== i))} title={`Take ${p.name} off ${station.name}`}>
-                <XIcon size={9} />
-              </button>
-            )}
-          </span>
-        ))}
-      </div>
-      {!readOnly && !full && (
-        <div style={{ display: 'flex', gap: 4 }}>
-          {party.length > 0 && (
-            <select
-              className="gb-input"
-              value=""
-              onChange={(e) => {
-                const ch = playerCharacters?.get(e.target.value)
-                if (ch) onChange([...people, { name: ch.name || 'Unnamed', characterId: ch.id, userId: e.target.value }])
-              }}
-              style={{ ...fieldStyle, flex: 1, minWidth: 0 }}
-              aria-label={`Put a party member at ${station.name}`}
-            >
-              <option value="">Party member…</option>
-              {party.map(([userId, ch]) => (
-                <option key={userId} value={userId}>
-                  {ch.name || 'Unnamed'}
-                  {isTestUser(userId) ? ' (test player)' : ''}
-                </option>
-              ))}
-            </select>
-          )}
-          {party.length === 0 && people.every((p) => !p.userId) && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', alignSelf: 'center' }} title="Players appear here once they’ve joined your session with a character. To test without them, add test players that play one of your characters (Players tab).">
-              No party here yet
-            </span>
-          )}
-          <AddLine placeholder="Or an NPC’s name" onAdd={(name) => onChange([...people, { name, tier: newTier }])} />
-          <select className="gb-input" value={newTier} onChange={(e) => setNewTier(e.target.value as CrewTier)} style={{ ...fieldStyle, width: 'auto' }} title="An NPC's tier: the flat bonus they roll with" aria-label="New NPC's tier">
-            {CREW_TIERS.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} {formatModifier(t.bonus)}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-    </div>
-  )
-}
+/**
+ * Who works the ship, at a glance: the hired crew's tier, and who sits where.
+ * It's set in the Combat screen (the ship's Stations tab); a player just sees
+ * where they are.
+ */
+function CrewSetup({ vehicle: v, readOnly, myUserId }: { vehicle: TrackedVehicle; readOnly: boolean; myUserId: string | null }): JSX.Element {
+  const stationName = (id: string): string => v.def.stations.find((s) => s.id === id)?.name ?? id
+  const whereIs = (key: string): string | null => Object.entries(v.crew).find(([, people]) => people.some((m) => crewKey(m) === key))?.[0] ?? null
+  const tier = CREW_TIERS.find((t) => t.id === v.crewTier) ?? CREW_TIERS[1]
 
-/** Who fires a weapon (with their bonus) — the DM can pick from whoever's at its station. */
-function GunnerLine({
-  v,
-  w,
-  shooter,
-  readOnly,
-  onPick
-}: {
-  v: TrackedVehicle
-  w: VehicleDef['weapons'][number]
-  shooter: { who: CrewMember | null; bonus: number | undefined }
-  readOnly: boolean
-  onPick: (key: string) => void
-}): JSX.Element {
-  const crew = weaponCrew(v, w.id)
-  const station = w.station ? (v.def.stations.find((s) => s.id === w.station)?.name ?? 'its station') : 'a station'
-  if (!shooter.who) return <div style={{ fontSize: 11, color: 'var(--danger)' }}>Nobody at {station} to fire it.</div>
-  const bonus = shooter.bonus === undefined ? ' (their sheet isn’t to hand)' : ` ${formatModifier(shooter.bonus)} to hit`
+  if (readOnly) {
+    const mine = myUserId ? whereIs(`user:${myUserId}`) : null
+    return (
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+        {mine ? `You’re at ${stationName(mine)} — your rolls are in the Combat tab.` : 'You’re not at a station. The DM puts the party where they sit.'} The rest of the ship is worked by {tier.name.toLowerCase()} crew ({formatModifier(tier.bonus)}).
+      </p>
+    )
+  }
+
+  const seated = Object.entries(v.crew).flatMap(([station, people]) => people.map((m) => ({ station, m })))
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
-      Fired by
-      {!readOnly && crew.length > 1 ? (
-        <select className="gb-input" value={crewKey(shooter.who)} onChange={(e) => onPick(e.target.value)} style={{ ...fieldStyle, fontSize: 11, padding: '1px 4px', minWidth: 0 }} aria-label={`Who fires the ${w.name}`}>
-          {crew.map((m) => (
-            <option key={crewKey(m)} value={crewKey(m)}>
-              {crewLabel(m)}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <span style={{ color: 'var(--text-primary)' }}>{crewLabel(shooter.who)}</span>
-      )}
-      <span>{bonus}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+      <span>
+        Hired crew: {tier.name} {formatModifier(tier.bonus)}
+      </span>
+      {seated.map(({ station, m }) => (
+        <span key={`${station}:${crewKey(m)}`}>
+          {crewLabel(m)}
+          {isTestUser(m.userId) ? ' (test)' : ''} · {stationName(station)}
+        </span>
+      ))}
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Set who sits where (and the crew’s tier) in the Combat screen: select the ship, then its Stations tab.</span>
     </div>
   )
 }
@@ -682,27 +440,8 @@ function AddLine({ placeholder, onAdd }: { placeholder: string; onAdd: (text: st
   )
 }
 
-function Tags({ values, readOnly, placeholder, onChange }: { values: string[]; readOnly: boolean; placeholder: string; onChange: (v: string[]) => void }): JSX.Element {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-      {values.map((t, i) => (
-        <span key={i} className="gb-badge" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {t}
-          {!readOnly && (
-            <button type="button" style={{ ...iconButton, padding: 0 }} onClick={() => onChange(values.filter((_, j) => j !== i))} title={`Remove ${t}`}>
-              <XIcon size={9} />
-            </button>
-          )}
-        </span>
-      ))}
-      {readOnly && values.length === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>None</span>}
-      {!readOnly && <AddLine placeholder={placeholder} onAdd={(t) => onChange([...values, t])} />}
-    </div>
-  )
-}
 
 const smallButton = { fontSize: 11, padding: '3px 8px' } as const
-const tierSelect = { fontSize: 10, background: 'none', border: 0, color: 'var(--text-muted)', padding: 0, cursor: 'pointer', font: 'inherit' } as const
 const fieldStyle = { fontSize: 12, padding: '3px 6px' } as const
 const labelStyle = { display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--text-muted)' } as const
 const checkLabel = { display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' } as const

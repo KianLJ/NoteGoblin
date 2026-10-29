@@ -4,24 +4,27 @@
 // encounter as the right panel's initiative tracker (encounterStore.ts).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
-import { nextTurnState, previousTurnState, sortedByInitiative, withCombatantHp, type Combatant } from '@shared/encounter'
+import { sortedByInitiative, withCombatantHp, type Combatant } from '@shared/encounter'
 import { activeBattle, canStand, MAX_TOKEN_SIZE, tokenCentre, turnToken, fogEverything, hiddenCombatantIds, isFogged, isTestUser, newBattle, type Ambient, type BattleMap, type MapImage, type Pt, type TemplateKind } from '@shared/battleMap'
 import { lightsOf, LIGHT_PRESETS, viewerKey, viewerSources, visionActive } from '@shared/vision'
 import { buildCheckRollEntry, diceGroups } from '@shared/dice'
 import { deriveSheet } from '@shared/content/sheet'
 import { formatModifier } from '@shared/dnd5e'
-import { crewKey, gunnerFor, vehicleName, weaponAttackBonus, weaponCrew, type CrewMember, type TrackedVehicle } from '@shared/vehicles'
+import { crewKey, fixedBonus, gunnerFor, shipCrew, vehicleName, weaponAttackBonus, weaponCrew, type CrewMember, type TrackedVehicle } from '@shared/vehicles'
 import { useAllMonsters } from '../../data/useAllMonsters'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { renderStatblockHtml } from '../../statblock'
 import { useSheetRoller } from '../dice/useSheetRoller'
 import { useShipFire } from './useShipFire'
-import { StationActions } from '../vehicles/StationActions'
-import { ComponentHealth } from '../vehicles/ComponentHealth'
+import { InitiativeTracker } from '../campaigns/InitiativeTracker'
+import { VehiclesPanel } from '../vehicles/VehiclesPanel'
+import { VehicleDamage } from '../vehicles/VehicleDamage'
+import { ShipTabs } from '../vehicles/ShipTabs'
+import { StationList } from '../vehicles/StationActions'
+import { Aboard } from '../vehicles/Aboard'
 import { weaponReach, weaponReady } from '@shared/shipCombat'
 import { rollInlineDice } from '../dice/inlineDice'
 import { getDiceLog, subscribeDiceLog } from '../dice/diceLogStore'
-import { playTurnFlowSfx } from '../audio/sfxBoardEngine'
 import { useVehicles } from '../vehicles/useVehicles'
 import { crewLabel, gunnerBonusFromSheet } from '../vehicles/crewBonus'
 import { XIcon } from '../../ui/icons'
@@ -32,7 +35,7 @@ import { playSfx } from '../audio/soundEffects'
 import { CharacterTabs, HpControls, InitiativeField, MonsterAbilities, Stat, hpChange } from './CombatPanels'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { BattleMapView, EyeIcon, HideToggle, LockToggle, type FogTool, type MapTool, type Sight, type WallDraw } from './BattleMapView'
+import { BattleMapView, HideToggle, LockToggle, type FogTool, type MapTool, type Sight, type WallDraw } from './BattleMapView'
 import { MapControls, RAIL, ToolOptions, ToolRail, railKey, type RailTool } from './MapToolbar'
 import { TestPlayersMenu } from './TestPlayersMenu'
 import { useRemoteDrags } from './useRemoteDrags'
@@ -142,6 +145,13 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
 
   const ordered = useMemo(() => sortedByInitiative(encounter.combatants), [encounter.combatants])
   const turnId = encounter.turnIndex >= 0 ? (ordered[encounter.turnIndex]?.id ?? null) : null
+  // Whoever's turn it is comes up on the map (the tracker on the left moves the turn on).
+  useEffect(() => {
+    if (turnId) setSelectedId(turnId)
+  }, [turnId])
+  // A vehicle sent from the tracker's Vehicles tab ("Add to initiative"), and one picked in the order to show there.
+  const [pendingVehicle, setPendingVehicle] = useState<TrackedVehicle | null>(null)
+  const [focusVehicle, setFocusVehicle] = useState<{ id: string } | null>(null)
   const monsterOf = (c: Combatant): BestiaryMonster | undefined => (c.kind === 'monster' ? monsters.find((m) => m.index === c.monsterIndex) : undefined)
   const vehicleOf = (c: Combatant): TrackedVehicle | undefined => (c.kind === 'vehicle' ? vehicles.doc.vehicles.find((v) => v.id === c.vehicleId) : undefined)
   const characterOf = (c: Combatant): CharacterSheet | undefined => (c.kind === 'player' && c.userId ? playerCharacters.get(c.userId) : undefined)
@@ -202,22 +212,6 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     setInitiative(c, buildCheckRollEntry(c.id, c.name, modifier, 'normal', true, 'Initiative').total)
     playSfx('diceRoll')
   }
-  function rollAllInitiative(): void {
-    setEncounter((s) => ({
-      ...s,
-      combatants: s.combatants.map((c) => ({ ...c, initiative: buildCheckRollEntry(c.id, c.name, initiativeModifierFor(c, playerCharacters, monsters, vehicles.doc.vehicles), 'normal', true, 'Initiative').total }))
-    }))
-    playSfx('diceRoll')
-  }
-
-  function step(dir: 1 | -1): void {
-    const next = dir === 1 ? nextTurnState(encounter) : previousTurnState(encounter)
-    setEncounter(next)
-    if (dir === 1) playTurnFlowSfx(encounter.turnIndex < 0 ? 'Initiative Start' : 'Turn Change', sessionId)
-    const id = sortedByInitiative(next.combatants)[next.turnIndex]?.id
-    if (id) setSelectedId(id)
-  }
-
   /**
    * Damage or healing — a vehicle ignores a hit under its threshold, can't be
    * repaired past full, and its hull follows. A player's comes off their
@@ -273,11 +267,11 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
             // The encounter's monsters replace whatever monsters are in the fight; the party and vehicles stay.
             const added = indexes.map((i) => monsters.find((m) => m.index === i)).filter((m): m is BestiaryMonster => !!m).map(monsterToCombatant)
             setEncounter((s) => ({ ...s, turnIndex: -1, round: 1, combatants: [...s.combatants.filter((c) => c.kind !== 'monster'), ...added] }))
-            setHint(`${added.length} enem${added.length === 1 ? 'y' : 'ies'} loaded where they stood on this map last time. Roll initiative in the Initiative tab.`)
+            setHint(`${added.length} enem${added.length === 1 ? 'y' : 'ies'} loaded where they stood on this map last time. Roll initiative in the tracker on the left.`)
           }}
         />
         {encounter.turnIndex >= 0 && <span className="gb-badge gb-badge--accent">Round {encounter.round}</span>}
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{encounter.combatants.length === 0 ? 'Add combatants in the Initiative tab (right panel), or load an encounter from a session scene.' : ''}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{encounter.combatants.length === 0 ? 'Add combatants in the tracker on the left, or load an encounter from a session scene.' : ''}</span>
         <div style={{ flex: 1 }} />
         <TestPlayersMenu />
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title="Use the map as a player would: see only what they see, and move only their token (walls, doors and fog stop it)">
@@ -301,50 +295,30 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
             ))}
           </select>
         </label>
-        {encounter.turnIndex >= 0 ? (
-          <>
-            <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => step(-1)}>
-              Previous
-            </button>
-            <button type="button" className="gb-btn gb-btn--primary" style={btn} onClick={() => step(1)}>
-              Next turn
-            </button>
-            <button
-              type="button"
-              className="gb-btn gb-btn--ghost"
-              style={btn}
-              onClick={() => {
-                setEncounter((s) => ({ ...s, turnIndex: -1, round: 1 }))
-                playTurnFlowSfx('End Combat', sessionId)
-              }}
-            >
-              End combat
-            </button>
-          </>
-        ) : (
-          <button type="button" className="gb-btn gb-btn--primary" style={btn} disabled={encounter.combatants.length === 0} onClick={() => step(1)} title="Roll initiative in the Initiative tab first; the order follows it">
-            Start combat
-          </button>
-        )}
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <ResizableSidebar defaultWidth={240} minWidth={180} maxWidth={420} handleSide="right" collapseStorageKey="gb-sidebar-collapsed:combat-order" widthStorageKey="gb-sidebar-width:combat-order">
-        <aside style={{ height: '100%', borderRight: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)', overflowY: 'auto', padding: 'var(--space-2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 6px 4px' }}>
-            <span className="gb-label" style={{ margin: 0, flex: 1 }}>
-              Initiative
-            </span>
-            {encounter.combatants.length > 0 && (
-              <button type="button" onClick={rollAllInitiative} title="Roll initiative for everyone (enemies' rolls stay yours)" style={{ ...pill, fontSize: 11 }}>
-                Roll all
-              </button>
-            )}
-          </div>
-          {ordered.map((c) => (
-            <OrderRow key={c.id} c={c} turn={c.id === turnId} selected={c.id === selectedId} onClick={() => setSelectedId(c.id)} />
-          ))}
-        </aside>
+        <ResizableSidebar defaultWidth={330} minWidth={260} maxWidth={600} handleSide="right" collapseStorageKey="gb-sidebar-collapsed:combat-tracker" widthStorageKey="gb-sidebar-width:combat-tracker">
+          <aside style={{ height: '100%', borderRight: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)', display: 'flex', flexDirection: 'column' }}>
+            <InitiativeTracker
+              sessionId={sessionId}
+              playerCharacters={playerCharacters}
+              onSelectMonster={(m) => {
+                const c = encounter.combatants.find((x) => x.kind === 'monster' && x.monsterIndex === m.index)
+                if (c) setSelectedId(c.id)
+              }}
+              onSelectCombatant={setSelectedId}
+              selectedId={selectedId}
+              pendingVehicle={pendingVehicle}
+              onPendingVehicleConsumed={() => setPendingVehicle(null)}
+              vehicles={vehicles.doc.vehicles}
+              onVehicleHp={(id, hp) => void vehicles.save({ vehicles: vehicles.doc.vehicles.map((v) => (v.id === id ? { ...v, hp } : v)) })}
+              onSelectVehicle={(id) => setFocusVehicle({ id })}
+              vehiclesView={
+                <VehiclesPanel sessionId={null} rollSessionId={sessionId} campaignId={campaignId} readOnly={false} playerCharacters={playerCharacters} focus={focusVehicle} onAddToInitiative={setPendingVehicle} />
+              }
+            />
+          </aside>
         </ResizableSidebar>
 
         <section style={{ position: 'relative', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden', background: '#0b0907' }}>
@@ -453,7 +427,12 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
                 playerCharacters={playerCharacters}
                 crewing={selected.kind === 'player' && selected.userId ? crewingOf(selected.userId) : []}
                 onAimFrom={(vehicleCombatantId, weaponId, gunnerKey) => fire.startAim(vehicleCombatantId, weaponId, gunnerKey)}
-                onVehicle={(next) => void vehicles.save({ vehicles: vehicles.doc.vehicles.map((x) => (x.id === next.id ? next : x)) })}
+                onVehicle={(next) => {
+                  // The hull and the turn order's hit points stay in step.
+                  if (next.hp !== vehicleOf(selected)?.hp) setEncounter((s) => withCombatantHp(s, selected.id, next.hp))
+                  void vehicles.save({ vehicles: vehicles.doc.vehicles.map((x) => (x.id === next.id ? next : x)) })
+                }}
+                onHint={setHint}
                 round={round}
                 aiming={fire.aim?.shooterId === selected.id ? fire.aim.weaponId : null}
                 onAim={(weaponId) => (fire.aim?.shooterId === selected.id && fire.aim.weaponId === weaponId ? fire.cancelAim() : fire.startAim(selected.id, weaponId))}
@@ -627,55 +606,6 @@ function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[
 
 const tiny = { fontSize: 12, padding: '2px 8px' } as const
 
-function OrderRow({ c, turn, selected, onClick }: { c: Combatant; turn: boolean; selected: boolean; onClick: () => void }): JSX.Element {
-  const frac = Math.max(0, c.currentHp / Math.max(1, c.maxHp))
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '28px 1fr',
-        gap: 8,
-        alignItems: 'center',
-        width: '100%',
-        textAlign: 'left',
-        padding: '6px 8px',
-        marginBottom: 4,
-        borderRadius: 'var(--radius-md)',
-        border: `1px solid ${turn ? 'var(--accent)' : selected ? 'var(--border-strong)' : 'transparent'}`,
-        background: turn ? 'var(--accent-subtle)' : selected ? 'var(--bg-surface)' : 'transparent',
-        color: 'inherit',
-        font: 'inherit',
-        cursor: 'pointer'
-      }}
-    >
-      <span style={{ fontWeight: 700, textAlign: 'center', color: 'var(--text-secondary)' }}>{c.initiative ?? '–'}</span>
-      <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <strong style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</strong>
-          {c.hidden && (
-            <span title="Hidden from players" style={{ color: 'var(--text-muted)', display: 'inline-flex' }}>
-              <EyeIcon open={false} />
-            </span>
-          )}
-          {c.currentHp <= 0 && (
-            <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)' }}>
-              {c.kind === 'vehicle' ? 'Wrecked' : 'Down'}
-            </span>
-          )}
-        </span>
-        <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>
-          {c.currentHp}/{c.maxHp} HP · AC {c.ac}
-          {c.statusEffects.length ? ` · ${c.statusEffects.join(', ')}` : ''}
-        </span>
-        <span style={{ display: 'block', height: 4, borderRadius: 9, background: 'var(--bg-canvas)', overflow: 'hidden', marginTop: 3 }}>
-          <span style={{ display: 'block', height: '100%', width: `${frac * 100}%`, background: frac > 0.5 ? 'var(--success)' : frac > 0.25 ? 'var(--accent)' : 'var(--danger)' }} />
-        </span>
-      </span>
-    </button>
-  )
-}
 
 interface AttackLine {
   name: string
@@ -710,7 +640,7 @@ function attacksFor(monster?: BestiaryMonster, vehicle?: TrackedVehicle, charact
       return sheet ? gunnerBonusFromSheet(sheet) : undefined
     }
     return vehicle.def.weapons.map((w) => {
-      const crewed = w.attackBonus === undefined && w.saveDc === undefined
+      const crewed = fixedBonus(vehicle, w) === undefined && w.saveDc === undefined
       const who = crewed ? gunnerFor(vehicle, w.id) : null
       return {
         name: w.name,
@@ -740,6 +670,7 @@ function Detail({
   crewing,
   onAimFrom,
   onVehicle,
+  onHint,
   round,
   aiming,
   onAim,
@@ -762,6 +693,8 @@ function Detail({
   crewing: Array<{ vehicle: TrackedVehicle; combatantId: string | null }>
   /** The vehicle changed (a component damaged or repaired). */
   onVehicle: (v: TrackedVehicle) => void
+  /** A line in the map's hint bar ("under its threshold: no damage"). */
+  onHint: (text: string) => void
   /** Fire a vehicle's weapon (by its combatant) at a target on the map. */
   onAimFrom: (vehicleCombatantId: string, weaponId: string, gunnerKey: string) => void
   /** The fight's round (null: not started), for weapons cooling down. */
@@ -782,104 +715,16 @@ function Detail({
   }
   const kindLabel = c.kind === 'player' ? 'Party member' : c.kind === 'vehicle' ? `${c.party ? 'Party' : 'Enemy'} vehicle${vehicle ? ` · ${vehicle.def.size} ${vehicle.def.category.toLowerCase()}` : ''}` : `${monster?.size ?? ''} ${monster?.type ?? 'creature'}`.trim()
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      <div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, lineHeight: 1.2 }}>{c.kind === 'vehicle' && vehicle ? vehicleName(vehicle) : c.name}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-          <span style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>{kindLabel}</span>
-        </div>
-        {c.hidden && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Players can’t see it on the map or in the turn order.</div>}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-        <Stat value={`${c.currentHp}${character?.tempHp ? ` +${character.tempHp}` : ''}`} label={`HP / ${c.maxHp}`} />
-        <Stat value={`${c.ac}`} label="AC" />
-        <InitiativeField value={c.initiative} onChange={onInitiative} onRoll={onRollInitiative} rollTitle={c.kind === 'player' ? 'Roll for them (players can roll their own in their Combat tab)' : 'Roll it quietly — players never see an enemy’s roll'} />
-      </div>
-      <HpControls onHp={onHp} repair={c.kind === 'vehicle'} temp={!!character} />
-      {c.damageThreshold ? <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Hits under {c.damageThreshold} do nothing.</div> : null}
-      {c.deathSaves && (
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-          Death saves: {c.deathSaves.successes} successes, {c.deathSaves.failures} failures (track them in the Initiative tab)
-        </div>
-      )}
-
-      {crewing.length > 0 && c.userId && (
-        <Block title="Aboard">
-          {crewing.map(({ vehicle: v, combatantId }) => {
-            const mine = (m: CrewMember): boolean => m.userId === c.userId
-            const stations = v.def.stations.filter((s) => (v.crew[s.id] ?? []).some(mine))
-            const guns = v.def.weapons.filter((w) => w.attackBonus === undefined && w.saveDc === undefined && weaponCrew(v, w.id).some(mine))
-            const bonus = character ? gunnerBonusFromSheet(character) : undefined
-            return (
-              <div key={v.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 12 }}>
-                  <strong>{vehicleName(v)}</strong> <span style={{ color: 'var(--text-muted)' }}>· {stations.map((s) => s.name).join(', ')}</span>
-                </span>
-                {stations.map((s) => (
-                  <StationActions key={s.id} vehicle={v} station={s} sheets={(userId) => playerCharacters.get(userId)} onlyUserId={c.userId} rollCheck={(label, modifier) => rollCheck(label, modifier)} />
-                ))}
-                {guns.map((w) => {
-                  const ready = weaponReady(v, w, round)
-                  return (
-                    <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        {w.name}
-                        {!ready.ok && <span style={{ display: 'block', fontSize: 11, color: 'var(--danger)' }}>{ready.why}</span>}
-                      </span>
-                      {combatantId && (
-                        <button type="button" style={{ ...pill, display: 'inline-flex', alignItems: 'center', padding: '2px 6px' }} disabled={!ready.ok || bonus === undefined} onClick={() => onAimFrom(combatantId, w.id, `user:${c.userId}`)} title={`Fire the ${w.name} at a target on the map, as ${c.name}`} aria-label={`Fire the ${w.name} as ${c.name}`}>
-                          <CrosshairIcon />
-                        </button>
-                      )}
-                      {bonus !== undefined && (
-                        <button type="button" style={pill} disabled={!ready.ok} onClick={() => rollCheck(`${w.name} Attack`, bonus)} title={`${c.name} fires: Dexterity + proficiency`}>
-                          {formatModifier(bonus)}
-                        </button>
-                      )}
-                      {w.damage && diceGroups(w.damage) && (
-                        <button type="button" style={pill} onClick={() => rollDice(w.damage, `${w.name} Damage`)}>
-                          {w.damage}
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })}
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Rolled as {c.name}, with their own numbers.</span>
-        </Block>
-      )}
-      {vehicle && vehicle.def.components.length > 0 && (
-        <Block title="Components">
-          <ComponentHealth vehicle={vehicle} onChange={onVehicle} />
-        </Block>
-      )}
-      {vehicle && vehicle.def.stations.some((s) => s.actions.length) && (
-        <Block title="Stations">
-          {vehicle.def.stations
-            .filter((s) => s.actions.length)
-            .map((s) => (
-              <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }} title={s.notes || undefined}>
-                  {s.name}
-                </span>
-                <StationActions vehicle={vehicle} station={s} sheets={(userId) => playerCharacters.get(userId)} rollCheck={(label, modifier) => rollCheck(label, modifier)} />
-              </div>
-            ))}
-        </Block>
-      )}
-      {!character && (
+  const attacksBlock = (
       <Block title={c.kind === 'vehicle' ? 'Weapons' : 'Attacks'}>
         {attacks.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>None to roll.</span>}
-        {vehicle && vehicle.def.stations.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Put crew at its stations under Initiative → Vehicles (right panel).</span>}
         {attacks.map((a, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-raised)', border: '1px solid var(--border-subtle)' }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
               <strong>{a.name}</strong>
               {a.note && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{a.note}</span>}
               {vehicle && a.weaponId && a.crewed && <GunnerPick vehicle={vehicle} weaponId={a.weaponId} onPick={(key) => onPickGunner(a.weaponId!, key)} />}
+              {vehicle && a.weaponId && <FixedBonusNote vehicle={vehicle} weaponId={a.weaponId} onVehicle={onVehicle} />}
               {vehicle && a.weaponId && <WeaponState vehicle={vehicle} weaponId={a.weaponId} round={round} onRepair={() => onRepairWeapon(a.weaponId!)} />}
             </span>
             {vehicle && a.weaponId && (
@@ -915,8 +760,8 @@ function Detail({
           </div>
         ))}
       </Block>
-      )}
-
+  )
+  const conditionsBlock = (
       <Block title="Conditions">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {c.statusEffects.map((s) => (
@@ -937,7 +782,73 @@ function Detail({
           </select>
         </div>
       </Block>
+  )
 
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      <div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, lineHeight: 1.2 }}>{c.kind === 'vehicle' && vehicle ? vehicleName(vehicle) : c.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <span style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>{kindLabel}</span>
+        </div>
+        {c.hidden && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Players can’t see it on the map or in the turn order.</div>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        <Stat value={`${c.currentHp}${character?.tempHp ? ` +${character.tempHp}` : ''}`} label={`HP / ${c.maxHp}`} />
+        <Stat value={`${c.ac}`} label="AC" />
+        <InitiativeField value={c.initiative} onChange={onInitiative} onRoll={onRollInitiative} rollTitle={c.kind === 'player' ? 'Roll for them (players can roll their own in their Combat tab)' : 'Roll it quietly — players never see an enemy’s roll'} />
+      </div>
+      {vehicle ? (
+        <ShipTabs
+          ship={
+            <>
+              <VehicleDamage vehicle={vehicle} onChange={onVehicle} onHint={onHint} />
+              {conditionsBlock}
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
+                Hired crew: {crewLabel(shipCrew(vehicle))}. Who sits where: the Stations tab. Fuel and cargo: the tracker’s Vehicles tab.
+              </p>
+            </>
+          }
+          stations={<StationList vehicle={vehicle} sheets={(userId) => playerCharacters.get(userId)} rollCheck={(label, modifier) => rollCheck(label, modifier)} crewing={{ party: playerCharacters, onChange: onVehicle }} />}
+          weapons={attacksBlock}
+        />
+      ) : (
+        <>
+          <HpControls onHp={onHp} repair={c.kind === 'vehicle'} temp={!!character} />
+          {c.damageThreshold ? <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Hits under {c.damageThreshold} do nothing.</div> : null}
+        </>
+      )}
+      {c.deathSaves && (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          Death saves: {c.deathSaves.successes} successes, {c.deathSaves.failures} failures (track them in the Initiative tab)
+        </div>
+      )}
+
+      {crewing.length > 0 && c.userId && (
+        <Block title="Aboard">
+          <Aboard
+            vehicles={crewing.map((x) => x.vehicle)}
+            userId={c.userId}
+            character={character}
+            round={round}
+            rollCheck={(label, modifier) => rollCheck(label, modifier)}
+            rollDice={rollDice}
+            aimFrom={(vehicleId, weaponId) => {
+              const combatantId = crewing.find((x) => x.vehicle.id === vehicleId)?.combatantId
+              return combatantId ? () => onAimFrom(combatantId, weaponId, `user:${c.userId}`) : undefined
+            }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Rolled as {c.name}, with their own numbers.</span>
+        </Block>
+      )}
+
+
+      {vehicle ? null : (
+        <>
+          {!character && attacksBlock}
+          {conditionsBlock}
+        </>
+      )}
       {character && <CharacterTabs character={character} sessionId={sessionId} canRoll />}
       {monster && <MonsterAbilities monster={monster} sessionId={sessionId} />}
       {monster && (
@@ -948,7 +859,6 @@ function Detail({
           {showBlock && <div className="gb-markdown" style={{ marginTop: 6 }} onClick={(e) => rollInlineDice(e, sessionId)} dangerouslySetInnerHTML={{ __html: renderStatblockHtml(monster, false) }} />}
         </div>
       )}
-      {vehicle && <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Crew, fuel and cargo are under Initiative → Vehicles (right panel).</p>}
     </div>
   )
 }
@@ -1076,6 +986,26 @@ const AMBIENT_HINT: Record<Ambient, string> = {
   bright: 'Daylight: everything in sight is seen.',
   dim: 'Twilight or a dim room: everything in sight is seen, dimly.',
   dark: 'Night or a dungeon: only lit places, and what darkvision reaches, are seen.'
+}
+
+/**
+ * A gun whose statblock gives it an attack bonus of its own fires at that,
+ * not the crew's — said here, with a way to have the crew fire it anyway (and
+ * back again).
+ */
+function FixedBonusNote({ vehicle: v, weaponId, onVehicle }: { vehicle: TrackedVehicle; weaponId: string; onVehicle: (v: TrackedVehicle) => void }): JSX.Element | null {
+  const w = v.def.weapons.find((x) => x.id === weaponId)
+  if (!w || w.attackBonus === undefined || w.saveDc !== undefined) return null
+  const crew = v.crewFires.includes(w.id)
+  const link = { background: 'none', border: 0, padding: 0, color: 'var(--accent-hover)', cursor: 'pointer', font: 'inherit', fontSize: 11, textDecoration: 'underline' } as const
+  return (
+    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>
+      {crew ? `Crew fires it (its statblock’s ${formatModifier(w.attackBonus)} set aside) · ` : `Fires at its own ${formatModifier(w.attackBonus)}, not the crew’s · `}
+      <button type="button" style={link} onClick={() => onVehicle({ ...v, crewFires: crew ? v.crewFires.filter((id) => id !== w.id) : [...v.crewFires, w.id] })}>
+        {crew ? `use ${formatModifier(w.attackBonus)}` : 'crew fires it'}
+      </button>
+    </span>
+  )
 }
 
 /** A weapon that can't fire right now (offline, cooling down, out of ammo) — and a way to fix one knocked offline. */

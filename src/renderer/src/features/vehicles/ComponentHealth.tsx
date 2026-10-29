@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { componentHp, vehicleCondition, type TrackedVehicle } from '@shared/vehicles'
+import { componentHp, componentMaxHp, vehicleCondition, type TrackedVehicle } from '@shared/vehicles'
 
 /**
  * A vehicle's components (engines, weapons, sails…), each with a small bar
@@ -16,8 +16,9 @@ export function ComponentHealth({ vehicle: v, readOnly = false, showNumbers = tr
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
       {v.def.components.map((c) => {
         const hp = componentHp(v, c.id)
+        const max = componentMaxHp(v.def, c)
         const out = hp <= 0
-        const pct = hp / Math.max(1, c.hp)
+        const pct = hp / Math.max(1, max)
         const colour = out ? 'var(--danger)' : pct > 0.5 ? 'var(--success)' : pct > 0.25 ? 'var(--accent)' : 'var(--danger)'
         return (
           <div key={c.id} title={c.notes || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -32,7 +33,7 @@ export function ComponentHealth({ vehicle: v, readOnly = false, showNumbers = tr
                 {out ? ' (out)' : ''}
               </span>
               {canEdit && (
-                <button type="button" className="gs-chip" style={step} disabled={out} onClick={() => set(c.id, c.hp, hp - 1)} aria-label={`Damage ${c.name}`} title="1 damage">
+                <button type="button" className="gs-chip" style={step} disabled={out} onClick={() => set(c.id, max, hp - 1)} aria-label={`Damage ${c.name}`} title="1 damage">
                   −
                 </button>
               )}
@@ -42,10 +43,10 @@ export function ComponentHealth({ vehicle: v, readOnly = false, showNumbers = tr
                   type="number"
                   autoFocus
                   min={0}
-                  max={c.hp}
+                  max={max}
                   defaultValue={hp}
                   onBlur={(e) => {
-                    set(c.id, c.hp, Number(e.target.value) || 0)
+                    set(c.id, max, Number(e.target.value) || 0)
                     setEditing(null)
                   }}
                   onKeyDown={(e) => {
@@ -63,11 +64,11 @@ export function ComponentHealth({ vehicle: v, readOnly = false, showNumbers = tr
                   title={canEdit ? 'Click to type its hit points' : undefined}
                   style={{ minWidth: 40, background: 'none', border: 0, padding: 0, font: 'inherit', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', cursor: canEdit ? 'text' : 'default' }}
                 >
-                  {showNumbers ? `${hp}/${c.hp}` : vehicleCondition(hp, c.hp)}
+                  {showNumbers ? `${hp}/${max}` : vehicleCondition(hp, max)}
                 </button>
               )}
               {canEdit && (
-                <button type="button" className="gs-chip" style={step} disabled={hp >= c.hp} onClick={() => set(c.id, c.hp, hp + 1)} aria-label={`Repair ${c.name}`} title="Repair 1">
+                <button type="button" className="gs-chip" style={step} disabled={hp >= max} onClick={() => set(c.id, max, hp + 1)} aria-label={`Repair ${c.name}`} title="Repair 1">
                   +
                 </button>
               )}

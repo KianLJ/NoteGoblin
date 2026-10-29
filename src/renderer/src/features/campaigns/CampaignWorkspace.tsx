@@ -24,6 +24,8 @@ interface CampaignWorkspaceProps {
   playerCharacters: Map<string, CharacterSheet>
   /** The connected players' characters plus the DM's test players' — who can join a fight or crew a vehicle. */
   partyCharacters?: Map<string, CharacterSheet>
+  /** Opens the Combat screen (the initiative tracker, encounter building and vehicles live there). */
+  onOpenCombat?: () => void
   /** Whose character is being viewed (read-only) instead of a note, if anyone — takes over the main pane until closed or a note is opened. Deliberately just the id, not the character itself: deriving it fresh from playerCharacters on every render (below) is what keeps the read-only view live instead of frozen at whatever it looked like at the moment you clicked. */
   viewedPlayerUserId: string | null
   onViewPlayerUserId: (userId: string | null) => void
@@ -43,12 +45,11 @@ export function CampaignWorkspace({
   hostedSessionId,
   onHostedSessionChange,
   playerCharacters,
-  partyCharacters,
+  onOpenCombat,
   viewedPlayerUserId,
   onViewPlayerUserId,
   monsterTabs,
   activeMonsterTab,
-  onOpenMonsterTab,
   onSelectMonsterTab
 }: CampaignWorkspaceProps): JSX.Element {
   const viewedPlayerCharacter = viewedPlayerUserId ? (playerCharacters.get(viewedPlayerUserId) ?? null) : null
@@ -223,12 +224,11 @@ export function CampaignWorkspace({
         sessionId={hostedSessionId ?? null}
         campaignId={campaign?.id ?? null}
         playerCharacters={playerCharacters}
-        partyCharacters={partyCharacters}
         onSelectPlayer={(userId) => {
           onSelectMonsterTab(null)
           onViewPlayerUserId(userId)
         }}
-        onSelectMonster={onOpenMonsterTab}
+        onOpenCombat={onOpenCombat}
         notes={notes ?? []}
         onOpenNote={(id) => {
           onViewPlayerUserId(null)

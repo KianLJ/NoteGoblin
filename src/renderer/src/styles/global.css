@@ -565,3 +565,8 @@ button {
 .gb-draggable-card:active {
   cursor: grabbing;
 }
+
+/* The Combat tab's initiative tile: the whole tile rolls the d20. */
+.gb-init-roll:hover {
+  background: var(--accent-subtle) !important;
+}
