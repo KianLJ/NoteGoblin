@@ -1,0 +1,14 @@
+{
+  "name": "NoteGoblin",
+  "short_name": "NoteGoblin",
+  "description": "Read your NoteGoblin notes and character sheets on the go.",
+  "start_url": "/viewer/",
+  "scope": "/viewer/",
+  "display": "standalone",
+  "background_color": "#faf6ec",
+  "theme_color": "#b5502c",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

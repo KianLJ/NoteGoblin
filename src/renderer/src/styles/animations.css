@@ -1,0 +1,353 @@
+/* Toast, pop-in/out, and dice-roll animations — split out of global.css so
+   the phone viewer (viewer/) can share them without global.css's
+   whole-app layout rules (a fixed, non-scrolling window). */
+
+/* Workspace error toast and friends (see .gb-toast-fade's callers) — fades
+   in quickly on arrival, stays fully readable, then fades over the last
+   second before its backing state clears (matches the 5s auto-dismiss timer
+   in useNotesWorkspace.ts/usePlayerWorkspace.ts) instead of just popping in
+   and vanishing abruptly at both ends. */
+@keyframes gb-fade-out {
+  0% {
+    opacity: 0;
+  }
+  4%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.gb-toast-fade {
+  animation: gb-fade-out 5s ease forwards;
+}
+
+/* App-wide "pop into existence" fade-in — a card, badge/tag, menu, or
+   popover appearing (mounting) eases in over a short beat instead of
+   snapping straight into view. Baked directly into the shared .gb-card and
+   .gb-badge primitives below (see primitives.css) so every card/menu/toast/
+   tag built on top of them gets this for free; apply the class directly to
+   anything that doesn't use those. Respects prefers-reduced-motion.
+
+   Opacity-only, deliberately — animating `transform` here too (a lift/scale
+   flourish) fought with any element that sets its own `transform` for
+   positioning, like HoverDetailCard's cursor-follow tooltip: for the
+   animation's duration the keyframe's transform value wins over the
+   element's own inline one, so the tooltip would render at the wrong
+   position (translateY(0) instead of its own translateY(-100%) anchor)
+   until the animation ended and control reverted to the inline style — the
+   card visibly starting in the wrong place, then snapping to the right one.
+   Since .gb-card/.gb-badge apply to essentially anything, "never touches
+   transform" is the only safe default for the shared animation. */
+@keyframes gb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.gb-fade-in {
+  animation: gb-fade-in 140ms ease-out;
+}
+
+/* The inverse — for a menu/popover closing itself out instead of just
+   vanishing. Unlike the mount case, this needs a beat of help from JS: React
+   unmounts the instant its condition goes false, before any exit animation
+   would get a chance to run. See useMountAnimation.ts, which keeps the
+   element rendered (applying this class instead of gb-fade-in) for exactly
+   this animation's duration before actually unmounting it. Opacity-only for
+   the same reason gb-fade-in is — see its own comment. */
+@keyframes gb-pop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.gb-pop-out {
+  /* !important: this is meant to override .gb-card/.gb-badge's own baked-in
+     gb-fade-in animation (see primitives.css) when both classes land on the
+     same element during the closing beat — otherwise plain CSS cascade
+     order (stylesheet order, not className order) would let whichever of
+     the two rules happens to load later win, which is exactly backwards
+     from "the element is closing, so gb-pop-out always wins" regardless of
+     import order. */
+  animation: gb-pop-out 110ms ease-in forwards !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gb-fade-in,
+  .gb-pop-out,
+  .gb-card,
+  .gb-badge {
+    animation: none !important;
+  }
+}
+
+/* Dramatic dice roll popup (RollAnimationOverlay.tsx) — a d20 tumbles for the
+   full spin (duration here must match SPIN_MS in the component so the
+   animation ends exactly as the tip-flip to the real number begins), then
+   ticks over from a nearby wrong number to the real one, then pops in once
+   revealed. Crit/fumble get their own emphasis on top of the same pop-in. */
+@keyframes gb-die-tumble {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  20% {
+    transform: rotate(230deg) scale(1.1);
+  }
+  40% {
+    transform: rotate(430deg) scale(0.92);
+  }
+  60% {
+    transform: rotate(660deg) scale(1.1);
+  }
+  80% {
+    transform: rotate(880deg) scale(0.95);
+  }
+  100% {
+    transform: rotate(1080deg) scale(1);
+  }
+}
+.gb-die-tumble {
+  animation: gb-die-tumble 1.3s cubic-bezier(0.32, 0.1, 0.2, 1) forwards;
+}
+
+/* Same shape as gb-die-tumble, scaled to match CLICK_FLICKER_TICK_MS *
+   CLICK_FLICKER_TICKS in RollAnimationOverlay.tsx — for the little flicker a
+   single advantage/disadvantage die plays right after its own click. Ends
+   on a multiple of 360deg for the same reason gb-die-tumble does: swapping
+   this class off exactly when the animation completes (not mid-turn) is
+   what keeps the die from visibly snapping back to its resting angle. */
+@keyframes gb-die-tumble-quick {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(240deg) scale(1.1);
+  }
+  50% {
+    transform: rotate(480deg) scale(0.92);
+  }
+  75% {
+    transform: rotate(680deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(1080deg) scale(1);
+  }
+}
+.gb-die-tumble-quick {
+  animation: gb-die-tumble-quick 1.32s cubic-bezier(0.32, 0.1, 0.2, 1) forwards;
+}
+
+/* The die winding down instead of stopping dead or snapping — plays across
+   both tip stages (duration must match TIP_OUT_MS + TIP_IN_MS combined; the
+   className doesn't change between those two phases, so this one animation
+   just keeps running uninterrupted), one more lazy turn that continuously
+   decelerates to a complete, smooth stop exactly as the real number finishes
+   revealing. Ends on a multiple of 360deg (same trick gb-die-tumble uses) so
+   nothing visibly jumps when it settles. */
+@keyframes gb-die-settle {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  18% {
+    transform: rotate(175deg) scale(1.05);
+  }
+  40% {
+    transform: rotate(275deg) scale(1.02);
+  }
+  65% {
+    transform: rotate(330deg) scale(1);
+  }
+  85% {
+    transform: rotate(352deg) scale(1);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+.gb-die-settle {
+  /* The deceleration curve is already encoded in how close together the
+     keyframe stops above get (fast at first, barely moving by the end) —
+     "linear" here interpolates between them as written instead of a bezier
+     re-shaping it on top and cancelling that out into a stall partway through. */
+  animation: gb-die-settle 1.5s linear forwards;
+}
+
+/* A much shorter landing wobble for the kept die right as it settles into
+   center after the discard (RollAnimationOverlay.tsx's 'settled' phase) —
+   duration must match SETTLE_PAUSE_MS there. Same "end on a multiple of
+   360deg" trick as the other die animations so swapping this class off
+   doesn't snap the rotation back. */
+@keyframes gb-die-land {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  40% {
+    transform: rotate(200deg) scale(1.1);
+  }
+  75% {
+    transform: rotate(330deg) scale(1);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+.gb-die-land {
+  animation: gb-die-land 450ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* The modifier chip's entrance (RollAnimationOverlay.tsx's renderModifierChip)
+   — a plain CSS animation rather than a React-state-driven transition,
+   deliberately: it needs to always run reliably right on mount regardless of
+   render timing, and it targets opacity on the *outer* wrapper while the
+   chip's later flight/fade-out (driven by state) targets the *inner* one, so
+   the two never fight over the same element's opacity mid-animation. */
+@keyframes gb-modifier-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.gb-modifier-fade-in {
+  animation: gb-modifier-fade-in 150ms ease-out forwards;
+}
+
+/* Each random number flickering past while the die spins — quick and
+   understated, since these aren't the result, just noise building suspense
+   (see flickerColor() in RollAnimationOverlay.tsx for the grey-to-bright
+   color ramp layered on top of this). */
+@keyframes gb-digit-flicker {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) rotateX(35deg);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1) rotateX(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotateX(0deg);
+  }
+}
+.gb-digit-flicker {
+  animation: gb-digit-flicker 0.14s ease-out forwards;
+}
+
+/* The two-stage tip: whichever number the flicker landed on holds still,
+   then visibly rotates away face-down (gb-digit-tip-out) — so it's actually
+   legible as "the closest number" before it's replaced — and only then does
+   the real result rotate in from the opposite side (gb-digit-tip-in).
+   Durations here must match TIP_OUT_MS/TIP_IN_MS in the component. */
+@keyframes gb-digit-tip-out {
+  0% {
+    opacity: 1;
+    transform: rotateX(0deg);
+  }
+  85% {
+    opacity: 1;
+    transform: rotateX(88deg);
+  }
+  100% {
+    opacity: 0;
+    transform: rotateX(95deg);
+  }
+}
+.gb-digit-tip-out {
+  /* A steady ease-in, not the near-frozen-then-snap curve this had before —
+     that front-loaded easing made the rotation invisible for most of the
+     duration, reading as a stuck/paused animation rather than a slow tip. */
+  animation: gb-digit-tip-out 0.75s ease-in forwards;
+}
+
+@keyframes gb-digit-tip-in {
+  0% {
+    opacity: 0;
+    transform: rotateX(-95deg);
+  }
+  15% {
+    opacity: 1;
+    transform: rotateX(-88deg);
+  }
+  100% {
+    opacity: 1;
+    transform: rotateX(0deg);
+  }
+}
+.gb-digit-tip-in {
+  animation: gb-digit-tip-in 0.75s ease-out forwards;
+}
+
+@keyframes gb-roll-pop-in {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.gb-roll-pop-in {
+  animation: gb-roll-pop-in 0.4s cubic-bezier(0.2, 0.8, 0.3, 1.3) forwards;
+}
+
+@keyframes gb-roll-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-8px) rotate(-2deg);
+  }
+  40% {
+    transform: translateX(7px) rotate(2deg);
+  }
+  60% {
+    transform: translateX(-5px) rotate(-1deg);
+  }
+  80% {
+    transform: translateX(4px) rotate(1deg);
+  }
+}
+.gb-roll-shake {
+  animation: gb-roll-shake 0.5s ease;
+}
+
+@keyframes gb-roll-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.gb-roll-backdrop-in {
+  animation: gb-roll-backdrop-in 0.2s ease forwards;
+}
+
+/* The die sitting idle, waiting for its own click before it actually rolls
+   (RollAnimationOverlay.tsx's "pending" phase) — a slow breathing pulse so
+   it reads as "waiting on you," not just a static, possibly-broken image. */
+@keyframes gb-die-idle-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+.gb-die-idle-pulse {
+  animation: gb-die-idle-pulse 1.6s ease-in-out infinite;
+}

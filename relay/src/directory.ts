@@ -27,6 +27,18 @@ interface StoredCampaignSnapshot {
   folders: unknown[]
 }
 
+/** Opaque to the relay apart from the top-level list fields — see handleSetCharacter. */
+interface StoredCharacter {
+  id: string
+  name: string
+  subtitle: string
+  updatedAt: string
+  sheet: unknown
+  derived: unknown
+}
+
+const MAX_CHARACTER_BYTES = 1_500_000
+
 interface FriendRequests {
   incoming: string[] // userIds who sent *this* user a request
   outgoing: string[] // userIds *this* user has requested
@@ -157,6 +169,10 @@ export class Directory extends Server<Env> {
     if (req.method === 'GET' && action === 'campaigns') return this.handleListCampaignSnapshots(req)
     if (req.method === 'GET' && segments[segments.length - 2] === 'campaigns') return this.handleGetCampaignSnapshot(req, action)
     if (req.method === 'POST' && segments[segments.length - 2] === 'campaigns') return this.handleSetCampaignSnapshot(req, action)
+    if (req.method === 'GET' && action === 'characters') return this.handleListCharacters(req)
+    if (req.method === 'GET' && segments[segments.length - 2] === 'characters') return this.handleGetCharacter(req, action)
+    if (req.method === 'POST' && segments[segments.length - 2] === 'characters') return this.handleSetCharacter(req, action)
+    if (req.method === 'POST' && segments[segments.length - 2] === 'characters-delete') return this.handleDeleteCharacter(req, action)
     if (req.method === 'GET' && action === 'friends') return this.handleListFriends(req)
     if (req.method === 'POST' && action === 'request') return this.handleSendRequest(req)
     if (req.method === 'POST' && action === 'accept') return this.handleRespondRequest(req, true)
@@ -306,6 +322,67 @@ export class Directory extends Server<Env> {
       folders: body.folders
     }
     await this.ctx.storage.put(`campaign:${account.id}:${campaignId}`, snapshot)
+    return json({ ok: true })
+  }
+
+  /**
+   * Character sheets for the read-only web viewer — same opaque-blob
+   * philosophy as campaign snapshots (see shared/cloudCharacter.ts for the
+   * shape the desktop sends), except `name`/`subtitle`/`updatedAt`, which
+   * the client sends top-level so the list endpoint never has to read into
+   * the sheet itself.
+   */
+  private async handleListCharacters(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const stored = await this.ctx.storage.list<StoredCharacter>({ prefix: `character:${account.id}:` })
+    const list = [...stored.values()]
+      .map((c) => ({ id: c.id, name: c.name, subtitle: c.subtitle, updatedAt: c.updatedAt }))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    return json(list)
+  }
+
+  private async handleGetCharacter(req: Request, characterId: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const character = await this.ctx.storage.get<StoredCharacter>(`character:${account.id}:${characterId}`)
+    if (!character) return json({ error: 'Not found' }, 404)
+    return json(character)
+  }
+
+  private async handleSetCharacter(req: Request, characterId: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const raw = await req.text()
+    // Durable Object values cap out at 2 MB; a sheet is a few KB plus its
+    // (already downscaled) portrait, so anything near that is a bug upstream.
+    if (raw.length > MAX_CHARACTER_BYTES) return json({ error: 'Character too large' }, 413)
+    const body = (() => {
+      try {
+        return JSON.parse(raw) as Partial<StoredCharacter>
+      } catch {
+        return null
+      }
+    })()
+    if (!body || typeof body.name !== 'string' || typeof body.updatedAt !== 'string' || !body.sheet || !body.derived) {
+      return badRequest('name, updatedAt, sheet, and derived are required')
+    }
+    const character: StoredCharacter = {
+      id: characterId,
+      name: body.name,
+      subtitle: typeof body.subtitle === 'string' ? body.subtitle : '',
+      updatedAt: body.updatedAt,
+      sheet: body.sheet,
+      derived: body.derived
+    }
+    await this.ctx.storage.put(`character:${account.id}:${characterId}`, character)
+    return json({ ok: true })
+  }
+
+  private async handleDeleteCharacter(req: Request, characterId: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    await this.ctx.storage.delete(`character:${account.id}:${characterId}`)
     return json({ ok: true })
   }
 

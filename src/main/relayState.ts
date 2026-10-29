@@ -21,9 +21,18 @@ export function getRelaySession(): RelaySession | null {
   return currentSession
 }
 
+const sessionStartedListeners = new Set<(session: RelaySession) => void>()
+
+/** Fires each time a relay session is established (login, register, password change, or a relay-recognized login on a new device) — for work that has to wait for a token, like flushing uploads queued while offline. */
+export function onRelaySessionStarted(listener: (session: RelaySession) => void): () => void {
+  sessionStartedListeners.add(listener)
+  return () => sessionStartedListeners.delete(listener)
+}
+
 export function setRelaySession(session: RelaySession | null): void {
   currentSession = session
   onlineFriends.clear()
+  if (session) for (const listener of sessionStartedListeners) listener(session)
 }
 
 export function getRelayStatus(): RelayStatus {

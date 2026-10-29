@@ -15,6 +15,7 @@ import { useNotesWorkspace } from '../campaigns/useNotesWorkspace'
 import { PlayerWorkspaceBody } from '../player/PlayerWorkspaceBody'
 import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
+import { useCharacterCloudSync } from '../player/useCharacterCloudSync'
 import { MusicButton } from '../audio/MusicButton'
 import { SoundBoardButton } from '../audio/SoundBoardButton'
 import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
@@ -98,6 +99,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [joinedSession, setJoinedSession] = useState<{ sessionId: string; label: string } | null>(null)
   const [disconnectMessage, setDisconnectMessage] = useState<string | null>(null)
   const playerWorkspace = usePlayerWorkspace(joinedSession?.sessionId)
+  useCharacterCloudSync(playerWorkspace.characters)
 
   // Which content packs every character sheet derives with (see shared/content/sheet.ts): the open campaign's
   // enabled packs — the DM's own campaign in DM mode, the joined (or offline) campaign in player mode — and the
