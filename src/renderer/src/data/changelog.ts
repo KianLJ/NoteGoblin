@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.9.1',
+    title: 'A new character creator, and packs per character',
+    highlights: [
+      'A brand-new character creator that fills the page and follows the 2024 order: class, background, species, ability scores, spells, then name and details. Your character fills in on a card beside you as you choose',
+      'Pick skills and spells from cards that say what they do (hover a spell to read it in full), and set ability scores by picking a score and clicking an ability, or dragging it there. Standard array, point buy, rolling and typed-in scores all work, with a “Suggest” button for your class',
+      'Spellcasters choose their cantrips and 1st-level spells as part of making the character, and the Details page has room for a portrait, alignment, personality and backstory',
+      'Each character now has its own content packs, picked when you make them, so packs no longer mix between characters. Existing characters keep the packs they already use, and a campaign’s packs are the starting point for a character made in it',
+      'An Edit button beside each character in the bottom-left menu opens the creator again, filled in. Changes keep your levels, later choices, inventory, hit points and higher-level spells',
+      'Big packs no longer slow the app down: switching tabs, saving a character and the level-up menu are much quicker',
+      'A pack that renames something from another pack (a renamed subclass, say) no longer has both versions selected at once in the level-up menu, and a pack’s own Paladin or Wizard replaces the built-in one',
+      'Subclass toggles always appear on the sheet, including ones that share a resource like Channel Divinity, and Paladins get Channel Divinity from 3rd level',
+      'Spell searches (the creator, the sheet’s Add Spell and the Codex) can show only homebrew or only SRD spells, and homebrew spells now appear in the Codex’s spell list'
+    ]
+  },
+  {
     version: '0.9.0',
     title: 'Ship combat, simpler crews, and a viewer that looks like the app',
     highlights: [
