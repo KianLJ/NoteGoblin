@@ -8,7 +8,7 @@ import {
   readStoredPack,
   writePackFile
 } from '@shared/content/packFiles'
-import { deriveSheet, getActivePacksKey, setActivePacks, subscribeActivePacks } from '@shared/content/sheet'
+import { deriveSheet, getActivePacksKey, normalizeForActivePacks, packsWithDependencies, setActivePacks, setPackPool, subscribeActivePacks, withDetectedPackIds } from '@shared/content/sheet'
 import { SRD_PACK_ID } from '@shared/content/srd'
 import { parsePack } from '@shared/content/validate'
 import type { ContentPack, ContentPackInput } from '@shared/content/schema'
@@ -59,6 +59,17 @@ describe('readPackFile', () => {
     const again = readPackFile(writePackFile(hexbound))
     expect(again.ok && again.pack).toEqual(hexbound)
     expect(readStoredPack(JSON.stringify(hexbound))).toEqual(hexbound)
+    expect(readStoredPack('{"not":"a pack"}')).toBeNull()
+  })
+
+  it('checks a stored pack once, and reads the same text back as the same pack', () => {
+    const text = JSON.stringify(hexbound)
+    const first = readStoredPack(text)
+    expect(readStoredPack(text)).toBe(first)
+    // Any change to the text is a different pack.
+    const edited = readStoredPack(JSON.stringify({ ...hexbound, description: 'Edited.' }))
+    expect(edited).not.toBe(first)
+    expect(edited?.description).toBe('Edited.')
     expect(readStoredPack('{"not":"a pack"}')).toBeNull()
   })
 
@@ -114,6 +125,41 @@ describe('active packs', () => {
     unsubscribe()
     expect(calls).toBe(3)
     expect(key).toMatch(/^hexbound@1\.0\.0#/)
+  })
+})
+
+describe('each character’s own packs', () => {
+  const addon = parsePack(addonInput, [hexbound])
+  afterEach(() => {
+    setActivePacks([])
+    setPackPool([])
+  })
+
+  it('brings in what a pack depends on, and names what isn’t there', () => {
+    const { packs, missing } = packsWithDependencies(['hexbound-addon', 'gone'], [hexbound, addon])
+    expect(packs.map((p) => p.id)).toEqual(['hexbound', 'hexbound-addon'])
+    expect(missing).toEqual(['gone'])
+  })
+
+  it('derives each sheet with its own packs, whatever is active', () => {
+    setPackPool([hexbound, addon])
+    setActivePacks([hexbound])
+    const hexblade: CharacterSheetData = { ...emptyCharacterSheet(), classes: [{ className: 'Hexblade', level: 1 }] }
+    // On its own packs: the Hexblade is there.
+    expect(normalizeForActivePacks({ ...hexblade, packIds: ['hexbound'] }).classes[0].classId).toBe('hexbound:hexblade')
+    expect(deriveSheet({ ...hexblade, packIds: ['hexbound'] }).derived.hitDice[0]?.die).toBe(10)
+    // SRD only: the same class name means nothing, even though Hexbound is active.
+    expect(normalizeForActivePacks({ ...hexblade, packIds: [] }).classes[0].classId).toBeUndefined()
+    // A pack this device doesn't have is flagged.
+    expect(deriveSheet({ ...hexblade, packIds: ['gone'] }).derived.diagnostics.some((d) => /"gone"/.test(d.message))).toBe(true)
+  })
+
+  it('gives an older sheet the packs it already uses', () => {
+    const old = { ...emptyCharacterSheet(), classes: [{ className: 'Hexblade', level: 3, subclass: 'Grave Hex' }] }
+    expect(withDetectedPackIds(old, [hexbound, addon]).packIds).toEqual(['hexbound', 'hexbound-addon'])
+    expect(withDetectedPackIds({ ...emptyCharacterSheet(), classes: [{ className: 'Fighter', level: 1 }] }, [hexbound, addon]).packIds).toEqual([])
+    // A sheet that already has a list keeps it.
+    expect(withDetectedPackIds({ ...old, packIds: [] }, [hexbound]).packIds).toEqual([])
   })
 })
 

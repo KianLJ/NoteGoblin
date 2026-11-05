@@ -69,6 +69,8 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
 
   const normalized = normalizeForActivePacks(character)
   const classIndex = normalized.classes.findIndex((c) => c.className.toLowerCase() === className.toLowerCase())
+  // The character at the old level, kept between renders: a new object every render would be derived from scratch each time.
+  const before = useMemo<CharacterSheetData>(() => ({ ...character, classes: character.classes.map((c, i) => (i === classIndex ? { ...c, level: fromLevel } : c)) }), [character, classIndex, fromLevel])
   const classLevel = classIndex >= 0 ? normalized.classes[classIndex] : undefined
   const { derived, registry } = deriveSheet(character)
   const cls = classLevel?.classId ? registry.get('classes', classLevel.classId) : undefined
@@ -86,7 +88,6 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
   // Archetype features (a bloodline this class granted) count too — they unlock with the class's level.
   const isOwnArchetype = (f: (typeof derived.features)[number]): boolean => !!f.archetypeId && f.classId === classId && f.key.includes(':', f.key.lastIndexOf('/'))
   const newFeatures = derived.features.filter((f) => (isOwn(f.key) || isOwnArchetype(f)) && f.level !== undefined && f.level > fromLevel && f.level <= toLevel)
-  const before: CharacterSheetData = { ...character, classes: character.classes.map((c, i) => (i === classIndex ? { ...c, level: fromLevel } : c)) }
   const derivedBefore = deriveSheet(before).derived
   const resourceChanges = derived.resources
     .filter((r) => r.className === cls.def.name)
@@ -192,7 +193,8 @@ export function LevelUpPopup({ character: savedCharacter, className, fromLevel, 
               classLabel={className}
               featureName={subclassLabel}
               slotLevel={cls.def.subclassLevel}
-              options={subclasses.map((s) => ({ id: s.def.id, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
+              // Full ids: a pack's renamed override (Oath of the Society) shares its short id with the SRD entry (devotion).
+              options={subclasses.map((s) => ({ id: s.fullId, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
               onChoose={chooseSubclass}
             />
           )

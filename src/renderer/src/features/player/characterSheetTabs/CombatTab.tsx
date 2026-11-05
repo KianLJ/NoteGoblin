@@ -352,10 +352,13 @@ export function CombatTab({ character, onSave, readOnly, canRoll = !readOnly, se
     return [...base, ...subclassReactions]
   })
 
-  // A toggle with a cost is how the engine models an activatable resource (Rage) — it's shown on its resource's card;
-  // free toggles (Reckless Attack) get their own Toggle Actions section.
-  const toggleFeatures = derived.toggles.filter((t) => !t.cost)
+  // A toggle with a cost is how the engine models an activatable resource (Rage) — the first one paid from a resource
+  // is shown on that resource's card. Every other toggle gets its own card in Toggle Actions: free ones (Reckless
+  // Attack), and ones that share a resource with another (a subclass's Channel Divinity option) or cost a resource
+  // this character doesn't have — those used to show nowhere.
   const toggleForResource = (resourceId: string): DerivedToggle | undefined => derived.toggles.find((t) => t.cost?.resourceId === resourceId)
+  const onResourceCards = new Set(derived.resources.map((r) => toggleForResource(r.id)?.id).filter((id): id is string => !!id))
+  const toggleFeatures = derived.toggles.filter((t) => !onResourceCards.has(t.id))
   const attackAdvantage = derived.attackMode
   const resources = derived.resources
   const bonusActionResources = resources.filter((r) => r.actionType === 'bonus')
@@ -642,6 +645,9 @@ export function CombatTab({ character, onSave, readOnly, canRoll = !readOnly, se
               {toggleFeatures.map((f) => {
                 const active = character.activeBuffs.includes(f.id)
                 const label = actionTypeLabel(f.actionType, registry)
+                const costResource = f.cost ? derived.resources.find((r) => r.id === f.cost!.resourceId) : undefined
+                const left = costResource ? resourceRemaining(costResource, resourceDraft) : null
+                const cantAfford = !active && left !== null && !!f.cost && left < f.cost.amount
                 return (
                   <div key={f.id} className="gb-card" style={{ padding: 'var(--space-3)', borderColor: active ? 'var(--accent)' : undefined }}>
                     <HoverDetailCard title={f.name} subtitle={f.className ?? f.source} fields={[]} description={f.description || f.detail || ''}>
@@ -659,10 +665,18 @@ export function CombatTab({ character, onSave, readOnly, canRoll = !readOnly, se
                         )}
                       </div>
                     </HoverDetailCard>
+                    {f.cost && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                        {costResource
+                          ? `Costs ${f.cost.amount} ${costResource.name} (${left} left)`
+                          : `Costs ${f.cost.amount} ${f.cost.resourceId}, which this character doesn't have`}
+                      </div>
+                    )}
                     <Button
                       variant={active ? 'secondary' : 'primary'}
                       onClick={() => toggleBuff(f)}
-                      disabled={readOnly}
+                      disabled={readOnly || cantAfford}
+                      title={cantAfford ? `No ${costResource?.name} left` : undefined}
                       style={{ width: '100%', fontSize: 12, padding: '4px 10px' }}
                     >
                       {active ? `End ${f.name}` : `Activate ${f.name}`}

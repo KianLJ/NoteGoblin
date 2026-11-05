@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PlayerSidebar } from './PlayerSidebar'
 import { PartySidebar } from './PartySidebar'
 import { CharacterSheetEditor } from './CharacterSheetEditor'
-import { CharacterCreationWizard } from './CharacterCreationWizard'
+import { CharacterCreator } from './creator/CharacterCreator'
 import { CharacterSwitcher } from './CharacterSwitcher'
 import { ForceRollPrompt } from './ForceRollPrompt'
 import { NoteEditor } from '../campaigns/NoteEditor'
@@ -60,10 +60,12 @@ export function PlayerWorkspaceBody({
     offlineSnapshots,
     openOfflineCampaign,
     closeOfflineCampaign,
-    deleteOfflineCampaign
+    deleteOfflineCampaign,
+    campaignPacks
   } = workspace
 
-  const [wizardOpen, setWizardOpen] = useState(false)
+  // The character creator takes the whole page: a new character, or an existing one being edited.
+  const [creator, setCreator] = useState<{ editing: CharacterSheet | null } | null>(null)
 
   // Prompted once per fresh join (not on every reconnect/resync of the same
   // session, and not just from reopening the app while already in one) —
@@ -98,18 +100,30 @@ export function PlayerWorkspaceBody({
     setViewedPartyMemberCharacter(result.ok ? result.data : null)
   }
 
+  if (creator) {
+    const editing = creator.editing
+    return (
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        <CharacterCreator
+          key={editing?.id ?? 'new'}
+          initial={editing}
+          // A new character in a campaign starts on that campaign's packs.
+          campaignPackIds={activeCampaign && campaignPacks ? campaignPacks.map((p) => p.id) : null}
+          onCreate={(name, sheet) => {
+            if (editing) {
+              void saveCharacter(editing.id, { ...sheet, name })
+              openTab({ kind: 'character', id: editing.id })
+            } else createCharacter(name, sheet)
+            setCreator(null)
+          }}
+          onClose={() => setCreator(null)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-      {wizardOpen && (
-        <CharacterCreationWizard
-          onCreate={(name, sheet) => {
-            createCharacter(name, sheet)
-            setWizardOpen(false)
-          }}
-          onClose={() => setWizardOpen(false)}
-        />
-      )}
-
       <Modal open={characterPromptOpen && !!characters} onClose={() => setCharacterPromptOpen(false)} width={400}>
         <h2 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 18 }}>Which character?</h2>
         <p style={{ margin: '0 0 var(--space-3)', fontSize: 13, color: 'var(--text-muted)' }}>
@@ -181,7 +195,8 @@ export function PlayerWorkspaceBody({
               characters={characters}
               current={lastActiveCharacter}
               onSelect={(character) => openTab({ kind: 'character', id: character.id })}
-              onRequestCreate={() => setWizardOpen(true)}
+              onRequestCreate={() => setCreator({ editing: null })}
+              onRequestEdit={(character) => setCreator({ editing: character })}
               onDelete={(character) => deleteCharacter(character.id)}
               sessionId={sessionId}
               onLeaveSession={onLeaveSession}

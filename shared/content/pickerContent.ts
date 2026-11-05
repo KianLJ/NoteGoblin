@@ -1,5 +1,5 @@
 import { BACKGROUNDS, CLASSES, RACES, type Ability, type Background, type Class, type Race, type SkillName } from '../dnd5e'
-import type { BackgroundDef } from './schema'
+import type { BackgroundDef, ContentPack } from './schema'
 import { subclassesForClass, type CompendiumSubclass } from '../compendium'
 import { registryForPacks } from './migrate'
 import { getActivePacks } from './sheet'
@@ -26,9 +26,9 @@ export interface PickerContent {
 
 const lower = (s: string): string => s.trim().toLowerCase()
 
-/** The picker lists for the active packs right now. React components use usePickerContent (renderer), which re-builds this when the packs change. */
-export function buildPickerContent(): PickerContent {
-  const registry = registryForPacks([srdPack(), ...getActivePacks()])
+/** The picker lists for some packs (the active ones by default). React components use usePickerContent (renderer), which re-builds this when the packs change. */
+export function buildPickerContent(packs: ContentPack[] = getActivePacks()): PickerContent {
+  const registry = registryForPacks([srdPack(), ...packs])
   const fromPacks = <T extends { fullId: string }>(entries: T[]): T[] => entries.filter((e) => !e.fullId.startsWith(`${SRD_PACK_ID}:`))
   const skillName = (id: string): SkillName => (registry.vocabulary.skills.find((s) => s.id === id)?.name ?? id) as SkillName
   const notTaken = <T extends { name: string }>(base: T[], extra: T[]): T[] => [...base, ...extra.filter((e) => !base.some((b) => lower(b.name) === lower(e.name)))]

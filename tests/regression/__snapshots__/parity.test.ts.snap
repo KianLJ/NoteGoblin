@@ -19632,6 +19632,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -19798,6 +19804,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 3,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -19955,6 +19967,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
       {
         "actionType": "action",
         "id": "paladin-divine-sense",
+        "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
         "max": 3,
         "recharge": "long",
       },
@@ -20125,6 +20143,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 3,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -20280,6 +20304,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
       {
         "actionType": "action",
         "id": "paladin-divine-sense",
+        "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
         "max": 3,
         "recharge": "long",
       },
@@ -20446,6 +20476,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
       {
         "actionType": "action",
         "id": "paladin-divine-sense",
+        "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
         "max": 3,
         "recharge": "long",
       },
@@ -20619,6 +20655,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 3,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -20774,6 +20816,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
       {
         "actionType": "action",
         "id": "paladin-divine-sense",
+        "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
         "max": 3,
         "recharge": "long",
       },
@@ -20938,6 +20986,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 3,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -21096,6 +21150,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
       {
         "actionType": "action",
         "id": "paladin-divine-sense",
+        "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
         "max": 3,
         "recharge": "long",
       },
@@ -21431,6 +21491,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 3,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -21593,6 +21659,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -21753,6 +21825,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -21906,6 +21984,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "actionType": "action",
         "id": "paladin-divine-sense",
         "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
         "recharge": "long",
       },
     ],
@@ -22070,6 +22154,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "actionType": "action",
         "id": "paladin-divine-sense",
         "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
         "recharge": "long",
       },
     ],
@@ -22240,6 +22330,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "max": 3,
         "recharge": "long",
       },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
+        "recharge": "long",
+      },
     ],
     "saves": {
       "cha": {
@@ -22394,6 +22490,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "actionType": "action",
         "id": "paladin-divine-sense",
         "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
         "recharge": "long",
       },
     ],
@@ -22552,6 +22654,12 @@ exports[`SRD pack at every class level > paladin 1`] = `
         "actionType": "action",
         "id": "paladin-divine-sense",
         "max": 3,
+        "recharge": "long",
+      },
+      {
+        "actionType": "action",
+        "id": "paladin-channel-divinity",
+        "max": 2,
         "recharge": "long",
       },
     ],
@@ -52904,6 +53012,12 @@ exports[`SRD pack parity > paladin 3 1`] = `
       "max": 3,
       "recharge": "long",
     },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 2,
+      "recharge": "long",
+    },
   ],
   "saves": {
     "cha": {
@@ -53063,6 +53177,12 @@ exports[`SRD pack parity > paladin 4 1`] = `
       "actionType": "action",
       "id": "paladin-divine-sense",
       "max": 3,
+      "recharge": "long",
+    },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 2,
       "recharge": "long",
     },
   ],
@@ -53233,6 +53353,12 @@ exports[`SRD pack parity > paladin 5 1`] = `
       "max": 3,
       "recharge": "long",
     },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 2,
+      "recharge": "long",
+    },
   ],
   "saves": {
     "cha": {
@@ -53392,6 +53518,12 @@ exports[`SRD pack parity > paladin 6 / warlock 3 1`] = `
       "actionType": "action",
       "id": "paladin-divine-sense",
       "max": 3,
+      "recharge": "long",
+    },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 2,
       "recharge": "long",
     },
   ],
@@ -53555,6 +53687,12 @@ exports[`SRD pack parity > paladin 6 1`] = `
       "actionType": "action",
       "id": "paladin-divine-sense",
       "max": 3,
+      "recharge": "long",
+    },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 2,
       "recharge": "long",
     },
   ],
@@ -53723,6 +53861,12 @@ exports[`SRD pack parity > paladin 9 1`] = `
       "max": 3,
       "recharge": "long",
     },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 2,
+      "recharge": "long",
+    },
   ],
   "saves": {
     "cha": {
@@ -53882,6 +54026,12 @@ exports[`SRD pack parity > paladin 11 1`] = `
     {
       "actionType": "action",
       "id": "paladin-divine-sense",
+      "max": 3,
+      "recharge": "long",
+    },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
       "max": 3,
       "recharge": "long",
     },
@@ -54055,6 +54205,12 @@ exports[`SRD pack parity > paladin 14 1`] = `
       "max": 3,
       "recharge": "long",
     },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 3,
+      "recharge": "long",
+    },
   ],
   "saves": {
     "cha": {
@@ -54215,6 +54371,12 @@ exports[`SRD pack parity > paladin 17 1`] = `
     {
       "actionType": "action",
       "id": "paladin-divine-sense",
+      "max": 3,
+      "recharge": "long",
+    },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
       "max": 3,
       "recharge": "long",
     },
@@ -54398,6 +54560,12 @@ exports[`SRD pack parity > paladin 19 1`] = `
       "max": 3,
       "recharge": "long",
     },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
+      "max": 3,
+      "recharge": "long",
+    },
   ],
   "saves": {
     "cha": {
@@ -54560,6 +54728,12 @@ exports[`SRD pack parity > paladin 20 1`] = `
     {
       "actionType": "action",
       "id": "paladin-divine-sense",
+      "max": 3,
+      "recharge": "long",
+    },
+    {
+      "actionType": "action",
+      "id": "paladin-channel-divinity",
       "max": 3,
       "recharge": "long",
     },

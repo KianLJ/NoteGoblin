@@ -94,6 +94,8 @@ export function SpellsTab({ character, onSave, readOnly, canRoll = !readOnly, se
   const [listSearch, setListSearch] = useState('')
   const [listLevelFilter, setListLevelFilter] = useState<'all' | number>('all')
   const [pickerLevelFilter, setPickerLevelFilter] = useState<'all' | number>('all')
+  /** Every source, only the SRD, or only the active packs' spells. */
+  const [pickerSource, setPickerSource] = useState<'all' | 'srd' | 'homebrew'>('all')
 
   function patch(fields: Partial<SpellsDraft>): void {
     setDraft((prev) => ({ ...prev, ...fields }))
@@ -507,6 +509,8 @@ export function SpellsTab({ character, onSave, readOnly, canRoll = !readOnly, se
                 30,
                 [...SPELLS, ...packSpells].filter((s) => {
                   const fromPack = s.id.startsWith('pack:')
+                  if (pickerSource === 'srd' && fromPack) return false
+                  if (pickerSource === 'homebrew' && !fromPack) return false
                   if (s.level > maxCastableLevel) return false
                   if (pickerLevelFilter !== 'all' && s.level !== pickerLevelFilter) return false
                   if (s.level === 0 && atCantripCap) return false
@@ -525,19 +529,28 @@ export function SpellsTab({ character, onSave, readOnly, canRoll = !readOnly, se
             buttonLabel="+ Add Spell"
             searchPlaceholder={packSpells.length ? 'Search spells…' : 'Search SRD spells…'}
             filters={
-              <select
-                className="gb-input"
-                style={{ fontSize: 12 }}
-                value={pickerLevelFilter}
-                onChange={(e) => setPickerLevelFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-              >
-                <option value="all">All Levels</option>
-                {SPELL_LEVEL_OPTIONS.filter((lvl) => lvl <= maxCastableLevel).map((lvl) => (
-                  <option key={lvl} value={lvl}>
-                    {spellLevelLabel(lvl)}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <select
+                  className="gb-input"
+                  style={{ fontSize: 12, flex: 1 }}
+                  value={pickerLevelFilter}
+                  onChange={(e) => setPickerLevelFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                >
+                  <option value="all">All Levels</option>
+                  {SPELL_LEVEL_OPTIONS.filter((lvl) => lvl <= maxCastableLevel).map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {spellLevelLabel(lvl)}
+                    </option>
+                  ))}
+                </select>
+                {packSpells.length > 0 && (
+                  <select className="gb-input" style={{ fontSize: 12, flex: 1 }} value={pickerSource} onChange={(e) => setPickerSource(e.target.value as 'all' | 'srd' | 'homebrew')} aria-label="Spell source">
+                    <option value="all">SRD and homebrew</option>
+                    <option value="srd">SRD only</option>
+                    <option value="homebrew">Homebrew only</option>
+                  </select>
+                )}
+              </div>
             }
           />
         </div>

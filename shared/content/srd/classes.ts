@@ -174,7 +174,7 @@ const PROFICIENCIES: Record<string, { armor: string[]; weapon: string[]; tool?: 
 // Resources, toggles and actions
 
 /** CLASS_RESOURCES' max/recharge functions as formulas, and the feature each one belongs to. */
-const RESOURCES: Record<string, { feature: string; max: string; recharge?: ResourceDef['recharge'] }> = {
+const RESOURCES: Record<string, { feature: string; max: string; recharge?: ResourceDef['recharge']; shortRestRegain?: string }> = {
   'barbarian-rage': { feature: 'Rage', max: '@table.rages' },
   // Font of Inspiration (5th level) switches it to a short rest.
   'bard-inspiration': { feature: 'Bardic Inspiration', max: 'max(1, @cha.mod)', recharge: { when: { kind: 'classLevel', classId: 'bard', min: 5 }, then: 'short', else: 'long' } },
@@ -186,6 +186,8 @@ const RESOURCES: Record<string, { feature: string; max: string; recharge?: Resou
   'fighter-indomitable': { feature: 'Indomitable', max: '@classLevel >= 17 ? 3 : @classLevel >= 13 ? 2 : 1' },
   'monk-ki': { feature: "Monk's Focus", max: '@classLevel' },
   'paladin-lay-on-hands': { feature: 'Lay on Hands', max: '@classLevel * 5' },
+  // One use back on a Short Rest, all on a Long Rest.
+  'paladin-channel-divinity': { feature: 'Channel Divinity', max: '@classLevel >= 11 ? 3 : 2', shortRestRegain: '1' },
   // Not in the 5.2.1 feature table, but the sheet still tracks it — it gets a feature of its own.
   'paladin-divine-sense': { feature: 'Divine Sense', max: '1 + max(0, @cha.mod)' },
   'sorcerer-sorcery-points': { feature: 'Font of Magic', max: '@classLevel' },
@@ -225,7 +227,8 @@ function resourceEffects(classId: string, def: ClassResourceDef): Effect[] {
           max: conv.max,
           recharge,
           display: def.kind,
-          ...(def.actionType ? { actionType: def.actionType } : {})
+          ...(def.actionType ? { actionType: def.actionType } : {}),
+          ...(conv.shortRestRegain ? { shortRestRegain: conv.shortRestRegain } : {})
         }
       }
     }

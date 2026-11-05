@@ -3,13 +3,15 @@ import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { stopMusic } from '../audio/musicEngine'
 import type { CharacterSheet } from '@shared/ipc'
-import { XIcon } from '../../ui/icons'
+import { PencilIcon, XIcon } from '../../ui/icons'
 
 interface CharacterSwitcherProps {
   characters: CharacterSheet[] | null
   current: CharacterSheet | null
   onSelect: (character: CharacterSheet) => void
   onRequestCreate: () => void
+  /** Opens the full-page character creator again on this character, filled in, to change its choices. */
+  onRequestEdit: (character: CharacterSheet) => void
   /** Deletion lives here now, not on the sheet itself — a character you're actively looking at is exactly where a stray click is most likely to land, so putting the button somewhere you only visit to switch/manage characters cuts down on that risk on its own, on top of the two-click confirm below. */
   onDelete: (character: CharacterSheet) => void
   /** The joined session id, if any — Leave only makes sense (and only shows) while actually connected to someone's table. Was FriendsMenu's own concern until it moved here, alongside the character you're playing that session as. */
@@ -18,8 +20,8 @@ interface CharacterSwitcherProps {
   onLeaveSession: () => void
 }
 
-/** Player mode's bottom-left corner control — picks/creates a character, the way CampaignSwitcher does for campaigns on the DM side. Fed from the shared player workspace state rather than fetching its own list. Creation itself opens the guided wizard (CharacterCreationWizard) rather than instant-creating here. */
-export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onDelete, sessionId, onLeaveSession }: CharacterSwitcherProps): JSX.Element {
+/** Player mode's bottom-left corner control — picks/creates a character, the way CampaignSwitcher does for campaigns on the DM side. Fed from the shared player workspace state rather than fetching its own list. Creation itself opens the full-page character creator (creator/CharacterCreator) rather than instant-creating here. */
+export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onRequestEdit, onDelete, sessionId, onLeaveSession }: CharacterSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   // Two clicks to actually delete: the first arms this row (button flips to
   // "Confirm delete?"), the second (still targeting the same character)
@@ -145,6 +147,19 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
                     }}
                   >
                     {character.name || 'Untitled'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false)
+                      setConfirmingId(null)
+                      onRequestEdit(character)
+                    }}
+                    title={`Edit ${character.name || 'this character'} in the character creator`}
+                    aria-label={`Edit ${character.name || 'this character'}`}
+                    style={{ flexShrink: 0, padding: '4px 6px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1, display: 'inline-flex' }}
+                  >
+                    <PencilIcon size={12} />
                   </button>
                   <button
                     type="button"

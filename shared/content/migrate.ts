@@ -18,7 +18,7 @@
 import type { CharacterSheetData, ClassLevel } from '../dnd5e'
 import { buildRegistry, type Registered, type Registry } from './registry'
 import type { ContentPack } from './schema'
-import { srdPack } from './srd'
+import { SRD_PACK_ID, srdPack } from './srd'
 import { packKey } from './packKey'
 import { migrateMagicInitiate } from './magicInitiate'
 
@@ -57,10 +57,14 @@ function resolveId<T extends { name: string }>(
   name: string,
   accept: (e: Registered<T>) => boolean = () => true
 ): string | undefined {
-  const byName = lower(name) ? entries.find((e) => lower(e.def.name) === lower(name) && accept(e)) : undefined
+  // The last match wins: packs load after the SRD (and dependents after what they depend on), so a pack's own
+  // "Paladin" replaces the SRD one, the same way an id lookup prefers the most recently enabled pack.
+  const byName = lower(name) ? [...entries].reverse().find((e) => lower(e.def.name) === lower(name) && accept(e)) : undefined
   if (currentId) {
     const current = entries.find((e) => e.fullId === currentId)
-    if (current && accept(current) && (lower(current.def.name) === lower(name) || !lower(name))) return currentId
+    // A sheet saved against the SRD entry moves to a pack's entry of the same name once that pack is in use.
+    const replacedBySrdName = !!current && packIdOf(currentId) === SRD_PACK_ID && !!byName && byName.fullId !== currentId && packIdOf(byName.fullId) !== SRD_PACK_ID
+    if (current && accept(current) && (lower(current.def.name) === lower(name) || !lower(name)) && !replacedBySrdName) return currentId
     const packEnabled = registry.packs.some((p) => p.id === packIdOf(currentId))
     if (!current && !packEnabled && !byName && lower(name)) return currentId
   }

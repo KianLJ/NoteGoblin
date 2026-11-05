@@ -57,12 +57,40 @@ export function packFileName(pack: Pick<ContentPack, 'name' | 'version'>): strin
  * fits the schema rather than crashing whoever reads it).
  */
 export function readStoredPack(json: string): ContentPack | null {
+  // Checking a big pack against the schema takes a quarter of a second or more, and the same stored packs are read
+  // over and over (every character read resolves against all of them, every campaign change re-lists them), so each
+  // stored text is checked once and the result reused. Callers treat packs as read-only, so sharing one is safe.
+  const key = `${json.length}:${fnv1a(json)}`
+  if (storedPackCache.has(key)) {
+    const hit = storedPackCache.get(key)!
+    // Most recently used goes last, so the oldest is the one dropped.
+    storedPackCache.delete(key)
+    storedPackCache.set(key, hit)
+    return hit
+  }
+  let pack: ContentPack | null
   try {
     const parsed = contentPackSchema.safeParse(JSON.parse(json))
-    return parsed.success ? parsed.data : null
+    pack = parsed.success ? parsed.data : null
   } catch {
-    return null
+    pack = null
   }
+  storedPackCache.set(key, pack)
+  if (storedPackCache.size > STORED_PACK_CACHE_SIZE) storedPackCache.delete(storedPackCache.keys().next().value!)
+  return pack
+}
+
+const STORED_PACK_CACHE_SIZE = 32
+const storedPackCache = new Map<string, ContentPack | null>()
+
+/** FNV-1a over a string: fast, and with the length, plenty to tell stored packs apart. */
+function fnv1a(text: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(36)
 }
 
 export interface PackSummary {

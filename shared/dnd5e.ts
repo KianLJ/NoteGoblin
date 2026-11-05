@@ -122,7 +122,7 @@ export interface Race {
    * increases; that choice moved to Background instead (2 points split
    * however you like, or +1/+1/+1). Kept on the type (rather than removed)
    * so a homebrew/houseruled species can still use it, and so
-   * CharacterCreationWizard's ability-bonus math doesn't need a separate
+   * the character creator's ability-bonus math doesn't need a separate
    * code path for "no bonus" vs "some bonus".
    */
   abilityBonuses: Partial<AbilityScores>
@@ -275,7 +275,7 @@ export interface LineageOption {
   alwaysPreparedSpellId?: string
   level3SpellId?: string
   level5SpellId?: string
-  /** Short SRD-derived summary for a hover tooltip on the option itself (see CharacterCreationWizard.tsx's lineage picker) — condensed, not verbatim rules text. */
+  /** Short SRD-derived summary for a hover tooltip on the option itself (see the character creator's lineage picker) — condensed, not verbatim rules text. */
   description: string
 }
 
@@ -505,7 +505,7 @@ export const CLASSES: Class[] = [
  * SRD 5.2.1 dropped the 2014-style unique background feature (Shelter of
  * the Faithful, Criminal Contact, etc.) — a background instead grants three
  * named ability scores (increase one by 2 and another by 1, or all three by
- * 1 — see CharacterCreationWizard.tsx's background-bonus step), a specific
+ * 1 — see the character creator's ability-score step), a specific
  * Origin feat (looked up by id from compendium.ts's FEATS, not stored here
  * to avoid a circular import back into this lower-level module), two skill
  * proficiencies, and one tool proficiency.
@@ -1263,6 +1263,19 @@ export const CLASS_RESOURCES: Record<string, ClassResourceDef[]> = {
         "Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest — with that pool, you can restore a total number of hit points equal to your paladin level × 5.\nAs an action, you can touch a creature and draw power from the pool to restore hit points to it, up to the maximum remaining in your pool.\nAlternatively, you can expend 5 hit points from your pool to cure the target of one disease or neutralize one poison affecting it (you can cure multiple afflictions with one use, expending hit points separately for each). This feature has no effect on undead and constructs."
     },
     {
+      // SRD 5.2.1: a Paladin's Channel Divinity from 3rd level: two uses (three from 11th), one back on a Short Rest, all on a Long Rest. Oath options spend it.
+      id: 'paladin-channel-divinity',
+      name: 'Channel Divinity',
+      kind: 'uses',
+      minLevel: 3,
+      actionType: 'action',
+      recharge: () => 'long',
+      max: (level) => (level >= 11 ? 3 : 2),
+      description: 'Channel divine energy to fuel Divine Sense or your oath’s Channel Divinity options.',
+      fullDescription:
+        'You can channel divine energy to fuel magical effects: Divine Sense, and the options your Sacred Oath grants. You can use Channel Divinity twice, and a third time once you reach Paladin level 11. You regain one expended use when you finish a Short Rest, and all of them when you finish a Long Rest.\nIf an effect calls for a saving throw, the DC equals your Paladin spell save DC.'
+    },
+    {
       id: 'paladin-divine-sense',
       name: 'Divine Sense',
       kind: 'uses',
@@ -1644,6 +1657,12 @@ export interface CharacterSheetData {
   companionStates?: Record<string, { state?: string; currentHp?: number }>
   /** Version of every content pack this sheet's ids point into, as of the last normalize — so a pack update or a missing pack can be flagged instead of silently changing the sheet. */
   packVersions?: Record<string, string>
+  /**
+   * The homebrew content packs this character uses (ids, the SRD always included) — chosen when the character is
+   * made, so packs never mix between characters. A pack someone else made can come from a campaign instead of your
+   * library. Undefined on a sheet from before per-character packs: it's filled from the packs its ids point into.
+   */
+  packIds?: string[]
   alignment: string
   experiencePoints: number
   appearance: Appearance

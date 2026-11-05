@@ -12,6 +12,7 @@ import { srdPack } from '@shared/content/srd'
 import { VehiclesPanel } from '../features/vehicles/VehiclesPanel'
 import { VehicleEditor } from '../features/workshop/form/vehicle'
 import { CombatView } from '../features/combat/CombatView'
+import { CharacterCreator } from '../features/player/creator/CharacterCreator'
 import { InitiativeTracker } from '../features/campaigns/InitiativeTracker'
 import { useVehicles } from '../features/vehicles/useVehicles'
 import { PlayerCombatView } from '../features/combat/PlayerCombatView'
@@ -380,7 +381,11 @@ applyFont(getStoredFontId())
 applyFontScale(getStoredFontScale())
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    {new URLSearchParams(location.search).has('combat') ? (
+    {new URLSearchParams(location.search).has('creator') ? (
+      <div style={{ height: '100vh', display: 'flex' }}>
+        <CharacterCreator initial={new URLSearchParams(location.search).has('edit') ? sample : null} onCreate={(name, sheet) => console.log('created', name, sheet)} onClose={() => console.log('closed')} />
+      </div>
+    ) : new URLSearchParams(location.search).has('combat') ? (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <DmCombat />
       </div>

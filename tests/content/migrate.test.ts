@@ -98,6 +98,35 @@ describe('normalizeSheet', () => {
   })
 })
 
+describe('a pack entry with an SRD entry’s name', () => {
+  // A pack's own Paladin (an override of another pack's, say) with a renamed Devotion.
+  const remake = parsePack(
+    {
+      formatVersion: 1,
+      id: 'remake',
+      name: 'Remake',
+      dependsOn: [SRD_PACK_ID],
+      classes: [{ id: 'paladin', name: 'Paladin', hitDie: 10, saves: ['wis', 'cha'] }],
+      subclasses: [{ id: 'devotion', name: 'Oath of the Society', classId: 'paladin' }]
+    },
+    [srdPack()]
+  )
+  const packs = [srdPack(), remake]
+
+  it('is the one a name resolves to while its pack is in use', () => {
+    const sheet = normalizeSheet<CharacterSheetData>({ ...emptyCharacterSheet(), classes: [{ className: 'Paladin', level: 3, subclass: 'Oath of the Society' }] }, packs)
+    expect(sheet.classes[0].classId).toBe('remake:paladin')
+    expect(sheet.classes[0].subclassId).toBe('remake:devotion')
+  })
+
+  it('takes over a sheet saved against the SRD entry, and gives it back when the pack goes', () => {
+    const saved = normalizeSheet<CharacterSheetData>({ ...emptyCharacterSheet(), classes: [{ className: 'Paladin', level: 3 }] })
+    expect(saved.classes[0].classId).toBe(`${SRD_PACK_ID}:paladin`)
+    expect(normalizeSheet(saved, packs).classes[0].classId).toBe('remake:paladin')
+    expect(normalizeSheet(normalizeSheet(saved, packs)).classes[0].classId).toBe(`${SRD_PACK_ID}:paladin`)
+  })
+})
+
 describe('adapter with format v2 sheets', () => {
   it('derives every regression fixture identically before and after migration', () => {
     for (const { name, sheet } of regressionFixtures()) {

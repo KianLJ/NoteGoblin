@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CampaignPack, LibraryPack } from '@shared/ipc'
 import type { ContentPack } from '@shared/content/schema'
-import { setActivePacks } from '@shared/content/sheet'
+import { setActivePacks, setPackPool } from '@shared/content/sheet'
 import { setLibraryPacksForMonsters } from '../../data/packMonsters'
 
 const LIBRARY_CHANGED = 'goblin:pack-library-changed'
@@ -35,6 +35,9 @@ export function useLibraryPacks(): { packs: LibraryPack[] | null; error: string 
   return { packs, error, refresh }
 }
 
+/** Which packs, in what order, as last saved: the same signature means the same content. */
+const signature = (packs: CampaignPack[]): string => packs.map((p) => `${p.pack.id}@${p.pack.version}@${p.updatedAt}`).join('|')
+
 /**
  * The packs enabled for a campaign — the DM's own (no sessionId) or, as a
  * player, fetched from the DM over the session. Re-fetched whenever the
@@ -52,7 +55,9 @@ export function useCampaignPacks(
     if (!campaignId) return
     window.goblin.campaignPacks.list(campaignId, sessionId).then((result) => {
       if (result.ok) {
-        setPacks(result.data)
+        // Any change to the campaign (a note saved, a turn passed) re-lists its packs; when they're the same as
+        // before, keep the old list, so nothing re-renders and the packs aren't re-hashed and re-indexed.
+        setPacks((prev) => (prev && signature(prev) === signature(result.data) ? prev : result.data))
         setError(null)
       } else {
         setPacks([])
@@ -82,7 +87,10 @@ export function useCampaignPacks(
 export function useApplyActivePacks(campaignPacks: ContentPack[] | null): void {
   const { packs: library } = useLibraryPacks()
   useEffect(() => {
-    setActivePacks(campaignPacks ?? (library ?? []).map((p) => p.pack))
-    setLibraryPacksForMonsters((library ?? []).map((p) => p.pack))
+    const libraryPacks = (library ?? []).map((p) => p.pack)
+    setActivePacks(campaignPacks ?? libraryPacks)
+    // Where each character's own packs come from: the open campaign's copies first (what the table plays with), then the library.
+    setPackPool([...(campaignPacks ?? []), ...libraryPacks])
+    setLibraryPacksForMonsters(libraryPacks)
   }, [campaignPacks, library])
 }

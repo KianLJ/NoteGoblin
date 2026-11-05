@@ -23,29 +23,127 @@ export interface DerivedSheet {
 }
 
 // ---------------------------------------------------------------------------
-// Active content packs
+// Active content packs, and each character's own
 //
 // Which homebrew packs apply right now, on top of the SRD: inside a campaign
 // (DM hosting it, a joined session, or an offline snapshot) exactly the
-// packs the DM enabled; outside one, the whole personal library. The
-// renderer sets this (see useActivePacks.ts); everything that derives a
-// sheet reads it, so no caller has to thread packs through.
+// packs the DM enabled; outside one, the whole personal library. That's what
+// the Codex, encounter tools and a sheet from before per-character packs use.
+//
+// A character sheet uses its own packs (sheet.packIds), taken from the pack
+// pool: every pack this device can use (the library, plus the open
+// campaign's). So two characters never mix packs, whatever's active. The
+// renderer sets both (see usePacks.ts); everything that derives a sheet
+// reads them, so no caller has to thread packs through.
 
 let activePacks: ContentPack[] = []
+let activeOnlyKey = ''
+let packPool: ContentPack[] = []
+let poolKey = ''
 let activeKey = ''
 const listeners = new Set<() => void>()
 
 // Content keys, not just id@version: a pack saved from the Workshop can change without a version bump.
 const keyOf = (packs: ContentPack[]): string => packs.map(packKey).join(',')
 
-/** Sets the homebrew packs sheets derive with (the SRD is always included). A no-op if nothing changed. */
+/** Sets the active homebrew packs (the SRD is always included). A no-op if nothing changed. */
 export function setActivePacks(packs: ContentPack[]): void {
   const extra = packs.filter((p) => p.id !== SRD_PACK_ID)
   const key = keyOf(extra)
-  if (key === activeKey) return
+  if (key === activeOnlyKey) return
   activePacks = extra
-  activeKey = key
+  activeOnlyKey = key
+  changed()
+}
+
+/** Sets every pack a character sheet can take its own packs from. A no-op if nothing changed. */
+export function setPackPool(packs: ContentPack[]): void {
+  const seen = new Set<string>()
+  const pool = packs.filter((p) => p.id !== SRD_PACK_ID && !seen.has(p.id) && !!seen.add(p.id))
+  const key = keyOf(pool)
+  if (key === poolKey) return
+  packPool = pool
+  poolKey = key
+  changed()
+}
+
+export function getPackPool(): ContentPack[] {
+  return packPool
+}
+
+function changed(): void {
+  activeKey = `${activeOnlyKey}|${poolKey}`
   for (const listener of listeners) listener()
+}
+
+/** `ids` and every pack they depend on, as found in `pool` (in pool order), plus the ids not found. */
+export function packsWithDependencies(ids: string[], pool: ContentPack[]): { packs: ContentPack[]; missing: string[] } {
+  const wanted = new Set<string>()
+  const missing: string[] = []
+  const add = (id: string): void => {
+    if (id === SRD_PACK_ID || wanted.has(id)) return
+    const pack = pool.find((p) => p.id === id)
+    if (!pack) {
+      if (!missing.includes(id)) missing.push(id)
+      return
+    }
+    wanted.add(id)
+    for (const dep of pack.dependsOn) add(dep)
+  }
+  for (const id of ids) add(id)
+  return { packs: pool.filter((p) => wanted.has(p.id)), missing }
+}
+
+/** The homebrew packs a sheet derives with: its own (and what they need) from the pool, or the active ones for a sheet without a pack list. */
+export function packsForSheet(sheet: CharacterSheetData): { packs: ContentPack[]; missing: string[] } {
+  if (!sheet.packIds) return { packs: activePacks, missing: [] }
+  // The active packs count as pool too: a campaign's packs are there even before the pool is first set.
+  return packsWithDependencies(sheet.packIds, [...packPool, ...activePacks.filter((a) => !packPool.some((p) => p.id === a.id))])
+}
+
+/**
+ * The packs a sheet without a pack list already uses: the ones its class,
+ * subclass, species, background, picks and pack spells come from (as `pool`
+ * resolves them — an override counts as the pack that overrides). Every other
+ * sheet comes back unchanged.
+ */
+export function withDetectedPackIds<T extends CharacterSheetData>(sheet: T, givenPool: ContentPack[]): T {
+  if (sheet.packIds) return sheet
+  const pool = givenPool.filter((p) => p.id !== SRD_PACK_ID)
+  const packs = [srdPack(), ...pool]
+  // The ids the sheet saved say where things came from. Only a name with no id yet is looked up — in the SRD first,
+  // so a plain "Fighter" isn't credited to whichever pack also has one.
+  const bySrd = normalizeSheet(sheet, [srdPack()])
+  const byPool = normalizeSheet(sheet, packs)
+  const normalized = {
+    ...sheet,
+    classes: sheet.classes.map((c, i) => ({
+      ...c,
+      classId: c.classId ?? bySrd.classes[i]?.classId ?? byPool.classes[i]?.classId,
+      subclassId: c.subclassId ?? bySrd.classes[i]?.subclassId ?? byPool.classes[i]?.subclassId
+    })),
+    speciesId: sheet.speciesId ?? bySrd.speciesId ?? byPool.speciesId,
+    backgroundId: sheet.backgroundId ?? bySrd.backgroundId ?? byPool.backgroundId
+  }
+  const registry = registryForPacks(packs)
+  const found = new Set<string>()
+  const note = (kind: Parameters<Registry['get']>[0], id: string | undefined): void => {
+    if (!id || !id.includes(':')) return
+    const packId = registry.get(kind, id)?.packId ?? id.slice(0, id.indexOf(':'))
+    if (packId !== SRD_PACK_ID) found.add(packId)
+  }
+  for (const c of normalized.classes) {
+    note('classes', c.classId)
+    note('subclasses', c.subclassId)
+  }
+  note('species', normalized.speciesId)
+  note('backgrounds', normalized.backgroundId)
+  for (const s of normalized.spells) note('spells', s.packSpellId)
+  // Picks are ids too ("my-pack:great-weapon-master"); anything that names a known pack counts.
+  for (const picks of Object.values(normalized.choices ?? {})) for (const id of picks) if (id.includes(':') && pool.some((p) => id.startsWith(`${p.id}:`))) found.add(id.slice(0, id.indexOf(':')))
+  for (const id of Object.keys(normalized.packVersions ?? {})) if (id !== SRD_PACK_ID && pool.some((p) => p.id === id)) found.add(id)
+  // A pack that isn't here any more stays on the list, so the sheet can say it's missing rather than quietly lose it.
+  return { ...sheet, packIds: [...pool.filter((p) => found.has(p.id)).map((p) => p.id), ...[...found].filter((id) => !pool.some((p) => p.id === id))] }
 }
 
 export function getActivePacks(): ContentPack[] {
@@ -62,9 +160,19 @@ export function subscribeActivePacks(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-/** normalizeSheet against the SRD plus the active packs — so a homebrew class added since the last save already resolves to its pack id. */
+/**
+ * A stored sheet brought up to date on its own packs, taken from `pool` (every
+ * pack the machine knows): an older sheet gets its pack list filled in first.
+ * What the main process does on every character read and write.
+ */
+export function normalizeWithOwnPacks<T extends CharacterSheetData>(sheet: T, pool: ContentPack[]): T {
+  const withIds = withDetectedPackIds(sheet, pool)
+  return normalizeSheet(withIds, [srdPack(), ...packsWithDependencies(withIds.packIds ?? [], pool).packs])
+}
+
+/** normalizeSheet against the SRD plus the sheet's packs — so a homebrew class added since the last save already resolves to its pack id. */
 export function normalizeForActivePacks<T extends CharacterSheetData>(sheet: T): T {
-  return normalizeSheet(sheet, [srdPack(), ...activePacks])
+  return normalizeSheet(sheet, [srdPack(), ...packsForSheet(sheet).packs])
 }
 
 const derivedCache = new WeakMap<CharacterSheetData, { key: string; result: DerivedSheet }>()
@@ -81,11 +189,13 @@ export function deriveSheet(sheet: CharacterSheetData): DerivedSheet {
   const cached = derivedCache.get(sheet)
   if (cached && cached.key === activeKey) return cached.result
   const srd = srdPack()
-  const { build, packs, warnings } = legacySheetToBuild(normalizeSheet(sheet, [srd, ...activePacks]), { packs: activePacks }, srd)
+  const own = packsForSheet(sheet)
+  const { build, packs, warnings } = legacySheetToBuild(normalizeSheet(sheet, [srd, ...own.packs]), { packs: own.packs }, srd)
   const registry = registryForPacks(packs)
   // keepEvaluator: the sheet works out spell damage per slot level (spellNumbers) from the same character.
   const derived = deriveCharacter(build, registry, { keepEvaluator: true })
   for (const message of warnings) derived.diagnostics.push({ severity: 'warning', message })
+  for (const id of own.missing) derived.diagnostics.push({ severity: 'warning', message: `This character uses the "${id}" content pack, which isn't on this device (or in this campaign).` })
   const result = { derived, build, registry }
   derivedCache.set(sheet, { key: activeKey, result })
   return result

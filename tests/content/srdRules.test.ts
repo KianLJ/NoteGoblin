@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { deriveCharacter, type CharacterBuild } from '@shared/content/engine'
 import { SRD_PACK_ID, srdPack } from '@shared/content/srd'
+import { restResources } from '@shared/content/resourceMath'
 
 const SRD = `${SRD_PACK_ID}:`
 const derive = (b: Partial<CharacterBuild> & { classes: CharacterBuild['classes'] }) =>
@@ -14,6 +15,18 @@ describe('SRD rules on the sheet', () => {
     expect(after.saves.dex.bonus).toBe(3 + 3)
     expect(after.conditionImmunities).toContain('frightened')
     expect(after.attacksPerAction).toBe(2)
+  })
+
+  it('Paladin: Channel Divinity from 3rd level, two uses (three at 11th), one back on a Short Rest', () => {
+    const channel = (level: number) => derive({ classes: cls('paladin', level) }).resources.find((r) => r.id === 'paladin-channel-divinity')
+    expect(channel(2)).toBeUndefined()
+    const cd = channel(3)!
+    expect([cd.max, cd.recharge, cd.shortRestRegain]).toEqual([2, 'long', 1])
+    expect(channel(11)!.max).toBe(3)
+    // Both spent: a Short Rest gives one back, a Long Rest the rest.
+    const spent = { resourceUsed: { 'paladin-channel-divinity': 2 }, resourceTemp: {} }
+    expect(restResources('short', [cd], spent).resourceUsed['paladin-channel-divinity']).toBe(1)
+    expect(restResources('long', [cd], spent).resourceUsed['paladin-channel-divinity'] ?? 0).toBe(0)
   })
 
   it('Bard: Jack of All Trades adds half proficiency to unproficient skills and initiative', () => {

@@ -93,7 +93,7 @@ import type { CampaignVehicles } from '@shared/vehicles'
 import type { BattleLibrary, BattleMap, PlayerBattleMap } from '@shared/battleMap'
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
-import { normalizeSheet } from '@shared/content/migrate'
+import { normalizeWithOwnPacks } from '@shared/content/sheet'
 import { packFileName, readPackFile, writePackFile } from '@shared/content/packFiles'
 import type { ContentPack } from '@shared/content/schema'
 import type { PackIssue } from '@shared/content/validate'
@@ -1195,7 +1195,35 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   function knownPacks(): ContentPack[] {
     const identity = getCurrentIdentity()
     if (!identity) return [srdPack()]
-    const all: ContentPack[] = [srdPack(), ...packLibrary.list(identity.id).map((p) => p.pack), ...snapshotRepo.allPacks(identity.id)]
+    // Every character read and save resolves against these, and reading them means pulling megabytes of pack JSON
+    // out of the databases — so they're kept until something actually changes, which a cheap query of just the
+    // rows' ids, times and sizes tells us.
+    const signature = knownPacksSignature(identity.id)
+    if (knownPacksCache && knownPacksCache.signature === signature) return knownPacksCache.packs
+    const packs = readKnownPacks(identity.id)
+    knownPacksCache = { signature, packs }
+    return packs
+  }
+  let knownPacksCache: { signature: string; packs: ContentPack[] } | null = null
+
+  function knownPacksSignature(identityId: string): string {
+    const rows = (db: typeof localDb, sql: string, ...args: unknown[]): string => JSON.stringify(db.prepare(sql).raw().all(...args))
+    let hosted = ''
+    try {
+      hosted = rows(getHostDb(userDataDir), 'SELECT campaign_id, pack_id, updated_at, length(pack_json) FROM campaign_packs ORDER BY campaign_id, position')
+    } catch {
+      /* no host db yet */
+    }
+    return [
+      identityId,
+      rows(localDb, 'SELECT pack_id, updated_at, length(pack_json) FROM content_packs WHERE identity_id = ? ORDER BY pack_id', identityId),
+      rows(localDb, 'SELECT campaign_id, synced_at, length(packs_json) FROM cached_campaigns WHERE identity_id = ? ORDER BY campaign_id', identityId),
+      hosted
+    ].join('\n')
+  }
+
+  function readKnownPacks(identityId: string): ContentPack[] {
+    const all: ContentPack[] = [srdPack(), ...packLibrary.list(identityId).map((p) => p.pack), ...snapshotRepo.allPacks(identityId)]
     try {
       const hosted = getHostDb(userDataDir).prepare('SELECT DISTINCT campaign_id FROM campaign_packs').all() as { campaign_id: string }[]
       const repo = new CampaignPackRepo(getHostDb(userDataDir))
@@ -1344,7 +1372,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   function toCharacterSheet(row: CharacterRow): CharacterSheet {
     // Normalized on read too, so a sheet not saved since before the content engine still arrives in format v2.
-    const sheet = normalizeSheet({ ...emptyCharacterSheet(), ...JSON.parse(row.sheet_json || '{}') }, knownPacks())
+    // On its own packs, so characters never mix them (an older sheet gets its pack list filled in).
+    const sheet = normalizeWithOwnPacks({ ...emptyCharacterSheet(), ...JSON.parse(row.sheet_json || '{}') }, knownPacks())
     return {
       ...sheet,
       id: row.id,

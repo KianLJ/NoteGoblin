@@ -343,7 +343,8 @@ function ClassFeatureSection({
             classLabel={classLevel.className}
             featureName={subclassLabel}
             slotLevel={subclassLevel}
-            options={subclasses.map((s) => ({ id: s.def.id, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
+            // Full ids: a pack's renamed override shares its short id with the entry it replaces.
+            options={subclasses.map((s) => ({ id: s.fullId, name: s.def.name, classId: s.def.classId, flavor: s.def.description }))}
             readOnly={readOnly}
             onChoose={(name) => onChooseSubclass(classIndex, name)}
           />

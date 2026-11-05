@@ -90,6 +90,8 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   const { packs: activePacks, registry: packRegistry } = useActivePackRegistry()
   const homebrew = useMemo(() => codexEntries(packRegistry, activePacks).filter((e) => e.kind !== 'monsters'), [packRegistry, activePacks])
   const [packFilter, setPackFilter] = useState('')
+  /** Spells: every source, only the SRD, or only homebrew from the active packs. */
+  const [spellSource, setSpellSource] = useState<'' | 'srd' | 'homebrew'>('')
   const visibleCategories = (hideMonsters ? CATEGORIES.filter((c) => c !== 'Monsters' && c !== 'NPCs') : CATEGORIES).filter((c) => c !== 'Homebrew' || homebrew.length > 0)
 
   // Opened as a note's "Import from Bestiary" picker — only a monster can become a ```statblock block, so the
@@ -114,6 +116,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   useEffect(() => {
     setQuery('')
     setTypeFilter('')
+    setSpellSource('')
     setSelectedIndex(null)
     setEditingNpcId(null)
   }, [effectiveCategory])
@@ -149,14 +152,27 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
     }).sort((a, b) => a.name.localeCompare(b.name))
   }, [query, typeFilter])
 
+  // The active packs' spells sit in the Spells list too, beside the SRD's (and still under Homebrew).
+  const homebrewSpells = useMemo(
+    () => homebrew.filter((e) => e.kind === 'spells').map((entry) => ({ entry, level: packRegistry.get('spells', entry.fullId)?.def.level ?? 0 })),
+    [homebrew, packRegistry]
+  )
   const filteredSpells = useMemo(() => {
     const q = query.trim().toLowerCase()
     return SPELLS.filter((s) => {
+      if (spellSource === 'homebrew') return false
       if (typeFilter && String(s.level) !== typeFilter) return false
       if (q && !s.name.toLowerCase().includes(q)) return false
       return true
     }).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
-  }, [query, typeFilter])
+  }, [query, typeFilter, spellSource])
+  const filteredHomebrewSpells = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (spellSource === 'srd') return []
+    return homebrewSpells
+      .filter((s) => (!typeFilter || String(s.level) === typeFilter) && (!q || s.entry.name.toLowerCase().includes(q)))
+      .sort((a, b) => a.level - b.level || a.entry.name.localeCompare(b.entry.name))
+  }, [homebrewSpells, query, typeFilter, spellSource])
 
   const filteredMagicItems = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -387,14 +403,23 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                 </select>
               )}
               {effectiveCategory === 'Spells' && (
-                <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
-                  <option value="">All levels</option>
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((lvl) => (
-                    <option key={lvl} value={String(lvl)}>
-                      {spellLevelLabel(lvl)}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                    <option value="">All levels</option>
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((lvl) => (
+                      <option key={lvl} value={String(lvl)}>
+                        {spellLevelLabel(lvl)}
+                      </option>
+                    ))}
+                  </select>
+                  {homebrewSpells.length > 0 && (
+                    <select className="gb-input" value={spellSource} onChange={(e) => setSpellSource(e.target.value as '' | 'srd' | 'homebrew')} style={{ fontSize: 13 }} aria-label="Spell source">
+                      <option value="">SRD and homebrew</option>
+                      <option value="srd">SRD only</option>
+                      <option value="homebrew">Homebrew only</option>
+                    </select>
+                  )}
+                </>
               )}
               {effectiveCategory === 'Homebrew' && (
                 <>
@@ -432,7 +457,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                 {effectiveCategory === 'Monsters' && `${filteredMonsters.length} monster${filteredMonsters.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'NPCs' && `${filteredNpcs.length} NPC${filteredNpcs.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Equipment' && `${filteredEquipment.length} item${filteredEquipment.length === 1 ? '' : 's'}`}
-                {effectiveCategory === 'Spells' && `${filteredSpells.length} spell${filteredSpells.length === 1 ? '' : 's'}`}
+                {effectiveCategory === 'Spells' && `${filteredSpells.length + filteredHomebrewSpells.length} spell${filteredSpells.length + filteredHomebrewSpells.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Magic Items' && `${filteredMagicItems.length} item${filteredMagicItems.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Playing the Game' && `${filteredTopics.length} topic${filteredTopics.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Homebrew' && `${filteredHomebrew.length} entr${filteredHomebrew.length === 1 ? 'y' : 'ies'}`}
@@ -517,6 +542,15 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{spellLevelLabel(s.level)}</span>
                   </button>
                 ))}
+              {effectiveCategory === 'Spells' &&
+                filteredHomebrewSpells.map(({ entry, level }) => (
+                  <button key={entry.key} type="button" onClick={() => setSelectedIndex(entry.key)} style={listRowStyle(selectedHomebrew?.key === entry.key)}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                      {spellLevelLabel(level)} · {entry.packName}
+                    </span>
+                  </button>
+                ))}
 
               {effectiveCategory === 'Magic Items' &&
                 filteredMagicItems.map((m) => (
@@ -547,7 +581,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
               {((effectiveCategory === 'Monsters' && filteredMonsters.length === 0) ||
                 (effectiveCategory === 'NPCs' && filteredNpcs.length === 0) ||
                 (effectiveCategory === 'Equipment' && filteredEquipment.length === 0) ||
-                (effectiveCategory === 'Spells' && filteredSpells.length === 0) ||
+                (effectiveCategory === 'Spells' && filteredSpells.length + filteredHomebrewSpells.length === 0) ||
                 (effectiveCategory === 'Playing the Game' && filteredTopics.length === 0) ||
                 (effectiveCategory === 'Homebrew' && filteredHomebrew.length === 0) ||
                 (effectiveCategory === 'Magic Items' && filteredMagicItems.length === 0)) && (
@@ -583,7 +617,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
                   <NoneSelected />
                 ))}
               {effectiveCategory === 'Equipment' && (selectedEquipment ? <EquipmentDetail item={selectedEquipment} /> : <NoneSelected />)}
-              {effectiveCategory === 'Spells' && (selectedSpell ? <SpellDetail spell={selectedSpell} /> : <NoneSelected />)}
+              {effectiveCategory === 'Spells' && (selectedSpell ? <SpellDetail spell={selectedSpell} /> : selectedHomebrew ? <HomebrewDetail entry={selectedHomebrew} /> : <NoneSelected />)}
               {effectiveCategory === 'Magic Items' && (selectedMagicItem ? <MagicItemDetail item={selectedMagicItem} /> : <NoneSelected />)}
               {effectiveCategory === 'Playing the Game' && (selectedTopic ? <RuleTopicDetail topic={selectedTopic} /> : <NoneSelected />)}
               {effectiveCategory === 'Homebrew' && (selectedHomebrew ? <HomebrewDetail entry={selectedHomebrew} /> : <NoneSelected />)}

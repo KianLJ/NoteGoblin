@@ -19,17 +19,26 @@ export function OriginFeatChooser({
   level,
   readOnly,
   onResolve,
-  taken = []
+  taken = [],
+  initial
 }: {
   label: string
   level: number
   readOnly?: boolean
+  /** A pick to start from (editing a character that already has one). */
+  initial?: Omit<AsiSlotChoice, 'id'> | null
   /** Feats already granted elsewhere (the background's), shown locked with why. */
   taken?: Array<{ id: string; why: string }>
   /** Called on every change: the complete pick, or null while something is still unpicked. */
   onResolve: (entry: Omit<AsiSlotChoice, 'id'> | null) => void
 }): JSX.Element {
-  const [state, setState] = useState({ featId: '', spellCasterAbility: 'wis' as Ability, cantripAId: '', cantripBId: '', leveledSpellId: '' })
+  const [state, setState] = useState(() => ({
+    featId: initial?.featId ?? '',
+    spellCasterAbility: (initial?.chosenAbility ?? 'wis') as Ability,
+    cantripAId: initial?.chosenSpellIds?.[0] ?? '',
+    cantripBId: initial?.chosenSpellIds?.[1] ?? '',
+    leveledSpellId: initial?.chosenSpellIds?.[2] ?? ''
+  }))
   const { featId, spellCasterAbility, cantripAId, cantripBId, leveledSpellId } = state
 
   const selectedFeat = FEATS.find((f) => f.id === featId)

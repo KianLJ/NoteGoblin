@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Campaign, CampaignSnapshot, CharacterSheet, Folder, Note } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
 import type { SessionDeck } from '@shared/sessionDeck'
@@ -28,6 +28,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
   // The content packs the DM enabled for the active campaign (live, or from the offline snapshot) — what this
   // player's sheets derive with while the campaign is open. null with no campaign open.
   const [campaignPacks, setCampaignPacks] = useState<ContentPack[] | null>(null)
+  const packsSignatureRef = useRef('')
   const [error, setError] = useState<string | null>(null)
   const [tabs, setTabs] = useState<PlayerTabRef[]>([])
   const [activeTab, setActiveTabState] = useState<PlayerTabRef | null>(null)
@@ -74,6 +75,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       setFolders(null)
       setSessionDecks(null)
       setCampaignPacks(null)
+      packsSignatureRef.current = ''
       return
     }
     refreshNotes(activeCampaign)
@@ -157,7 +159,12 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       setSessionDecks(decks)
       // Same for content packs — an older host without them just means none.
       const packs = packsResult.ok ? packsResult.data.map((p) => p.pack) : []
-      setCampaignPacks(packs)
+      // Every refresh re-lists the packs; when they're unchanged, keep the old list so sheets aren't re-derived.
+      const signature = packsResult.ok ? packsResult.data.map((p) => `${p.pack.id}@${p.pack.version}@${p.updatedAt}`).join('|') : ''
+      if (signature !== packsSignatureRef.current || !packsResult.ok) {
+        packsSignatureRef.current = signature
+        setCampaignPacks(packs)
+      }
       window.goblin.snapshots.save(campaign, notesResult.data, foldersResult.data, decks, packs).then(refreshOfflineSnapshots)
     })
   }
@@ -184,6 +191,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
       setFolders(result.data.folders)
       setSessionDecks(result.data.sessionDecks ?? [])
       setCampaignPacks(result.data.packs ?? [])
+      packsSignatureRef.current = ''
     })
   }
 
@@ -196,6 +204,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     setFolders(null)
     setSessionDecks(null)
     setCampaignPacks(null)
+    packsSignatureRef.current = ''
     setTabs((prev) => prev.filter((t) => t.kind !== 'note'))
     setActiveTabState((current) => (current?.kind === 'note' ? null : current))
   }
