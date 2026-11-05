@@ -632,7 +632,9 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               <CardGrid>
                 {picker.backgrounds.map((b) => {
-                  const feat = FEATS.find((f) => f.id === b.featId)
+                  // An SRD background's feat is in the compendium; a pack's comes from the pack (see pickerContent).
+                  const packFeat = picker.originFeatFor(b.id)
+                  const feat = packFeat ? { name: packFeat.name, desc: packFeat.description } : FEATS.find((f) => f.id === b.featId)
                   return (
                     <PickCard
                       key={b.id}
@@ -649,13 +651,19 @@ export function CharacterCreationWizard({ onCreate, onClose }: CharacterCreation
                     >
                       <strong>{b.name}</strong>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        {b.abilityScores.map((a) => a.toUpperCase()).join(', ')} · Skills: {b.skillProficiencies.join(', ')}
+                        {[b.abilityScores.length ? b.abilityScores.map((a) => a.toUpperCase()).join(', ') : '', b.skillProficiencies.length ? `Skills: ${b.skillProficiencies.join(', ')}` : ''].filter(Boolean).join(' · ')}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
-                        <em>Origin Feat — {feat?.name ?? b.featId}:</em> {feat?.desc ?? 'No description available.'}
+                        {feat ? (
+                          <>
+                            <em>Origin Feat — {feat.name}:</em> {feat.desc || 'No description yet.'}
+                          </>
+                        ) : b.featId ? (
+                          <em>Origin Feat — {b.featId}</em>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                        Tool: {b.toolProficiency}
+                        {b.toolProficiency ? `Tool: ${b.toolProficiency}` : null}
                       </div>
                     </PickCard>
                   )

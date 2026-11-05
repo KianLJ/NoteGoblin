@@ -4,6 +4,7 @@ import { readPackFile } from '@shared/content/packFiles'
 import { setActivePacks } from '@shared/content/sheet'
 import { CLASSES, RACES } from '@shared/dnd5e'
 import { buildPickerContent } from '@shared/content/pickerContent'
+import { contentPackSchema } from '@shared/content/schema'
 
 describe('picker content', () => {
   afterEach(() => setActivePacks([]))
@@ -32,5 +33,31 @@ describe('picker content', () => {
     })
     // The pack's longsword override doesn't add a second Longsword, and no SRD name is duplicated.
     expect(new Set(picker.classes.map((c) => c.name)).size).toBe(picker.classes.length)
+  })
+  it('names a pack background’s origin feat, from the pack or the SRD', () => {
+    const background = (id: string, featId: string) => ({
+      id,
+      name: id,
+      features: [
+        { id: 'origin-feat', name: 'Origin Feat', effects: [{ do: { kind: 'grantChoice', choice: { id: 'feat', label: 'Origin feat', from: { kind: 'feats', featIds: [featId] } } } }] },
+        { id: 'proficiencies', name: 'Proficiencies', effects: [{ do: { kind: 'proficiency', category: 'skill', value: 'athletics' } }, { do: { kind: 'proficiency', category: 'tool', value: 'Vehicles (ground)' } }] }
+      ]
+    })
+    const pack = contentPackSchema.parse({
+      formatVersion: 1,
+      id: 'homebrew',
+      name: 'Homebrew',
+      backgrounds: [background('scarred', 'iron-will'), background('veteran', 'alert')],
+      feats: [{ id: 'iron-will', name: 'Iron Will', description: 'You don’t break.', category: 'Origin' }]
+    })
+    setActivePacks([pack])
+    const picker = buildPickerContent()
+    const scarred = picker.backgrounds.find((b) => b.id === 'homebrew:scarred')!
+    expect(scarred.featId).toBe('homebrew:iron-will')
+    expect(scarred.skillProficiencies).toEqual(['Athletics'])
+    expect(scarred.toolProficiency).toBe('Vehicles (ground)')
+    expect(picker.originFeatFor('homebrew:scarred')).toEqual({ name: 'Iron Will', description: 'You don’t break.' })
+    expect(picker.originFeatFor('homebrew:veteran')?.name).toBe('Alert')
+    expect(picker.originFeatFor('homebrew:veteran')?.description).not.toBe('')
   })
 })
