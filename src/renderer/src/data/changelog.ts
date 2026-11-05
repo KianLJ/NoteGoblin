@@ -7,6 +7,22 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.9.0',
+    title: 'Ship combat, simpler crews, and a viewer that looks like the app',
+    highlights: [
+      'Fire a ship’s weapons from the battle map: pick a gun and a target, and it checks the gun’s arc and reach, rolls to hit against the target’s armour class, then rolls damage with ship scale. Damage past a side’s threshold, critical hits from the critical-hit table, and weapon cooldowns are all tracked',
+      'Crewing is simpler: each ship has one hired-crew tier (Green +3, Trained +5, Veteran +7, Elite +9) that works every station and gun nobody from the party is at. Put party members (or test players) at a station from the ship’s Stations tab, and they roll with their own Dexterity and proficiency',
+      'A ship panel with Ship, Stations and Weapons tabs, for the DM and (to look at and roll from) for players. Station actions are buttons to roll, with a card on hover explaining how each one works',
+      'Hull and component damage in one list. Components have a quarter of the ship’s hit points, and their health shows as small bars you can edit. Ships already in a campaign are corrected when they load',
+      'Everything for a fight is in the Combat screen: the initiative tracker, encounter building and vehicles sit in its left panel. Click anyone’s initiative to roll a d20 (right-click to type a number), and the Combat button is always there',
+      'Tokens can face a direction and have their own width and height. Vehicles are sized to match (a Colossal ship is 6 squares), and long ships turn on their side when they face east or west',
+      'Select a token to get a popup beside it to hide, lock, turn, resize or light it',
+      'Quick stand-in test players, so you can try out crews and maps on your own',
+      'The web viewer now looks like NoteGoblin: character sheets use the app’s layout and tabs, with checks, attacks, damage and spells you can tap to roll, and campaigns show the app’s folder tree beside the open note',
+      'Homebrew backgrounds show their origin feat’s name and description in character creation, along with their skills and tool, instead of “No description available”'
+    ]
+  },
+  {
     version: '0.8.0',
     title: 'Read your notes and character sheets on your phone',
     highlights: [
