@@ -7,6 +7,20 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.10.0',
+    title: 'A table you lay out yourself',
+    highlights: [
+      'The DM and player screens are now one big canvas: every tool, note, statblock and sheet is a box you can move, resize, minimize, pin and zoom around. Save the arrangement as a layout to come back to. Prefer the old sidebars? Settings → Appearance → Classic layout',
+      'Right-click the canvas to add a note, monster statblock, sticky note, image, collection or session right where you clicked, or open a player’s sheet or a closed tool there',
+      'Statblocks on the canvas are rollable (checks, saves, skills, attacks, damage), and the rolls stay private to the DM. A new monster editor shows which roll buttons each action gets and can write attacks for you; SRD and pack monsters are saved as your own copy',
+      'Sessions are collections: each scene is a note box, numbered and joined by arrows in the order it reads. Present from the collection and step through with the pinned controls. Players only see scenes you’ve presented, and their Sessions box shows the live scene without opening anything',
+      'Collections tuck boxes into a tile that opens like its own canvas, and stay open when you switch between DM and Player. Closing a session’s tile keeps it in the Sessions box',
+      'A session timer and stopwatch in the dock, an encounter builder with monster cards, a difficulty meter and a tagged library, and enemy positions saved into encounters so scenes load them back onto the same squares',
+      'Homebrew Codex entries and images can go on the canvas, spells show their details on hover in Add Spell, and hover cards never cover what they explain',
+      'A What’s New post like this one opens once after each update; reopen it from the changelog'
+    ]
+  },
+  {
     version: '0.9.1',
     title: 'A new character creator, and packs per character',
     highlights: [
