@@ -3,6 +3,7 @@ import { ChatIcon } from '../campaigns/panelIcons'
 import { ChatPanel } from './ChatPanel'
 import { useMessageToast } from './useMessageToast'
 import { MessageToast } from './MessageToast'
+import './chat.css'
 
 interface MessagesButtonProps {
   campaignId: string | null
@@ -41,48 +42,11 @@ export function MessagesButton({ campaignId, sessionId, myUserId }: MessagesButt
         style={{ position: 'relative', padding: 'var(--space-2)', display: 'flex' }}
       >
         <ChatIcon />
-        {unread > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              top: -4,
-              right: -4,
-              minWidth: 15,
-              height: 15,
-              padding: '0 3px',
-              borderRadius: '999px',
-              background: 'var(--accent)',
-              color: 'var(--accent-contrast, #fff)',
-              fontSize: 9,
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              lineHeight: 1
-            }}
-          >
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
+        {unread > 0 && <span className="ms-count">{unread > 9 ? '9+' : unread}</span>}
       </button>
       {!open && toast && <MessageToast key={toast.id} toast={toast} />}
 
-      <div
-        className="gb-card"
-        style={{
-          position: 'absolute',
-          top: 'calc(100% + 8px)',
-          right: 0,
-          width: 320,
-          height: 420,
-          zIndex: 20,
-          padding: 0,
-          overflow: 'hidden',
-          display: open ? 'flex' : 'none',
-          flexDirection: 'column',
-          boxShadow: 'var(--shadow-lg)'
-        }}
-      >
+      <div className="gb-card ms-pop" style={{ display: open ? 'flex' : 'none' }}>
         <ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} onUnreadTotalChange={setUnread} />
       </div>
     </div>

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BESTIARY_TYPES, formatCr, type BestiaryMonster } from '../../data/bestiary'
 import { removeCustomMonster, isCustomMonster } from '../../data/customBestiary'
 import { PERSONAL_MONSTER_PACK_ID, moveLocalMonstersToPack, removePersonalMonster, type PackMonster } from '../../data/packMonsters'
 import { useAllMonsters } from '../../data/useAllMonsters'
 import { MonsterEditor, editsInPlace } from './MonsterEditor'
-import { XIcon } from '../../ui/icons'
+import { PencilIcon, PlusIcon, XIcon } from '../../ui/icons'
+import './codex.css'
 import { loadNpcs, createNpc, updateNpc, removeNpc, type Npc } from '../../data/npcs'
 import { generateNpcName } from '../../data/npcNames'
 import { renderStatblockHtml } from '../../statblock'
@@ -291,84 +292,33 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
           boxShadow: 'var(--shadow-lg)'
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 'var(--space-3) var(--space-4)',
-            borderBottom: '1px solid var(--border-subtle)',
-            flexShrink: 0,
-            gap: 'var(--space-4)'
-          }}
-        >
-          {!embedded && <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16, flexShrink: 0 }}>Codex</span>}
+        <div className="cx-head">
+          {!embedded && <span className="cx-title">{onPick ? 'Pick a monster' : 'Codex'}</span>}
           {!onPick && (
-            <div style={{ display: 'flex', gap: 4, flex: 1 }}>
+            <div className="cx-tabs" role="tablist" aria-label="Codex sections">
               {visibleCategories.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setCategory(c)}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-subtle)',
-                    background: effectiveCategory === c ? 'var(--accent-subtle)' : 'transparent',
-                    color: effectiveCategory === c ? 'var(--accent-hover)' : 'var(--text-secondary)',
-                    fontSize: 12,
-                    fontWeight: effectiveCategory === c ? 700 : 400,
-                    cursor: 'pointer'
-                  }}
-                >
+                <button key={c} type="button" role="tab" aria-selected={effectiveCategory === c} className={effectiveCategory === c ? 'cx-tab cx-tab--on' : 'cx-tab'} onClick={() => setCategory(c)}>
                   {c}
                 </button>
               ))}
             </div>
           )}
           {!embedded && (
-            <button
-              type="button"
-              onClick={onClose}
-              title="Close"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                display: 'flex',
-                padding: 4,
-                flexShrink: 0
-              }}
-            >
+            <button type="button" className="cx-close" onClick={onClose} title="Close" aria-label="Close">
               <CloseIcon />
             </button>
           )}
         </div>
 
         <div className="gb-codex-split" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          <div
-            className="gb-codex-list"
-            style={{
-              width: 280,
-              flexShrink: 0,
-              borderRight: '1px solid var(--border-subtle)',
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0
-            }}
-          >
-            <div style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-              <input
-                autoFocus
-                className="gb-input"
-                placeholder={`Search ${effectiveCategory.toLowerCase()}…`}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{ fontSize: 13 }}
-              />
+          <div className="gb-codex-list cx-list">
+            <div className="cx-filters">
+              <label className="cx-search">
+                <SearchIcon />
+                <input autoFocus placeholder={`Search ${effectiveCategory.toLowerCase()}…`} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={`Search ${effectiveCategory.toLowerCase()}`} />
+              </label>
               {effectiveCategory === 'Monsters' && (
-                <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                <select className="gb-input cx-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                   <option value="">All types</option>
                   {BESTIARY_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -379,7 +329,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
               )}
               {effectiveCategory === 'NPCs' && (
                 <>
-                  <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                  <select className="gb-input cx-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                     <option value="">All races</option>
                     {RACES.map((r) => (
                       <option key={r.id} value={r.name}>
@@ -387,13 +337,14 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                       </option>
                     ))}
                   </select>
-                  <button type="button" className="gb-btn gb-btn--secondary" onClick={startNewNpc} style={{ fontSize: 12 }}>
-                    + New NPC
+                  <button type="button" className="gb-btn gb-btn--secondary cx-new" onClick={startNewNpc}>
+                    <PlusIcon size={12} />
+                    New NPC
                   </button>
                 </>
               )}
               {effectiveCategory === 'Equipment' && (
-                <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                <select className="gb-input cx-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                   <option value="">All categories</option>
                   {EQUIPMENT_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -404,7 +355,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
               )}
               {effectiveCategory === 'Spells' && (
                 <>
-                  <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                  <select className="gb-input cx-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                     <option value="">All levels</option>
                     {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((lvl) => (
                       <option key={lvl} value={String(lvl)}>
@@ -413,7 +364,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                     ))}
                   </select>
                   {homebrewSpells.length > 0 && (
-                    <select className="gb-input" value={spellSource} onChange={(e) => setSpellSource(e.target.value as '' | 'srd' | 'homebrew')} style={{ fontSize: 13 }} aria-label="Spell source">
+                    <select className="gb-input cx-select" value={spellSource} onChange={(e) => setSpellSource(e.target.value as '' | 'srd' | 'homebrew')} aria-label="Spell source">
                       <option value="">SRD and homebrew</option>
                       <option value="srd">SRD only</option>
                       <option value="homebrew">Homebrew only</option>
@@ -423,7 +374,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
               )}
               {effectiveCategory === 'Homebrew' && (
                 <>
-                  <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                  <select className="gb-input cx-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                     <option value="">All kinds</option>
                     {WORKSHOP_SECTIONS.filter((sec) => homebrew.some((e) => e.kind === sec.kind)).map((sec) => (
                       <option key={sec.kind} value={sec.kind}>
@@ -432,7 +383,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                     ))}
                   </select>
                   {activePacks.length > 1 && (
-                    <select className="gb-input" value={packFilter} onChange={(e) => setPackFilter(e.target.value)} style={{ fontSize: 13 }}>
+                    <select className="gb-input cx-select" value={packFilter} onChange={(e) => setPackFilter(e.target.value)}>
                       <option value="">All packs</option>
                       {activePacks.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -444,7 +395,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                 </>
               )}
               {effectiveCategory === 'Magic Items' && (
-                <select className="gb-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 13 }}>
+                <select className="gb-input cx-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                   <option value="">All rarities</option>
                   {rarityOptions.map((r) => (
                     <option key={r} value={r}>
@@ -453,7 +404,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                   ))}
                 </select>
               )}
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              <div className="cx-count">
                 {effectiveCategory === 'Monsters' && `${filteredMonsters.length} monster${filteredMonsters.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'NPCs' && `${filteredNpcs.length} NPC${filteredNpcs.length === 1 ? '' : 's'}`}
                 {effectiveCategory === 'Equipment' && `${filteredEquipment.length} item${filteredEquipment.length === 1 ? '' : 's'}`}
@@ -463,17 +414,17 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                 {effectiveCategory === 'Homebrew' && `${filteredHomebrew.length} entr${filteredHomebrew.length === 1 ? 'y' : 'ies'}`}
               </div>
               {effectiveCategory === 'Monsters' && localMonsterCount > 0 && (
-                <div className="gb-card" style={{ padding: '6px 8px', fontSize: 11, color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div className="cx-notice">
                   {localMonsterCount} custom creature{localMonsterCount === 1 ? ' is' : 's are'} saved only on this device. Move {localMonsterCount === 1 ? 'it' : 'them'} into your My Creatures pack to edit in the Workshop, export and share.
-                  <button type="button" className="gb-btn gb-btn--secondary" disabled={movingMonsters} onClick={() => void moveLocalMonsters()} style={{ fontSize: 11, padding: '3px 8px', alignSelf: 'flex-start' }}>
+                  <button type="button" className="gb-btn gb-btn--secondary cx-small" disabled={movingMonsters} onClick={() => void moveLocalMonsters()}>
                     {movingMonsters ? 'Moving…' : 'Move to My Creatures'}
                   </button>
                 </div>
               )}
-              {effectiveCategory === 'Monsters' && monsterNotice && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{monsterNotice}</div>}
+              {effectiveCategory === 'Monsters' && monsterNotice && <div className="cx-count">{monsterNotice}</div>}
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', borderTop: '1px solid var(--border-subtle)' }}>
+            <div className="cx-rows">
               {effectiveCategory === 'Monsters' &&
                 filteredMonsters.map((m) => {
                   const active = selectedMonster?.index === m.index
@@ -481,24 +432,24 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                   const personal = m.packId === PERSONAL_MONSTER_PACK_ID
                   const custom = local || personal
                   return (
-                    <div key={m.index} style={{ display: 'flex', alignItems: 'center', background: active ? 'var(--accent-subtle)' : 'transparent' }}>
+                    <div key={m.index} className={active ? 'cx-row-wrap cx-row-wrap--on' : 'cx-row-wrap'}>
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedIndex(m.index)
                           playMonsterSfx(`monster:${m.index}`, m, sessionId)
                         }}
-                        style={listRowStyle(active)}
+                        className={rowClass(active)}
                       >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span className="cx-row-name">
                           {m.name}
-                          {local && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 5 }}>· this device</span>}
-                          {m.packName && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 5 }}>· {m.packName}</span>}
+                          {local && <span className="cx-row-tag">· this device</span>}
+                          {m.packName && <span className="cx-row-tag">· {m.packName}</span>}
                         </span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>CR {formatCr(m.crNumeric)}</span>
+                        <span className="cx-row-meta">CR {formatCr(m.crNumeric)}</span>
                       </button>
                       {custom && (
-                        <button type="button" onClick={() => void handleDeleteCustom(m)} title="Delete this custom creature" style={{ ...deleteBtnStyle, display: 'inline-flex', alignItems: 'center' }}>
+                        <button type="button" className="cx-row-delete" onClick={() => void handleDeleteCustom(m)} title="Delete this custom creature" aria-label={`Delete ${m.name}`}>
                           <XIcon size={11} />
                         </button>
                       )}
@@ -508,12 +459,12 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
 
               {effectiveCategory === 'NPCs' &&
                 filteredNpcs.map((n) => (
-                  <div key={n.id} style={{ display: 'flex', alignItems: 'center', background: selectedNpc?.id === n.id ? 'var(--accent-subtle)' : 'transparent' }}>
-                    <button type="button" onClick={() => setSelectedIndex(n.id)} style={listRowStyle(selectedNpc?.id === n.id)}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.name || 'Unnamed NPC'}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{n.race}</span>
+                  <div key={n.id} className={selectedNpc?.id === n.id ? 'cx-row-wrap cx-row-wrap--on' : 'cx-row-wrap'}>
+                    <button type="button" onClick={() => setSelectedIndex(n.id)} className={rowClass(selectedNpc?.id === n.id)}>
+                      <span className="cx-row-name">{n.name || 'Unnamed NPC'}</span>
+                      <span className="cx-row-meta">{n.race}</span>
                     </button>
-                    <button type="button" onClick={() => handleDeleteNpc(n.id)} title="Delete this NPC" style={deleteBtnStyle}>
+                    <button type="button" className="cx-row-delete" onClick={() => handleDeleteNpc(n.id)} title="Delete this NPC" aria-label={`Delete ${n.name || 'this NPC'}`}>
                       <XIcon size={12} />
                     </button>
                   </div>
@@ -521,9 +472,9 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
 
               {effectiveCategory === 'Equipment' &&
                 filteredEquipment.map((e) => (
-                  <button key={e.id} type="button" onClick={() => setSelectedIndex(e.id)} style={listRowStyle(selectedEquipment?.id === e.id)}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{e.category}</span>
+                  <button key={e.id} type="button" onClick={() => setSelectedIndex(e.id)} className={rowClass(selectedEquipment?.id === e.id)}>
+                    <span className="cx-row-name">{e.name}</span>
+                    <span className="cx-row-meta">{e.category}</span>
                   </button>
                 ))}
 
@@ -536,17 +487,17 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                       setSelectedIndex(s.id)
                       playSpellCastSfx(`spell:${s.id}`, s.id, s.school, sessionId)
                     }}
-                    style={listRowStyle(selectedSpell?.id === s.id)}
+                    className={rowClass(selectedSpell?.id === s.id)}
                   >
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{spellLevelLabel(s.level)}</span>
+                    <span className="cx-row-name">{s.name}</span>
+                    <span className="cx-row-meta">{spellLevelLabel(s.level)}</span>
                   </button>
                 ))}
               {effectiveCategory === 'Spells' &&
                 filteredHomebrewSpells.map(({ entry, level }) => (
-                  <button key={entry.key} type="button" onClick={() => setSelectedIndex(entry.key)} style={listRowStyle(selectedHomebrew?.key === entry.key)}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                  <button key={entry.key} type="button" onClick={() => setSelectedIndex(entry.key)} className={rowClass(selectedHomebrew?.key === entry.key)}>
+                    <span className="cx-row-name">{entry.name}</span>
+                    <span className="cx-row-meta">
                       {spellLevelLabel(level)} · {entry.packName}
                     </span>
                   </button>
@@ -554,17 +505,17 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
 
               {effectiveCategory === 'Magic Items' &&
                 filteredMagicItems.map((m) => (
-                  <button key={m.id} type="button" onClick={() => setSelectedIndex(m.id)} style={listRowStyle(selectedMagicItem?.id === m.id)}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{m.rarity}</span>
+                  <button key={m.id} type="button" onClick={() => setSelectedIndex(m.id)} className={rowClass(selectedMagicItem?.id === m.id)}>
+                    <span className="cx-row-name">{m.name}</span>
+                    <span className="cx-row-meta">{m.rarity}</span>
                   </button>
                 ))}
 
               {effectiveCategory === 'Homebrew' &&
                 filteredHomebrew.map((e) => (
-                  <button key={e.key} type="button" onClick={() => setSelectedIndex(e.key)} style={{ ...listRowStyle(selectedHomebrew?.key === e.key), display: 'block' }}>
-                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <button key={e.key} type="button" onClick={() => setSelectedIndex(e.key)} className={rowClass(selectedHomebrew?.key === e.key, true)}>
+                    <div className="cx-row-name">{e.name}</div>
+                    <div className="cx-row-sub">
                       {e.kindLabel} · {e.packName}
                     </div>
                   </button>
@@ -572,9 +523,9 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
 
               {effectiveCategory === 'Playing the Game' &&
                 filteredTopics.map((t) => (
-                  <button key={t.id} type="button" onClick={() => setSelectedIndex(t.id)} style={{ ...listRowStyle(selectedTopic?.id === t.id), display: 'block' }}>
-                    <div>{t.title}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.dek}</div>
+                  <button key={t.id} type="button" onClick={() => setSelectedIndex(t.id)} className={rowClass(selectedTopic?.id === t.id, true)}>
+                    <div className="cx-row-name">{t.title}</div>
+                    <div className="cx-row-sub">{t.dek}</div>
                   </button>
                 ))}
 
@@ -585,28 +536,28 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                 (effectiveCategory === 'Playing the Game' && filteredTopics.length === 0) ||
                 (effectiveCategory === 'Homebrew' && filteredHomebrew.length === 0) ||
                 (effectiveCategory === 'Magic Items' && filteredMagicItems.length === 0)) && (
-                <div style={{ padding: 'var(--space-3)', fontSize: 12, color: 'var(--text-muted)' }}>No matches.</div>
+                <div className="cx-none">Nothing matches{query.trim() ? ` “${query.trim()}”` : ''}.</div>
               )}
             </div>
           </div>
 
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          <div className="cx-detail">
             {effectiveCategory === 'Monsters' && selectedMonster && (
-              <div style={{ position: 'absolute', top: 'var(--space-2)', right: 'var(--space-2)', zIndex: 5 }}>
+              <div className="cx-sfx">
                 <CustomSfxControl entityKey={`monster:${selectedMonster.index}`} floating />
               </div>
             )}
             {effectiveCategory === 'Spells' && selectedSpell && (
-              <div style={{ position: 'absolute', top: 'var(--space-2)', right: 'var(--space-2)', zIndex: 5 }}>
+              <div className="cx-sfx">
                 <CustomSfxControl entityKey={`spell:${selectedSpell.id}`} floating />
               </div>
             )}
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-4)' }}>
+            <div className="cx-detail-body">
               {effectiveCategory === 'Monsters' &&
                 (selectedMonster ? (
                   <div onClick={(e) => rollInlineDice(e, sessionId)} dangerouslySetInnerHTML={{ __html: renderStatblockHtml(selectedMonster) }} />
                 ) : (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No monster selected.</div>
+                  <NoneSelected />
                 ))}
               {effectiveCategory === 'NPCs' &&
                 (editingNpcId ? (
@@ -640,7 +591,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
               const editable = effectiveCategory === 'Monsters' && selectedMonster
               return (
                 ((entry && onAddToCanvas) || editable) && (
-                  <div style={{ padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+                  <div className="cx-actions">
                     {editable && (
                       <button
                         type="button"
@@ -648,12 +599,14 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                         onClick={() => setEditingMonster(selectedMonster as PackMonster)}
                         title={editsInPlace(selectedMonster as PackMonster) ? 'Change this creature' : 'Change it as your own copy, in My Creatures'}
                       >
-                        ✎ {editsInPlace(selectedMonster as PackMonster) ? 'Edit' : 'Edit a copy'}
+                        <PencilIcon size={13} />
+                        {editsInPlace(selectedMonster as PackMonster) ? 'Edit' : 'Edit a copy'}
                       </button>
                     )}
                     {entry && onAddToCanvas && (
                       <button type="button" className="gb-btn gb-btn--secondary" onClick={() => onAddToCanvas(entry)} title="Give it a box of its own on the canvas">
-                        + Add to canvas
+                        <PlusIcon size={12} />
+                        Add to canvas
                       </button>
                     )}
                   </div>
@@ -661,8 +614,8 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
               )
             })()}
             {onPick && selectedMonster && (
-              <div style={{ padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-                <button type="button" className="gb-btn gb-btn--primary" onClick={() => onPick(selectedMonster)} style={{ width: '100%' }}>
+              <div className="cx-actions">
+                <button type="button" className="gb-btn gb-btn--primary cx-insert" onClick={() => onPick(selectedMonster)}>
                   Insert {selectedMonster.name}
                 </button>
               </div>
@@ -713,7 +666,31 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
 }
 
 function NoneSelected(): JSX.Element {
-  return <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Nothing selected.</div>
+  return (
+    <div className="cx-empty">
+      <BookIcon />
+      <span>Pick something from the list to read it here.</span>
+    </div>
+  )
+}
+
+function SearchIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5L14 14" />
+    </svg>
+  )
+}
+
+function BookIcon(): JSX.Element {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" />
+      <path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5" />
+      <path d="M8 7h8M8 10.5h6" />
+    </svg>
+  )
 }
 
 /**
@@ -783,10 +760,11 @@ function CustomSfxControl({ entityKey, floating }: { entityKey: string; floating
         <button
           type="button"
           className="gb-btn gb-btn--secondary"
-          style={{ fontSize: 11, padding: '2px 8px' }}
+          style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
           onClick={() => void setCustomEntitySfx(entityKey)}
         >
-          + Add custom SFX
+          <PlusIcon size={10} />
+          Add custom SFX
         </button>
       )}
     </div>
@@ -795,18 +773,18 @@ function CustomSfxControl({ entityKey, floating }: { entityKey: string; floating
 
 function DetailHeader({ name, subtitle }: { name: string; subtitle: string }): JSX.Element {
   return (
-    <div style={{ marginBottom: 'var(--space-3)' }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 600, color: 'var(--accent)' }}>{name}</div>
-      <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-secondary)' }}>{subtitle}</div>
+    <div className="cx-detail-head">
+      <h2>{name}</h2>
+      <p>{subtitle}</p>
     </div>
   )
 }
 
 function DetailField({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div style={{ fontSize: 13, marginBottom: 3 }}>
-      <strong>{label}: </strong>
-      <span style={{ color: 'var(--text-secondary)' }}>{value}</span>
+    <div className="cx-field">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   )
 }
@@ -984,7 +962,7 @@ function NpcEditor({
               Random
             </button>
           </div>
-          <select className="gb-input" value={draft.race} onChange={(e) => patch({ race: e.target.value })} style={{ fontSize: 13 }}>
+          <select className="gb-input cx-select" value={draft.race} onChange={(e) => patch({ race: e.target.value })}>
             {RACES.map((r) => (
               <option key={r.id} value={r.name}>
                 {r.name}
@@ -1117,30 +1095,6 @@ function RuleTopicDetail({ topic }: { topic: RuleTopic }): JSX.Element {
   )
 }
 
-function listRowStyle(active: boolean): CSSProperties {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
-    width: '100%',
-    minWidth: 0,
-    textAlign: 'left',
-    padding: '6px var(--space-3)',
-    border: 'none',
-    background: active ? 'var(--accent-subtle)' : 'none',
-    color: active ? 'var(--accent-hover)' : 'var(--text-primary)',
-    cursor: 'pointer',
-    fontSize: 13
-  }
-}
-
-const deleteBtnStyle: CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--text-muted)',
-  cursor: 'pointer',
-  fontSize: 14,
-  padding: '0 var(--space-2)',
-  flexShrink: 0
+function rowClass(active: boolean, twoLine = false): string {
+  return ['cx-row', twoLine && 'cx-row--two', active && 'cx-row--on'].filter(Boolean).join(' ')
 }

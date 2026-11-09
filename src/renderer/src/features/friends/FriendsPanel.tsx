@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Button } from '../../ui/Button'
 import { useFriends } from './useFriends'
+import { ConfirmButton } from '../../ui/ConfirmButton'
+import { XIcon } from '../../ui/icons'
+import './friends.css'
 import type { Mode } from '../shell/ModeToggle'
 
 interface FriendsPanelProps {
@@ -88,183 +91,137 @@ export function FriendsPanel({
     onJoinedSession(sessionId, `${friendUsername}'s Table`)
   }
 
-  return (
-        <div
-          style={{ padding: 'var(--space-3) var(--space-4)', overflowY: 'auto' }}
-        >
-          {status !== 'connected' && (
-            <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 'var(--space-2)' }}>
-              {status === 'connecting' ? 'Connecting to the relay…' : 'Relay unavailable — friends will update once reconnected.'}
-            </p>
-          )}
+  // Online first (hosting before just online), then by name.
+  const sortedFriends = [...friends].sort((a, b) => Number(!!b.hostingSessionId) - Number(!!a.hostingSessionId) || Number(b.online) - Number(a.online) || a.username.localeCompare(b.username))
 
-          {mode === 'player' && connectedLabel && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 6,
-                marginBottom: 'var(--space-3)',
-                paddingBottom: 'var(--space-2)',
-                borderBottom: '1px solid var(--border-subtle)'
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 12,
-                  color: 'var(--text-secondary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {activeCampaignName ? (
-                  <>
-                    Playing <strong>{activeCampaignName}</strong>
-                  </>
-                ) : (
-                  `Connected: ${connectedLabel}`
-                )}
+  return (
+    <div className="fr">
+      {status !== 'connected' && (
+        <div className={`fr-status${status === 'connecting' ? '' : ' fr-status--down'}`} role="status">
+          <span className="fr-dot" />
+          {status === 'connecting' ? 'Connecting to friends…' : 'Can’t reach the friends service right now. Your list updates once it’s back.'}
+        </div>
+      )}
+
+      {mode === 'player' && connectedLabel && (
+        <div className="fr-playing">
+          <span className="fr-dot fr-dot--on" />
+          <span className="fr-playing-text">
+            {activeCampaignName ? (
+              <>
+                Playing <strong>{activeCampaignName}</strong>
+              </>
+            ) : (
+              <>
+                At <strong>{connectedLabel}</strong>
+              </>
+            )}
+          </span>
+          <Button variant="secondary" onClick={onResync} title="Catch up if the DM switched campaigns" className="fr-small">
+            Sync
+          </Button>
+        </div>
+      )}
+
+      <form
+        className="fr-add"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void handleSendRequest()
+        }}
+      >
+        <label className="fr-add-field">
+          <AddPersonIcon />
+          <input placeholder="Add a friend by username" value={username} onChange={(e) => setUsername(e.target.value)} aria-label="Friend's username" />
+        </label>
+        <Button variant="primary" type="submit" disabled={sending || !username.trim()} className="fr-small">
+          {sending ? 'Sending…' : 'Add'}
+        </Button>
+      </form>
+      {sendError && <p className="fr-msg fr-msg--bad">{sendError}</p>}
+      {sendSuccess && <p className="fr-msg fr-msg--good">{sendSuccess}</p>}
+
+      {incomingRequests.length > 0 && (
+        <section className="fr-section">
+          <h4>
+            Friend requests <span className="fr-count">{incomingRequests.length}</span>
+          </h4>
+          {incomingRequests.map((req) => (
+            <div key={req.userId} className="fr-row fr-row--request">
+              <Avatar name={req.username} picture={req.avatar} />
+              <span className="fr-name">
+                <strong>{req.username}</strong>
+                <small>Wants to be friends</small>
               </span>
-              <Button
-                variant="secondary"
-                onClick={onResync}
-                title="Catch up if the DM switched campaigns"
-                style={{ fontSize: 11, padding: '2px 8px' }}
-              >
-                Sync
+              <Button variant="primary" onClick={() => accept(req.userId)} className="fr-small">
+                Accept
+              </Button>
+              <Button variant="ghost" onClick={() => decline(req.userId)} className="fr-small">
+                Decline
               </Button>
             </div>
-          )}
+          ))}
+        </section>
+      )}
 
-          <div style={{ display: 'flex', gap: 6, marginBottom: 'var(--space-3)' }}>
-            <input
-              className="gb-input"
-              placeholder="Add friend by username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleSendRequest()
-              }}
-              style={{ flex: 1, fontSize: 12 }}
-            />
-            <Button variant="secondary" onClick={handleSendRequest} disabled={sending || !username.trim()}>
-              Add
-            </Button>
+      <section className="fr-section">
+        <h4>
+          Friends {friends.length > 0 && <span className="fr-count">{friends.filter((f) => f.online).length} online</span>}
+        </h4>
+        {friends.length === 0 ? (
+          <div className="fr-empty">
+            <strong>No friends yet</strong>
+            <span>Add someone by their username above. Once you’re friends you can invite them to your game, or join theirs.</span>
           </div>
-          {sendError && (
-            <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 'var(--space-2)' }}>{sendError}</p>
-          )}
-          {sendSuccess && (
-            <p style={{ color: 'var(--success)', fontSize: 12, marginBottom: 'var(--space-2)' }}>{sendSuccess}</p>
-          )}
-
-          {incomingRequests.length > 0 && (
-            <div style={{ marginBottom: 'var(--space-3)' }}>
-              <h4 style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 6px' }}>Requests</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {incomingRequests.map((req) => (
-                  <div
-                    key={req.userId}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
-                  >
-                    <span style={{ fontSize: 13 }}>{req.username}</span>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <Button
-                        variant="secondary"
-                        onClick={() => accept(req.userId)}
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => decline(req.userId)}
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                      >
-                        Decline
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+        ) : (
+          sortedFriends.map((friend) => {
+            const hosting = !!friend.hostingSessionId
+            const canJoin = hosting && invitedSessionIds.has(friend.hostingSessionId!)
+            return (
+              <div key={friend.userId} className={`fr-row${friend.online ? '' : ' fr-row--offline'}`}>
+                <Avatar name={friend.username} picture={friend.avatar} online={friend.online} />
+                <span className="fr-name">
+                  <strong>{friend.username}</strong>
+                  <small>{canJoin ? 'Invited you to their game' : hosting ? 'Running a game' : friend.online ? 'Online' : 'Offline'}</small>
+                </span>
+                {mode === 'dm' && hostedSessionId && (
+                  <Button variant="secondary" onClick={() => invite(friend.userId)} disabled={inviteBusyId === friend.userId || invitedIds.has(friend.userId)} className="fr-small" title="Invite them to your game">
+                    {invitedIds.has(friend.userId) ? 'Invited' : inviteBusyId === friend.userId ? 'Inviting…' : 'Invite'}
+                  </Button>
+                )}
+                {canJoin && (
+                  <Button variant="primary" onClick={() => join(friend.userId, friend.username, friend.hostingSessionId!)} disabled={joinBusyId === friend.userId} className="fr-small">
+                    {joinBusyId === friend.userId ? 'Joining…' : 'Join'}
+                  </Button>
+                )}
+                <ConfirmButton label={<XIcon size={12} />} confirmLabel="Remove?" variant="ghost" danger className="fr-remove" title={`Remove ${friend.username} from your friends`} onConfirm={() => remove(friend.userId)} />
               </div>
-            </div>
-          )}
+            )
+          })
+        )}
+      </section>
 
-          <h4 style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 6px' }}>
-            Friends {friends.length > 0 ? `(${friends.length})` : ''}
-          </h4>
-          {friends.length === 0 ? (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No friends yet — add one by username above.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {friends.map((friend) => (
-                <div
-                  key={friend.userId}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        flexShrink: 0,
-                        background: friend.online ? 'var(--success)' : 'var(--text-muted)'
-                      }}
-                    />
-                    <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {friend.username}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    {mode === 'dm' && hostedSessionId && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => invite(friend.userId)}
-                        disabled={inviteBusyId === friend.userId || invitedIds.has(friend.userId)}
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                      >
-                        {invitedIds.has(friend.userId) ? 'Invited' : inviteBusyId === friend.userId ? '…' : 'Invite'}
-                      </Button>
-                    )}
-                    {friend.hostingSessionId && invitedSessionIds.has(friend.hostingSessionId) && (
-                      <Button
-                        variant="primary"
-                        onClick={() => join(friend.userId, friend.username, friend.hostingSessionId!)}
-                        disabled={joinBusyId === friend.userId}
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                      >
-                        {joinBusyId === friend.userId ? '…' : 'Join'}
-                      </Button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => remove(friend.userId)}
-                      title="Remove friend"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        fontSize: 11,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+      {(error || actionError) && <p className="fr-msg fr-msg--bad">{actionError ?? error}</p>}
+    </div>
+  )
+}
 
-          {(error || actionError) && (
-            <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 'var(--space-2)' }}>
-              {actionError ?? error}
-            </p>
-          )}
-        </div>
+/** A friend's picture (or initial) in a circle, with a green dot when they're online. */
+function Avatar({ name, picture, online }: { name: string; picture?: string; online?: boolean }): JSX.Element {
+  return (
+    <span className="fr-avatar" aria-hidden="true">
+      {picture ? <img className="gb-face-img" src={picture} alt="" /> : name.trim().charAt(0).toUpperCase()}
+      {online && <i />}
+    </span>
+  )
+}
+
+function AddPersonIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <circle cx="6.5" cy="5.5" r="2.8" />
+      <path d="M1.5 14c.6-2.6 2.6-4 5-4s4.4 1.4 5 4M13 4.5v4M11 6.5h4" />
+    </svg>
   )
 }
 

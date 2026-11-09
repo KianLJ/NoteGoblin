@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Canvas } from '../features/canvas/Canvas'
 import { TOOL_ICONS } from '../features/canvas/toolIcons'
-import { TimerDockButton, TimerPanel, setSessionTimer } from '../features/canvas/SessionTimer'
+import { TimerDockButton, TimerMini, TimerPanel, setSessionTimer } from '../features/canvas/SessionTimer'
 import { StickyNote } from '../features/canvas/StickyNote'
 import { DiceButton } from '../features/dice/DiceButton'
 import { StatblockCard } from '../features/campaigns/StatblockCard'
@@ -18,6 +18,10 @@ import type { CanvasItem } from '../features/canvas/toolItems'
 import type { CanvasNav } from '../features/canvas/useCanvasLayout'
 import { WhatsNewView } from '../features/shell/WhatsNew'
 import '../features/canvas/canvas.css'
+import { MusicPanel } from '../features/audio/MusicPanel'
+import { MusicMini, PartyMini, SessionsMini, SoundBoardMini } from '../features/canvas/toolMinis'
+import { TOOL_MINI } from '@shared/canvasTools'
+import { SoundBoardPanel } from '../features/audio/SoundBoardPanel'
 import '../styles/animations.css'
 
 const goblin = BESTIARY.find((m) => m.index === 'goblin') ?? BESTIARY[0]
@@ -195,7 +199,52 @@ function SessionsShot(): JSX.Element {
   )
 }
 
+/** ?showcase=audio: the music and sound board boxes on the canvas, the note box in front of them. */
+const AUDIO: CanvasLayout = {
+  viewport: { x: 0, y: 0, zoom: 1 },
+  nodes: [
+    { id: 'music', x: 32, y: 32, w: 352, h: 480, z: 1 },
+    { id: 'soundboard', x: 400, y: 32, w: 320, h: 400, z: 2 },
+    { id: 'note:crypt', x: 736, y: 32, w: 400, h: 336, z: 3 },
+    { id: 'timer', x: 736, y: 400, w: 320, h: 208, z: 4 },
+    { id: 'players', x: 32, y: 560, w: 320, h: 480, z: 5 },
+    { id: 'sessions', x: 400, y: 560, w: 880, h: 640, z: 6 }
+  ]
+}
+
+const AUDIO_DECKS = {
+  decks: [{ id: 'd', campaignId: 'c', title: 'Session 4', createdAt: '', updatedAt: '', scenes: [{ noteId: 'n1' }, { noteId: 'n2' }, { noteId: 'n3' }] }],
+  live: { deckId: 'd', sceneIndex: 1 },
+  setLiveSceneIndex: (i: number) => console.log('scene', i)
+} as unknown as SessionDecksApi
+
+function AudioShot(): JSX.Element {
+  const [layout, setLayout] = useState(AUDIO)
+  const items: CanvasItem[] = [
+    { id: 'music', title: 'Music', icon: TOOL_ICONS.music, size: { w: 352, h: 480 }, content: <MusicPanel sessionId={null} />, mini: <MusicMini sessionId={null} />, miniSize: TOOL_MINI.music },
+    { id: 'soundboard', title: 'Sound Board', icon: TOOL_ICONS.soundboard, size: { w: 320, h: 400 }, content: <SoundBoardPanel sessionId={null} />, mini: <SoundBoardMini sessionId={null} />, miniSize: TOOL_MINI.soundboard },
+    { id: 'timer', title: 'Session Timer', icon: TOOL_ICONS.timer, size: { w: 320, h: 208 }, content: <TimerPanel />, mini: <TimerMini />, miniSize: TOOL_MINI.timer },
+    { id: 'players', title: 'Players', icon: TOOL_ICONS.players, size: { w: 320, h: 480 }, content: <div />, mini: <PartyMini sessionId={null} campaignId={null} />, miniSize: TOOL_MINI.players },
+    {
+      id: 'sessions',
+      title: 'Sessions',
+      icon: TOOL_ICONS.sessions,
+      size: { w: 880, h: 640 },
+      content: <div />,
+      mini: <SessionsMini api={AUDIO_DECKS} notes={[{ id: 'n2', title: 'The Leaky Lantern' } as never]} hostedSessionId={null} />,
+      miniSize: TOOL_MINI.sessions
+    },
+    noteBox('crypt', 'The Sunken Crypt', NOTE_HTML)
+  ]
+  return (
+    <div style={{ height: '100vh', display: 'flex' }}>
+      <Canvas mode="dm" layout={layout} setLayout={setLayout} items={items} toolIcons={TOOL_ICONS} hiddenTools={['codex', 'timer']} nav={{ ...nav, root: AUDIO }} contextMenu={() => ({ add: [] })} />
+    </div>
+  )
+}
+
 export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
+  if (scene === 'audio') return <AudioShot />
   if (scene === 'editor') return <MonsterEditor monster={goblin} onClose={() => {}} onSaved={() => {}} />
   if (scene === 'statblock') return <StatblockShot />
   if (scene === 'whatsnew')

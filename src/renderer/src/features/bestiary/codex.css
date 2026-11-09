@@ -1,0 +1,328 @@
+/* The Codex. Theme tokens only. */
+
+.cx-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.cx-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cx-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cx-tab {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.cx-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.cx-tab--on,
+.cx-tab--on:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+.cx-close {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.cx-close:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+/* The list side. */
+.cx-list {
+  width: 290px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.cx-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  flex-shrink: 0;
+}
+.cx-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+}
+.cx-search:focus-within {
+  border-color: var(--accent);
+}
+.cx-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+.cx-select {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.cx-new {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+.cx-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+.cx-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.cx-small {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 3px 10px;
+}
+.cx-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 6px 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+.cx-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.cx-row:hover {
+  background: var(--bg-sunken);
+}
+.cx-row--two {
+  display: block;
+}
+.cx-row--on,
+.cx-row--on:hover {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.cx-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-row--on .cx-row-name {
+  font-weight: 600;
+}
+.cx-row-meta {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cx-row--on .cx-row-meta {
+  background: var(--bg-surface);
+}
+.cx-row-tag {
+  margin-left: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.cx-row-sub {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-row-wrap {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+.cx-row-wrap .cx-row {
+  flex: 1;
+}
+.cx-row-wrap--on {
+  background: var(--accent-subtle);
+}
+.cx-row-delete {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.cx-row-wrap:hover .cx-row-delete,
+.cx-row-delete:focus-visible {
+  opacity: 1;
+}
+.cx-row-delete:hover {
+  color: var(--danger);
+  background: var(--bg-surface);
+}
+.cx-none {
+  padding: 16px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* The entry side. */
+.cx-detail {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.cx-sfx {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 5;
+}
+.cx-detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.cx-detail-head {
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cx-detail-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent-hover);
+}
+.cx-detail-head p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+.cx-field {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+.cx-field > span {
+  width: 120px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.cx-field > strong {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.cx-empty {
+  height: 100%;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.cx-empty svg {
+  opacity: 0.5;
+}
+.cx-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.cx-actions .gb-btn {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.cx-insert {
+  width: 100%;
+}

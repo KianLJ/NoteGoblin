@@ -126,6 +126,7 @@ export interface PresencePlayer {
   userId: string
   displayName: string
   characterName: string | null
+  avatar?: string
 }
 
 export interface PresenceUpdate {
@@ -575,9 +576,12 @@ export interface AppApi {
      * that only exists on the DM's own disk.
      */
     listCustom: () => Promise<Record<string, { id: string; title: string }[]>>
-    /** Opens a native file picker scoped to audio files; returns the added track, or null if cancelled. */
-    addCustomTrack: (groupId: string) => Promise<{ id: string; title: string } | null>
+    /** Opens a native file picker scoped to audio files (several at once); returns what was added, empty if cancelled. */
+    addCustomTrack: (groupId: string) => Promise<{ id: string; title: string }[]>
+    /** Adds audio files dropped onto the app; anything that isn't an audio file is skipped. */
+    addCustomFiles: (groupId: string, files: File[]) => Promise<{ id: string; title: string }[]>
     removeCustomTrack: (groupId: string, trackId: string) => Promise<void>
+    renameCustomTrack: (groupId: string, trackId: string, title: string) => Promise<void>
   }
   // Ambient layers (see ambientLibrary.ts/ambientEngine.ts) — bundled loops
   // synced the same "just an id" way music is, except keyed by both a mood
@@ -598,7 +602,7 @@ export interface AppApi {
     /** A no-op unless actually hosting. */
     broadcast: (sfxId: string) => Promise<void>
     /** Fires for every connected player (never the DM's own trigger, which they already played locally) whenever the DM fires a cue. */
-    onPlay: (callback: (sfxId: string) => void) => () => void
+    onPlay: (callback: (sfxId: string, custom?: { title: string; mimeType: string; dataBase64: string }) => void) => () => void
   }
   // A DM's own per-Codex-entity sound override (see main/customEntitySfx.ts's
   // doc comment) — local-only, no broadcast path, unlike the rest of the
@@ -617,6 +621,8 @@ export interface AppApi {
     status: () => Promise<RelayStatus>
     /** Your own relay account id — null if not connected. This is the id notes/folders you author over a joined session get stamped with (see sessionHost.ts's dispatch()), distinct from your local identity id and (for a DM) your local host-db user id. */
     myUserId: () => Promise<string | null>
+    getAvatar: () => Promise<string | null>
+    setAvatar: (avatar: string | null) => Promise<ApiResult<void>>
     friends: {
       list: () => Promise<ApiResult<FriendSummary[]>>
       listRequests: () => Promise<ApiResult<FriendRequest[]>>

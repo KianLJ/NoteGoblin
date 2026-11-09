@@ -22,7 +22,8 @@
   cursor: grabbing !important;
 }
 
-.gb-canvas-world {
+.gb-canvas-world,
+.gb-canvas-zoom {
   position: absolute;
   inset: 0 auto auto 0;
   width: 0;
@@ -136,6 +137,8 @@
   display: flex;
   flex-direction: column;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
+  /* The box's own (opaque) colour, so a scrolling box keeps sharp text: Chromium blurs text in a see-through scroll layer. */
+  background: inherit;
   /* Tools can lay themselves out by the box's width (@container rules below). */
   container-type: inline-size;
 }

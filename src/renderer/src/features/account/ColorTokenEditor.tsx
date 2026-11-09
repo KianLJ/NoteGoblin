@@ -1,198 +1,194 @@
 import { useState } from 'react'
-import { Button } from '../../ui/Button'
 import { toHexColor } from '../../color'
-import {
-  COLOR_TOKENS,
-  GROUP_REPRESENTATIVE_TOKEN,
-  TINTABLE_GROUPS,
-  getGroupColor,
-  getOverrides,
-  isGroupTinted,
-  resetAllColorOverrides,
-  resetColorOverride,
-  resetGroup,
-  resolveMode,
-  setColorOverride,
-  tintGroup,
-  type ColorToken,
-  type ResolvedTheme,
-  type ThemeMode
-} from '../../theme'
+import { defaultColor, getOverrides, getTone, resetAllColorOverrides, resolveMode, setAccentTone, setBackgroundTone, setStatusColor, toneResult, type ThemeMode } from '../../theme'
 
-const STATUS_TOKENS = COLOR_TOKENS.filter((t) => t.group === 'Status')
+// Ready-made colours. `null` is the app's own default.
+const ACCENTS: [string, string | null][] = [
+  ['Ember', null],
+  ['Gold', '#c9a03c'],
+  ['Moss', '#4f8a5b'],
+  ['Teal', '#2f8f8a'],
+  ['Sky', '#3f7fc9'],
+  ['Violet', '#7c5cc4'],
+  ['Rose', '#c45c8a'],
+  ['Crimson', '#b8333a']
+]
+const TONES: [string, string | null][] = [
+  ['Parchment', null],
+  ['Stone', '#808080'],
+  ['Slate', '#5f7086'],
+  ['Forest', '#4f6b55'],
+  ['Dusk', '#6b5a80'],
+  ['Ocean', '#3f6a80']
+]
 
 /**
- * One color per section — Backgrounds, Borders, Text, Accent — recolored
- * onto each token's existing lightness ladder (so contrast within the
- * section stays intact, only the hue changes), like a duotone tint over a
- * greyscale base. Status (success/danger) is excluded from that and stays
- * two individually-pickable colors, since forcing them onto one hue would
- * defeat the point of having two different status colors.
- *
- * Always edits whichever theme (light/dark) is currently resolved and
- * visible, so what you pick is exactly what you see change.
+ * Colours, in two choices and a little extra: the accent (buttons and
+ * highlights) and the background tone (backgrounds, borders and text, which
+ * lean together so they always match). Each swatch shows what it will really
+ * look like, and a choice applies to both light and dark. Success and danger
+ * can be changed on their own under "Status colours".
  */
 export function ColorTokenEditor({ themeMode }: { themeMode: ThemeMode }): JSX.Element {
-  const resolved = resolveMode(themeMode)
-  // Bumped on "Reset all" so every row remounts and re-reads its default.
-  const [resetNonce, setResetNonce] = useState(0)
+  // Re-read on every change; `themeMode` re-renders this when light/dark flips, since swatches show that theme's result.
+  const [, setTick] = useState(0)
+  const bump = (): void => setTick((t) => t + 1)
+  const accent = getTone('accent')
+  const tone = getTone('background')
+  const overrides = getOverrides(resolveMode(themeMode))
+  const [statusOpen, setStatusOpen] = useState(() => '--success' in overrides || '--danger' in overrides)
+  const changed = accent !== null || tone !== null || Object.keys(overrides).length > 0
 
   return (
-    <div>
-      <div style={{ maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
-        {TINTABLE_GROUPS.map((group) => (
-          <GroupColorRow key={`${resolved}:${group}:${resetNonce}`} group={group} resolved={resolved} />
-        ))}
-
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-            margin: '8px 0 2px'
-          }}
-        >
-          Status
-        </div>
-        {STATUS_TOKENS.map((token) => (
-          <ColorTokenRow key={`${resolved}:${token.key}:${resetNonce}`} token={token} resolved={resolved} />
-        ))}
-      </div>
-      <Button
-        variant="secondary"
-        onClick={() => {
-          resetAllColorOverrides(resolved)
-          setResetNonce((n) => n + 1)
+    <div className="ce">
+      <ColourChoice
+        label="Accent"
+        hint="Buttons, highlights and the current selection."
+        options={ACCENTS}
+        value={accent}
+        token="--accent"
+        onPick={(hex) => {
+          setAccentTone(hex)
+          bump()
         }}
-        style={{ width: '100%', marginTop: 'var(--space-2)' }}
-      >
-        Reset all colors
-      </Button>
-    </div>
-  )
-}
+      />
+      <ColourChoice
+        label="Background tone"
+        hint="Backgrounds, borders and text, tinted together so they always match."
+        options={TONES}
+        value={tone}
+        token="--bg-surface-raised"
+        onPick={(hex) => {
+          setBackgroundTone(hex)
+          bump()
+        }}
+      />
 
-function GroupColorRow({
-  group,
-  resolved
-}: {
-  group: (typeof TINTABLE_GROUPS)[number]
-  resolved: ResolvedTheme
-}): JSX.Element {
-  const [value, setValue] = useState(() => getGroupColor(resolved, group))
-  const [tinted, setTinted] = useState(() => isGroupTinted(resolved, group))
-
-  function handleChange(hex: string): void {
-    setValue(hex)
-    setTinted(true)
-    tintGroup(resolved, group, hex)
-  }
-
-  function handleReset(): void {
-    resetGroup(resolved, group)
-    setTinted(false)
-    setValue(getGroupColor(resolved, group))
-  }
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-      <span style={{ fontSize: 13 }}>{group}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {tinted && (
-          <button
-            type="button"
-            onClick={handleReset}
-            title="Reset to default"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: 11,
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0
-            }}
-          >
-            reset
-          </button>
-        )}
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => handleChange(e.target.value)}
-          title={`Recolor ${GROUP_REPRESENTATIVE_TOKEN[group]} and the rest of ${group}`}
-          style={{
-            width: 26,
-            height: 26,
-            padding: 0,
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)',
-            background: 'none',
-            cursor: 'pointer'
-          }}
-        />
+      <div className="ce-preview" aria-hidden="true">
+        <div className="ce-preview-card">
+          <strong>The Sunken Crypt</strong>
+          <span>Beneath the old chapel, water has crept into the burial halls.</span>
+          <div className="ce-preview-row">
+            <span className="ce-preview-btn">Start combat</span>
+            <span className="ce-preview-chip ce-preview-chip--good">Saved</span>
+            <span className="ce-preview-chip ce-preview-chip--bad">Dead</span>
+          </div>
+        </div>
       </div>
+
+      <button type="button" className="ce-more" onClick={() => setStatusOpen((o) => !o)} aria-expanded={statusOpen}>
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true" style={{ transform: statusOpen ? 'rotate(90deg)' : undefined }}>
+          <path d="M4.5 2.5L8 6l-3.5 3.5" />
+        </svg>
+        Status colours
+      </button>
+      {statusOpen && (
+        <div className="ce-status">
+          {(
+            [
+              ['--success', 'Success', 'Saves, healing, things going well.'],
+              ['--danger', 'Danger', 'Damage, deaths, deleting.']
+            ] as const
+          ).map(([key, label, hint]) => {
+            const custom = overrides[key]
+            return (
+              <label key={key} className="ce-status-row">
+                <input
+                  type="color"
+                  className="ce-picker"
+                  value={toHexColor(custom ?? defaultColor(key))}
+                  onChange={(e) => {
+                    setStatusColor(key, e.target.value)
+                    bump()
+                  }}
+                  aria-label={`${label} colour`}
+                />
+                <span className="ce-status-text">
+                  <strong>{label}</strong>
+                  <small>{hint}</small>
+                </span>
+                {custom && (
+                  <button
+                    type="button"
+                    className="ce-reset-one"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      setStatusColor(key, null)
+                      bump()
+                    }}
+                  >
+                    Default
+                  </button>
+                )}
+              </label>
+            )
+          })}
+        </div>
+      )}
+
+      <button
+        type="button"
+        className="ce-reset"
+        disabled={!changed}
+        onClick={() => {
+          resetAllColorOverrides()
+          bump()
+        }}
+      >
+        Reset all colours to the defaults
+      </button>
     </div>
   )
 }
 
-function ColorTokenRow({ token, resolved }: { token: ColorToken; resolved: ResolvedTheme }): JSX.Element {
-  const [value, setValue] = useState(() =>
-    toHexColor(getComputedStyle(document.documentElement).getPropertyValue(token.key))
-  )
-  const [hasOverride, setHasOverride] = useState(() => token.key in getOverrides(resolved))
-
-  function handleChange(hex: string): void {
-    setValue(hex)
-    setHasOverride(true)
-    setColorOverride(resolved, token.key, hex)
-  }
-
-  function handleReset(): void {
-    resetColorOverride(resolved, token.key)
-    setHasOverride(false)
-    setValue(toHexColor(getComputedStyle(document.documentElement).getPropertyValue(token.key)))
-  }
-
+/** One choice: named swatches showing the colour they'll really give, then a custom colour. */
+function ColourChoice({
+  label,
+  hint,
+  options,
+  value,
+  token,
+  onPick
+}: {
+  label: string
+  hint: string
+  options: [string, string | null][]
+  value: string | null
+  /** Which colour the swatches show the result for. */
+  token: string
+  onPick: (hex: string | null) => void
+}): JSX.Element {
+  const isPreset = value === null || options.some(([, hex]) => hex === value)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 0' }}>
-      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{token.label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {hasOverride && (
-          <button
-            type="button"
-            onClick={handleReset}
-            title="Reset to default"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: 11,
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0
-            }}
-          >
-            reset
-          </button>
-        )}
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => handleChange(e.target.value)}
-          title={token.key}
-          style={{
-            width: 24,
-            height: 24,
-            padding: 0,
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)',
-            background: 'none',
-            cursor: 'pointer'
-          }}
-        />
+    <div className="ce-choice">
+      <div className="ce-choice-text">
+        <strong>{label}</strong>
+        <small>{hint}</small>
+      </div>
+      <div className="ce-swatches" role="radiogroup" aria-label={label}>
+        {options.map(([name, hex]) => {
+          const on = value === hex
+          return (
+            <button
+              key={name}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              className={on ? 'ce-swatch ce-swatch--on' : 'ce-swatch'}
+              onClick={() => onPick(hex)}
+              title={hex ? name : `${name} (default)`}
+            >
+              <i style={{ background: hex ? toneResult(hex, token) : defaultColor(token) }} />
+              <span>{name}</span>
+            </button>
+          )
+        })}
+        <label className={!isPreset ? 'ce-swatch ce-swatch--on ce-swatch--custom' : 'ce-swatch ce-swatch--custom'} title="Pick any colour">
+          <i style={!isPreset && value ? { background: toneResult(value, token) } : undefined}>
+            <input type="color" value={value ?? '#888888'} onChange={(e) => onPick(e.target.value)} aria-label={`Custom ${label.toLowerCase()} colour`} />
+          </i>
+          <span>Custom</span>
+        </label>
       </div>
     </div>
   )

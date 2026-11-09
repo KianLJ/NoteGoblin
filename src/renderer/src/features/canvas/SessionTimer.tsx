@@ -286,3 +286,29 @@ function CountdownPanel(): JSX.Element {
     </div>
   )
 }
+
+/** The Session Timer box minimized: the countdown (or a running stopwatch) and one button to pause or carry on. */
+export function TimerMini(): JSX.Element {
+  const { timer, watch, now } = useTimer()
+  const left = remainingMs(timer, now)
+  if (timer.kind === 'idle' && watch.kind !== 'idle')
+    return (
+      <div className="mini-timer">
+        <span className="mini-timer-time">{formatTimer(elapsedMs(watch, now))}</span>
+        <button type="button" className="gb-btn gb-btn--secondary" onClick={() => setWatch(watch.kind === 'running' ? stopStopwatch(watch, Date.now()) : runStopwatch(watch, Date.now()))}>
+          {watch.kind === 'running' ? 'Stop' : 'Carry on'}
+        </button>
+      </div>
+    )
+  if (timer.kind === 'idle') return <div className="mini-empty">No timer set</div>
+  return (
+    <div className={`mini-timer${stateClass(timer, left)}`}>
+      <span className="mini-timer-time">{formatTimer(left)}</span>
+      {left > 0 && (
+        <button type="button" className="gb-btn gb-btn--secondary" onClick={() => setTimer(timer.kind === 'running' ? pauseTimer(timer, Date.now()) : resumeTimer(timer, Date.now()))}>
+          {timer.kind === 'running' ? 'Pause' : 'Resume'}
+        </button>
+      )}
+    </div>
+  )
+}

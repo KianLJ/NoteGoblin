@@ -28,6 +28,33 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.11.0',
+    title: 'A fresh coat of paint, and a face for everyone',
+    intro: 'This update goes back over the menus and tools that had fallen behind the canvas, so the whole app feels like one thing. Here’s what changed.',
+    sections: [
+      {
+        heading: 'Your account, and your face',
+        body: 'Your name in the corner is now a round account button, top left beside the mode switch. Click it for light or dark, Settings and signing out. Settings is now a proper window with a page for each thing. On the Profile page, click the circle to choose a profile picture: it shows on your account button, in your friends’ lists, in messages and on the party’s faces at the table.'
+      },
+      {
+        heading: 'Colours that make sense',
+        body: 'Choosing colours is down to two picks: an accent for buttons and highlights, and a background tone for everything else. Each swatch shows exactly what you’ll get, the choice applies to light and dark, and contrast stays as readable as the default. Dark mode’s borders, text fields and sliders are easier to tell apart too. (If you picked a background tone before, pick it again to get the improved version.)'
+      },
+      {
+        heading: 'Music and sounds, your own included',
+        body: 'The music player and sound board have been rebuilt. Drag your own songs and sound effects in and everyone at the table hears them. Right-click anything to rename it, make your own moods and sound categories, or add sounds to the built-in ones. Minimise the music box and it becomes a small player; each tool now has its own minimised view.'
+      },
+      {
+        heading: 'Redesigned tools',
+        body: 'The initiative tracker and encounter builder are cleaner, and adding an enemy is a quick search instead of a huge list. The calendar and its builder are easier to follow, with a simpler time of day and ready-made calendars to start from. The Codex, Friends, Content Packs and Messages all match the rest of the app now.'
+      },
+      {
+        heading: 'And a few fixes',
+        body: 'Text on the canvas stays sharp at any zoom. The battle map opens on its centre point and new tokens line up level with it. Making a session no longer drops you into its collection, and :: hidden text is hidden from players again.'
+      }
+    ]
+  },
+  {
     version: '0.10.0',
     title: 'A table you lay out yourself',
     intro:

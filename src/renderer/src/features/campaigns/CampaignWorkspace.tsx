@@ -8,7 +8,8 @@ import { monsterToCombatant } from './InitiativeTracker'
 import { FileIcon, PawIcon } from './icons'
 import { useKnownPlayerSheets } from './useKnownPlayerSheets'
 import { DmInitiativeTool } from './DmInitiativeTool'
-import { TimerDockButton, TimerPanel } from '../canvas/SessionTimer'
+import { TimerDockButton, TimerMini, TimerPanel } from '../canvas/SessionTimer'
+import { CalendarMini, InitiativeMini, PartyMini, SessionsMini } from '../canvas/toolMinis'
 import { SceneDeleteButton, SessionPresenter, SessionsList } from './SessionTimeline'
 import { useSessionDecks } from './useSessionDecks'
 import { SessionIcon } from './panelIcons'
@@ -16,7 +17,6 @@ import { dropEntry, putEntry, useCanvasEntries } from '../canvas/canvasEntries'
 import { MonsterEditor } from '../bestiary/MonsterEditor'
 import type { PackMonster } from '../../data/packMonsters'
 import { entryItems } from '../canvas/entryItems'
-import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import { CharacterSheetEditor } from '../player/CharacterSheetEditor'
 import { UserIcon } from '../player/icons'
 import { DiceButton } from '../dice/DiceButton'
@@ -148,11 +148,11 @@ export function CampaignWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckHere, sequenceKey])
 
-  /** Goes into a session's collection — making it first, with a box per scene, if it has none yet. */
-  function openSession(deck: SessionDeck, at?: CanvasPoint): void {
+  /** Goes into a session's collection — making it first, with a box per scene, if it has none yet. `enter: false` only makes it. */
+  function openSession(deck: SessionDeck, at?: CanvasPoint, enter = true): void {
     const found = sessionCollections(nav.root).find((s) => s.collection.sessionDeckId === deck.id)
     if (found) {
-      nav.enterPath(found.path)
+      if (enter) nav.enterPath(found.path)
       return
     }
     const cid = crypto.randomUUID()
@@ -163,7 +163,7 @@ export function CampaignWorkspace({
       .filter((s) => !nav.placed.has(`note:${s.noteId}`))
       .map((s, i) => ({ id: `note:${s.noteId}`, ...sceneSpot(i, SCENE_SIZE), z: i + 1 }))
     setLayout((l) => addCollection(l, cid, deck.title || 'Untitled Session', spot, { sessionDeckId: deck.id, nodes }))
-    nav.enter(cid)
+    if (enter) nav.enter(cid)
   }
 
   /** Where a session's collection lives, and whether its tile is closed (shelved: kept, opened from the Sessions box). */
@@ -187,12 +187,12 @@ export function CampaignWorkspace({
     if (parent.join('/') === nav.path.join('/')) setTimeout(() => canvasRef.current?.reveal(tile), 0)
   }
 
-  /** A new session, its first scene ready to write in, opened. */
+  /** A new session with its first scene, as a tile on this canvas (not opened). */
   async function newSession(at?: CanvasPoint): Promise<void> {
     const deck = await decksApi.createDeck('Untitled Session')
     if (!deck) return
     const note = await decksApi.addScene(deck.id, 'Scene 1')
-    openSession(note ? { ...deck, scenes: [{ noteId: note.id, encounterId: null, moodId: null, trackId: null }] } : deck, at)
+    openSession(note ? { ...deck, scenes: [{ noteId: note.id, encounterId: null, moodId: null, trackId: null }] } : deck, at, false)
     if (note) addNoteLocally(note)
   }
 
@@ -304,39 +304,49 @@ export function CampaignWorkspace({
         onPasteFolder={duplicateFolder}
       />
     ),
-    players: (
-      <div style={{ overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: 'var(--space-2) var(--space-3) 0' }}>
-          <span style={{ flex: 1, fontSize: 11, color: 'var(--text-muted)' }}>Stand-ins for testing, as party members:</span>
-          <TestPlayersMenu />
+    players: {
+      mini: <PartyMini sessionId={hostedSessionId ?? null} campaignId={campaign?.id ?? null} />,
+      full: (
+        <div style={{ overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: 'var(--space-2) var(--space-3) 0' }}>
+            <span style={{ flex: 1, fontSize: 11, color: 'var(--text-muted)' }}>Stand-ins for testing, as party members:</span>
+            <TestPlayersMenu />
+          </div>
+          <ConnectedPlayersList
+            sessionId={hostedSessionId ?? null}
+            campaignId={campaign?.id ?? null}
+            playerCharacters={playerCharacters}
+            onSelectPlayer={(userId) => canvasRef.current?.openAt(`playerSheet:${userId}`, DYNAMIC_SIZE.playerSheet)}
+          />
         </div>
-        <ConnectedPlayersList
-          sessionId={hostedSessionId ?? null}
-          campaignId={campaign?.id ?? null}
-          playerCharacters={playerCharacters}
-          onSelectPlayer={(userId) => canvasRef.current?.openAt(`playerSheet:${userId}`, DYNAMIC_SIZE.playerSheet)}
-        />
-      </div>
-    ),
+      )
+    },
     // Calendar and Sessions always take the local/direct path, never the hosted session id: the DM is never a
     // joined participant of their own session, so routing over the relay would fail with "not connected to that
     // session". Saves and presenting still reach connected players — registerIpc.ts checks getHostedSession().
-    initiative: (
-      <DmInitiativeTool sessionId={hostedSessionId ?? null} campaignId={campaign?.id ?? null} combatCharacters={combatCharacters} onOpenMonster={(m) => openMonster(m)} />
-    ),
-    timer: <TimerPanel />,
-    calendar: <CalendarPanel sessionId={null} campaignId={campaign?.id ?? null} readOnly={false} notes={notes ?? []} />,
-    sessions: (
-      <SessionsList
-        api={decksApi}
-        onOpen={(deck) => openSession(deck)}
-        onNew={() => void newSession()}
-        onDelete={deleteSession}
-        onRename={renameSession}
-        shelved={(deck) => !!sessionPlace(deck)?.shelved}
-        onUnshelve={unshelveSession}
-      />
-    )
+    initiative: {
+      full: <DmInitiativeTool sessionId={hostedSessionId ?? null} campaignId={campaign?.id ?? null} combatCharacters={combatCharacters} onOpenMonster={(m) => openMonster(m)} />,
+      mini: <InitiativeMini />
+    },
+    timer: { full: <TimerPanel />, mini: <TimerMini /> },
+    calendar: {
+      full: <CalendarPanel sessionId={null} campaignId={campaign?.id ?? null} readOnly={false} notes={notes ?? []} />,
+      mini: <CalendarMini sessionId={null} campaignId={campaign?.id ?? null} />
+    },
+    sessions: {
+      full: (
+        <SessionsList
+          api={decksApi}
+          onOpen={(deck) => openSession(deck)}
+          onNew={() => void newSession()}
+          onDelete={deleteSession}
+          onRename={renameSession}
+          shelved={(deck) => !!sessionPlace(deck)?.shelved}
+          onUnshelve={unshelveSession}
+        />
+      ),
+      mini: <SessionsMini api={decksApi} notes={notes ?? []} hostedSessionId={hostedSessionId ?? null} />
+    }
   }
 
   const items: CanvasItem[] = [
@@ -493,7 +503,6 @@ export function CampaignWorkspace({
               hostedSessionId={hostedSessionId ?? null}
               onHostedSessionChange={onHostedSessionChange}
             />
-            <AccountSettingsButton />
           </>
         }
       />

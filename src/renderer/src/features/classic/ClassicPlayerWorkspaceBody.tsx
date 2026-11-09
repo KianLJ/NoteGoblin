@@ -7,7 +7,6 @@ import { CharacterCreator } from '../player/creator/CharacterCreator'
 import { CharacterSwitcher } from '../player/CharacterSwitcher'
 import { ForceRollPrompt } from '../player/ForceRollPrompt'
 import { NoteEditor } from '../campaigns/NoteEditor'
-import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import type { PlayerWorkspace } from '../player/usePlayerWorkspace'
@@ -177,7 +176,6 @@ export function ClassicPlayerWorkspaceBody({
               sessionId={sessionId}
               onLeaveSession={onLeaveSession}
             />
-            <AccountSettingsButton />
           </>
         }
       >

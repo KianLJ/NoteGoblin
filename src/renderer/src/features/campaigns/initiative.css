@@ -1,0 +1,744 @@
+/* The initiative tracker. Theme tokens only. */
+
+.it {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  /* Rows lay themselves out by how wide the tracker is (see the @container rule at the end). */
+  container: tracker / inline-size;
+}
+
+/* Tracker / Build / Vehicles. */
+.it-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 8px 8px 0;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  flex-shrink: 0;
+}
+.it-tab {
+  flex: 1;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.it-tab:hover {
+  color: var(--text-primary);
+}
+.it-tab--on {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.it-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Toolbar. */
+.it-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.it-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+}
+.it-add {
+  font-size: 12px;
+  padding: 5px 6px;
+  max-width: 150px;
+  min-width: 0;
+  flex: 1 1 110px;
+}
+.it-spacer {
+  flex: 1;
+}
+.it-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.it-icon-btn:not(:disabled):hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.it-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Whose turn it is. */
+.it-turnbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent);
+  background: linear-gradient(120deg, var(--accent-subtle), var(--bg-surface-raised) 80%);
+}
+.it-turn-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.it-turn-text small {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-hover);
+}
+.it-turn-text strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.it-end {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+}
+.it-end:hover {
+  color: var(--danger);
+}
+
+.it-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 24px 12px;
+  text-align: center;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.it-empty strong {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* A combatant. */
+.it-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.it-row {
+  --kind: var(--text-muted);
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-areas: 'grip init main hp ac x';
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 4px 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--kind);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  transition: background 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+.it-row--player {
+  --kind: var(--success);
+}
+.it-row--monster {
+  --kind: var(--danger);
+}
+.it-row--vehicle {
+  --kind: var(--text-secondary);
+}
+.it-row:hover {
+  border-color: var(--border-strong);
+  border-left-color: var(--kind);
+}
+.it-row--turn {
+  border-color: var(--accent);
+  border-left-color: var(--kind);
+  background: var(--accent-subtle);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.it-row--down {
+  opacity: 0.6;
+}
+.it-row--down .it-name {
+  text-decoration: line-through;
+}
+.it-row--drop {
+  border-color: var(--accent);
+  border-style: dashed;
+  border-left-style: solid;
+}
+.it-row--dragging {
+  opacity: 0.4;
+}
+.it-row--picked {
+  box-shadow: 0 0 0 2px var(--text-primary);
+}
+.it-grip {
+  display: flex;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0.5;
+}
+.it-row:hover .it-grip {
+  opacity: 1;
+}
+
+/* Initiative and AC: an icon over its number. */
+.it-stat {
+  width: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.it-stat-icon {
+  display: flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+}
+.it-stat-icon--button {
+  cursor: pointer;
+  border-radius: 4px;
+}
+.it-stat-icon--button:hover {
+  color: var(--accent);
+}
+.it-stat--init .it-stat-icon {
+  color: var(--accent);
+}
+.it-stat-value {
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+}
+.it-stat-value:hover,
+.it-stat-value:focus {
+  background: var(--bg-sunken);
+  outline: none;
+}
+.it-stat--ac .it-stat-value {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.it-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.it-name {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.it-name--link {
+  cursor: pointer;
+}
+.it-name--link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.it-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-height: 18px;
+}
+.it-tags .gb-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+.it-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  background: transparent;
+  white-space: nowrap;
+}
+.it-tag--turn {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+.it-tag--down {
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  color: var(--danger);
+}
+.it-add-status-wrap {
+  position: relative;
+}
+.it-add-status {
+  border-style: dashed;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.it-row:hover .it-add-status,
+.it-add-status:focus-visible,
+.it-add-status--open {
+  opacity: 1;
+}
+.it-add-status:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* HP: − current / max +, with a bar under. */
+.it-hp {
+  width: 104px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.it-hp-top {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.it-hp-btn {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+.it-hp-btn--dmg {
+  color: var(--danger);
+}
+.it-hp-btn--heal {
+  color: var(--success);
+}
+.it-hp-btn--dmg:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-surface));
+}
+.it-hp-btn--heal:hover {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--bg-surface));
+}
+.it-hp-vals {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.it-hp-cur,
+.it-hp-max {
+  width: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: center;
+  font-weight: 800;
+}
+.it-hp-cur {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.it-hp-max {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.it-hp-cur:hover,
+.it-hp-cur:focus,
+.it-hp-max:hover,
+.it-hp-max:focus {
+  background: var(--bg-sunken);
+  outline: none;
+}
+.it-hp-amount {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+.it-hp-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.it-hp-bar i {
+  display: block;
+  height: 100%;
+  background: var(--success);
+  transition: width 240ms ease;
+}
+.it-hp-bar i.it-hp-mid {
+  background: var(--warning, #c9a03c);
+}
+.it-hp-bar i.it-hp-low {
+  background: var(--danger);
+}
+
+.it-remove {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.it-row:hover .it-remove,
+.it-remove:focus-visible {
+  opacity: 1;
+}
+.it-remove:hover {
+  color: var(--danger);
+  background: var(--bg-sunken);
+}
+
+/* Death saves and the dismemberment prompt: full width, under the row. */
+.it-extra {
+  grid-column: 1 / -1;
+}
+.it-saves {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 2px 0 0 18px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .it-hp-bar i {
+    transition: none;
+  }
+}
+
+.it-grip {
+  grid-area: grip;
+}
+.it-stat--init {
+  grid-area: init;
+}
+.it-main {
+  grid-area: main;
+}
+.it-hp {
+  grid-area: hp;
+}
+.it-stat--ac {
+  grid-area: ac;
+}
+.it-remove {
+  grid-area: x;
+}
+
+/* A narrow tracker (the Combat screen's side panel, a slim box): the name gets the whole top line, HP and AC go under it. */
+@container tracker (max-width: 420px) {
+  .it-row {
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'grip init main main x'
+      'grip init hp ac ac';
+    row-gap: 2px;
+  }
+  .it-hp {
+    width: auto;
+  }
+  .it-extra {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Picking a monster: a search box with its matches below. */
+.mp {
+  position: relative;
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.mp-input {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+/* Drawn in the pop-up layer (see MonsterPicker), placed under its box. */
+.mp-list {
+  position: fixed;
+  z-index: 1000;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+}
+.mp-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.mp-item svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.mp-item--active {
+  background: var(--accent-subtle);
+}
+.mp-item--active svg {
+  color: var(--accent);
+}
+.mp-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-name small {
+  color: var(--text-muted);
+}
+.mp-cr {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.mp-none {
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* The Build tab: the encounter, generating one, and your library. */
+.eb {
+  gap: 12px;
+}
+.eb-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+}
+.eb-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.eb-head > span {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+.eb-head small {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.eb-muted {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.eb .mp {
+  flex: none;
+}
+
+.eb-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+.eb-summary-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.eb-summary-top small {
+  color: var(--text-muted);
+}
+.eb-suggest {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.eb-chip {
+  cursor: pointer;
+  font-weight: 600;
+}
+.eb-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.eb-save {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.eb-save .gb-input {
+  font-size: 12px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+.eb-save-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.eb-party {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.eb-party label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.eb-party small {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.eb-party .gb-input {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.eb-tiers {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.eb-tier {
+  --tier: var(--text-secondary);
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--tier) 45%, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--tier) 10%, transparent);
+  color: var(--tier);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.eb-tier:hover {
+  background: color-mix(in srgb, var(--tier) 22%, transparent);
+}
+.eb-tier--easy {
+  --tier: var(--success);
+}
+.eb-tier--medium {
+  --tier: var(--warning, #c9a03c);
+}
+.eb-tier--hard {
+  --tier: var(--accent);
+}
+.eb-tier--deadly {
+  --tier: var(--danger);
+}
+.eb-delete {
+  opacity: 1;
+  margin-left: auto;
+}

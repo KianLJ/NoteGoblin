@@ -49,6 +49,8 @@ export interface CanvasNodeProps {
   onTogglePin?: () => void
   /** Shrunk to a tile — see shared/canvasLayout.ts's setMinimized. */
   minimized?: boolean
+  /** Shown under the title bar while minimized, instead of the plain tile (a tool's own small view). */
+  mini?: ReactNode
   onToggleMinimize?: () => void
   /** The smallest size its contents can be shown at; below it the box asks to be made bigger. */
   minContent?: { w: number; h: number }
@@ -106,6 +108,7 @@ export function CanvasNode({
   pinned,
   onTogglePin,
   minimized,
+  mini,
   onToggleMinimize,
   minContent,
   className: extraClass,
@@ -196,7 +199,7 @@ export function CanvasNode({
     'gb-canvas-node',
     front && 'gb-canvas-node--front',
     pinned && 'gb-canvas-node--pinned',
-    minimized && 'gb-canvas-node--mini',
+    minimized && (mini ? 'gb-canvas-node--compact' : 'gb-canvas-node--mini'),
     extraClass
   ]
     .filter(Boolean)
@@ -211,7 +214,7 @@ export function CanvasNode({
       onPointerDownCapture={onFocus}
       style={{ left: shown.x, top: shown.y, width: shown.w, height: shown.h, zIndex: z }}
     >
-      {minimized ? (
+      {minimized && !mini ? (
         <div
           className="gb-canvas-node-tile"
           title={typeof title === 'string' ? `${title} — double-click to ${tileOpenTitle ? 'open' : 'restore'}` : undefined}
@@ -234,6 +237,7 @@ export function CanvasNode({
       <div className="gb-canvas-node-body" data-canvas-node-body style={minimized || tooSmall ? { display: 'none' } : undefined}>
         {children}
       </div>
+      {minimized && mini && <div className="gb-canvas-node-compact">{mini}</div>}
       {tooSmall && (
         <div className="gb-canvas-node-small">
           <span>Make this box bigger to see it</span>

@@ -6,6 +6,7 @@ import { UserRepo } from '@server/repositories/userRepo'
 import * as campaignService from '@server/services/campaignService'
 import type { ServiceResult } from '@server/services/campaignService'
 import { RELAY_URL, relaySessionPath } from '@server/relay/relayConfig'
+import { getFriends } from '@server/relay/relayClient'
 import type {
   RequestFrame,
   ResponseFrame,
@@ -59,6 +60,24 @@ let dmWindow: BrowserWindow | null = null
 let dmSubscribedCampaignId: string | null = null
 /** Purely runtime, never persisted — if the DM closes the app mid-presentation, the presentation just stops; the deck's actual content is still safely in session_decks. */
 let liveScene: { campaignId: string; deckId: string; sceneIndex: number } | null = null
+let hostToken: string | null = null
+/** Players' profile pictures, from the DM's friends list (every invited player is a friend). */
+const avatars = new Map<string, string>()
+
+/** Re-reads friends' pictures, then re-sends presence wherever one changed. shortcut: a picture changed mid-session shows on the next player join, upgrade if that matters. */
+async function loadAvatars(): Promise<void> {
+  if (!hostToken) return
+  const result = await getFriends(hostToken)
+  if (!result.ok) return
+  let changed = false
+  for (const f of result.data.friends) {
+    if ((avatars.get(f.userId) ?? '') === (f.avatar ?? '')) continue
+    changed = true
+    if (f.avatar) avatars.set(f.userId, f.avatar)
+    else avatars.delete(f.userId)
+  }
+  if (changed) for (const id of new Set([...players.values()].map((p) => p.campaignId))) if (id) broadcastPresence(id)
+}
 
 function wsUrl(sessionId: string): string {
   return RELAY_URL.replace(/^http/, 'ws') + relaySessionPath(sessionId)
@@ -79,6 +98,7 @@ export function startSessionHost(
 
   const sessionId = uuid()
   dmWindow = window
+  hostToken = relayToken
 
   return new Promise((resolve) => {
     const ws = new WebSocket(
@@ -196,7 +216,8 @@ function broadcastPresence(campaignId: string): void {
   const playerList = inCampaign.map((p) => ({
     userId: p.userId,
     displayName: p.username,
-    characterName: p.characterName
+    characterName: p.characterName,
+    avatar: avatars.get(p.userId)
   }))
   const frame: PresenceFrame = { type: 'presence', campaignId, players: playerList }
   for (const p of inCampaign) sendToRelay(p.userId, frame)
@@ -497,6 +518,7 @@ function handleFrame(raw: WebSocket.RawData): void {
       characterName: null,
       character: null
     })
+    void loadAvatars()
   }
 
   dispatch(fromUserId, fromUsername, frame)
@@ -538,7 +560,8 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
     case 'campaigns.joinActive':
       return fromService(frame.reqId, campaignService.joinActiveCampaign(db, userId))
     case 'notes.list':
-      return fromService(frame.reqId, campaignService.listNotes(db, str('campaignId'), userId))
+      // Always a player's view: everything here came over the relay, even from the DM self-joined as a player (dev builds).
+      return fromService(frame.reqId, campaignService.listNotes(db, str('campaignId'), userId, true))
     case 'notes.create': {
       const campaignId = str('campaignId')
       // campaignService validates every field's type at runtime (title/bodyMarkdown/visibility
@@ -732,7 +755,7 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       return { reqId: frame.reqId, ok: true, data: undefined }
     }
     case 'sessionDecks.list':
-      return fromService(frame.reqId, campaignService.listSessionDecks(db, str('campaignId'), userId))
+      return fromService(frame.reqId, campaignService.listSessionDecks(db, str('campaignId'), userId, true))
     case 'sessionDecks.create': {
       const campaignId = str('campaignId')
       const result = campaignService.createSessionDeck(db, campaignId, userId, str('title'))

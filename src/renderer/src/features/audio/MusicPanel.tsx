@@ -3,16 +3,23 @@ import { MUSIC_LIBRARY, findTrack } from '../../data/musicLibrary'
 import { ambientLayersFor, isRainLayer, isWindLayer } from '../../data/ambientLibrary'
 import { getMusicState, subscribeMusic, pickMood, playSpecificTrack, togglePlayPause, skipTrack, changeVolume, stopPlayersOnly } from './musicEngine'
 import { fadeAmbientLayerLevel, switchAmbientMood, broadcastAmbientLayerLevel } from './ambientEngine'
+import { getStoredMusicVolume, setMusicVolume, getStoredMusicBroadcastEnabled, setMusicBroadcastEnabled, getStoredAmbientLevel, setStoredAmbientLevel } from './soundSettings'
 import {
-  getStoredMusicVolume,
-  setMusicVolume,
-  getStoredMusicBroadcastEnabled,
-  setMusicBroadcastEnabled,
-  getStoredAmbientLevel,
-  setStoredAmbientLevel
-} from './soundSettings'
+  ensureCustomMusicLoaded,
+  subscribeCustomMusic,
+  getCustomTracks,
+  findCustomTrack,
+  addCustomTrack,
+  addCustomFiles,
+  removeCustomTrack,
+  renameCustomTrack,
+  YOUR_MUSIC_GROUP
+} from './customMusicStore'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
-import { ensureCustomMusicLoaded, subscribeCustomMusic, getCustomTracks, findCustomTrack, addCustomTrack, removeCustomTrack } from './customMusicStore'
+import { useAudioDrop } from './useAudioDrop'
+import { audioName, isRenamed, setAudioName, subscribeAudioNames } from './audioNames'
+import { audioGroups, createAudioGroup, deleteAudioGroup, renameAudioGroup, subscribeAudioGroups } from './audioGroups'
+import './audio.css'
 import { useCalendar } from '../campaigns/useCalendar'
 import { weatherForDate, type RainLevel } from '@shared/calendar'
 
@@ -28,7 +35,12 @@ interface MusicPanelProps {
 // instead of a click. Any rain at all counts (rain is already gated by the
 // climate's own rainChance, so a rolled rain day is worth reflecting), heavy
 // rain gets the full mix.
-const AUTO_RAIN_LEVEL: Record<RainLevel, number> = { none: 0, light: 0.25, moderate: 0.5, heavy: 1 }
+const AUTO_RAIN_LEVEL: Record<RainLevel, number> = {
+  none: 0,
+  light: 0.25,
+  moderate: 0.5,
+  heavy: 1
+}
 
 // Wind has no built-in gate the way rain's rainChance provides — it's a
 // continuous mph value, so it needs its own real floor before it's worth
@@ -67,13 +79,18 @@ function closestAmbientLevelIndex(level: number): number {
   return bestIndex
 }
 
-/** DM-only header button — Goblin Bard's mood picker. Picking a mood plays a random track from it on loop and (while hosting) broadcasts that exact track to every connected player; picking a different mood, or skipping within one, crossfades. */
+/** DM-only — Goblin Bard: what's playing, the moods, each mood's songs (your own added by button or by dropping files), and its ambience. Picking a mood plays a random track from it on loop and (while hosting) broadcasts that exact track to every connected player; picking a different mood, or skipping within one, crossfades. */
 export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): JSX.Element {
   const [musicState, setMusicState] = useState(() => getMusicState())
   const [fadeMs, setFadeMs] = useState(DEFAULT_FADE_MS)
   const [volume, setVolume] = useState(() => getStoredMusicVolume())
   const [broadcastEnabled, setBroadcastEnabledState] = useState(() => getStoredMusicBroadcastEnabled())
-  const [trackMenu, setTrackMenu] = useState<ContextMenuState | null>(null)
+  // Which mood's songs are listed: the one you last picked, or the one playing.
+  const [viewGroup, setViewGroup] = useState<string | null>(null)
+  const [dropGroup, setDropGroup] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  const [renaming, setRenaming] = useState<string | null>(null)
   const [, setCustomTick] = useState(0)
   // Placeholder ambient-SFX slider levels (see ambientLibrary.ts) — keyed by
   // "groupId:ambientId" since e.g. "wind" means something different (and
@@ -103,6 +120,8 @@ export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): J
 
   useEffect(() => subscribeMusic(() => setMusicState(getMusicState())), [])
   useEffect(() => subscribeCustomMusic(() => setCustomTick((t) => t + 1)), [])
+  useEffect(() => subscribeAudioNames(() => setCustomTick((t) => t + 1)), [])
+  useEffect(() => subscribeAudioGroups(() => setCustomTick((t) => t + 1)), [])
   useEffect(() => {
     void ensureCustomMusicLoaded()
   }, [])
@@ -207,248 +226,346 @@ export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): J
     changeVolume(next, sessionId)
   }
 
-  const nowPlaying = musicState.groupId ? MUSIC_LIBRARY.find((g) => g.id === musicState.groupId) : null
+  const moods: { id: string; label: string; tracks: { id: string; title: string; url: string }[]; own?: boolean }[] = [
+    ...MUSIC_LIBRARY,
+    { id: YOUR_MUSIC_GROUP, label: 'Your music', tracks: [] },
+    ...audioGroups('mood').map((g) => ({ id: g.id, label: g.label, tracks: [], own: true }))
+  ]
+
+  function flash(message: string): void {
+    setToast(message)
+    setTimeout(() => setToast((t) => (t === message ? null : t)), 3000)
+  }
+  // A save that fails (the app not restarted since an update, a file gone) says so instead of quietly doing nothing.
+  const failed =
+    (what: string) =>
+    (e: unknown): void =>
+      flash(`Couldn't ${what}: ${e instanceof Error ? e.message : String(e)}`)
+
+  function newMood(): void {
+    const group = createAudioGroup('mood', 'New mood')
+    setViewGroup(group.id)
+    setRenaming(group.id)
+  }
+
+  async function deleteMood(id: string): Promise<void> {
+    try {
+      for (const t of getCustomTracks(id)) await removeCustomTrack(id, t.id)
+      deleteAudioGroup('mood', id)
+      if (viewGroup === id) setViewGroup(null)
+    } catch (e) {
+      failed('delete it')(e)
+    }
+  }
+  const nowPlaying = musicState.groupId ? moods.find((g) => g.id === musicState.groupId) : null
   const nowPlayingTrack = musicState.trackId ? (findTrack(musicState.trackId) ?? findCustomTrack(musicState.trackId)) : null
+  const shownGroup = moods.find((g) => g.id === (viewGroup ?? musicState.groupId)) ?? null
+  const shownTracks = shownGroup
+    ? [...shownGroup.tracks.map((t) => ({ ...t, title: audioName(t.id, t.title), mine: false })), ...getCustomTracks(shownGroup.id).map((t) => ({ ...t, mine: true }))]
+    : []
+
+  async function addSongs(groupId: string, files?: File[]): Promise<void> {
+    let n: number
+    try {
+      n = files ? await addCustomFiles(groupId, files) : await addCustomTrack(groupId)
+    } catch (e) {
+      failed('add those')(e)
+      return
+    }
+    const label = moods.find((g) => g.id === groupId)?.label ?? 'Your music'
+    if (files && n === 0) flash("Those weren't audio files (mp3, wav, ogg, m4a or flac)")
+    else if (n > 0) flash(`Added ${n} ${n === 1 ? 'song' : 'songs'} to ${label}`)
+    else return
+    setViewGroup(groupId)
+  }
+
+  const moodUnder = (el: EventTarget): string | null => (el as HTMLElement).closest<HTMLElement>('[data-mood]')?.dataset.mood ?? null
+  const drop = useAudioDrop((files, target) => {
+    void addSongs(moodUnder(target) ?? shownGroup?.id ?? YOUR_MUSIC_GROUP, files)
+    setDropGroup(null)
+  })
+  const dropTarget = moods.find((g) => g.id === (dropGroup ?? shownGroup?.id ?? YOUR_MUSIC_GROUP))
 
   return (
-    <>
-        <div
-          style={{
-            minHeight: 0,
-            overflowY: 'auto',
-            padding: 'var(--space-3) var(--space-4)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-3)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 15 }}>Goblin Bard</span>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {nowPlaying ? nowPlaying.label : 'Silent'}
-            </span>
+    <div
+      className="ab-panel"
+      {...drop.handlers}
+      onDragOver={(e) => {
+        drop.handlers.onDragOver(e)
+        // Over a mood: the files go there.
+        const over = moodUnder(e.target)
+        if (e.dataTransfer.types.includes('Files') && over !== dropGroup) setDropGroup(over)
+      }}
+    >
+      <div className={`ab-now${musicState.playing ? ' ab-now--playing' : ''}`}>
+        <div className="ab-now-top">
+          <div className="ab-now-art" aria-hidden="true">
+            <span className="ab-eq-bar" />
+            <span className="ab-eq-bar" />
+            <span className="ab-eq-bar" />
+            <span className="ab-eq-bar" />
           </div>
-
-          <label
-            title="On: every connected player hears the same music and ambiance, synced. Off: it only plays from this device — for playing in person around one table."
-            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+          <div className="ab-now-text">
+            <div className="ab-now-title">{nowPlayingTrack ? audioName(nowPlayingTrack.id, nowPlayingTrack.title) : 'Nothing playing'}</div>
+            <div className="ab-now-sub">{nowPlaying ? `${nowPlaying.label}${musicState.playing ? '' : ' · paused'}` : 'Pick a mood below to start'}</div>
+          </div>
+        </div>
+        <div className="ab-transport">
+          <IconPopoverSlider
+            title="Volume"
+            icon={<SpeakerIcon />}
+            value={volume}
+            min={0}
+            max={1}
+            step={0.05}
+            displayValue={`${Math.round(volume * 100)}%`}
+            onChange={handleVolumeChange}
+          />
+          <button type="button" className="ab-round" title="Previous song" disabled={!musicState.groupId} onClick={() => skipTrack(-1, fadeMs, sessionId)}>
+            <SkipIcon direction="prev" />
+          </button>
+          <button
+            type="button"
+            className="ab-round ab-round--big"
+            title={musicState.playing ? 'Pause' : 'Play'}
+            disabled={!musicState.trackId}
+            onClick={() => togglePlayPause(fadeMs, sessionId)}
           >
-            <input type="checkbox" checked={broadcastEnabled} onChange={(e) => chooseBroadcastEnabled(e.target.checked)} />
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Broadcast to players</span>
-          </label>
+            {musicState.playing ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <button type="button" className="ab-round" title="Next song" disabled={!musicState.groupId} onClick={() => skipTrack(1, fadeMs, sessionId)}>
+            <SkipIcon direction="next" />
+          </button>
+          <IconPopoverSlider
+            title="Crossfade between songs"
+            icon={<CrossfadeIcon />}
+            value={fadeMs}
+            min={0}
+            max={MAX_FADE_MS}
+            step={FADE_STEP_MS}
+            displayValue={fadeMs === 0 ? 'Cut' : `${(fadeMs / 1000).toFixed(2)}s fade`}
+            onChange={setFadeMs}
+          />
+        </div>
+      </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6 }}>
-            {MUSIC_LIBRARY.map((group) => {
-              const active = musicState.groupId === group.id
-              const customTracks = getCustomTracks(group.id)
-              const isEmpty = group.tracks.length === 0 && customTracks.length === 0
+      <label className="ab-switch" title="On: everyone in your session hears the music and ambience with you. Off: it only plays here, for a table in one room.">
+        <input type="checkbox" checked={broadcastEnabled} onChange={(e) => chooseBroadcastEnabled(e.target.checked)} />
+        <span className="ab-switch-track" />
+        Players hear the music
+      </label>
+
+      <div className="ab-section">
+        <div className="ab-section-head">
+          <span>Moods</span>
+        </div>
+        <div className="ab-moods">
+          {moods.map((group) => {
+            const count = group.tracks.length + getCustomTracks(group.id).length
+            const isEmpty = count === 0
+            if (renaming === group.id)
               return (
-                <button
+                <RenameField
                   key={group.id}
-                  type="button"
-                  onClick={() => {
-                    if (isEmpty) return
-                    pickMood(group.id, fadeMs, sessionId)
+                  value={group.label}
+                  className="ab-mood-rename"
+                  onDone={(label) => {
+                    setRenaming(null)
+                    if (label) renameAudioGroup('mood', group.id, label)
                   }}
+                />
+              )
+            return (
+              <button
+                onContextMenu={(e) => {
+                  if (!group.own) return
+                  e.preventDefault()
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    items: [
+                      { label: 'Rename', onSelect: () => setRenaming(group.id) },
+                      { label: 'Delete mood and its songs', danger: true, onSelect: () => void deleteMood(group.id) }
+                    ]
+                  })
+                }}
+                key={group.id}
+                type="button"
+                data-mood={group.id}
+                className={[
+                  'ab-mood',
+                  musicState.groupId === group.id && 'ab-mood--on',
+                  isEmpty && 'ab-mood--empty',
+                  drop.dragging && dropTarget?.id === group.id && 'ab-mood--drop'
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() => {
+                  setViewGroup(group.id)
+                  if (isEmpty) void addSongs(group.id)
+                  else pickMood(group.id, fadeMs, sessionId)
+                }}
+                title={isEmpty ? `Add songs to ${group.label}` : `Play ${group.label}`}
+              >
+                <span className="ab-mood-name">{group.label}</span>
+                <span className="ab-mood-count">{isEmpty ? 'Add songs' : `${count} ${count === 1 ? 'song' : 'songs'}`}</span>
+              </button>
+            )
+          })}
+          <button type="button" className="ab-mood ab-mood--empty ab-mood--new" onClick={newMood} title="Make a mood of your own">
+            <span className="ab-mood-name">
+              <PlusSmallIcon /> New mood
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {shownGroup && (
+        <div className="ab-section">
+          <div className="ab-section-head">
+            <span>{shownGroup.label}</span>
+          </div>
+          {shownTracks.length > 0 && (
+            <div className="ab-tracks">
+              {shownTracks.map((track) => (
+                <div
+                  key={track.id}
+                  className={`ab-track${musicState.trackId === track.id ? ' ab-track--on' : ''}`}
                   onContextMenu={(e) => {
                     e.preventDefault()
-                    const items: ContextMenuState['items'] = []
-                    for (const track of group.tracks) {
-                      items.push({ label: track.title, onSelect: () => playSpecificTrack(track.id, fadeMs, sessionId) })
-                    }
-                    for (const track of customTracks) {
-                      items.push({ label: `${track.title} (custom)`, onSelect: () => playSpecificTrack(track.id, fadeMs, sessionId) })
-                    }
-                    items.push({ label: '+ Add custom track…', onSelect: () => void addCustomTrack(group.id) })
-                    for (const track of customTracks) {
-                      items.push({
-                        label: `Remove "${track.title}"`,
-                        danger: true,
-                        onSelect: () => void removeCustomTrack(group.id, track.id)
-                      })
-                    }
-                    setTrackMenu({ x: e.clientX, y: e.clientY, items })
-                  }}
-                  title={`${group.label} — right-click to pick a specific track or add your own`}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-subtle)',
-                    background: active ? 'var(--accent-subtle)' : 'transparent',
-                    color: active ? 'var(--accent-hover)' : isEmpty ? 'var(--text-muted)' : 'var(--text-primary)',
-                    fontSize: 13,
-                    fontWeight: active ? 700 : 400,
-                    cursor: isEmpty ? 'default' : 'pointer'
+                    setMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      items: [
+                        { label: 'Rename', onSelect: () => setRenaming(track.id) },
+                        ...(track.mine
+                          ? [{ label: 'Remove', danger: true, onSelect: () => void removeCustomTrack(shownGroup.id, track.id).catch(failed('remove it')) }]
+                          : isRenamed(track.id)
+                            ? [{ label: 'Use its original name', onSelect: () => setAudioName(track.id, null) }]
+                            : [])
+                      ]
+                    })
                   }}
                 >
-                  {group.label}
-                </button>
-              )
-            })}
-          </div>
+                  {renaming === track.id ? (
+                    <RenameField
+                      value={track.title}
+                      onDone={(title) => {
+                        setRenaming(null)
+                        if (!title) return
+                        if (track.mine) void renameCustomTrack(shownGroup.id, track.id, title).catch(failed('rename it'))
+                        else setAudioName(track.id, title)
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="ab-track-play"
+                      onClick={() => playSpecificTrack(track.id, fadeMs, sessionId)}
+                      title={`Play ${track.title} (right-click to rename)`}
+                    >
+                      <PlayIcon size={11} />
+                      <span>{track.title}</span>
+                    </button>
+                  )}
+                  {track.mine && <span className="ab-mine">Yours</span>}
+                  {track.mine && (
+                    <button
+                      type="button"
+                      className="ab-x"
+                      onClick={() => void removeCustomTrack(shownGroup.id, track.id).catch(failed('remove it'))}
+                      title={`Remove ${track.title}`}
+                      aria-label={`Remove ${track.title}`}
+                    >
+                      <XSmallIcon />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <button type="button" className="ab-add" onClick={() => void addSongs(shownGroup.id)}>
+            <PlusSmallIcon />
+            Add your own songs to {shownGroup.label}
+          </button>
+          <span className="ab-hint">Or drop audio files anywhere here. Players hear your songs too.</span>
+        </div>
+      )}
 
-          <div
-            style={{
-              textAlign: 'center',
-              fontSize: 14,
-              fontWeight: 600,
-              color: nowPlayingTrack ? 'var(--text-primary)' : 'var(--text-muted)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {nowPlayingTrack ? nowPlayingTrack.title : 'Nothing playing'}
+      {musicState.groupId && ambientLayersFor(musicState.groupId).length > 0 && (
+        <div className="ab-section">
+          <div className="ab-section-head">
+            <span>Ambience</span>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            <IconPopoverSlider
-              title="Volume"
-              icon={<SpeakerIcon />}
-              value={volume}
-              min={0}
-              max={1}
-              step={0.05}
-              displayValue={`${Math.round(volume * 100)}%`}
-              onChange={handleVolumeChange}
-            />
-            <TransportButton
-              title="Previous track in this mood"
-              disabled={!musicState.groupId}
-              onClick={() => skipTrack(-1, fadeMs, sessionId)}
-            >
-              <SkipIcon direction="prev" />
-            </TransportButton>
-            <TransportButton
-              title={musicState.playing ? 'Pause' : 'Play'}
-              disabled={!musicState.trackId}
-              onClick={() => togglePlayPause(fadeMs, sessionId)}
-              large
-            >
-              {musicState.playing ? <PauseIcon /> : <PlayIcon />}
-            </TransportButton>
-            <TransportButton
-              title="Next track in this mood"
-              disabled={!musicState.groupId}
-              onClick={() => skipTrack(1, fadeMs, sessionId)}
-            >
-              <SkipIcon direction="next" />
-            </TransportButton>
-            <IconPopoverSlider
-              title="Crossfade"
-              icon={<CrossfadeIcon />}
-              value={fadeMs}
-              min={0}
-              max={MAX_FADE_MS}
-              step={FADE_STEP_MS}
-              displayValue={fadeMs === 0 ? 'Cut' : `${(fadeMs / 1000).toFixed(2)}s`}
-              onChange={setFadeMs}
-            />
-          </div>
-
-          {musicState.groupId &&
-            (() => {
-              const groupId = musicState.groupId
-              const layers = ambientLayersFor(groupId)
-              if (layers.length === 0) return null
+          <div className="ab-layers">
+            {ambientLayersFor(musicState.groupId).map((layer) => {
+              const groupId = musicState.groupId!
+              const activeIndex = closestAmbientLevelIndex(ambientLevels[`${groupId}:${layer.id}`] ?? 0)
               return (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                    paddingTop: 'var(--space-2)',
-                    borderTop: '1px solid var(--border-subtle)'
-                  }}
-                >
-                  <span className="gb-label" style={{ margin: 0 }}>
-                    Ambient
-                  </span>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', columnGap: 10, rowGap: 6 }}>
-                    {layers.map((layer) => {
-                      const level = ambientLevels[`${groupId}:${layer.id}`] ?? 0
-                      const activeIndex = closestAmbientLevelIndex(level)
-                      return (
-                        <div key={layer.id} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                          <span
-                            title={layer.label}
-                            style={{
-                              fontSize: 12,
-                              color: 'var(--text-secondary)',
-                              flex: 1,
-                              minWidth: 0,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {layer.label}
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'flex-end', flexShrink: 0 }}>
-                            {AMBIENT_LEVELS.map((stepLevel, i) => {
-                              const filled = i <= activeIndex
-                              return (
-                                // The visible bar was also the whole click target — easy to miss,
-                                // especially for the shorter early bars. The button itself is now
-                                // a much bigger, uniform hit box (18x22, no gap between them so they
-                                // tile edge-to-edge with no dead space), and the bar itself is now
-                                // wide enough to fill most of that box too (just a hairline gap
-                                // between bars, via the button's own side padding) instead of
-                                // floating as a thin sliver in the middle of empty space.
-                                <button
-                                  key={i}
-                                  type="button"
-                                  title={`${Math.round(stepLevel * 100)}%`}
-                                  onClick={() => handleAmbientChange(groupId, layer.id, layer.url, stepLevel)}
-                                  style={{
-                                    width: 18,
-                                    height: 22,
-                                    padding: '0 1px',
-                                    display: 'flex',
-                                    alignItems: 'flex-end',
-                                    justifyContent: 'center',
-                                    border: 'none',
-                                    background: 'transparent',
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      display: 'block',
-                                      width: '100%',
-                                      height: 6 + i * 3,
-                                      borderRadius: 2,
-                                      border: `1px solid ${filled ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                                      background: filled ? 'var(--accent)' : 'transparent',
-                                      transition: 'background 0.15s ease, border-color 0.15s ease'
-                                    }}
-                                  />
-                                </button>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
+                <div key={layer.id} className="ab-layer">
+                  <span title={layer.label}>{layer.label}</span>
+                  <div className="ab-levels">
+                    {AMBIENT_LEVELS.map((stepLevel, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        title={`${layer.label}: ${stepLevel === 0 ? 'off' : `${Math.round(stepLevel * 100)}%`}`}
+                        onClick={() => handleAmbientChange(groupId, layer.id, layer.url, stepLevel)}
+                      >
+                        <i className={i > 0 && i <= activeIndex ? 'ab-on' : undefined} style={{ height: 5 + i * 3 }} />
+                      </button>
+                    ))}
                   </div>
                 </div>
               )
-            })()}
-
-          <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-muted)' }}>Music by alkakrab</div>
+            })}
+          </div>
         </div>
-      <ContextMenu state={trackMenu} onClose={() => setTrackMenu(null)} />
-    </>
+      )}
+
+      <div className="ab-hint" style={{ textAlign: 'center' }}>
+        Music by alkakrab
+      </div>
+
+      {drop.dragging && <div className="ab-drop">Drop to add to {dropTarget?.label ?? 'Your music'}</div>}
+      {toast && (
+        <div className="ab-toast" role="status">
+          {toast}
+        </div>
+      )}
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
+    </div>
   )
 }
 
-/**
- * A round icon button that opens a small vertical slider above itself —
- * used for Volume and Crossfade, which used to each be a full-width
- * horizontal row taking up space even when nobody needed to touch them.
- * Closes on an outside click, same pattern as the panel itself.
- */
+/** A name edited in place: Enter or clicking away keeps it, Escape leaves it as it was (`onDone(null)`). */
+export function RenameField({ value, onDone, className }: { value: string; onDone: (title: string | null) => void; className?: string }): JSX.Element {
+  const [draft, setDraft] = useState(value)
+  const done = useRef(false)
+  const finish = (title: string | null): void => {
+    if (done.current) return
+    done.current = true
+    const name = title?.trim()
+    onDone(name && name !== value ? name : null)
+  }
+  return (
+    <input
+      className={`gb-input ab-rename${className ? ` ${className}` : ''}`}
+      value={draft}
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => finish(draft)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') finish(draft)
+        if (e.key === 'Escape') finish(null)
+      }}
+      aria-label="New name"
+    />
+  )
+}
+
+/** A round button that opens a small vertical slider above itself (volume, crossfade). Closes on a click elsewhere. */
 function IconPopoverSlider({
   title,
   icon,
@@ -482,26 +599,12 @@ function IconPopoverSlider({
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <TransportButton title={title} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="ab-round" title={title} onClick={() => setOpen((o) => !o)}>
         {icon}
-      </TransportButton>
+      </button>
       {open && (
-        <div
-          className="gb-card"
-          style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 8px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: 'var(--space-2) var(--space-3)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 6,
-            zIndex: 30
-          }}
-        >
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{displayValue}</span>
+        <div className="gb-card ab-slider-pop">
+          <span>{displayValue}</span>
           <input
             className="gb-slider gb-slider--vertical"
             type="range"
@@ -510,6 +613,7 @@ function IconPopoverSlider({
             step={step}
             value={value}
             onChange={(e) => onChange(Number(e.target.value))}
+            aria-label={title}
           />
         </div>
       )}
@@ -517,50 +621,10 @@ function IconPopoverSlider({
   )
 }
 
-function TransportButton({
-  title,
-  disabled,
-  onClick,
-  large,
-  children
-}: {
-  title: string
-  disabled?: boolean
-  onClick: () => void
-  large?: boolean
-  children: ReactNode
-}): JSX.Element {
-  const size = large ? 44 : 36
+function PlayIcon({ size = 17 }: { size?: number }): JSX.Element {
   return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      style={{
-        width: size,
-        height: size,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '50%',
-        border: '1px solid var(--border-subtle)',
-        background: large ? 'var(--accent-subtle)' : 'transparent',
-        color: disabled ? 'var(--text-muted)' : large ? 'var(--accent-hover)' : 'var(--text-secondary)',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        flexShrink: 0
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-function PlayIcon(): JSX.Element {
-  return (
-    <svg width="17" height="17" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-      <path d="M2.5 1.5v9l7-4.5-7-4.5Z" />
+    <svg width={size} height={size} viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M3 1.5v9l7-4.5-7-4.5Z" />
     </svg>
   )
 }
@@ -568,32 +632,24 @@ function PlayIcon(): JSX.Element {
 function PauseIcon(): JSX.Element {
   return (
     <svg width="17" height="17" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-      <rect x="2.5" y="1.5" width="2.5" height="9" />
-      <rect x="7" y="1.5" width="2.5" height="9" />
+      <rect x="2.5" y="1.5" width="2.5" height="9" rx="0.6" />
+      <rect x="7" y="1.5" width="2.5" height="9" rx="0.6" />
     </svg>
   )
 }
 
 function SkipIcon({ direction }: { direction: 'prev' | 'next' }): JSX.Element {
-  const flip = direction === 'prev'
   return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 12 12"
-      fill="currentColor"
-      aria-hidden="true"
-      style={{ transform: flip ? 'scaleX(-1)' : undefined }}
-    >
+    <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" style={{ transform: direction === 'prev' ? 'scaleX(-1)' : undefined }}>
       <path d="M1.5 1.5v9l6-4.5-6-4.5Z" />
-      <rect x="8.2" y="1.5" width="1.8" height="9" />
+      <rect x="8.2" y="1.5" width="1.8" height="9" rx="0.5" />
     </svg>
   )
 }
 
 function SpeakerIcon(): JSX.Element {
   return (
-    <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M1.5 6h2.8l3.7-3v10l-3.7-3H1.5V6Z" fill="currentColor" stroke="none" />
       <path d="M10.5 5.2c1 .8 1 5.8 0 6.6" />
       <path d="M12.5 3.3c2.3 2.3 2.3 7.1 0 9.4" />
@@ -601,12 +657,28 @@ function SpeakerIcon(): JSX.Element {
   )
 }
 
-/** Two overlapping shapes handing off to each other — stands in for "crossfade" the same way a Venn diagram reads as "blend of two things" at a glance. */
+/** Two overlapping circles: one song blending into the next. */
 function CrossfadeIcon(): JSX.Element {
   return (
-    <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <circle cx="6" cy="8" r="4.5" fill="currentColor" opacity="0.55" />
       <circle cx="10" cy="8" r="4.5" fill="currentColor" opacity="0.55" />
+    </svg>
+  )
+}
+
+export function PlusSmallIcon(): JSX.Element {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 2v8M2 6h8" />
+    </svg>
+  )
+}
+
+export function XSmallIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <path d="M3 3l6 6M9 3l-6 6" />
     </svg>
   )
 }

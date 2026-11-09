@@ -12,6 +12,15 @@ import { srdPack } from '@shared/content/srd'
 import { VehiclesPanel } from '../features/vehicles/VehiclesPanel'
 import { VehicleEditor } from '../features/workshop/form/vehicle'
 import { CombatView } from '../features/combat/CombatView'
+import { MusicPanel } from '../features/audio/MusicPanel'
+import { Bestiary } from '../features/bestiary/Bestiary'
+import { AccountButton } from '../features/account/AccountSettingsButton'
+import { ChatPanel } from '../features/chat/ChatPanel'
+import { FriendsPanel } from '../features/friends/FriendsPanel'
+import { ContentPacksModal } from '../features/content/ContentPacksModal'
+import { newPackDraft } from '@shared/content/workshop'
+import { contentPackSchema } from '@shared/content/schema'
+import { SoundBoardPanel } from '../features/audio/SoundBoardPanel'
 import { CharacterCreator } from '../features/player/creator/CharacterCreator'
 import { InitiativeTracker } from '../features/campaigns/InitiativeTracker'
 import { useVehicles } from '../features/vehicles/useVehicles'
@@ -272,9 +281,93 @@ const battleMapApi = {
 // The DM's own characters (for test players): just the sample.
 const charactersApi = { list: async () => ({ ok: true, data: [sample] }), setPlayerHp: async () => {}, onHpFromDm: noop, onPlayerCharacterChanged: noop, getPlayerCharacter: async () => ({ ok: true, data: null }) }
 const initiativeApi = { onUpdate: noop, broadcast: async () => {}, setMine: async () => {}, onPlayerInitiative: noop, onPlayerSet: noop }
+// ?audio: the music player and sound board, with your own songs and sounds kept in memory.
+const customAudio: Record<string, { id: string; title: string }[]> = { soundboard: [{ id: 'my1', title: 'Dragon roar (mine)' }] }
+let audioSeq = 0
+const addAudio = (groupId: string, titles: string[]): { id: string; title: string }[] => {
+  const added = titles.map((title) => ({ id: `my-${++audioSeq}`, title }))
+  customAudio[groupId] = [...(customAudio[groupId] ?? []), ...added]
+  return added
+}
+const musicApi = {
+  broadcast: async () => {},
+  onChange: () => () => {},
+  broadcastVolume: async () => {},
+  onVolumeChange: () => () => {},
+  listCustom: async () => customAudio,
+  addCustomTrack: async (groupId: string) => addAudio(groupId, ['Picked song']),
+  addCustomFiles: async (groupId: string, files: File[]) => addAudio(groupId, files.filter((f) => /\.(mp3|wav|ogg|m4a|flac)$/i.test(f.name)).map((f) => f.name.replace(/\.[^.]+$/, ''))),
+  renameCustomTrack: async (groupId: string, id: string, title: string) => {
+    customAudio[groupId] = (customAudio[groupId] ?? []).map((t) => (t.id === id ? { ...t, title } : t))
+  },
+  removeCustomTrack: async (groupId: string, id: string) => {
+    customAudio[groupId] = (customAudio[groupId] ?? []).filter((t) => t.id !== id)
+  }
+}
+// ?friends and ?packs: a few friends, a request, and two packs (one on for the campaign).
+const relayApi = {
+  status: async () => 'connected',
+  getAvatar: async () => null,
+  setAvatar: async () => ({ ok: true, data: undefined }),
+  onFriendsChanged: () => () => {},
+  onNotificationsChanged: () => () => {},
+  notifications: { list: async () => ({ ok: true, data: [] }) },
+  messages: { list: async () => ({ ok: true, data: [] }), markRead: async () => ({ ok: true, data: undefined }), onMessage: () => () => {}, send: async () => ({ ok: true, data: undefined }) },
+  friends: {
+    list: async () => ({
+      ok: true,
+      data: [
+        { userId: 'f1', username: 'Sam', online: true, hostingSessionId: 'host-1', avatar: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#3f7fc9"/><circle cx="5" cy="4" r="2" fill="#fde"/><rect x="2" y="7" width="6" height="4" rx="2" fill="#fde"/></svg>')}` },
+        { userId: 'f2', username: 'Ollie', online: true },
+        { userId: 'f3', username: 'Priya', online: false },
+        { userId: 'f4', username: 'Marcus', online: false }
+      ]
+    }),
+    listRequests: async () => ({ ok: true, data: [{ userId: 'r1', username: 'Jun' }] }),
+    sendRequest: async () => ({ ok: true, data: { status: 'requested' } }),
+    accept: async () => ({ ok: true, data: undefined }),
+    decline: async () => ({ ok: true, data: undefined }),
+    remove: async () => ({ ok: true, data: undefined })
+  }
+}
+// ?account and ?messages: who you are, and a party chat with a few lines.
+const identityApi = {
+  getCurrent: async () => ({ id: 'me', displayName: 'Kian' }),
+  hasRemembered: async () => true,
+  updateDisplayName: async (name: string) => ({ ok: true, identity: { id: 'me', displayName: name } }),
+  changePassword: async () => ({ ok: true }),
+  remember: async () => ({ ok: true }),
+  signOut: async () => {}
+}
+const chatLines = [
+  ['u2', 'Sam', 'Is everyone ready? The docks are just ahead.'],
+  ['u2', 'Sam', 'I’ll take point.'],
+  ['me', 'Kian', 'Ready. Elowen has her bow out.'],
+  ['u3', 'Ollie', 'Wait, did anyone pick up the lantern?'],
+  ['me', 'Kian', 'Oops.']
+].map(([senderUserId, senderDisplayName, body], i) => ({ id: `m${i}`, campaignId: 'camp', channel: 'party', senderUserId, senderDisplayName, body, createdAt: new Date(Date.now() - (5 - i) * 60000).toISOString() }))
+const messagesApi = {
+  list: async () => ({ ok: true, data: chatLines }),
+  onMessage: () => () => {},
+  send: async () => ({ ok: true, data: chatLines[0] })
+}
+const samplePack = (id: string, name: string, author: string, description: string) =>
+  contentPackSchema.parse({ ...newPackDraft(name, author, []), id, version: '1.2.0', description })
+const packsApi = {
+  list: async () => ({
+    ok: true,
+    data: [
+      { pack: samplePack('northern-lands', 'The Northern Lands', 'Kian', 'Frost giants, ice witches and the clans of the far north.'), createdAt: '', updatedAt: '' },
+      { pack: samplePack('arcane-academy', 'Arcane Academy', 'Sam', 'Wizard schools, new spells and student backgrounds.'), createdAt: '', updatedAt: '' }
+    ]
+  })
+}
+const campaignPacksApi = {
+  list: async () => ({ ok: true, data: [{ pack: samplePack('northern-lands', 'The Northern Lands', 'Kian', 'Frost giants, ice witches and the clans of the far north.'), enabledAt: '' }] })
+}
 ;(window as unknown as { goblin: unknown }).goblin = new Proxy(
   {},
-  { get: (_t, key) => (key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : base[key]) }
+  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : base[key]) }
 )
 
 // A demo pack with a starship, for the vehicles preview's "Add a vehicle".
@@ -382,7 +475,40 @@ applyFont(getStoredFontId())
 applyFontScale(getStoredFontScale())
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    {new URLSearchParams(location.search).has('creator') ? (
+    {new URLSearchParams(location.search).has('account') ? (
+      <div style={{ padding: 16, background: 'var(--bg-canvas)', minHeight: '100vh' }}>
+        <AccountButton displayName="Kian" />
+      </div>
+    ) : new URLSearchParams(location.search).has('messages') ? (
+      <div style={{ padding: 16, background: 'var(--bg-canvas)', minHeight: '100vh' }}>
+        <div className="gb-card" style={{ width: 340, height: 460, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <ChatPanel campaignId="camp" sessionId={null} myUserId="me" />
+        </div>
+      </div>
+    ) : new URLSearchParams(location.search).has('codex') ? (
+      <div style={{ padding: 16, background: 'var(--bg-canvas)', minHeight: '100vh' }}>
+        <div className="gb-card" style={{ width: 1000, height: 640, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Bestiary embedded />
+        </div>
+      </div>
+    ) : new URLSearchParams(location.search).has('friends') ? (
+      <div style={{ padding: 16, background: 'var(--bg-canvas)', minHeight: '100vh' }}>
+        <div className="gb-card" style={{ width: 320, height: 440, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <FriendsPanel mode="player" hostedSessionId={null} onJoinedSession={() => {}} invitedSessionIds={new Set(['host-1'])} connectedLabel="Sam's Table" activeCampaignName="The Sunken Crypt" onResync={() => {}} />
+        </div>
+      </div>
+    ) : new URLSearchParams(location.search).has('packs') ? (
+      <ContentPacksModal onClose={() => {}} campaign={{ id: 'camp', name: 'The Sunken Crypt' }} role="dm" />
+    ) : new URLSearchParams(location.search).has('audio') ? (
+      <div style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'flex-start', background: 'var(--bg-canvas)', minHeight: '100vh' }}>
+        <div className="gb-card" style={{ width: 352, height: 640, padding: 0, overflow: 'hidden' }}>
+          <MusicPanel sessionId={null} />
+        </div>
+        <div className="gb-card" style={{ width: 320, height: 520, padding: 0, overflow: 'hidden' }}>
+          <SoundBoardPanel sessionId={null} />
+        </div>
+      </div>
+    ) : new URLSearchParams(location.search).has('creator') ? (
       <div style={{ height: '100vh', display: 'flex' }}>
         <CharacterCreator initial={new URLSearchParams(location.search).has('edit') ? sample : null} onCreate={(name, sheet) => console.log('created', name, sheet)} onClose={() => console.log('closed')} />
       </div>

@@ -1,0 +1,220 @@
+/* The Friends panel. Theme tokens only. */
+
+.fr {
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fr-small {
+  font-size: 12px;
+  padding: 5px 12px;
+  flex-shrink: 0;
+}
+.fr-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.fr-dot--on {
+  background: var(--success);
+}
+
+.fr-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.fr-status--down {
+  color: var(--danger);
+}
+.fr-status--down .fr-dot {
+  background: var(--danger);
+}
+
+.fr-playing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--success) 45%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--success) 8%, var(--bg-surface));
+}
+.fr-playing-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fr-playing-text strong {
+  color: var(--text-primary);
+}
+
+.fr-add {
+  display: flex;
+  gap: 6px;
+}
+.fr-add-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+}
+.fr-add-field:focus-within {
+  border-color: var(--accent);
+}
+.fr-add-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+.fr-msg {
+  margin: -6px 0 0;
+  font-size: 12px;
+}
+.fr-msg--good {
+  color: var(--success);
+}
+.fr-msg--bad {
+  color: var(--danger);
+}
+
+.fr-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fr-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+.fr-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.fr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 4px;
+  border-radius: var(--radius-sm);
+}
+.fr-row:hover {
+  background: var(--bg-sunken);
+}
+.fr-row--request {
+  border: 1px solid var(--accent);
+  background: var(--accent-subtle);
+}
+.fr-row--offline .fr-avatar {
+  opacity: 0.55;
+}
+.fr-avatar {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  font-size: 13px;
+  font-weight: 700;
+}
+.fr-avatar i {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 2px solid var(--bg-surface);
+}
+.fr-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fr-name strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fr-name small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.fr-row:not(.fr-row--offline) .fr-name small {
+  color: var(--success);
+}
+.fr-remove,
+.gb-btn.fr-remove {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 11px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0;
+}
+.fr-row:hover .fr-remove,
+.fr-remove:focus-visible {
+  opacity: 1;
+}
+.fr-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 12px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.fr-empty strong {
+  font-size: 13px;
+  color: var(--text-secondary);
+}

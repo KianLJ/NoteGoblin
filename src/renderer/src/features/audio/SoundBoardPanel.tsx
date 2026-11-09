@@ -1,198 +1,263 @@
-import { useMemo, useState } from 'react'
-import { SFX_LIBRARY, type SfxCue } from '../../data/sfxLibrary'
-import { playSfxCue } from './sfxBoardEngine'
+import { useEffect, useMemo, useState } from 'react'
+import { SFX_LIBRARY } from '../../data/sfxLibrary'
+import { playSfxCue, rememberRecentSfx } from './sfxBoardEngine'
 import { getStoredSfxBoardBroadcastEnabled, setSfxBoardBroadcastEnabled } from './soundSettings'
+import { addCustomFiles, addCustomTrack, ensureCustomMusicLoaded, getCustomTracks, removeCustomTrack, renameCustomTrack, subscribeCustomMusic, YOUR_SOUNDS_GROUP } from './customMusicStore'
+import { useAudioDrop } from './useAudioDrop'
+import { audioName, isRenamed, setAudioName, subscribeAudioNames } from './audioNames'
+import { audioGroups, createAudioGroup, deleteAudioGroup, renameAudioGroup, sfxGroupFor, subscribeAudioGroups } from './audioGroups'
+import { PlusSmallIcon, RenameField, XSmallIcon } from './MusicPanel'
+import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
+import './audio.css'
 
 interface SoundBoardPanelProps {
   /** The DM's hosted session id — null while not hosting, in which case a cue always plays locally-only regardless of the broadcast toggle below (nobody's connected to receive it anyway). */
   sessionId: string | null
 }
 
-/** DM-only canvas tool — a searchable, categorized board of one-shot combat/magic/creature cues (see sfxLibrary.ts). Clicking a cue plays it immediately and (while hosting with broadcasting on) tells every connected player to play the same one. */
+const YOURS = 'yours'
+
+interface Category {
+  id: string
+  label: string
+  /** Where your own sounds in it are kept. */
+  group: string
+  /** Built-in sounds in it. */
+  cues: { id: string; label: string }[]
+  /** One you made: can be renamed or deleted. */
+  own?: boolean
+}
+
+interface Pad {
+  id: string
+  label: string
+  sub?: string
+  /** Set for your own sounds: the group they're kept in. */
+  group?: string
+}
+
+/** DM-only — one-shot sounds as pads, by category. Add your own to any category (or a category of your own) by button or by dropping files; right-click to rename. Hitting a pad plays it here and, with "Players hear" on, for everyone in the session. */
 export function SoundBoardPanel({ sessionId }: SoundBoardPanelProps): JSX.Element {
   const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [broadcastEnabled, setBroadcastEnabledState] = useState(() => getStoredSfxBoardBroadcastEnabled())
+  const [, setTick] = useState(0)
+  const [hit, setHit] = useState<{ id: string; n: number } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  // A pad or a category chip being renamed, by id.
+  const [renaming, setRenaming] = useState<string | null>(null)
+  useEffect(() => {
+    const bump = (): void => setTick((t) => t + 1)
+    const offs = [subscribeCustomMusic(bump), subscribeAudioNames(bump), subscribeAudioGroups(bump)]
+    void ensureCustomMusicLoaded()
+    return () => offs.forEach((off) => off())
+  }, [])
 
-  const totalCues = useMemo(() => SFX_LIBRARY.reduce((sum, c) => sum + c.cues.length, 0), [])
+  const builtIn = useMemo(() => SFX_LIBRARY.map((c) => ({ id: c.id, label: c.label, cues: c.cues.map((cue) => ({ id: cue.id, label: cue.label })) })), [])
+  const categories: Category[] = [
+    { id: YOURS, label: 'Yours', group: YOUR_SOUNDS_GROUP, cues: [] },
+    ...audioGroups('sfx').map((g) => ({ id: g.id, label: g.label, group: sfxGroupFor(g.id), cues: [], own: true })),
+    // Built-in categories with nothing in them yet (built-in or yours) stay out of the way.
+    ...builtIn.map((c) => ({ ...c, group: sfxGroupFor(c.id) })).filter((c) => c.cues.length > 0 || getCustomTracks(c.group).length > 0)
+  ]
+  const [categoryId, setCategoryId] = useState<string>(() => (getCustomTracks(YOUR_SOUNDS_GROUP).length > 0 ? YOURS : (builtIn.find((c) => c.cues.length > 0)?.id ?? YOURS)))
+  const category = categories.find((c) => c.id === categoryId) ?? categories[0]
 
-  function toggleCategory(id: string): void {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  const padsOf = (c: Category, withSub = false): Pad[] => [
+    ...c.cues.map((cue) => ({ id: cue.id, label: audioName(cue.id, cue.label), sub: withSub ? c.label : undefined })),
+    ...getCustomTracks(c.group).map((t) => ({ id: t.id, label: t.title, sub: withSub ? c.label : undefined, group: c.group }))
+  ]
+
+  function flash(message: string): void {
+    setToast(message)
+    setTimeout(() => setToast((t) => (t === message ? null : t)), 3000)
+  }
+  // A save that fails (the app not restarted since an update, a file gone) says so instead of quietly doing nothing.
+  const failed =
+    (what: string) =>
+    (e: unknown): void =>
+      flash(`Couldn't ${what}: ${e instanceof Error ? e.message : String(e)}`)
+
+  async function addSounds(files?: File[]): Promise<void> {
+    const target = category
+    try {
+      const n = files ? await addCustomFiles(target.group, files) : await addCustomTrack(target.group)
+      if (files && n === 0) flash("Those weren't audio files (mp3, wav, ogg, m4a or flac)")
+      else if (n > 0) flash(`Added ${n} ${n === 1 ? 'sound' : 'sounds'} to ${target.label}`)
+      setQuery('')
+    } catch (e) {
+      failed('add those')(e)
+    }
+  }
+  const drop = useAudioDrop((files) => void addSounds(files))
+
+  function newCategory(): void {
+    const group = createAudioGroup('sfx', 'New category')
+    setCategoryId(group.id)
+    setQuery('')
+    setRenaming(group.id)
   }
 
-  function handlePlay(cue: SfxCue): void {
-    playSfxCue(cue.id, sessionId)
+  async function deleteCategory(c: Category): Promise<void> {
+    try {
+      for (const t of getCustomTracks(c.group)) await removeCustomTrack(c.group, t.id)
+      deleteAudioGroup('sfx', c.id)
+      if (categoryId === c.id) setCategoryId(YOURS)
+    } catch (e) {
+      failed('delete it')(e)
+    }
   }
 
-  const trimmedQuery = query.trim().toLowerCase()
-  const searching = trimmedQuery.length > 0
+  const q = query.trim().toLowerCase()
+  const pads: Pad[] = q ? categories.flatMap((c) => padsOf(c, true)).filter((p) => p.label.toLowerCase().includes(q)) : padsOf(category)
 
-  // While searching, every matching cue across every category — flattened,
-  // since hunting through collapsed sections defeats the point of typing a
-  // search in the first place.
-  const searchResults: { cue: SfxCue; categoryLabel: string }[] = searching
-    ? SFX_LIBRARY.flatMap((category) =>
-        category.cues.filter((cue) => cue.label.toLowerCase().includes(trimmedQuery)).map((cue) => ({ cue, categoryLabel: category.label }))
-      )
-    : []
+  function play(id: string): void {
+    playSfxCue(id, sessionId)
+    rememberRecentSfx(id)
+    // A new key each time restarts the flash, even on the same pad.
+    setHit((h) => ({ id, n: (h?.n ?? 0) + 1 }))
+  }
 
   return (
-        <div
-          style={{
-            minHeight: 0,
-            overflow: 'hidden',
-            padding: 'var(--space-3) var(--space-4)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-3)'
+    <div className="ab-panel" {...drop.handlers}>
+      <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sounds…" className="gb-input ab-search" aria-label="Search sounds" />
+
+      <label className="ab-switch" title="On: everyone in your session hears the sounds you play. Off: they only play here, for a table in one room.">
+        <input
+          type="checkbox"
+          checked={broadcastEnabled}
+          onChange={(e) => {
+            setSfxBoardBroadcastEnabled(e.target.checked)
+            setBroadcastEnabledState(e.target.checked)
           }}
-        >
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{totalCues} cues</span>
+        />
+        <span className="ab-switch-track" />
+        Players hear the sounds
+      </label>
 
-          <label
-            title="On: every connected player hears the same cue you trigger. Off: it only plays from this device — for playing in person around one table."
-            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-          >
-            <input
-              type="checkbox"
-              checked={broadcastEnabled}
-              onChange={(e) => {
-                setSfxBoardBroadcastEnabled(e.target.checked)
-                setBroadcastEnabledState(e.target.checked)
-              }}
-            />
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Broadcast to players</span>
-          </label>
-
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search cues…"
-            className="gb-input"
-            style={{ width: '100%' }}
-          />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', flex: 1, minHeight: 0 }}>
-            {searching ? (
-              searchResults.length === 0 ? (
-                <span style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 2px' }}>No cues match &ldquo;{query}&rdquo;</span>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 2 }}>
-                  {searchResults.map(({ cue, categoryLabel }) => (
-                    <CueRow key={cue.id} cue={cue} sublabel={categoryLabel} onPlay={() => handlePlay(cue)} />
-                  ))}
-                </div>
-              )
+      {!q && (
+        <div className="ab-chips" role="tablist" aria-label="Sound categories">
+          {categories.map((c) =>
+            renaming === c.id ? (
+              <RenameField
+                key={c.id}
+                value={c.label}
+                className="ab-chip-rename"
+                onDone={(label) => {
+                  setRenaming(null)
+                  if (label) renameAudioGroup('sfx', c.id, label)
+                }}
+              />
             ) : (
-              SFX_LIBRARY.map((category) => {
-                const isOpen = expanded.has(category.id)
-                const isEmpty = category.cues.length === 0
-                return (
-                  <div key={category.id}>
-                    <button
-                      type="button"
-                      onClick={() => !isEmpty && toggleCategory(category.id)}
-                      disabled={isEmpty}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '7px 4px',
-                        background: 'none',
-                        border: 'none',
-                        borderBottom: '1px solid var(--border-subtle)',
-                        cursor: isEmpty ? 'default' : 'pointer',
-                        color: isEmpty ? 'var(--text-muted)' : 'var(--text-primary)'
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
-                        {!isEmpty && <ChevronIcon open={isOpen} />}
-                        {category.label}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{category.cues.length}</span>
-                    </button>
-                    {isEmpty && (
-                      <div style={{ padding: '6px 4px 10px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                        No cues yet — drop MP3s into <code>assets/soundboard/{category.id}</code>
-                      </div>
-                    )}
-                    {!isEmpty && isOpen && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2, padding: '4px 0 8px' }}>
-                        {category.cues.map((cue) => (
-                          <CueRow key={cue.id} cue={cue} onPlay={() => handlePlay(cue)} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            )}
-          </div>
+              <button
+                key={c.id}
+                type="button"
+                role="tab"
+                aria-selected={category.id === c.id}
+                className={`ab-chip${category.id === c.id ? ' ab-chip--on' : ''}`}
+                onClick={() => setCategoryId(c.id)}
+                onContextMenu={(e) => {
+                  if (!c.own) return
+                  e.preventDefault()
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    items: [
+                      { label: 'Rename', onSelect: () => setRenaming(c.id) },
+                      { label: 'Delete category and its sounds', danger: true, onSelect: () => void deleteCategory(c) }
+                    ]
+                  })
+                }}
+                title={c.own ? `${c.label} (right-click to rename or delete)` : c.label}
+              >
+                {c.label}
+              </button>
+            )
+          )}
+          <button type="button" className="ab-chip ab-chip--new" onClick={newCategory} title="Make a category for your own sounds">
+            <PlusSmallIcon />
+            New
+          </button>
         </div>
-  )
-}
+      )}
 
-function CueRow({ cue, sublabel, onPlay }: { cue: SfxCue; sublabel?: string; onPlay: () => void }): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onPlay}
-      title={`Play "${cue.label}"`}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        width: '100%',
-        textAlign: 'left',
-        padding: '6px 8px',
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid transparent',
-        background: 'transparent',
-        color: 'var(--text-primary)',
-        fontSize: 13,
-        cursor: 'pointer'
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-sunken)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-    >
-      <PlayPadIcon />
-      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cue.label}</span>
-      {sublabel && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{sublabel}</span>}
-    </button>
-  )
-}
+      {q && pads.length === 0 ? (
+        <div className="ab-empty">No sounds match “{query}”</div>
+      ) : (
+        <div className="ab-pads">
+          {pads.map((pad) => (
+            <div
+              key={pad.id}
+              className="ab-pad-wrap"
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  items: [
+                    { label: 'Rename', onSelect: () => setRenaming(pad.id) },
+                    ...(pad.group
+                      ? [{ label: 'Remove', danger: true, onSelect: () => void removeCustomTrack(pad.group!, pad.id).catch(failed('remove it')) }]
+                      : isRenamed(pad.id)
+                        ? [{ label: 'Use its original name', onSelect: () => setAudioName(pad.id, null) }]
+                        : [])
+                  ]
+                })
+              }}
+            >
+              {renaming === pad.id ? (
+                <RenameField
+                  value={pad.label}
+                  onDone={(title) => {
+                    setRenaming(null)
+                    if (!title) return
+                    if (pad.group) void renameCustomTrack(pad.group, pad.id, title).catch(failed('rename it'))
+                    else setAudioName(pad.id, title)
+                  }}
+                />
+              ) : (
+                <button
+                  key={hit?.id === pad.id ? hit.n : 0}
+                  type="button"
+                  className={['ab-pad', pad.group && 'ab-pad--mine', hit?.id === pad.id && 'ab-pad--hit'].filter(Boolean).join(' ')}
+                  onClick={() => play(pad.id)}
+                  title={`Play ${pad.label} (right-click to rename)`}
+                >
+                  <span className="ab-pad-label">{pad.label}</span>
+                  {pad.sub && <span className="ab-pad-sub">{pad.sub}</span>}
+                </button>
+              )}
+              {pad.group && renaming !== pad.id && (
+                <button
+                  type="button"
+                  className="ab-x"
+                  aria-label={`Remove ${pad.label}`}
+                  title={`Remove ${pad.label}`}
+                  onClick={() => void removeCustomTrack(pad.group!, pad.id).catch(failed('remove it'))}
+                >
+                  <XSmallIcon />
+                </button>
+              )}
+            </div>
+          ))}
+          {!q && (
+            <button type="button" className="ab-pad ab-pad--add" onClick={() => void addSounds()}>
+              <PlusSmallIcon />
+              Add sounds
+            </button>
+          )}
+        </div>
+      )}
+      {!q && <span className="ab-hint">Add your own to {category.label}, or drop audio files anywhere here. Players hear them too.</span>}
 
-function ChevronIcon({ open }: { open: boolean }): JSX.Element {
-  return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      style={{ transform: open ? 'rotate(90deg)' : undefined, transition: 'transform 0.12s ease', flexShrink: 0 }}
-    >
-      <path d="M4 2l4 4-4 4" />
-    </svg>
-  )
-}
-
-function PlayPadIcon(): JSX.Element {
-  return (
-    <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0, opacity: 0.7 }}>
-      <path d="M2.5 1.5v9l7-4.5-7-4.5Z" />
-    </svg>
+      {drop.dragging && <div className="ab-drop">Drop to add to {category.label}</div>}
+      {toast && (
+        <div className="ab-toast" role="status">
+          {toast}
+        </div>
+      )}
+      <ContextMenu state={menu} onClose={() => setMenu(null)} />
+    </div>
   )
 }
 

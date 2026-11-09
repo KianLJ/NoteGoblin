@@ -7,6 +7,23 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.0',
+    title: 'A fresh coat of paint, and a face for everyone',
+    highlights: [
+      'Set a profile picture in Settings → Profile. Friends, messages and your party see it',
+      'Your account is now a circle top left beside the mode switch, with a quick menu and a redesigned Settings window split into clear pages',
+      'Colours reworked: pick an accent and a background tone from swatches that show the real result, in light and dark, with contrast kept readable. Dark mode borders, text fields and sliders stand out properly now',
+      'Music and sound board redesigned. Drop in your own songs and sound effects and everyone at the table hears them; rename anything with a right-click, and make your own moods and sound categories',
+      'Minimised boxes on the canvas each get their own small view, like a mini music player or the party’s faces',
+      'Initiative tracker and encounter builder redesigned, with a searchable monster picker instead of a giant list',
+      'Calendar and calendar builder redesigned, with an easier time of day and ready-made calendars to start from',
+      'Codex, Friends, Content Packs and Messages redesigned to match the rest of the app',
+      'Text on the canvas stays sharp at every zoom',
+      'The battle map opens centred on its centre point, and new tokens line up level with it',
+      'Fixes: making a session no longer drops you into its collection, and :: hidden text is hidden from players again'
+    ]
+  },
+  {
     version: '0.10.0',
     title: 'A table you lay out yourself',
     highlights: [

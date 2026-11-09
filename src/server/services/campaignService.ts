@@ -553,7 +553,9 @@ export function touchCampaignContentVersion(db: DatabaseType, campaignId: string
 export function listNotes(
   db: DatabaseType,
   campaignId: string,
-  userId: string
+  userId: string,
+  /** Read as a player even if `userId` is the DM: the dev build's DM self-joined as a player (see sessionHost's dispatch). */
+  asPlayer = false
 ): ServiceResult<NoteJson[]> {
   const userRepo = new UserRepo(db)
   const campaignRepo = makeCampaignRepo(db)
@@ -564,7 +566,7 @@ export function listNotes(
     return { ok: false, status: 403, error: 'Join this campaign first.' }
   }
   const rows = noteRepo.listVisibleTo(campaign.id, userId)
-  const viewerIsDm = campaign.dm_user_id === userId
+  const viewerIsDm = !asPlayer && campaign.dm_user_id === userId
   // A scene note is 'shared' visibility (every member can normally read it),
   // but a player shouldn't be able to find one at all — via this list, a
   // wikilink, anything — until the DM has actually presented its deck at
@@ -1068,7 +1070,7 @@ function isFiniteNumber(v: unknown): v is number {
  * sanity (e.g. a month named ''). A DM building their own calendar can type
  * whatever names/lengths they want.
  */
-function validateCalendarConfig(input: unknown): { config: CalendarConfig } | { error: string } {
+export function validateCalendarConfig(input: unknown): { config: CalendarConfig } | { error: string } {
   if (typeof input !== 'object' || input === null) return { error: 'Invalid calendar.' }
   const obj = input as Record<string, unknown>
 
@@ -1558,14 +1560,14 @@ function toSessionDeckJson(row: SessionDeckRow): SessionDeckJson {
 }
 
 /** Every campaign member can list session decks — players get every scene's encounterId dropped (DM-only metadata, same reasoning as a scene note's `::` asides), the DM sees everything. A scene's actual content is a real Note, fetched the normal way via listNotes/notes:list. */
-export function listSessionDecks(db: DatabaseType, campaignId: string, userId: string): ServiceResult<SessionDeckJson[]> {
+export function listSessionDecks(db: DatabaseType, campaignId: string, userId: string, asPlayer = false): ServiceResult<SessionDeckJson[]> {
   const campaignRepo = makeCampaignRepo(db)
   const campaign = campaignRepo.findById(campaignId)
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
   if (!campaignRepo.getRole(campaign.id, userId)) {
     return { ok: false, status: 403, error: 'Join this campaign first.' }
   }
-  const isDm = campaign.dm_user_id === userId
+  const isDm = !asPlayer && campaign.dm_user_id === userId
   const rows = new SessionDeckRepo(db).listByCampaign(campaignId)
   return {
     ok: true,

@@ -25,7 +25,7 @@ import * as relayClient from '@server/relay/relayClient'
 import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId, setRelaySession } from './relayState'
 import { queryOnline, connectPresence } from './relaySocket'
 import { setDiscordActivity } from './discordPresence'
-import { listCustomMusic, addCustomMusicTrack, removeCustomMusicTrack, getCustomMusicTrack, mimeTypeForPath } from './customMusic'
+import { listCustomMusic, addCustomMusicTrack, removeCustomMusicTrack, renameCustomMusicTrack, getCustomMusicTrack, mimeTypeForPath } from './customMusic'
 import { listCustomEntitySfx, setCustomEntitySfx, removeCustomEntitySfx } from './customEntitySfx'
 import {
   startSessionHost,
@@ -1673,21 +1673,30 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   const CUSTOM_MUSIC_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'flac']
 
-  ipcMain.handle('music:add-custom-track', async (_event, groupId: string): Promise<{ id: string; title: string } | null> => {
+  // Files dropped from the renderer are only trusted as far as being existing audio files.
+  const addAudioFiles = (groupId: string, filePaths: unknown): { id: string; title: string }[] =>
+    (Array.isArray(filePaths) ? filePaths : [])
+      .filter((p): p is string => typeof p === 'string' && CUSTOM_MUSIC_EXTENSIONS.includes(extname(p).slice(1).toLowerCase()) && existsSync(p))
+      .map((p) => addCustomMusicTrack(userDataDir, groupId, p, basename(p, extname(p))))
+
+  ipcMain.handle('music:add-custom-track', async (_event, groupId: string): Promise<{ id: string; title: string }[]> => {
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Add a custom track',
-      properties: ['openFile'],
+      title: 'Add your own audio',
+      properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Audio', extensions: CUSTOM_MUSIC_EXTENSIONS }]
     })
     mainWindow.focus()
-    if (result.canceled || result.filePaths.length === 0) return null
-    const filePath = result.filePaths[0]
-    const title = basename(filePath, extname(filePath))
-    return addCustomMusicTrack(userDataDir, groupId, filePath, title)
+    return result.canceled ? [] : addAudioFiles(groupId, result.filePaths)
   })
+
+  ipcMain.handle('music:add-custom-files', (_event, groupId: string, filePaths: unknown): { id: string; title: string }[] => addAudioFiles(groupId, filePaths))
 
   ipcMain.handle('music:remove-custom-track', (_event, groupId: string, trackId: string): void => {
     removeCustomMusicTrack(userDataDir, groupId, trackId)
+  })
+
+  ipcMain.handle('music:rename-custom-track', (_event, groupId: string, trackId: string, title: unknown): void => {
+    if (typeof title === 'string' && title.trim()) renameCustomMusicTrack(userDataDir, groupId, trackId, title.trim().slice(0, 200))
   })
 
   // DM-only, fire-and-forget — Ambient layers are bundled files just like
@@ -1705,10 +1714,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // over, so it goes out as a request the DM's own process relays to the
   // rest of the table instead (see sessionHost.ts's 'sfxBoard.play' case). A
   // Sound Board cue is always a bundled file (see sfxLibrary.ts), so this
-  // only ever carries an id, never audio data, either way.
-  ipcMain.handle('sfx-board:broadcast', (_event, sfxId: string): void => {
-    if (getHostedSession()) broadcastSfxPlayed(sfxId)
-    else void sendSessionRequest('sfxBoard.play', { sfxId })
+  // only ever carries an id — except the DM's own added sounds, whose audio goes first, the same way a custom song's does.
+  ipcMain.handle('sfx-board:broadcast', async (_event, sfxId: string): Promise<void> => {
+    if (!getHostedSession()) {
+      void sendSessionRequest('sfxBoard.play', { sfxId })
+      return
+    }
+    const custom = getCustomMusicTrack(userDataDir, sfxId)
+    if (custom) {
+      try {
+        const buffer = await readFile(custom.path)
+        // shortcut: the sound's audio is resent on every play; fine for short effects, cache per player if long ones get used.
+        if (buffer.byteLength <= MAX_BROADCAST_CUSTOM_TRACK_BYTES) broadcastMusicTrackData(sfxId, custom.title, mimeTypeForPath(custom.path), buffer.toString('base64'))
+      } catch {
+        /* file moved or gone: players just won't hear it */
+      }
+    }
+    broadcastSfxPlayed(sfxId)
   })
 
   // A DM's own per-Codex-entity sound override — see customEntitySfx.ts's
@@ -1758,6 +1780,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('relay:status', () => getRelayStatus())
 
   ipcMain.handle('relay:my-user-id', () => getRelaySession()?.userId ?? null)
+
+  ipcMain.handle('relay:avatar:get', async (): Promise<string | null> => {
+    const session = getRelaySession()
+    if (!session) return null
+    const result = await relayClient.getMe(session.token)
+    return result.ok ? (result.data.avatar ?? null) : null
+  })
+
+  ipcMain.handle('relay:avatar:set', async (_event, avatar: string | null): Promise<ApiResult<void>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Sign in to the relay to set a picture.' }
+    const result = await relayClient.setAvatar(session.token, avatar)
+    return result.ok ? { ok: true, data: undefined } : result
+  })
 
   ipcMain.handle('relay:friends:list', async (): Promise<ApiResult<FriendSummary[]>> => {
     const session = getRelaySession()

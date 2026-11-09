@@ -57,6 +57,15 @@ export function setPrefs(token: string, prefs: unknown): Promise<ClientResult<{ 
   return call('/prefs', 'POST', token, { prefs })
 }
 
+export function getMe(token: string): Promise<ClientResult<{ userId: string; username: string; avatar?: string }>> {
+  return call('/me', 'GET', token)
+}
+
+/** A small data URL, or null to remove it. */
+export function setAvatar(token: string, avatar: string | null): Promise<ClientResult<{ ok: true }>> {
+  return call('/avatar', 'POST', token, { avatar })
+}
+
 export interface CampaignSnapshotSummary {
   campaignId: string
   name: string

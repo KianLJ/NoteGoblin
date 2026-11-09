@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { CalendarMini, PartyMini, PlayerInitiativeMini, PlayerSessionsMini } from '../canvas/toolMinis'
 import { createPortal } from 'react-dom'
 import { PlayerSidebar } from './PlayerSidebar'
 import { PartyList, usePartyPresence } from './PartyList'
@@ -14,7 +15,6 @@ import { PlayerSessions } from '../campaigns/PlayerSessions'
 import { FileIcon } from '../campaigns/icons'
 import { VehiclesPanel } from '../vehicles/VehiclesPanel'
 import { DiceButton } from '../dice/DiceButton'
-import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import { Canvas, type CanvasHandle, type CanvasPoint } from '../canvas/Canvas'
 import { toolItems, type CanvasItem, type ToolContents } from '../canvas/toolItems'
 import { KeepAliveOutlet, useKeepAliveHost } from '../canvas/KeepAlive'
@@ -209,34 +209,51 @@ export function PlayerWorkspaceBody({
         onDeleteOfflineCampaign={deleteOfflineCampaign}
       />
     ),
-    party: (
-      <PartyList
-        sessionId={sessionId}
-        campaignId={!isOffline ? (activeCampaign?.id ?? null) : null}
-        myUserId={myUserId}
-        activeNote={activeNote}
-        onToggleEditor={(noteId, userId, grant) => {
-          const note = notes?.find((n) => n.id === noteId)
-          if (!note) return
-          const next = grant ? [...note.editorUserIds, userId] : note.editorUserIds.filter((id) => id !== userId)
-          saveNote(noteId, { editorUserIds: next })
-        }}
-        onViewCharacter={viewPartyMemberCharacter}
-      />
-    ),
-    initiative: <KeepAliveOutlet host={initiativeHost} />,
-    calendar: <CalendarPanel sessionId={sessionId} campaignId={!isOffline ? (activeCampaign?.id ?? null) : null} readOnly />,
-    sessions: (
-      <PlayerSessions
-        sessionId={sessionId}
-        // Stays set while offline (unlike Calendar's), so a cached deck list still has something to key off of.
-        campaignId={activeCampaign?.id ?? null}
-        notes={notes ?? []}
-        // Only when asked: a box of its own, never swapped into the note you had open.
-        onOpenNote={(id) => openTabAndReveal({ kind: 'note', id })}
-        offlineDecks={isOffline ? (sessionDecks ?? []) : null}
-      />
-    )
+    party: {
+      mini: <PartyMini sessionId={sessionId} campaignId={!isOffline ? (activeCampaign?.id ?? null) : null} />,
+      full: (
+        <PartyList
+          sessionId={sessionId}
+          campaignId={!isOffline ? (activeCampaign?.id ?? null) : null}
+          myUserId={myUserId}
+          activeNote={activeNote}
+          onToggleEditor={(noteId, userId, grant) => {
+            const note = notes?.find((n) => n.id === noteId)
+            if (!note) return
+            const next = grant ? [...note.editorUserIds, userId] : note.editorUserIds.filter((id) => id !== userId)
+            saveNote(noteId, { editorUserIds: next })
+          }}
+          onViewCharacter={viewPartyMemberCharacter}
+        />
+      )
+    },
+    initiative: { full: <KeepAliveOutlet host={initiativeHost} />, mini: <PlayerInitiativeMini sessionId={sessionId} /> },
+    calendar: {
+      full: <CalendarPanel sessionId={sessionId} campaignId={!isOffline ? (activeCampaign?.id ?? null) : null} readOnly />,
+      mini: <CalendarMini sessionId={sessionId} campaignId={!isOffline ? (activeCampaign?.id ?? null) : null} />
+    },
+    sessions: {
+      mini: (
+        <PlayerSessionsMini
+          sessionId={sessionId}
+          campaignId={activeCampaign?.id ?? null}
+          notes={notes ?? []}
+          offlineDecks={isOffline ? (sessionDecks ?? []) : null}
+          onOpenNote={(id) => openTabAndReveal({ kind: 'note', id })}
+        />
+      ),
+      full: (
+        <PlayerSessions
+          sessionId={sessionId}
+          // Stays set while offline (unlike Calendar's), so a cached deck list still has something to key off of.
+          campaignId={activeCampaign?.id ?? null}
+          notes={notes ?? []}
+          // Only when asked: a box of its own, never swapped into the note you had open.
+          onOpenNote={(id) => openTabAndReveal({ kind: 'note', id })}
+          offlineDecks={isOffline ? (sessionDecks ?? []) : null}
+        />
+      )
+    }
   }
 
   const items: CanvasItem[] = [...toolItems('player', layout, tools, TOOL_ICONS), ...entryItems('player', layout, entries)]
@@ -431,7 +448,6 @@ export function PlayerWorkspaceBody({
               sessionId={sessionId}
               onLeaveSession={onLeaveSession}
             />
-            <AccountSettingsButton />
           </>
         }
       />

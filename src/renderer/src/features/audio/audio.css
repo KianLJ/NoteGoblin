@@ -1,0 +1,658 @@
+/* The music player and the sound board. Theme tokens only. */
+
+.ab-panel {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  /* Opaque, so a scrolling panel keeps sharp text: Chromium blurs text in a see-through scroll layer. */
+  background: var(--bg-surface);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ab-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+.ab-section-head > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ab-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* "Players hear this" switch. */
+.ab-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+.ab-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.ab-switch-track {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.ab-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 140ms ease, background 140ms ease;
+}
+.ab-switch input:checked + .ab-switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.ab-switch input:checked + .ab-switch-track::after {
+  transform: translateX(13px);
+  background: var(--text-on-accent);
+}
+.ab-switch input:focus-visible + .ab-switch-track {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Now playing. */
+.ab-now {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: linear-gradient(160deg, var(--accent-subtle), var(--bg-surface-raised) 70%);
+}
+.ab-now-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.ab-now-art {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 9px;
+  background: var(--bg-sunken);
+  color: var(--accent);
+}
+.ab-eq-bar {
+  width: 5px;
+  height: 30%;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.45;
+}
+.ab-now--playing .ab-eq-bar {
+  opacity: 1;
+  animation: ab-eq 900ms ease-in-out infinite alternate;
+}
+.ab-now--playing .ab-eq-bar:nth-child(2) {
+  animation-duration: 700ms;
+  animation-delay: -200ms;
+}
+.ab-now--playing .ab-eq-bar:nth-child(3) {
+  animation-duration: 1100ms;
+  animation-delay: -500ms;
+}
+.ab-now--playing .ab-eq-bar:nth-child(4) {
+  animation-duration: 800ms;
+  animation-delay: -350ms;
+}
+@keyframes ab-eq {
+  from {
+    height: 20%;
+  }
+  to {
+    height: 100%;
+  }
+}
+.ab-now-text {
+  flex: 1;
+  min-width: 0;
+}
+.ab-now-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ab-now-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ab-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ab-round {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, transform 80ms ease;
+}
+.ab-round:not(:disabled):hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.ab-round:not(:disabled):active {
+  transform: scale(0.94);
+}
+.ab-round:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ab-round--big {
+  width: 46px;
+  height: 46px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  box-shadow: var(--shadow-sm);
+}
+.ab-round--big:not(:disabled):hover {
+  color: var(--text-on-accent);
+  filter: brightness(1.08);
+}
+.ab-slider-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 30;
+}
+.ab-slider-pop span {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Moods. */
+.ab-moods {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+}
+.ab-mood {
+  position: relative;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 80ms ease;
+}
+.ab-mood:hover {
+  border-color: var(--border-strong);
+}
+.ab-mood:active {
+  transform: scale(0.98);
+}
+.ab-mood-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.ab-mood-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ab-mood--on {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.ab-mood--on .ab-mood-name {
+  color: var(--accent-hover);
+}
+.ab-mood--empty {
+  border-style: dashed;
+  background: transparent;
+}
+.ab-mood--empty .ab-mood-name {
+  color: var(--text-secondary);
+}
+.ab-mood--drop {
+  border-color: var(--accent);
+  border-style: solid;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Songs in a mood. */
+.ab-tracks {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.ab-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px 0 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.ab-track:last-child {
+  border-bottom: none;
+}
+.ab-track:hover {
+  background: var(--bg-sunken);
+}
+.ab-track-play {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ab-track-play > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ab-track-play svg {
+  color: var(--text-muted);
+}
+.ab-track--on .ab-track-play {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+.ab-track--on .ab-track-play svg {
+  color: var(--accent);
+}
+.ab-mine {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.ab-x {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ab-x:hover {
+  color: var(--danger);
+  background: var(--bg-surface);
+}
+.ab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ab-add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+/* Renaming your own song or sound in place. */
+.ab-rename {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  margin: 2px 0;
+  padding: 2px 8px;
+  font-size: 13px;
+}
+.ab-pad-wrap > .ab-rename {
+  height: auto;
+  min-height: 54px;
+  margin: 0;
+}
+
+/* Ambient layers. */
+.ab-layers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px 12px;
+}
+.ab-layer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ab-layer > span {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ab-levels {
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+.ab-levels button {
+  width: 16px;
+  height: 22px;
+  padding: 0 1px;
+  display: flex;
+  align-items: flex-end;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.ab-levels i {
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  transition: background 150ms ease;
+}
+.ab-levels i.ab-on {
+  background: var(--accent);
+}
+
+/* Sound board. */
+.ab-search {
+  width: 100%;
+}
+/* Wraps rather than scrolls, so every category (and New) stays in sight in a narrow box. */
+.ab-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.ab-chip {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ab-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.ab-chip--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+.ab-chip--on:hover {
+  color: var(--text-on-accent);
+}
+.ab-pads {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 6px;
+}
+.ab-pad {
+  position: relative;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  border-bottom-width: 3px;
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 80ms ease;
+}
+.ab-pad:hover {
+  border-color: var(--border-strong);
+}
+.ab-pad:active {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+}
+.ab-pad-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ab-pad-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ab-pad--hit {
+  animation: ab-hit 420ms ease-out;
+}
+@keyframes ab-hit {
+  0% {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-on-accent);
+  }
+  100% {
+    background: var(--bg-surface-raised);
+  }
+}
+.ab-pad--mine {
+  border-bottom-color: var(--accent);
+}
+.ab-pad-wrap {
+  position: relative;
+  display: flex;
+}
+.ab-pad-wrap > .ab-pad {
+  flex: 1;
+  min-width: 0;
+}
+.ab-pad-wrap > .ab-x {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  opacity: 0;
+}
+.ab-pad-wrap:hover > .ab-x,
+.ab-pad-wrap > .ab-x:focus-visible {
+  opacity: 1;
+}
+.ab-pad--add {
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  border-bottom-width: 1px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ab-pad--add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.ab-empty {
+  padding: 16px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Dragging audio files over a panel. */
+.ab-drop {
+  position: absolute;
+  inset: 6px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  color: var(--accent-hover);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.ab-toast {
+  position: sticky;
+  bottom: 0;
+  align-self: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-md);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-now--playing .ab-eq-bar,
+  .ab-pad--hit {
+    animation: none;
+  }
+}
+
+/* Making your own mood or category. */
+.ab-mood--new .ab-mood-name,
+.ab-chip--new {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ab-mood--new {
+  color: var(--text-secondary);
+}
+.ab-mood--new:hover {
+  border-color: var(--accent);
+}
+.ab-mood--new:hover .ab-mood-name {
+  color: var(--accent);
+}
+.ab-chip--new {
+  border-style: dashed;
+}
+.ab-rename.ab-mood-rename {
+  height: auto;
+  min-height: 48px;
+  margin: 0;
+}
+.ab-rename.ab-chip-rename {
+  flex: 0 0 140px;
+  height: 26px;
+  margin: 0;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}

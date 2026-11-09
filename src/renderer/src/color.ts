@@ -85,3 +85,26 @@ export function toHexColor(value: string): string {
   if (resolved !== trimmed) return toHexColor(resolved)
   return '#000000'
 }
+
+/** Relative luminance (WCAG): how bright a colour actually looks, 0 to 1. */
+export function luminance(hex: string): number {
+  const clean = hex.replace('#', '')
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(clean.slice(i, i + 2), 16) / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** The colour with hue `h` and saturation `s` that looks exactly as bright as `like`, so contrast against other colours stays the same. */
+export function hslMatchingBrightness(h: number, s: number, like: string): string {
+  const target = luminance(like)
+  let lo = 0
+  let hi = 100
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2
+    if (luminance(hslToHex(h, s, mid)) < target) lo = mid
+    else hi = mid
+  }
+  return hslToHex(h, s, (lo + hi) / 2)
+}

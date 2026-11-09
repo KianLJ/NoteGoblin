@@ -3,7 +3,8 @@ import type { ApiResult, CampaignPack, PackImportResult } from '@shared/ipc'
 import type { ContentPack } from '@shared/content/schema'
 import { describePackContents } from '@shared/content/packFiles'
 import { terminologyConflicts } from '@shared/content/terms'
-import { ArrowDownIcon, ArrowUpIcon } from '../../ui/icons'
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon } from '../../ui/icons'
+import './packs.css'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
@@ -67,17 +68,17 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
   }
 
   return (
-    <Modal onClose={onClose} width={640}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-        <div>
-          <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 20 }}>Content Packs</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-            Homebrew classes, species, feats, spells and items. {campaign ? `Character sheets in ${campaign.name} use the packs enabled for it.` : 'Outside a campaign, character sheets use every pack in your library.'}
+    <Modal onClose={onClose} width={680}>
+      <div className="pk">
+        <header className="pk-head">
+          <h2>Content packs</h2>
+          <p>
+            Homebrew classes, species, feats, spells and items. {campaign ? `Character sheets in ${campaign.name} use the packs turned on for it.` : 'Outside a campaign, character sheets use every pack in your library.'}
           </p>
-        </div>
+        </header>
 
         {error && (
-          <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: 12 }}>
+          <div className="pk-error" role="alert">
             {error}
           </div>
         )}
@@ -87,13 +88,13 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
             {enabled.length === 0 && (
               <Muted>{isDm ? 'No packs enabled — this campaign uses the SRD only. Enable a pack from your library below.' : 'The DM hasn’t enabled any packs — this campaign uses the SRD only.'}</Muted>
             )}
-            {enabled.length > 1 && <Muted>Load order: later packs win where two rename the same thing or define the same vocabulary entry.</Muted>}
+            {enabled.length > 1 && <Muted>Packs load top to bottom: a later pack wins where two rename the same thing.</Muted>}
             {conflicts.length > 0 && (
-              <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <strong style={{ fontSize: 12 }}>Renamed by more than one pack</strong>
+              <div className="pk-warn">
+                <strong>Renamed by more than one pack</strong>
                 {conflicts.map((c) => (
-                  <div key={c.key} style={{ color: 'var(--text-secondary)' }}>
-                    <code style={{ fontSize: 11 }}>{c.key}</code>: {c.packs.map((p) => `“${p.label}” (${p.name})`).join(' vs ')} — <span style={{ color: 'var(--accent)' }}>{c.packs.find((p) => p.id === c.winner)?.label}</span> wins
+                  <div key={c.key}>
+                    <code>{c.key}</code>: {c.packs.map((p) => `“${p.label}” (${p.name})`).join(' vs ')} — <span className="pk-win">{c.packs.find((p) => p.id === c.winner)?.label}</span> wins
                     {isDm ? ' (move a pack later to change it)' : ''}
                   </div>
                 ))}
@@ -106,7 +107,8 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
                 <PackRow
                   key={pack.id}
                   pack={pack}
-                  badge="Enabled"
+                  order={enabled.length > 1 ? index + 1 : undefined}
+                  badge="On"
                   actions={
                     isDm ? (
                       <>
@@ -126,7 +128,7 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
                           </Button>
                         )}
                         <Button variant="secondary" disabled={busy} onClick={() => run(() => campaignAction(window.goblin.campaignPacks.disable(campaign.id, pack.id)))} style={smallButton} title="Sheets keep what they picked from it — enabling it again restores everything.">
-                          Disable
+                          Turn off
                         </Button>
                       </>
                     ) : undefined
@@ -136,16 +138,14 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
             })}
             {isDm && notEnabled.length > 0 && (
               <>
-                <div className="gb-label" style={{ margin: '8px 0 4px' }}>
-                  Available from your library
-                </div>
+                <div className="pk-sub">Turn on from your library</div>
                 {notEnabled.map(({ pack }) => (
                   <PackRow
                     key={pack.id}
                     pack={pack}
                     actions={
                       <Button variant="primary" disabled={busy} onClick={() => run(() => campaignAction(window.goblin.campaignPacks.enable(campaign.id, pack.id)))} style={smallButton}>
-                        Enable
+                        Turn on
                       </Button>
                     }
                   />
@@ -159,19 +159,24 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
           title="Your library"
           action={
             <Button variant="secondary" disabled={busy} onClick={importPacks} style={smallButton}>
-              Import…
+              <PlusIcon size={12} />
+              Import a pack
             </Button>
           }
         >
           {importResult && <ImportSummary result={importResult} onDismiss={() => setImportResult(null)} />}
           {library.packs && libraryPacks.length === 0 && (
-            <Muted>No packs yet. Import a .ngpack.json file someone shared with you, or make your own in the Homebrew Workshop (the hammer next to DM and Player mode).</Muted>
+            <div className="pk-empty">
+              <strong>No packs yet</strong>
+              <span>Import a .ngpack.json file someone shared with you, or make your own in the Homebrew Workshop (the hammer next to DM and Player mode).</span>
+            </div>
           )}
           {libraryPacks.map(({ pack }) => (
             <PackRow
               key={pack.id}
               pack={pack}
               badge={enabled.some((e) => e.id === pack.id) ? 'In this campaign' : undefined}
+              quietBadge
               actions={
                 <>
                   <Button variant="secondary" disabled={busy} onClick={() => run(() => window.goblin.packs.exportPack(pack.id))} style={smallButton}>
@@ -205,53 +210,49 @@ export function ContentPacksModal({ onClose, campaign, role, playerCampaignPacks
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }): JSX.Element {
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
-        <div className="gb-label" style={{ margin: 0, flex: 1 }}>
-          {title}
-        </div>
+    <section className="pk-section">
+      <div className="pk-section-head">
+        <h3>{title}</h3>
         {action}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</div>
-    </div>
+      <div className="pk-list">{children}</div>
+    </section>
   )
 }
 
-function PackRow({ pack, badge, actions }: { pack: ContentPack; badge?: string; actions?: ReactNode }): JSX.Element {
+function PackRow({ pack, badge, quietBadge, order, actions }: { pack: ContentPack; badge?: string; quietBadge?: boolean; order?: number; actions?: ReactNode }): JSX.Element {
+  const needs = pack.dependsOn.filter((d) => d !== 'srd-5.2.1')
   return (
-    <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+    <div className={`pk-card${badge && !quietBadge ? ' pk-card--on' : ''}`}>
+      <span className="pk-tile" aria-hidden="true">
+        {order ?? pack.name.trim().charAt(0).toUpperCase()}
+      </span>
+      <div className="pk-info">
+        <div className="pk-title">
           <strong>{pack.name}</strong>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          <span className="pk-version">
             v{pack.version}
             {pack.author ? ` · ${pack.author}` : ''}
           </span>
-          {badge && (
-            <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }}>
-              {badge}
-            </span>
-          )}
+          {badge && <span className={quietBadge ? 'pk-badge pk-badge--quiet' : 'pk-badge'}>{badge}</span>}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{describePackContents(pack)}</div>
-        {pack.description && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{pack.description}</div>}
-        {pack.dependsOn.filter((d) => d !== 'srd-5.2.1').length > 0 && (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Needs: {pack.dependsOn.filter((d) => d !== 'srd-5.2.1').join(', ')}</div>
-        )}
+        <div className="pk-contents">{describePackContents(pack)}</div>
+        {pack.description && <div className="pk-desc">{pack.description}</div>}
+        {needs.length > 0 && <div className="pk-desc">Needs: {needs.join(', ')}</div>}
       </div>
-      {actions && <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>{actions}</div>}
+      {actions && <div className="pk-actions">{actions}</div>}
     </div>
   )
 }
 
 export function ImportSummary({ result, onDismiss }: { result: PackImportResult; onDismiss: () => void }): JSX.Element {
   return (
-    <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div className="pk-import">
       {result.imported.map(({ pack, replaced, warnings }) => (
         <div key={pack.id}>
-          <span style={{ color: 'var(--accent)' }}>{replaced ? 'Updated' : 'Imported'}</span> {pack.name} v{pack.version}
+          <span className="pk-win">{replaced ? 'Updated' : 'Imported'}</span> {pack.name} v{pack.version}
           {warnings.length > 0 && (
-            <ul style={{ margin: '2px 0 0', paddingLeft: 18, color: 'var(--text-muted)' }}>
+            <ul>
               {warnings.map((w, i) => (
                 <li key={i}>
                   {w.path ? `${w.path}: ` : ''}
@@ -264,8 +265,8 @@ export function ImportSummary({ result, onDismiss }: { result: PackImportResult;
       ))}
       {result.failed.map(({ fileName, issues }) => (
         <div key={fileName}>
-          <span style={{ color: 'var(--danger)' }}>Couldn’t import</span> {fileName}
-          <ul style={{ margin: '2px 0 0', paddingLeft: 18, color: 'var(--text-muted)' }}>
+          <span className="pk-bad">Couldn’t import</span> {fileName}
+          <ul>
             {issues.slice(0, 8).map((issue, i) => (
               <li key={i}>
                 {issue.path ? `${issue.path}: ` : ''}
@@ -277,7 +278,7 @@ export function ImportSummary({ result, onDismiss }: { result: PackImportResult;
         </div>
       ))}
       <div>
-        <button type="button" className="gb-btn gb-btn--ghost" onClick={onDismiss} style={{ fontSize: 11, padding: '2px 6px' }}>
+        <button type="button" className="gb-btn gb-btn--ghost pk-dismiss" onClick={onDismiss}>
           Dismiss
         </button>
       </div>
@@ -286,8 +287,8 @@ export function ImportSummary({ result, onDismiss }: { result: PackImportResult;
 }
 
 function Muted({ children }: { children: ReactNode }): JSX.Element {
-  return <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{children}</p>
+  return <p className="pk-muted">{children}</p>
 }
 
-const smallButton = { fontSize: 12, padding: '4px 10px' } as const
+const smallButton = { fontSize: 12, padding: '5px 10px' } as const
 const orderButton = { padding: '4px 6px', display: 'inline-flex' } as const

@@ -156,6 +156,13 @@ describe('canvas layout', () => {
     expect(parseLayout(pinned, () => true)!.nodes.find((n) => n.id === 'notes')!.pinned).toBe(true)
   })
 
+  it('minimizes a tool to its own small view size, and restores the size it had', () => {
+    const mini = setMinimized(twoNodes, 'dice', true, { w: 288, h: 192 })
+    expect(mini.nodes[0]).toMatchObject({ w: 288, h: 192, minimized: { w: 320, h: 480 } })
+    expect(setNodeRect(mini, 'dice', { x: 32, y: 32, w: 10, h: 10 }).nodes[0]).toMatchObject({ x: 32, y: 32, w: 288, h: 192 })
+    expect(setMinimized(mini, 'dice', false).nodes[0]).toMatchObject({ w: 320, h: 480, minimized: undefined })
+  })
+
   it('minimizes a node to a tile that only moves, and restores the size it had', () => {
     const mini = setMinimized(twoNodes, 'dice', true)
     expect(mini.nodes[0]).toMatchObject({ x: 0, y: 0, w: MINI_SIZE, h: MINI_SIZE, minimized: { w: 320, h: 480 } })

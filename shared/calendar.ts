@@ -448,6 +448,31 @@ export function parseTimeOfDay(timeOfDay: string): number | null {
   return hours + minutes / 60
 }
 
+/** The date and time `hours` from now (negative goes back), rolling over midnight into the next or previous day. With no time set yet, counts from midnight. */
+export function advanceTime(config: CalendarConfig, hours: number): Pick<CalendarConfig, 'currentDate' | 'timeOfDay'> {
+  // Whole minutes, so repeated steps never drift.
+  const minutes = Math.round(((parseTimeOfDay(config.timeOfDay) ?? 0) + hours) * 60)
+  const days = Math.floor(minutes / 1440)
+  const rest = minutes - days * 1440
+  const hh = String(Math.floor(rest / 60)).padStart(2, '0')
+  const mm = String(rest % 60).padStart(2, '0')
+  return { currentDate: addDays(config, config.currentDate, days), timeOfDay: `${hh}:${mm}` }
+}
+
+/** A plain word for the time of day ("Dawn", "Late evening") from decimal hours. */
+export function partOfDay(hour: number): string {
+  const h = mod(hour, 24)
+  if (h < 4) return 'Dead of night'
+  if (h < 6) return 'Before dawn'
+  if (h < 8) return 'Dawn'
+  if (h < 11.5) return 'Morning'
+  if (h < 13.5) return 'Midday'
+  if (h < 17) return 'Afternoon'
+  if (h < 19.5) return 'Dusk'
+  if (h < 22) return 'Evening'
+  return 'Night'
+}
+
 export function formatHour(hour: number): string {
   const normalized = mod(hour, 24)
   const h = Math.floor(normalized)

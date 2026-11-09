@@ -170,11 +170,15 @@ export function fogBox(f: FogShape): Bounds {
  * squares. The grid is endless; this is just the part worth working out
  * sight and fog over. A fog over everything isn't counted (it's sized from this).
  */
+/** The starting area: `cols` by `rows` squares around the map's centre point (0, 0). */
+export function startArea(map: Pick<BattleMap, 'cols' | 'rows'>): Bounds {
+  const x0 = -Math.floor(map.cols / 2)
+  const y0 = -Math.floor(map.rows / 2)
+  return { x0, y0, x1: x0 + map.cols, y1: y0 + map.rows }
+}
+
 export function mapBounds(map: Pick<BattleMap, 'cols' | 'rows' | 'images' | 'tokens' | 'walls' | 'lights' | 'fog' | 'templates' | 'partyStarts'>, pad = 0): Bounds {
-  let x0 = 0
-  let y0 = 0
-  let x1 = map.cols
-  let y1 = map.rows
+  let { x0, y0, x1, y1 } = startArea(map)
   const add = (b: Bounds): void => {
     if (![b.x0, b.y0, b.x1, b.y1].every(Number.isFinite)) return
     x0 = Math.min(x0, b.x0)
@@ -320,10 +324,12 @@ export function placeTokens(map: BattleMap, combatants: Combatant[], sizeOf: (c:
       if (start) spot = { x: start.x, y: start.y, size, ...sized }
     }
     // Something bigger than the starting area still fits along its edge (the grid goes on).
-    const rows = Math.max(next.rows, h)
+    const area = startArea(next)
+    // Rows nearest the centre first, so a small fight sits level with it.
+    const ys = Array.from({ length: Math.max(1, area.y1 - area.y0 - h + 1) }, (_, k) => area.y0 + k).sort((a, b) => Math.abs(a + h / 2) - Math.abs(b + h / 2) || a - b)
     for (let i = 0; i < Math.max(next.cols, size) && !spot; i++) {
-      const x = party ? i : next.cols - size - i
-      for (let y = 0; y + h <= rows; y++) {
+      const x = party ? area.x0 + i : area.x1 - size - i
+      for (const y of ys) {
         const t = { x, y, size, ...sized }
         if (canStand(next, t)) {
           spot = t

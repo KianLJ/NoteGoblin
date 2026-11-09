@@ -37,6 +37,22 @@ export const TOOLS_BY_MODE: Record<CanvasMode, ToolKind[]> = {
   player: ['notes', 'party', 'initiative', 'calendar', 'sessions', 'codex', 'friends', 'whatsnew']
 }
 
+/**
+ * Tools that minimize to a small view of their own (what's playing, the time,
+ * whose turn it is) instead of the plain tile: its size, title bar included,
+ * in whole tiles (MINI_SIZE).
+ */
+export const TOOL_MINI: Partial<Record<ToolKind, { w: number; h: number }>> = {
+  music: { w: 256, h: 160 },
+  soundboard: { w: 288, h: 192 },
+  initiative: { w: 192, h: 192 },
+  timer: { w: 288, h: 96 },
+  calendar: { w: 192, h: 96 },
+  players: { w: 192, h: 96 },
+  party: { w: 192, h: 96 },
+  sessions: { w: 288, h: 128 }
+}
+
 /** Tools opened from the app's header (the Codex button, the version's What's New) rather than the canvas's bottom bar. */
 export const HEADER_TOOLS: ToolKind[] = ['codex', 'whatsnew']
 

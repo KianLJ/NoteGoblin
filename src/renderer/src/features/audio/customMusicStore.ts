@@ -56,12 +56,34 @@ export async function ensureCustomMusicLoaded(): Promise<void> {
   notify()
 }
 
-/** Opens a native file picker (see registerIpc.ts's music:add-custom-track) scoped to that mood — a no-op if the DM cancels. */
-export async function addCustomTrack(groupId: string): Promise<void> {
-  const added = await window.goblin.music.addCustomTrack(groupId)
-  if (!added) return
-  const track: MusicTrack = { id: added.id, title: added.title, url: `custom-music://${added.id}` }
-  tracksByGroup = { ...tracksByGroup, [groupId]: [...(tracksByGroup[groupId] ?? []), track] }
+/** Your own songs, kept as a mood of their own. */
+export const YOUR_MUSIC_GROUP = 'custom'
+/** Your own sound board sounds — stored with the songs, played as one-shots (see sfxBoardEngine). */
+export const YOUR_SOUNDS_GROUP = 'soundboard'
+
+function added(groupId: string, list: { id: string; title: string }[]): number {
+  if (list.length === 0) return 0
+  const tracks = list.map((a): MusicTrack => ({ id: a.id, title: a.title, url: `custom-music://${a.id}` }))
+  tracksByGroup = { ...tracksByGroup, [groupId]: [...(tracksByGroup[groupId] ?? []), ...tracks] }
+  notify()
+  return tracks.length
+}
+
+/** Opens a file picker (several files at once) and adds them to `groupId`; returns how many were added. */
+export async function addCustomTrack(groupId: string): Promise<number> {
+  return added(groupId, await window.goblin.music.addCustomTrack(groupId))
+}
+
+/** Adds audio files dropped onto the app to `groupId`, skipping anything that isn't audio; returns how many were added. */
+export async function addCustomFiles(groupId: string, files: FileList | File[]): Promise<number> {
+  return added(groupId, await window.goblin.music.addCustomFiles(groupId, [...files]))
+}
+
+export async function renameCustomTrack(groupId: string, trackId: string, title: string): Promise<void> {
+  const name = title.trim()
+  if (!name) return
+  await window.goblin.music.renameCustomTrack(groupId, trackId, name)
+  tracksByGroup = { ...tracksByGroup, [groupId]: (tracksByGroup[groupId] ?? []).map((t) => (t.id === trackId ? { ...t, title: name } : t)) }
   notify()
 }
 

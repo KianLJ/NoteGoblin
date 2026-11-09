@@ -8,6 +8,7 @@ import {
   latestEra,
   climateInUnit,
   defaultCalendarConfig,
+  formatCalendarDate,
   SEASON_CLIMATE_PRESETS,
   type CalendarClimate,
   type CalendarConfig,
@@ -21,7 +22,9 @@ import {
   type EventRepeat
 } from '@shared/calendar'
 import type { Note } from '@shared/ipc'
-import { XIcon } from '../../ui/icons'
+import { CALENDAR_TEMPLATES } from '@shared/calendarTemplates'
+import { PlusIcon, XIcon } from '../../ui/icons'
+import './calendar.css'
 
 interface CalendarCreatorWizardProps {
   /** Editing an existing calendar starts the wizard pre-filled with it instead of the Gregorian-shaped default. */
@@ -34,15 +37,36 @@ interface CalendarCreatorWizardProps {
 
 type TabId = 'general' | 'dates' | 'eras' | 'seasons' | 'locations' | 'celestial' | 'events'
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'general', label: 'General' },
-  { id: 'dates', label: 'Dates' },
-  { id: 'eras', label: 'Eras' },
-  { id: 'seasons', label: 'Seasons & Weather' },
-  { id: 'locations', label: 'Locations' },
-  { id: 'celestial', label: 'Celestial Bodies' },
-  { id: 'events', label: 'Events' }
+const TABS: { id: TabId; label: string; about: string }[] = [
+  { id: 'general', label: 'General', about: 'Its name, how dates are written, and the temperature unit.' },
+  { id: 'dates', label: 'Days & months', about: 'The days of the week and the months of the year.' },
+  { id: 'eras', label: 'Eras', about: 'Named ages, and how years are written in each.' },
+  { id: 'seasons', label: 'Seasons & weather', about: 'When each season runs, and the weather it brings.' },
+  { id: 'locations', label: 'Locations', about: 'Places with a climate of their own.' },
+  { id: 'celestial', label: 'Moons', about: 'Moons and other bodies, and their phases.' },
+  { id: 'events', label: 'Events', about: 'Holidays and happenings on set dates.' }
 ]
+
+/** A short count for a section's entry in the list, so you can see at a glance what's been set up. */
+function tabCount(id: TabId, c: CalendarConfig): string {
+  const n = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`
+  switch (id) {
+    case 'general':
+      return c.name.trim() ? c.name : 'Needs a name'
+    case 'dates':
+      return `${n(c.weekdays.length, 'day', 'days')} · ${n(c.months.length, 'month', 'months')}`
+    case 'eras':
+      return c.eras.length ? n(c.eras.length, 'era', 'eras') : 'None'
+    case 'seasons':
+      return c.seasons.length ? n(c.seasons.length, 'season', 'seasons') : 'None'
+    case 'locations':
+      return c.locations.length ? n(c.locations.length, 'place', 'places') : 'None'
+    case 'celestial':
+      return c.moons.length ? n(c.moons.length, 'moon', 'moons') : 'None'
+    case 'events':
+      return c.events.length ? n(c.events.length, 'event', 'events') : 'None'
+  }
+}
 
 /**
  * DM-facing calendar builder — a left-hand tab list (General/Dates/Eras/
@@ -57,6 +81,15 @@ export function CalendarCreatorWizard({ initial, notes = [], onSave, onClose }: 
   const [tab, setTab] = useState<TabId>('general')
   const [config, setConfig] = useState<CalendarConfig>(() => initial ?? defaultCalendarConfig())
   const [saveError, setSaveError] = useState<string | null>(null)
+  // A new calendar starts by picking a template (or a blank one).
+  const [choosing, setChoosing] = useState(!initial)
+
+  function startFrom(build: () => CalendarConfig): void {
+    setConfig(build())
+    setTab('general')
+    setSaveError(null)
+    setChoosing(false)
+  }
 
   function patch(fields: Partial<CalendarConfig>): void {
     setConfig((prev) => ({ ...prev, ...fields }))
@@ -64,12 +97,12 @@ export function CalendarCreatorWizard({ initial, notes = [], onSave, onClose }: 
 
   function handleSave(): void {
     if (config.name.trim().length === 0) {
-      setSaveError('Give the calendar a name (General tab).')
+      setSaveError('Give the calendar a name (General).')
       setTab('general')
       return
     }
     if (config.weekdays.length === 0 || config.months.length === 0) {
-      setSaveError('Define at least one weekday and one month (Dates tab).')
+      setSaveError('Add at least one day and one month (Days & months).')
       setTab('dates')
       return
     }
@@ -86,56 +119,99 @@ export function CalendarCreatorWizard({ initial, notes = [], onSave, onClose }: 
   }
 
   return (
-    <Modal onClose={onClose} width={760} dismissible={false}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-        <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 22 }}>{initial ? 'Edit Calendar' : 'Create Calendar'}</h2>
-
-        <div style={{ display: 'flex', gap: 'var(--space-3)', minHeight: 420 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: 150, flexShrink: 0 }}>
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                style={{
-                  textAlign: 'left',
-                  border: 'none',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '8px 10px',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  background: tab === t.id ? 'var(--accent-subtle)' : 'transparent',
-                  color: tab === t.id ? 'var(--text-primary)' : 'var(--text-secondary)'
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
+    <Modal onClose={onClose} width={840} dismissible={false}>
+      {choosing ? (
+        <div className="cw">
+          <header className="cw-head">
+            <h2>Make a calendar</h2>
+            <p>Start from one of these, filled in and ready to use, then change anything you like. Or start blank.</p>
+          </header>
+          <div className="cw-templates">
+            {CALENDAR_TEMPLATES.map((t) => {
+              const preview = t.build()
+              return (
+                <button key={t.id} type="button" className="cw-template" onClick={() => startFrom(t.build)}>
+                  <strong>{t.name}</strong>
+                  <span>{t.blurb}</span>
+                  <small>Today: {formatCalendarDate(preview, preview.currentDate)}</small>
+                </button>
+              )
+            })}
+            <button type="button" className="cw-template cw-template--blank" onClick={() => startFrom(defaultCalendarConfig)}>
+              <strong>Start blank</strong>
+              <span>Build your own from nothing: name every day, month and season yourself.</span>
+            </button>
           </div>
-
-          <div style={{ flex: 1, minWidth: 0, maxHeight: '60vh', overflowY: 'auto' }}>
-            {tab === 'general' && <GeneralStep config={config} onPatch={patch} />}
-            {tab === 'dates' && <DatesStep config={config} onPatch={patch} />}
-            {tab === 'eras' && <ErasStep config={config} onPatch={patch} />}
-            {tab === 'seasons' && <SeasonsStep config={config} onPatch={patch} />}
-            {tab === 'locations' && <LocationsStep config={config} onPatch={patch} />}
-            {tab === 'celestial' && <CelestialStep config={config} onPatch={patch} />}
-            {tab === 'events' && <EventsStep config={config} onPatch={patch} notes={notes} />}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)' }}>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            {saveError && <span style={{ fontSize: 12, color: 'var(--danger, #e05555)' }}>{saveError}</span>}
-            <Button variant="primary" onClick={handleSave}>
-              {initial ? 'Save Changes' : 'Create Calendar'}
+          <footer className="cw-foot">
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
             </Button>
-          </div>
+          </footer>
         </div>
-      </div>
+      ) : (
+        <div className="cw">
+          <header className="cw-head">
+            <h2>
+              {initial ? 'Edit calendar' : 'Make a calendar'}
+              {!initial && (
+                <button type="button" className="cw-back" onClick={() => setChoosing(true)}>
+                  Templates
+                </button>
+              )}
+            </h2>
+            {config.weekdays.length > 0 && config.months.length > 0 && (
+              <p>
+                Today reads as{' '}
+                <strong>{formatCalendarDate(config, { ...config.currentDate, monthIndex: Math.min(config.currentDate.monthIndex, config.months.length - 1) })}</strong>
+              </p>
+            )}
+          </header>
+
+          <div className="cw-body">
+            <nav className="cw-nav" aria-label="Calendar sections">
+              {TABS.map((t, i) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={tab === t.id ? 'cw-tab cw-tab--on' : 'cw-tab'}
+                  onClick={() => setTab(t.id)}
+                  aria-current={tab === t.id ? 'step' : undefined}
+                >
+                  <span className="cw-tab-n">{i + 1}</span>
+                  <span className="cw-tab-text">
+                    <strong>{t.label}</strong>
+                    <small>{tabCount(t.id, config)}</small>
+                  </span>
+                </button>
+              ))}
+            </nav>
+
+            <div className="cw-content">
+              <div className="cw-content-head">
+                <h3>{TABS.find((t) => t.id === tab)!.label}</h3>
+                <p>{TABS.find((t) => t.id === tab)!.about}</p>
+              </div>
+              {tab === 'general' && <GeneralStep config={config} onPatch={patch} />}
+              {tab === 'dates' && <DatesStep config={config} onPatch={patch} />}
+              {tab === 'eras' && <ErasStep config={config} onPatch={patch} />}
+              {tab === 'seasons' && <SeasonsStep config={config} onPatch={patch} />}
+              {tab === 'locations' && <LocationsStep config={config} onPatch={patch} />}
+              {tab === 'celestial' && <CelestialStep config={config} onPatch={patch} />}
+              {tab === 'events' && <EventsStep config={config} onPatch={patch} notes={notes} />}
+            </div>
+          </div>
+
+          <footer className="cw-foot">
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            {saveError && <span className="cw-error">{saveError}</span>}
+            <Button variant="primary" onClick={handleSave}>
+              {initial ? 'Save changes' : 'Make the calendar'}
+            </Button>
+          </footer>
+        </div>
+      )}
     </Modal>
   )
 }
@@ -148,12 +224,9 @@ interface StepProps {
 /** A row of small column captions sitting above a list of same-shaped rows (weekdays, months, weather types, eras) — a placeholder alone disappears the moment you type into it, so once every row has real values there's nothing left saying which column is which. Widths must mirror the row below it exactly (same flex/width values) for the labels to actually line up over their fields. */
 function ColumnCaptions({ columns }: { columns: { label: string; flex?: number; width?: number }[] }): JSX.Element {
   return (
-    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+    <div className="cw-captions">
       {columns.map((col, i) => (
-        <span
-          key={i}
-          style={{ flex: col.flex, width: col.width, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}
-        >
+        <span key={i} style={{ flex: col.flex, width: col.width }}>
           {col.label}
         </span>
       ))}
@@ -165,28 +238,9 @@ function ColumnCaptions({ columns }: { columns: { label: string; flex?: number; 
 /** Sits at the end of a list, in place of a "+ Add" button up in the section header — the next item always appears right where the user's mouse already is, instead of making them jump back up to a corner every time they add another row. */
 function AddCard({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }): JSX.Element {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        padding: '8px',
-        marginTop: 6,
-        width: '100%',
-        border: '1px dashed var(--border-subtle)',
-        borderRadius: 'var(--radius-sm)',
-        background: 'transparent',
-        color: 'var(--text-muted)',
-        fontSize: 12,
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.5 : 1
-      }}
-    >
-      + {label}
+    <button type="button" className="cw-add" onClick={onClick} disabled={disabled}>
+      <PlusIcon size={11} />
+      {label}
     </button>
   )
 }
@@ -194,8 +248,8 @@ function AddCard({ label, onClick, disabled }: { label: string; onClick: () => v
 /** A small caption above a single field — for anything that only had a placeholder (which disappears once filled) or a hover-only title before. */
 function FieldLabel({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</span>
+    <label className="cw-field">
+      <span>{label}</span>
       {children}
     </label>
   )
@@ -203,19 +257,12 @@ function FieldLabel({ label, children }: { label: string; children: ReactNode })
 
 function GeneralStep({ config, onPatch }: StepProps): JSX.Element {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+    <div className="cw-stack">
       <div>
         <label className="gb-label" htmlFor="cal-name">
           Calendar Name
         </label>
-        <input
-          id="cal-name"
-          className="gb-input"
-          autoFocus
-          value={config.name}
-          onChange={(e) => onPatch({ name: e.target.value })}
-          placeholder="The Harptos Calendar"
-        />
+        <input id="cal-name" className="gb-input" autoFocus value={config.name} onChange={(e) => onPatch({ name: e.target.value })} placeholder="The Harptos Calendar" />
       </div>
       <div>
         <label className="gb-label" htmlFor="cal-description">
@@ -241,37 +288,25 @@ function GeneralStep({ config, onPatch }: StepProps): JSX.Element {
           onChange={(e) => onPatch({ dateFormat: e.target.value })}
           placeholder="{weekday}, {day} {month} {year}"
         />
-        <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
-          Placeholders: {'{weekday} {weekdayAbbr} {day} {month} {monthAbbr} {year} {era}'}
-        </p>
+        <p className="cw-hint">Placeholders: {'{weekday} {weekdayAbbr} {day} {month} {monthAbbr} {year} {era}'}</p>
       </div>
       <div>
-        <label className="gb-label" style={{ margin: 0 }}>
-          Temperature Unit
-        </label>
-        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+        <h4 className="cw-sub">Temperature Unit</h4>
+        <div className="cal-segment cw-unit" role="radiogroup" aria-label="Temperature unit">
           {(['C', 'F'] as const).map((unit) => (
             <button
               key={unit}
               type="button"
+              role="radio"
+              aria-checked={config.temperatureUnit === unit}
+              className={config.temperatureUnit === unit ? 'cal-seg cal-seg--on' : 'cal-seg'}
               onClick={() => onPatch({ temperatureUnit: unit })}
-              style={{
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '4px 14px',
-                fontSize: 13,
-                cursor: 'pointer',
-                background: config.temperatureUnit === unit ? 'var(--accent-subtle)' : 'transparent',
-                color: config.temperatureUnit === unit ? 'var(--text-primary)' : 'var(--text-secondary)'
-              }}
             >
               °{unit}
             </button>
           ))}
         </div>
-        <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
-          Every season and location's temperature range is entered in this unit.
-        </p>
+        <p className="cw-hint">Every season and location's temperature range is entered in this unit.</p>
       </div>
     </div>
   )
@@ -297,9 +332,7 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
   function removeMonth(index: number): void {
     onPatch({
       months: config.months.filter((_, i) => i !== index),
-      leapRules: config.leapRules
-        .filter((r) => r.monthIndex !== index)
-        .map((r) => (r.monthIndex > index ? { ...r, monthIndex: r.monthIndex - 1 } : r))
+      leapRules: config.leapRules.filter((r) => r.monthIndex !== index).map((r) => (r.monthIndex > index ? { ...r, monthIndex: r.monthIndex - 1 } : r))
     })
   }
 
@@ -315,50 +348,46 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+    <div className="cw-stack cw-stack--wide">
       <div>
-        <label className="gb-label" style={{ margin: 0 }}>
-          Weekdays
-        </label>
-        {config.weekdays.length > 0 && <ColumnCaptions columns={[{ label: 'Name', flex: 2 }, { label: 'Abbreviation', flex: 1 }]} />}
+        <h4 className="cw-sub">Weekdays</h4>
+        {config.weekdays.length > 0 && (
+          <ColumnCaptions
+            columns={[
+              { label: '', width: 22 },
+              { label: 'Name', flex: 2 },
+              { label: 'Abbreviation', flex: 1 }
+            ]}
+          />
+        )}
         {config.weekdays.map((w, i) => (
-          <div key={i} style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 6 }}>
-            <input
-              className="gb-input"
-              style={{ flex: 2 }}
-              value={w.name}
-              onChange={(e) => updateWeekday(i, { name: e.target.value })}
-              placeholder="Name"
-            />
-            <input
-              className="gb-input"
-              style={{ flex: 1 }}
-              value={w.abbreviation}
-              onChange={(e) => updateWeekday(i, { abbreviation: e.target.value })}
-              placeholder="Abbr"
-            />
-            <Button variant="ghost" onClick={() => removeWeekday(i)}>
-              <XIcon />
-            </Button>
+          <div key={i} className="cw-row">
+            <span className="cw-row-n">{i + 1}</span>
+            <input className="gb-input" style={{ flex: 2 }} value={w.name} onChange={(e) => updateWeekday(i, { name: e.target.value })} placeholder="Name" />
+            <input className="gb-input" style={{ flex: 1 }} value={w.abbreviation} onChange={(e) => updateWeekday(i, { abbreviation: e.target.value })} placeholder="Abbr" />
+            <button type="button" className="cw-remove" onClick={() => removeWeekday(i)} title="Remove" aria-label="Remove">
+              <XIcon size={12} />
+            </button>
           </div>
         ))}
         <AddCard label="Add Weekday" onClick={addWeekday} />
       </div>
 
       <div>
-        <label className="gb-label" style={{ margin: 0 }}>
-          Months
-        </label>
-        {config.months.length > 0 && <ColumnCaptions columns={[{ label: 'Name', flex: 2 }, { label: 'Days', flex: 1 }]} />}
+        <h4 className="cw-sub">Months</h4>
+        {config.months.length > 0 && (
+          <ColumnCaptions
+            columns={[
+              { label: '', width: 22 },
+              { label: 'Name', flex: 2 },
+              { label: 'Days', flex: 1 }
+            ]}
+          />
+        )}
         {config.months.map((m, i) => (
-          <div key={i} style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 6 }}>
-            <input
-              className="gb-input"
-              style={{ flex: 2 }}
-              value={m.name}
-              onChange={(e) => updateMonth(i, { name: e.target.value })}
-              placeholder="Name"
-            />
+          <div key={i} className="cw-row">
+            <span className="cw-row-n">{i + 1}</span>
+            <input className="gb-input" style={{ flex: 2 }} value={m.name} onChange={(e) => updateMonth(i, { name: e.target.value })} placeholder="Name" />
             <input
               className="gb-input"
               type="number"
@@ -369,41 +398,29 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
               onChange={(e) => updateMonth(i, { length: Math.min(366, Math.max(1, Number(e.target.value) || 1)) })}
               placeholder="Days"
             />
-            <Button variant="ghost" onClick={() => removeMonth(i)}>
-              <XIcon />
-            </Button>
+            <button type="button" className="cw-remove" onClick={() => removeMonth(i)} title="Remove" aria-label="Remove">
+              <XIcon size={12} />
+            </button>
           </div>
         ))}
         <AddCard label="Add Month" onClick={addMonth} />
       </div>
 
       <div>
-        <label className="gb-label" style={{ margin: 0 }}>
-          Leap Days
-        </label>
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-          E.g. "every 4 years, offset 0" adds a day in year 4, 8, 12... — offset shifts which years count (offset 1 would be
-          years 1, 5, 9 instead).
-        </p>
-        {config.leapRules.length === 0 && (
-          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>None — every year is the same length.</p>
-        )}
+        <h4 className="cw-sub">Leap Days</h4>
+        <p className="cw-hint">E.g. "every 4 years, offset 0" adds a day in year 4, 8, 12... — offset shifts which years count (offset 1 would be years 1, 5, 9 instead).</p>
+        {config.leapRules.length === 0 && <p className="cw-empty">None — every year is the same length.</p>}
         {config.leapRules.map((rule, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 6, fontSize: 12 }}>
-            <span style={{ color: 'var(--text-muted)' }}>Add a day to</span>
-            <select
-              className="gb-input"
-              style={{ flex: 1 }}
-              value={rule.monthIndex}
-              onChange={(e) => updateLeapRule(i, { monthIndex: Number(e.target.value) })}
-            >
+          <div key={i} className="cw-row cw-row--sentence">
+            <span className="cw-word">Add a day to</span>
+            <select className="gb-input" style={{ flex: 1 }} value={rule.monthIndex} onChange={(e) => updateLeapRule(i, { monthIndex: Number(e.target.value) })}>
               {config.months.map((m, mi) => (
                 <option key={mi} value={mi}>
                   {m.name}
                 </option>
               ))}
             </select>
-            <span style={{ color: 'var(--text-muted)' }}>every</span>
+            <span className="cw-word">every</span>
             <input
               className="gb-input"
               type="number"
@@ -412,7 +429,7 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
               value={rule.interval}
               onChange={(e) => updateLeapRule(i, { interval: Math.max(1, Number(e.target.value) || 1) })}
             />
-            <span style={{ color: 'var(--text-muted)' }}>years, offset</span>
+            <span className="cw-word">years, offset</span>
             <input
               className="gb-input"
               type="number"
@@ -421,9 +438,9 @@ function DatesStep({ config, onPatch }: StepProps): JSX.Element {
               value={rule.offset}
               onChange={(e) => updateLeapRule(i, { offset: Math.max(0, Number(e.target.value) || 0) })}
             />
-            <Button variant="ghost" onClick={() => removeLeapRule(i)}>
-              <XIcon />
-            </Button>
+            <button type="button" className="cw-remove" onClick={() => removeLeapRule(i)} title="Remove" aria-label="Remove">
+              <XIcon size={12} />
+            </button>
           </div>
         ))}
         <AddCard label="Add Leap Day Rule" disabled={config.months.length === 0} onClick={addLeapRule} />
@@ -440,34 +457,28 @@ const CLIMATE_PRESET_LABELS: { key: keyof typeof SEASON_CLIMATE_PRESETS; label: 
 ]
 
 /** Shared by a season's own climate and a location's per-month climate override — the numeric ranges weather is generated within, plus one-click presets for the four basic seasons (still fully editable afterward). `unit` is just for labeling the temp fields and translating presets — the climate object itself is unit-agnostic. */
-function ClimateEditor({
-  climate,
-  unit,
-  onChange
-}: {
-  climate: CalendarClimate
-  unit: 'C' | 'F'
-  onChange: (next: CalendarClimate) => void
-}): JSX.Element {
+function ClimateEditor({ climate, unit, onChange }: { climate: CalendarClimate; unit: 'C' | 'F'; onChange: (next: CalendarClimate) => void }): JSX.Element {
   function patch(fields: Partial<CalendarClimate>): void {
     onChange({ ...climate, ...fields })
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', gap: 4 }}>
+    <div className="cw-climate-wrap">
+      <div className="cw-presets">
+        <span>Like:</span>
         {CLIMATE_PRESET_LABELS.map(({ key, label }) => (
-          <Button
+          <button
             key={key}
-            variant="ghost"
-            style={{ fontSize: 11, padding: '2px 8px' }}
+            type="button"
+            className="cw-chip"
             onClick={() => onChange(climateInUnit(SEASON_CLIMATE_PRESETS[key], unit))}
+            title={`Fill in a typical ${label.toLowerCase()}`}
           >
             {label}
-          </Button>
+          </button>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+      <div className="cw-climate">
         <ClimateField label={`Min Temp (°${unit})`} value={climate.tempMin} onChange={(v) => patch({ tempMin: v })} />
         <ClimateField label={`Max Temp (°${unit})`} value={climate.tempMax} onChange={(v) => patch({ tempMax: v })} />
         <ClimateField label="Rain Chance (%)" value={Math.round(climate.rainChance * 100)} onChange={(v) => patch({ rainChance: v / 100 })} min={0} max={100} />
@@ -479,28 +490,16 @@ function ClimateEditor({
   )
 }
 
-function ClimateField({
-  label,
-  value,
-  onChange,
-  min,
-  max
-}: {
-  label: string
-  value: number
-  onChange: (v: number) => void
-  min?: number
-  max?: number
-}): JSX.Element {
+function ClimateField({ label, value, onChange, min, max }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number }): JSX.Element {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</span>
+    <label className="cw-field">
+      <span>{label}</span>
       <input
         className="gb-input"
         type="number"
         min={min}
         max={max}
-        style={{ fontSize: 12, padding: '2px 6px' }}
+
         value={value}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
       />
@@ -535,54 +534,25 @@ function SeasonsStep({ config, onPatch }: StepProps): JSX.Element {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      <label className="gb-label" style={{ margin: 0 }}>
-        Seasons
-      </label>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-        Each season starts on a month/day and runs until the next season's start — whichever one's start is latest and still
-        at or before a given date is active, wrapping around the year for whatever carries over from December.
+    <div className="cw-stack">
+      <h4 className="cw-sub">Seasons</h4>
+      <p className="cw-hint">
+        Each season starts on a month/day and runs until the next season's start — whichever one's start is latest and still at or before a given date is active, wrapping around
+        the year for whatever carries over from December.
       </p>
-      {config.seasons.length === 0 && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>None — no season or weather will be shown.</p>
-      )}
+      {config.seasons.length === 0 && <p className="cw-empty">None — no season or weather will be shown.</p>}
       {config.seasons.map((season, i) => (
-        <div
-          key={season.id}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            padding: 'var(--space-2)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)'
-          }}
-        >
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Color</span>
-              <input
-                type="color"
-                title="Season color"
-                value={season.color}
-                onChange={(e) => updateSeason(i, { color: e.target.value })}
-                style={{ width: 28, height: 22, padding: 0, border: 'none', background: 'none' }}
-              />
+        <div key={season.id} className="cw-card">
+          <div className="cw-line">
+            <label className="cw-color-field">
+              <span>Colour</span>
+              <input type="color" title="Season color" value={season.color} onChange={(e) => updateSeason(i, { color: e.target.value })} className="cw-color" />
             </label>
             <FieldLabel label="Name">
-              <input
-                className="gb-input"
-                value={season.name}
-                onChange={(e) => updateSeason(i, { name: e.target.value })}
-                placeholder="Season name"
-              />
+              <input className="gb-input" value={season.name} onChange={(e) => updateSeason(i, { name: e.target.value })} placeholder="Season name" />
             </FieldLabel>
             <FieldLabel label="Starts Month">
-              <select
-                className="gb-input"
-                value={season.startMonthIndex}
-                onChange={(e) => updateSeason(i, { startMonthIndex: Number(e.target.value) })}
-              >
+              <select className="gb-input" value={season.startMonthIndex} onChange={(e) => updateSeason(i, { startMonthIndex: Number(e.target.value) })}>
                 {config.months.map((m, mi) => (
                   <option key={mi} value={mi}>
                     {m.name}
@@ -596,22 +566,22 @@ function SeasonsStep({ config, onPatch }: StepProps): JSX.Element {
                 type="number"
                 min={1}
                 max={config.months[season.startMonthIndex]?.length ?? 31}
-                style={{ width: 56 }}
+                style={{ width: 64 }}
                 value={season.startDay}
                 onChange={(e) => updateSeason(i, { startDay: Math.max(1, Number(e.target.value) || 1) })}
               />
             </FieldLabel>
-            <Button variant="ghost" onClick={() => removeSeason(i)}>
-              <XIcon />
-            </Button>
+            <button type="button" className="cw-remove" onClick={() => removeSeason(i)} title="Remove" aria-label="Remove">
+              <XIcon size={12} />
+            </button>
           </div>
           <ClimateEditor climate={season.climate} unit={config.temperatureUnit} onChange={(climate) => updateSeason(i, { climate })} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className="cw-line">
             <FieldLabel label="Sunrise">
               <input
                 className="gb-input"
                 type="time"
-                style={{ fontSize: 12, padding: '2px 6px' }}
+
                 value={hourToTimeInput(season.sunriseHour)}
                 onChange={(e) => updateSeason(i, { sunriseHour: timeInputToHour(e.target.value) })}
               />
@@ -620,7 +590,7 @@ function SeasonsStep({ config, onPatch }: StepProps): JSX.Element {
               <input
                 className="gb-input"
                 type="time"
-                style={{ fontSize: 12, padding: '2px 6px' }}
+
                 value={hourToTimeInput(season.sunsetHour)}
                 onChange={(e) => updateSeason(i, { sunsetHour: timeInputToHour(e.target.value) })}
               />
@@ -665,94 +635,55 @@ function LocationsStep({ config, onPatch }: StepProps): JSX.Element {
     // than typing a whole climate from scratch for what's usually a small regional tweak.
     const baseClimate = config.seasons[0]?.climate ?? climateInUnit(SEASON_CLIMATE_PRESETS.spring, config.temperatureUnit)
     onPatch({
-      locations: config.locations.map((l, i) =>
-        i === locIndex ? { ...l, monthOverrides: [...l.monthOverrides, { monthIndex: 0, climate: baseClimate }] } : l
-      )
+      locations: config.locations.map((l, i) => (i === locIndex ? { ...l, monthOverrides: [...l.monthOverrides, { monthIndex: 0, climate: baseClimate }] } : l))
     })
   }
   function updateOverride(locIndex: number, overrideIndex: number, monthIndex: number): void {
     onPatch({
-      locations: config.locations.map((l, i) =>
-        i === locIndex
-          ? { ...l, monthOverrides: l.monthOverrides.map((o, oi) => (oi === overrideIndex ? { ...o, monthIndex } : o)) }
-          : l
-      )
+      locations: config.locations.map((l, i) => (i === locIndex ? { ...l, monthOverrides: l.monthOverrides.map((o, oi) => (oi === overrideIndex ? { ...o, monthIndex } : o)) } : l))
     })
   }
   function updateOverrideClimate(locIndex: number, overrideIndex: number, climate: CalendarClimate): void {
     onPatch({
-      locations: config.locations.map((l, i) =>
-        i === locIndex
-          ? { ...l, monthOverrides: l.monthOverrides.map((o, oi) => (oi === overrideIndex ? { ...o, climate } : o)) }
-          : l
-      )
+      locations: config.locations.map((l, i) => (i === locIndex ? { ...l, monthOverrides: l.monthOverrides.map((o, oi) => (oi === overrideIndex ? { ...o, climate } : o)) } : l))
     })
   }
   function removeOverride(locIndex: number, overrideIndex: number): void {
     onPatch({
-      locations: config.locations.map((l, i) =>
-        i === locIndex ? { ...l, monthOverrides: l.monthOverrides.filter((_, oi) => oi !== overrideIndex) } : l
-      )
+      locations: config.locations.map((l, i) => (i === locIndex ? { ...l, monthOverrides: l.monthOverrides.filter((_, oi) => oi !== overrideIndex) } : l))
     })
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      <label className="gb-label" style={{ margin: 0 }}>
-        Locations
-      </label>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-        Optional — give a location its own climate for specific months, overriding the season's default there. A month
-        with no override just uses the active season's climate as normal.
+    <div className="cw-stack">
+      <h4 className="cw-sub">Locations</h4>
+      <p className="cw-hint">
+        Optional — give a location its own climate for specific months, overriding the season's default there. A month with no override just uses the active season's climate as
+        normal.
       </p>
-      {config.locations.length === 0 && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>None — weather always follows the season only.</p>
-      )}
+      {config.locations.length === 0 && <p className="cw-empty">None — weather always follows the season only.</p>}
       {config.locations.map((location, li) => (
-        <div
-          key={location.id}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            padding: 'var(--space-2)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)'
-          }}
-        >
-          <div style={{ display: 'flex', gap: 6 }}>
+        <div key={location.id} className="cw-card">
+          <div className="cw-line">
             <FieldLabel label="Name">
-              <input
-                className="gb-input"
-                value={location.name}
-                onChange={(e) => updateLocation(li, { name: e.target.value })}
-                placeholder="Location name"
-              />
+              <input className="gb-input" value={location.name} onChange={(e) => updateLocation(li, { name: e.target.value })} placeholder="Location name" />
             </FieldLabel>
-            <Button variant="ghost" onClick={() => removeLocation(li)}>
-              <XIcon />
-            </Button>
+            <button type="button" className="cw-remove" onClick={() => removeLocation(li)} title="Remove" aria-label="Remove">
+              <XIcon size={12} />
+            </button>
           </div>
           <FieldLabel label="Description">
-            <input
-              className="gb-input"
-              value={location.description}
-              onChange={(e) => updateLocation(li, { description: e.target.value })}
-              placeholder="Description (optional)"
-            />
+            <input className="gb-input" value={location.description} onChange={(e) => updateLocation(li, { description: e.target.value })} placeholder="Description (optional)" />
           </FieldLabel>
 
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Month climate overrides</span>
+          <h5 className="cw-sub2">Months with their own climate</h5>
           {location.monthOverrides.map((override, oi) => (
-            <div
-              key={oi}
-              style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8, borderLeft: '2px solid var(--border-subtle)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div key={oi} className="cw-override">
+              <div className="cw-line">
                 <FieldLabel label="Month">
                   <select
                     className="gb-input"
-                    style={{ fontSize: 12, padding: '2px 6px' }}
+
                     value={override.monthIndex}
                     onChange={(e) => updateOverride(li, oi, Number(e.target.value))}
                   >
@@ -763,15 +694,11 @@ function LocationsStep({ config, onPatch }: StepProps): JSX.Element {
                     ))}
                   </select>
                 </FieldLabel>
-                <Button variant="ghost" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => removeOverride(li, oi)}>
-                  <XIcon />
-                </Button>
+                <button type="button" className="cw-remove" onClick={() => removeOverride(li, oi)} title="Remove" aria-label="Remove">
+                  <XIcon size={12} />
+                </button>
               </div>
-              <ClimateEditor
-                climate={override.climate}
-                unit={config.temperatureUnit}
-                onChange={(climate) => updateOverrideClimate(li, oi, climate)}
-              />
+              <ClimateEditor climate={override.climate} unit={config.temperatureUnit} onChange={(climate) => updateOverrideClimate(li, oi, climate)} />
             </div>
           ))}
           <AddCard label="Add Month Override" disabled={config.months.length === 0} onClick={() => addOverride(li)} />
@@ -796,44 +723,26 @@ function ErasStep({ config, onPatch }: StepProps): JSX.Element {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      <label className="gb-label" style={{ margin: 0 }}>
-        Eras
-      </label>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-        A date's era is whichever one's start year is the latest that's still at or before that year — use this for a setting
-        with more than one historical age (e.g. "203 SC" before a cataclysm, "1 AC" after it).
+    <div className="cw-stack">
+      <h4 className="cw-sub">Eras</h4>
+      <p className="cw-hint">
+        A date's era is whichever one's start year is the latest that's still at or before that year — use this for a setting with more than one historical age (e.g. "203 SC"
+        before a cataclysm, "1 AC" after it).
       </p>
-      {config.eras.length === 0 && (
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-          None — dates will just show the plain year number.
-        </p>
-      )}
+      {config.eras.length === 0 && <p className="cw-empty">None — dates will just show the plain year number.</p>}
       {config.eras.length > 0 && (
         <ColumnCaptions
-          columns={[{ label: 'Name', flex: 2 }, { label: 'Display Format (use {year})', flex: 2 }, { label: 'Start Year', flex: 1 }]}
+          columns={[
+            { label: 'Name', flex: 2 },
+            { label: 'Display Format (use {year})', flex: 2 },
+            { label: 'Start Year', flex: 1 }
+          ]}
         />
       )}
       {config.eras.map((era, i) => (
-        <div
-          key={era.id}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            padding: 'var(--space-2)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)'
-          }}
-        >
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            <input
-              className="gb-input"
-              style={{ flex: 2 }}
-              value={era.name}
-              onChange={(e) => updateEra(i, { name: e.target.value })}
-              placeholder="Era name"
-            />
+        <div key={era.id} className="cw-card">
+          <div className="cw-line">
+            <input className="gb-input" style={{ flex: 2 }} value={era.name} onChange={(e) => updateEra(i, { name: e.target.value })} placeholder="Era name" />
             <input
               className="gb-input"
               style={{ flex: 2 }}
@@ -851,17 +760,12 @@ function ErasStep({ config, onPatch }: StepProps): JSX.Element {
               placeholder="Start year"
               title="The year this era begins"
             />
-            <Button variant="ghost" onClick={() => removeEra(i)}>
-              <XIcon />
-            </Button>
+            <button type="button" className="cw-remove" onClick={() => removeEra(i)} title="Remove" aria-label="Remove">
+              <XIcon size={12} />
+            </button>
           </div>
           <FieldLabel label="Description">
-            <input
-              className="gb-input"
-              value={era.description}
-              onChange={(e) => updateEra(i, { description: e.target.value })}
-              placeholder="Description (optional)"
-            />
+            <input className="gb-input" value={era.description} onChange={(e) => updateEra(i, { description: e.target.value })} placeholder="Description (optional)" />
           </FieldLabel>
         </div>
       ))}
@@ -882,15 +786,13 @@ function CelestialStep({ config, onPatch }: StepProps): JSX.Element {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      <label className="gb-label" style={{ margin: 0 }}>
-        Moons
-      </label>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-        Each moon cycles through its 8 phases deterministically — the same day always shows the same phase, no rolling
-        involved. Two moons with different cycle lengths (or an offset) drift in and out of sync with each other.
+    <div className="cw-stack">
+      <h4 className="cw-sub">Moons</h4>
+      <p className="cw-hint">
+        Each moon cycles through its 8 phases deterministically — the same day always shows the same phase, no rolling involved. Two moons with different cycle lengths (or an
+        offset) drift in and out of sync with each other.
       </p>
-      {config.moons.length === 0 && <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>None — no moon phases will be shown.</p>}
+      {config.moons.length === 0 && <p className="cw-empty">None — no moon phases will be shown.</p>}
       {config.moons.length > 0 && (
         <ColumnCaptions
           columns={[
@@ -902,21 +804,9 @@ function CelestialStep({ config, onPatch }: StepProps): JSX.Element {
         />
       )}
       {config.moons.map((moon, i) => (
-        <div key={moon.id} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input
-            type="color"
-            title="Moon color"
-            value={moon.color}
-            onChange={(e) => updateMoon(i, { color: e.target.value })}
-            style={{ width: 28, height: 28, padding: 0, border: 'none', background: 'none', flexShrink: 0 }}
-          />
-          <input
-            className="gb-input"
-            style={{ flex: 2 }}
-            value={moon.name}
-            onChange={(e) => updateMoon(i, { name: e.target.value })}
-            placeholder="Moon name"
-          />
+        <div key={moon.id} className="cw-line">
+          <input type="color" title="Moon color" value={moon.color} onChange={(e) => updateMoon(i, { color: e.target.value })} className="cw-color" />
+          <input className="gb-input" style={{ flex: 2 }} value={moon.name} onChange={(e) => updateMoon(i, { name: e.target.value })} placeholder="Moon name" />
           <input
             className="gb-input"
             type="number"
@@ -934,9 +824,9 @@ function CelestialStep({ config, onPatch }: StepProps): JSX.Element {
             title="Shifts which day starts the cycle — use this to desync two moons that share a cycle length"
             onChange={(e) => updateMoon(i, { offset: Number(e.target.value) || 0 })}
           />
-          <Button variant="ghost" onClick={() => removeMoon(i)}>
-            <XIcon />
-          </Button>
+          <button type="button" className="cw-remove" onClick={() => removeMoon(i)} title="Remove" aria-label="Remove">
+            <XIcon size={12} />
+          </button>
         </div>
       ))}
       <AddCard label="Add Moon" onClick={addMoon} />
@@ -976,51 +866,27 @@ function EventsStep({ config, onPatch, notes }: StepProps & { notes: Note[] }): 
   const existingCategories = [...new Set(config.events.map((e) => e.category).filter(Boolean))]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      <label className="gb-label" style={{ margin: 0 }}>
-        Events
-      </label>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-        Festivals, deadlines, anniversaries — anything worth marking on the calendar. Group related events under the same
-        category for a quick visual read, and optionally pair one with an existing note (a session recap, a quest writeup).
-        Events can also be added day-by-day from the calendar itself, next to whichever day is selected.
+    <div className="cw-stack">
+      <h4 className="cw-sub">Events</h4>
+      <p className="cw-hint">
+        Festivals, deadlines, anniversaries — anything worth marking on the calendar. Group related events under the same category for a quick visual read, and optionally pair one
+        with an existing note (a session recap, a quest writeup). Events can also be added day-by-day from the calendar itself, next to whichever day is selected.
       </p>
       <datalist id="cal-event-categories">
         {existingCategories.map((c) => (
           <option key={c} value={c} />
         ))}
       </datalist>
-      {config.events.length === 0 && <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>None yet.</p>}
+      {config.events.length === 0 && <p className="cw-empty">None yet.</p>}
       {config.events.map((event, i) => (
-        <div
-          key={event.id}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            padding: 'var(--space-2)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)'
-          }}
-        >
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Color</span>
-              <input
-                type="color"
-                title="Event color"
-                value={event.color}
-                onChange={(e) => updateEvent(i, { color: e.target.value })}
-                style={{ width: 28, height: 22, padding: 0, border: 'none', background: 'none' }}
-              />
+        <div key={event.id} className="cw-card">
+          <div className="cw-line">
+            <label className="cw-color-field">
+              <span>Colour</span>
+              <input type="color" title="Event color" value={event.color} onChange={(e) => updateEvent(i, { color: e.target.value })} className="cw-color" />
             </label>
             <FieldLabel label="Name">
-              <input
-                className="gb-input"
-                value={event.name}
-                onChange={(e) => updateEvent(i, { name: e.target.value })}
-                placeholder="Event name"
-              />
+              <input className="gb-input" value={event.name} onChange={(e) => updateEvent(i, { name: e.target.value })} placeholder="Event name" />
             </FieldLabel>
             <FieldLabel label="Category">
               <input
@@ -1031,14 +897,14 @@ function EventsStep({ config, onPatch, notes }: StepProps & { notes: Note[] }): 
                 placeholder="Category"
               />
             </FieldLabel>
-            <ConfirmButton label={<XIcon />} confirmLabel="Sure?" variant="ghost" danger onConfirm={() => removeEvent(i)} />
+            <ConfirmButton label={<XIcon size={12} />} confirmLabel="Sure?" variant="ghost" danger className="cw-remove" onConfirm={() => removeEvent(i)} />
           </div>
 
-          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+          <div className="cw-line cw-line--end">
             <FieldLabel label="Month">
               <select
                 className="gb-input"
-                style={{ fontSize: 12 }}
+
                 value={event.date.monthIndex}
                 onChange={(e) => updateEvent(i, { date: { ...event.date, monthIndex: Number(e.target.value) } })}
               >
@@ -1055,7 +921,7 @@ function EventsStep({ config, onPatch, notes }: StepProps & { notes: Note[] }): 
                 type="number"
                 min={1}
                 max={config.months[event.date.monthIndex]?.length ?? 31}
-                style={{ width: 56, fontSize: 12 }}
+                style={{ width: 64 }}
                 value={event.date.day}
                 onChange={(e) => updateEvent(i, { date: { ...event.date, day: Math.max(1, Number(e.target.value) || 1) } })}
               />
@@ -1064,18 +930,13 @@ function EventsStep({ config, onPatch, notes }: StepProps & { notes: Note[] }): 
               <input
                 className="gb-input"
                 type="number"
-                style={{ width: 64, fontSize: 12 }}
+                style={{ width: 72 }}
                 value={event.date.year}
                 onChange={(e) => updateEvent(i, { date: { ...event.date, year: Number(e.target.value) || 0 } })}
               />
             </FieldLabel>
             <FieldLabel label="Repeats">
-              <select
-                className="gb-input"
-                style={{ fontSize: 12 }}
-                value={event.repeat}
-                onChange={(e) => updateEvent(i, { repeat: e.target.value as EventRepeat })}
-              >
+              <select className="gb-input" value={event.repeat} onChange={(e) => updateEvent(i, { repeat: e.target.value as EventRepeat })}>
                 <option value="none">Never</option>
                 <option value="yearly">Yearly</option>
                 <option value="monthly">Monthly</option>
@@ -1088,7 +949,7 @@ function EventsStep({ config, onPatch, notes }: StepProps & { notes: Note[] }): 
             <textarea
               className="gb-input"
               rows={2}
-              style={{ fontSize: 12 }}
+
               value={event.description}
               onChange={(e) => updateEvent(i, { description: e.target.value })}
               placeholder="Description (optional)"
@@ -1099,7 +960,7 @@ function EventsStep({ config, onPatch, notes }: StepProps & { notes: Note[] }): 
             <FieldLabel label="Linked Note">
               <select
                 className="gb-input"
-                style={{ fontSize: 12, padding: '2px 6px' }}
+
                 value={event.linkedNoteId ?? ''}
                 onChange={(e) => updateEvent(i, { linkedNoteId: e.target.value || null })}
               >

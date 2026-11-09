@@ -16,6 +16,8 @@ interface StoredAccount {
   id: string
   username: string
   passwordHash: string
+  /** Small profile picture as a data URL (the app resizes it before upload). */
+  avatar?: string
 }
 
 /** Opaque to the relay — see handleSetCampaignSnapshot's doc comment. */
@@ -38,6 +40,7 @@ interface StoredCharacter {
 }
 
 const MAX_CHARACTER_BYTES = 1_500_000
+const MAX_AVATAR_CHARS = 60_000
 
 interface FriendRequests {
   incoming: string[] // userIds who sent *this* user a request
@@ -166,6 +169,7 @@ export class Directory extends Server<Env> {
     if (req.method === 'POST' && action === 'change-password') return this.handleChangePassword(req)
     if (req.method === 'GET' && action === 'prefs') return this.handleGetPrefs(req)
     if (req.method === 'POST' && action === 'prefs') return this.handleSetPrefs(req)
+    if (req.method === 'POST' && action === 'avatar') return this.handleSetAvatar(req)
     if (req.method === 'GET' && action === 'campaigns') return this.handleListCampaignSnapshots(req)
     if (req.method === 'GET' && segments[segments.length - 2] === 'campaigns') return this.handleGetCampaignSnapshot(req, action)
     if (req.method === 'POST' && segments[segments.length - 2] === 'campaigns') return this.handleSetCampaignSnapshot(req, action)
@@ -246,7 +250,23 @@ export class Directory extends Server<Env> {
   private async handleMe(req: Request): Promise<Response> {
     const account = await this.authenticate(req)
     if (!account) return json({ error: 'Unauthorized' }, 401)
-    return json({ userId: account.id, username: account.username })
+    return json({ userId: account.id, username: account.username, avatar: account.avatar })
+  }
+
+  /** Sets (or with null, clears) your profile picture, then nudges friends to re-fetch so they see it. */
+  private async handleSetAvatar(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const body = (await req.json().catch(() => null)) as { avatar?: string | null } | null
+    const avatar = body?.avatar
+    if (avatar !== null && (typeof avatar !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(avatar) || avatar.length > MAX_AVATAR_CHARS)) {
+      return badRequest('avatar must be a small png, jpeg or webp data URL, or null')
+    }
+    const { avatar: _old, ...rest } = account
+    await this.ctx.storage.put(`user:${account.id}`, avatar ? { ...rest, avatar } : rest)
+    const friendIds = (await this.ctx.storage.get<string[]>(`friends:${account.id}`)) ?? []
+    await Promise.all(friendIds.map((id) => this.pushFriendGraphChanged(id)))
+    return json({ ok: true })
   }
 
   /** Keeps the relay account's password in step with the local device identity's — without this, changing your local password silently strands the relay account on the old one (next sync tries login-with-new-password, fails, then register-with-new-password, fails too since the username's already taken — a dead end with no way back in short of an admin clearing the account). */
@@ -394,7 +414,7 @@ export class Directory extends Server<Env> {
     const friends = await Promise.all(
       friendIds.map(async (id) => {
         const friend = await this.ctx.storage.get<StoredAccount>(`user:${id}`)
-        return friend ? { userId: friend.id, username: friend.username } : null
+        return friend ? { userId: friend.id, username: friend.username, avatar: friend.avatar } : null
       })
     )
 
@@ -405,13 +425,13 @@ export class Directory extends Server<Env> {
     const incoming = await Promise.all(
       requests.incoming.map(async (id) => {
         const requester = await this.ctx.storage.get<StoredAccount>(`user:${id}`)
-        return requester ? { userId: requester.id, username: requester.username } : null
+        return requester ? { userId: requester.id, username: requester.username, avatar: requester.avatar } : null
       })
     )
 
     return json({
-      friends: friends.filter((f): f is { userId: string; username: string } => f !== null),
-      incomingRequests: incoming.filter((f): f is { userId: string; username: string } => f !== null)
+      friends: friends.filter((f): f is { userId: string; username: string; avatar: string | undefined } => f !== null),
+      incomingRequests: incoming.filter((f): f is { userId: string; username: string; avatar: string | undefined } => f !== null)
     })
   }
 

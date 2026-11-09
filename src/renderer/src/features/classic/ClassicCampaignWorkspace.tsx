@@ -3,7 +3,6 @@ import { NoteSidebar } from '../campaigns/NoteSidebar'
 import { NoteEditor } from '../campaigns/NoteEditor'
 import { RightPanel } from './RightPanel'
 import { CampaignSwitcher } from '../campaigns/CampaignSwitcher'
-import { AccountSettingsButton } from '../account/AccountSettingsButton'
 import { CharacterSheetEditor } from '../player/CharacterSheetEditor'
 import { renderStatblockHtml } from '../../statblock'
 import { rollInlineDice } from '../dice/inlineDice'
@@ -105,7 +104,6 @@ export function ClassicCampaignWorkspace({
               hostedSessionId={hostedSessionId ?? null}
               onHostedSessionChange={onHostedSessionChange}
             />
-            <AccountSettingsButton />
           </>
         }
       >

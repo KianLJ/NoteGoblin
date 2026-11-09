@@ -1,6 +1,8 @@
 import { findSfxCue, pickSfxVariant, findClassFeatureSfxCue, findTurnFlowCue, findSpellCastSfxCue, findMonsterSfxCue } from '../../data/sfxLibrary'
 import { getStoredSfxBoardVolume, getStoredSfxBoardBroadcastEnabled } from './soundSettings'
 import { getCustomEntitySfxUrl } from './customEntitySfxStore'
+import { findCustomTrack } from './customMusicStore'
+import { base64ToBlobUrl } from './musicEngine'
 
 /**
  * Sound Board's playback — deliberately much simpler than musicEngine.ts or
@@ -51,9 +53,42 @@ function playLocal(url: string): void {
  */
 export function playSfxCue(cueId: string, sessionId: string | null): void {
   const cue = findSfxCue(cueId)
-  if (!cue) return
-  playLocal(pickSfxVariant(cue))
+  // Your own sounds (see customMusicStore's YOUR_SOUNDS_GROUP) go out the same way; their audio travels with them.
+  const url = cue ? pickSfxVariant(cue) : findCustomTrack(cueId)?.url
+  if (!url) return
+  playLocal(url)
   if (sessionId && getStoredSfxBoardBroadcastEnabled()) void window.goblin.sfxBoard.broadcast(cueId)
+}
+
+// The sound board pads you've hit lately, newest first — what its minimized box offers.
+const RECENT_KEY = 'gb-sfx-recent'
+const RECENT_MAX = 6
+let recent: string[] = (() => {
+  try {
+    return (JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as string[]).slice(0, RECENT_MAX)
+  } catch {
+    return []
+  }
+})()
+const recentListeners = new Set<() => void>()
+
+export function recentSfx(): string[] {
+  return recent
+}
+
+export function rememberRecentSfx(id: string): void {
+  recent = [id, ...recent.filter((r) => r !== id)].slice(0, RECENT_MAX)
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recent))
+  } catch {
+    /* this run only */
+  }
+  for (const l of recentListeners) l()
+}
+
+export function subscribeRecentSfx(listener: () => void): () => void {
+  recentListeners.add(listener)
+  return () => recentListeners.delete(listener)
 }
 
 /** Plays and broadcasts the Class Features cue matching a character sheet ability's display name (see findClassFeatureSfxCue) — a silent no-op if that ability has no cue mapped, or its mapped cue hasn't been curated yet, so it's safe to call from every activate/use button regardless of what's actually in assets/soundboard/ClassFeatures right now. */
@@ -103,8 +138,11 @@ let listening = false
 export function ensureSfxBoardListening(): void {
   if (listening) return
   listening = true
-  window.goblin.sfxBoard.onPlay((cueId) => {
+  const received = new Map<string, string>()
+  window.goblin.sfxBoard.onPlay((cueId, custom) => {
+    if (custom && !received.has(cueId)) received.set(cueId, base64ToBlobUrl(custom.dataBase64, custom.mimeType))
     const cue = findSfxCue(cueId)
-    if (cue) playLocal(pickSfxVariant(cue))
+    const url = cue ? pickSfxVariant(cue) : received.get(cueId)
+    if (url) playLocal(url)
   })
 }

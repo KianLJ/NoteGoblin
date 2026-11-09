@@ -221,3 +221,20 @@ button {
 .gb-init-roll:hover {
   background: var(--accent-subtle) !important;
 }
+
+/* A profile picture filling whatever round face it sits in. */
+.gb-face-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Dark mode: text fields and slider tracks sit on cards of the same colour, so they get a recessed fill to stand apart. */
+:root[data-theme='dark'] .gb-input {
+  background: var(--bg-canvas);
+}
+:root[data-theme='dark'] .gb-slider {
+  background: var(--text-muted);
+}

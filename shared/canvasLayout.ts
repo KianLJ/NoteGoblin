@@ -117,12 +117,12 @@ export function setNodeRect(layout: CanvasLayout, id: string, rect: Rect): Canva
   }
 }
 
-/** Shrinks a node to its tile, keeping its top-left corner, or opens it back up to the size it had. */
-export function setMinimized(layout: CanvasLayout, id: string, minimized: boolean): CanvasLayout {
+/** Shrinks a node to its tile (`size`: a tool's own small view, else the plain tile), keeping its top-left corner, or opens it back up to the size it had. */
+export function setMinimized(layout: CanvasLayout, id: string, minimized: boolean, size: { w: number; h: number } = { w: MINI_SIZE, h: MINI_SIZE }): CanvasLayout {
   const node = findNode(layout, id)
   if (!node || !!node.minimized === minimized) return layout
   const next: CanvasNodeGeom = minimized
-    ? { ...node, w: MINI_SIZE, h: MINI_SIZE, minimized: { w: node.w, h: node.h } }
+    ? { ...node, w: size.w, h: size.h, minimized: { w: node.w, h: node.h } }
     : { ...node, w: node.minimized!.w, h: node.minimized!.h, minimized: undefined }
   return { ...layout, nodes: layout.nodes.map((n) => (n.id === id ? next : n)) }
 }

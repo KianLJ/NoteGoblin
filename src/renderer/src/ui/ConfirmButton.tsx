@@ -15,6 +15,7 @@ interface ConfirmButtonProps {
   /** Armed state renders in danger red instead of the accent color — for something irreversible/consequential like leaving a session. Starting/stopping hosting isn't destructive, so it stays unset there. */
   danger?: boolean
   style?: CSSProperties
+  className?: string
   title?: string
 }
 
@@ -26,7 +27,7 @@ interface ConfirmButtonProps {
  * out the window, or navigating away all just let it quietly disarm — no
  * modal, no extra state to clean up.
  */
-export function ConfirmButton({ label, confirmLabel = 'Confirm?', onConfirm, disabled, variant = 'primary', danger, style, title }: ConfirmButtonProps): JSX.Element {
+export function ConfirmButton({ label, confirmLabel = 'Confirm?', onConfirm, disabled, variant = 'primary', danger, style, className, title }: ConfirmButtonProps): JSX.Element {
   const [armed, setArmed] = useState(false)
   const disarmTimer = useRef<ReturnType<typeof setTimeout>>()
 
@@ -49,6 +50,7 @@ export function ConfirmButton({ label, confirmLabel = 'Confirm?', onConfirm, dis
       variant={armed ? 'primary' : variant}
       onClick={handleClick}
       disabled={disabled}
+      className={className}
       title={armed ? 'Click again to confirm' : title}
       style={{ ...(armed && danger ? { background: 'var(--danger)', borderColor: 'var(--danger)' } : null), ...style }}
     >

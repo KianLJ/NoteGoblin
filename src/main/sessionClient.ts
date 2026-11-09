@@ -321,6 +321,7 @@ function handleFrame(raw: WebSocket.RawData): void {
 
   if (payload.type === 'sfx-played' && clientWindow) {
     const frame = payload as SfxPlayedFrame
-    clientWindow.webContents.send('ws:sfx-played', frame.sfxId)
+    // One of the DM's own sounds arrives as chunks first, like a custom song (see music-track-chunk above).
+    clientWindow.webContents.send('ws:sfx-played', frame.sfxId, assembledCustomTracks.get(frame.sfxId))
   }
 }

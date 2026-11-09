@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { exhaustionEffectsDescription, abilityModifier } from '@shared/dnd5e'
 import { deriveSheet } from '@shared/content/sheet'
 import { buildCheckRollEntry, formatModifierTerm } from '@shared/dice'
-import { ExhaustionIcon, HeartIcon, ShieldIcon, DiceIcon } from '../player/characterSheetTabs/icons'
+import { ExhaustionIcon, ShieldIcon, DiceIcon } from '../player/characterSheetTabs/icons'
 import { GearIcon } from '../account/icons'
 import { useMountAnimation } from '../../ui/useMountAnimation'
 import { useLastTruthy } from '../../ui/useLastTruthy'
@@ -24,15 +24,16 @@ import {
   type Difficulty
 } from '@shared/encounter'
 import { formatCr } from '../../data/bestiary'
-import { isCustomMonster } from '../../data/customBestiary'
 import { useAllMonsters } from '../../data/useAllMonsters'
 import { loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import './encounter.css'
+import './initiative.css'
+import { MonsterPicker } from './MonsterPicker'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { Button } from '../../ui/Button'
 import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
 import { playSfx } from '../audio/soundEffects'
-import { IconLabel, UndoIcon, XIcon } from '../../ui/icons'
+import { ArrowLeftIcon, ArrowRightIcon, IconLabel, MinusIcon, PlusIcon, UndoIcon, XIcon } from '../../ui/icons'
 import { useEncounter } from '../combat/encounterStore'
 import { vehicleName, type TrackedVehicle } from '@shared/vehicles'
 
@@ -189,7 +190,6 @@ export function InitiativeTracker({
   // Shared with the Combat tab (features/combat/encounterStore.ts), so both edit the same fight.
   const [state, setState] = useEncounter()
   const [view, setView] = useState<'tracker' | 'build' | 'vehicles'>('tracker')
-  const [monsterQuery, setMonsterQuery] = useState('')
   const [savedEncounters, setSavedEncounters] = useState(() => loadSavedEncounters())
   const [encounterDraft, setEncounterDraft] = useState<Record<string, number>>({})
   const [encounterName, setEncounterName] = useState('')
@@ -530,175 +530,145 @@ export function InitiativeTracker({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', gap: 4, padding: 'var(--space-2)', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-        <button type="button" onClick={() => setView('tracker')} style={innerTabStyle(view === 'tracker')}>
+    <div className="it">
+      <div className="it-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={view === 'tracker'} className={`it-tab${view === 'tracker' ? ' it-tab--on' : ''}`} onClick={() => setView('tracker')}>
           Tracker
         </button>
-        <button type="button" onClick={() => setView('build')} style={innerTabStyle(view === 'build')} title="Build an encounter">
+        <button type="button" role="tab" aria-selected={view === 'build'} className={`it-tab${view === 'build' ? ' it-tab--on' : ''}`} onClick={() => setView('build')} title="Build an encounter">
           Build
         </button>
         {vehiclesView && (
-          <button type="button" onClick={() => setView('vehicles')} style={innerTabStyle(view === 'vehicles')}>
+          <button type="button" role="tab" aria-selected={view === 'vehicles'} className={`it-tab${view === 'vehicles' ? ' it-tab--on' : ''}`} onClick={() => setView('vehicles')}>
             Vehicles
           </button>
         )}
       </div>
 
       {view === 'tracker' ? (
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <select
-              className="gb-input"
-              value=""
-              onChange={(e) => {
-                const monster = allMonstersForQuickAdd.find((m) => m.index === e.target.value)
-                if (monster) {
-                  pushHistory()
-                  patch({ combatants: [...state.combatants, monsterToCombatant(monster)] })
-                }
-              }}
-              style={{ fontSize: 11, padding: '3px 4px', maxWidth: 130 }}
-              title="Add an enemy"
-            >
-              <option value="">+ Add Enemy…</option>
-              {allMonstersForQuickAdd.map((m) => (
-                <option key={m.index} value={m.index}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            <Button
-              variant="secondary"
-              onClick={rollAllInitiative}
-              disabled={state.combatants.length === 0}
-              title="Roll 1d20 + Dex for every combatant"
-              style={{ fontSize: 11, padding: '3px 8px' }}
-            >
-              <IconLabel icon={<DiceIcon size={12} />}>Roll All</IconLabel>
-            </Button>
-            {!inCombat ? (
-              <Button variant="primary" onClick={startCombat} disabled={state.combatants.length === 0} style={{ fontSize: 11, padding: '3px 8px' }}>
-                Start Combat
-              </Button>
-            ) : (
-              <Button variant="secondary" onClick={endCombat} style={{ fontSize: 11, padding: '3px 8px' }}>
-                End Combat
+        <div className="it-body">
+          <div className="it-toolbar">
+            {!inCombat && (
+              <Button variant="primary" onClick={startCombat} disabled={state.combatants.length === 0} className="it-btn">
+                Start combat
               </Button>
             )}
-            <Button variant="ghost" onClick={clearAll} style={{ fontSize: 11, padding: '3px 8px' }}>
-              Clear
+            <Button variant="secondary" onClick={rollAllInitiative} disabled={state.combatants.length === 0} title="Roll 1d20 + Dex for every combatant" className="it-btn">
+              <IconLabel icon={<DiceIcon size={13} />}>Roll all</IconLabel>
             </Button>
-            <Button variant="ghost" onClick={undo} disabled={history.length === 0} title="Undo the last action" style={{ fontSize: 11, padding: '3px 8px' }}>
-              <IconLabel icon={<UndoIcon size={12} />}>Undo</IconLabel>
-            </Button>
-            <div style={{ marginLeft: 'auto' }}>
-              <TrackerSettingsMenu
-                dismembermentEnabled={state.dismembermentEnabled}
-                onSetDismembermentEnabled={(v) => patch({ dismembermentEnabled: v })}
-                deathSavesPrivate={state.deathSavesPrivate}
-                onSetDeathSavesPrivate={(v) => patch({ deathSavesPrivate: v })}
-              />
-            </div>
+            <MonsterPicker
+              monsters={allMonstersForQuickAdd}
+              onPick={(monster) => {
+                pushHistory()
+                patch({ combatants: [...state.combatants, monsterToCombatant(monster)] })
+              }}
+            />
+            <span className="it-spacer" />
+            <button type="button" className="it-icon-btn" onClick={undo} disabled={history.length === 0} title="Undo the last change" aria-label="Undo">
+              <UndoIcon size={14} />
+            </button>
+            <button type="button" className="it-icon-btn" onClick={clearAll} disabled={state.combatants.length === 0} title="Clear everyone (undo brings them back)" aria-label="Clear everyone">
+              <XIcon size={13} />
+            </button>
+            <TrackerSettingsMenu
+              dismembermentEnabled={state.dismembermentEnabled}
+              onSetDismembermentEnabled={(v) => patch({ dismembermentEnabled: v })}
+              deathSavesPrivate={state.deathSavesPrivate}
+              onSetDeathSavesPrivate={(v) => patch({ deathSavesPrivate: v })}
+            />
           </div>
 
           {inCombat && (
-            <div
-              className="gb-card"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-2)' }}
-            >
-              <button type="button" onClick={prevTurn} title="Previous turn" style={roundBtnStyle}>
-                ‹
+            <div className="it-turnbar">
+              <button type="button" className="it-icon-btn" onClick={prevTurn} title="Previous turn" aria-label="Previous turn">
+                <ArrowLeftIcon size={14} />
               </button>
-              <div style={{ textAlign: 'center', fontSize: 12 }}>
-                <div style={{ fontWeight: 700 }}>Round {state.round}</div>
-                <div style={{ color: 'var(--accent)' }}>{ordered[state.turnIndex]?.name ?? '—'}'s turn</div>
+              <div className="it-turn-text">
+                <small>Round {state.round}</small>
+                <strong>{ordered[state.turnIndex]?.name ?? '—'}</strong>
               </div>
-              <button type="button" onClick={nextTurn} title="Next turn" style={roundBtnStyle}>
-                ›
+              <Button variant="primary" onClick={nextTurn} className="it-btn">
+                <IconLabel icon={<ArrowRightIcon size={13} />} iconAfter>
+                  Next turn
+                </IconLabel>
+              </Button>
+              <button type="button" className="it-end" onClick={endCombat} title="End the fight">
+                End
               </button>
             </div>
           )}
 
-          {ordered.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No combatants yet.</p>}
+          {ordered.length === 0 && (
+            <div className="it-empty">
+              <strong>No one in the fight yet</strong>
+              <span>Add an enemy above, build an encounter, or players join as they connect.</span>
+            </div>
+          )}
 
-          {ordered.map((c, i) => (
-            <div
-              key={c.id}
-              className="gb-card gb-draggable-card"
-              draggable
-              onDragStart={() => setDragFromId(c.id)}
-              onDragOver={(e) => {
-                e.preventDefault()
-                if (dragOverId !== c.id) setDragOverId(c.id)
-              }}
-              onDragLeave={() => setDragOverId((prev) => (prev === c.id ? null : prev))}
-              onDrop={(e) => {
-                e.preventDefault()
-                if (dragFromId) reorderCombatants(dragFromId, c.id)
-                setDragFromId(null)
-                setDragOverId(null)
-              }}
-              onDragEnd={() => {
-                setDragFromId(null)
-                setDragOverId(null)
-              }}
-              style={{
-                position: 'relative',
-                padding: 'var(--space-2)',
-                borderColor: dragOverId === c.id ? 'var(--accent)' : inCombat && i === state.turnIndex ? 'var(--accent)' : undefined,
-                background: inCombat && i === state.turnIndex ? 'var(--accent-subtle)' : undefined,
-                opacity: dragFromId === c.id ? 0.5 : 1,
-                // Picked on the Combat screen's map.
-                boxShadow: selectedId === c.id ? '0 0 0 2px var(--text-primary)' : undefined
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => removeCombatant(c.id)}
-                title="Remove"
-                style={{
-                  position: 'absolute',
-                  top: 6,
-                  right: 6,
-                  width: 26,
-                  height: 26,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'none',
-                  border: 'none',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-muted)',
-                  fontSize: 18,
-                  lineHeight: 1,
-                  cursor: 'pointer'
-                }}
-              >
-                <XIcon size={12} />
-              </button>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 24 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                  <span
-                    title="Drag to reorder"
-                    style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, userSelect: 'none', marginTop: 8 }}
-                  >
-                    ⠿
+          <div className="it-list">
+            {ordered.map((c, i) => {
+              const isTurn = inCombat && i === state.turnIndex
+              const down = c.currentHp <= 0
+              const exhaustionLevel = c.kind === 'player' && c.userId ? (playerCharacters.get(c.userId)?.exhaustionLevel ?? 0) : 0
+              return (
+                <div
+                  key={c.id}
+                  className={[
+                    'it-row',
+                    `it-row--${c.kind}`,
+                    isTurn && 'it-row--turn',
+                    down && 'it-row--down',
+                    dragOverId === c.id && 'it-row--drop',
+                    dragFromId === c.id && 'it-row--dragging',
+                    // Picked on the Combat screen's map.
+                    selectedId === c.id && 'it-row--picked'
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  draggable
+                  onDragStart={() => setDragFromId(c.id)}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    if (dragOverId !== c.id) setDragOverId(c.id)
+                  }}
+                  onDragLeave={() => setDragOverId((prev) => (prev === c.id ? null : prev))}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    if (dragFromId) reorderCombatants(dragFromId, c.id)
+                    setDragFromId(null)
+                    setDragOverId(null)
+                  }}
+                  onDragEnd={() => {
+                    setDragFromId(null)
+                    setDragOverId(null)
+                  }}
+                >
+                  <span className="it-grip" title="Drag to reorder" aria-hidden="true">
+                    <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
+                      <circle cx="2" cy="3" r="1.1" />
+                      <circle cx="6" cy="3" r="1.1" />
+                      <circle cx="2" cy="7" r="1.1" />
+                      <circle cx="6" cy="7" r="1.1" />
+                      <circle cx="2" cy="11" r="1.1" />
+                      <circle cx="6" cy="11" r="1.1" />
+                    </svg>
                   </span>
                   <IconValueColumn
-                    icon={<DiceIcon size={ICON_STAT_SIZE} style={{ color: 'var(--accent)' }} />}
+                    icon={<DiceIcon size={ICON_STAT_SIZE} />}
                     iconTitle={`Roll 1d20 ${formatModifierTerm(initiativeModifierFor(c, playerCharacters, allMonstersForQuickAdd, vehicles))}`}
                     onIconClick={() => rollInitiativeFor(c)}
                     value={c.initiative ?? ''}
                     onChange={(v) => updateCombatant(c.id, { initiative: v === '' ? null : Number(v) })}
                     inputTitle="Initiative"
                     placeholder="—"
+                    className="it-stat--init"
                   />
 
-                  <div style={{ flex: 1, minWidth: 0, paddingTop: 6 }}>
+                  <div className="it-main">
                     {c.kind === 'monster' || c.kind === 'vehicle' ? (
                       <button
                         type="button"
+                        className="it-name it-name--link"
                         onClick={() => {
                           if (onSelectCombatant) return onSelectCombatant(c.id)
                           if (c.kind === 'vehicle') {
@@ -711,50 +681,36 @@ export function InitiativeTracker({
                           const monster = allMonstersForQuickAdd.find((m) => m.index === c.monsterIndex)
                           if (monster) onSelectMonster(monster)
                         }}
-                        title={c.kind === 'vehicle' ? 'Open it under Vehicles' : 'View statblock'}
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          textAlign: 'left',
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          cursor: 'pointer',
-                          color: 'var(--accent)',
-                          fontSize: 17,
-                          fontWeight: 800,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
+                        title={c.kind === 'vehicle' ? `${c.name}: open it under Vehicles` : `${c.name}: view statblock`}
                       >
                         {c.name}
                       </button>
                     ) : (
-                      <strong style={{ display: 'block', fontSize: 17, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <strong className="it-name" title={c.name}>
                         {c.name}
                       </strong>
                     )}
-                    {c.currentHp <= 0 && (
-                      <span className="gb-badge" style={{ fontSize: 10, color: 'var(--danger)', marginTop: 2 }}>
-                        {c.kind === 'vehicle' ? 'Wrecked' : 'Dead'}
-                      </span>
-                    )}
-                    {c.kind === 'player' &&
-                      c.userId &&
-                      (() => {
-                        const exhaustionLevel = playerCharacters.get(c.userId)?.exhaustionLevel ?? 0
-                        if (exhaustionLevel <= 0) return null
-                        return (
-                          <span
-                            title={`Exhaustion ${exhaustionLevel}\n${exhaustionEffectsDescription(exhaustionLevel)}`}
-                            style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--danger)', marginTop: 2 }}
-                          >
-                            <ExhaustionIcon size={13} style={{ color: 'var(--danger)' }} />
-                            {exhaustionLevel}
-                          </span>
-                        )
-                      })()}
+                    <div className="it-tags">
+                      {isTurn && <span className="it-tag it-tag--turn">Their turn</span>}
+                      {down && <span className="it-tag it-tag--down">{c.kind === 'vehicle' ? 'Wrecked' : c.kind === 'player' ? 'Down' : 'Dead'}</span>}
+                      {exhaustionLevel > 0 && (
+                        <span className="it-tag it-tag--down" title={`Exhaustion ${exhaustionLevel}\n${exhaustionEffectsDescription(exhaustionLevel)}`}>
+                          <ExhaustionIcon size={11} />
+                          {exhaustionLevel}
+                        </span>
+                      )}
+                      {c.statusEffects.map((effect) => (
+                        <FadeOutBadge key={effect} onRemove={() => removeStatusEffect(c.id, effect)}>
+                          {effect}
+                        </FadeOutBadge>
+                      ))}
+                      {c.dismemberments.map((tag) => (
+                        <FadeOutBadge key={tag} color="var(--danger)" onRemove={() => removeDismemberment(c.id, tag)}>
+                          {tag}
+                        </FadeOutBadge>
+                      ))}
+                      <AddStatusEffectControl options={STATUS_EFFECT_PRESETS.filter((s) => !c.statusEffects.includes(s))} onAdd={(effect) => addStatusEffect(c.id, effect)} />
+                    </div>
                   </div>
 
                   <HpIconColumn
@@ -765,62 +721,39 @@ export function InitiativeTracker({
                     onApply={(amount, kind) => applyDamageOrHeal(c.id, amount, kind)}
                   />
                   <IconValueColumn
-                    icon={<ShieldIcon size={ICON_STAT_SIZE} style={{ color: 'var(--text-muted)' }} />}
+                    icon={<ShieldIcon size={ICON_STAT_SIZE} />}
                     iconTitle="Armor Class"
                     value={c.ac}
                     onChange={(v) => updateCombatant(c.id, { ac: v === '' ? 0 : Number(v) })}
                     inputTitle="Armor Class"
+                    className="it-stat--ac"
                   />
+                  <button type="button" className="it-remove" onClick={() => removeCombatant(c.id)} title={`Remove ${c.name}`} aria-label={`Remove ${c.name}`}>
+                    <XIcon size={12} />
+                  </button>
+
+                  {c.deathSaves && (
+                    <div className="it-extra it-saves">
+                      <DeathSaveRow label="Saves" count={c.deathSaves.successes} color="var(--success)" onChange={(delta) => bumpDeathSave(c.id, 'successes', delta)} />
+                      <DeathSaveRow label="Fails" count={c.deathSaves.failures} color="var(--danger)" onChange={(delta) => bumpDeathSave(c.id, 'failures', delta)} />
+                    </div>
+                  )}
+
+                  {dismemberPromptRendered && lastDismemberPrompt?.combatantId === c.id && (
+                    <div className="it-extra">
+                      <DismembermentPrompt mode={lastDismemberPrompt.mode} closing={dismemberPromptClosing} onPick={(tag) => addDismemberment(c.id, tag)} onDismiss={() => setDismemberPrompt(null)} />
+                    </div>
+                  )}
                 </div>
-
-                {c.deathSaves && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-                    <DeathSaveRow label="Success" count={c.deathSaves.successes} color="var(--success)" onChange={(delta) => bumpDeathSave(c.id, 'successes', delta)} />
-                    <DeathSaveRow label="Fail" count={c.deathSaves.failures} color="var(--danger)" onChange={(delta) => bumpDeathSave(c.id, 'failures', delta)} />
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                  {c.statusEffects.map((effect) => (
-                    <FadeOutBadge key={effect} onRemove={() => removeStatusEffect(c.id, effect)}>
-                      {effect}
-                    </FadeOutBadge>
-                  ))}
-                  <AddStatusEffectControl
-                    options={STATUS_EFFECT_PRESETS.filter((s) => !c.statusEffects.includes(s))}
-                    onAdd={(effect) => addStatusEffect(c.id, effect)}
-                  />
-                </div>
-
-                {c.dismemberments.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                    {c.dismemberments.map((tag) => (
-                      <FadeOutBadge key={tag} color="var(--danger)" onRemove={() => removeDismemberment(c.id, tag)}>
-                        {tag}
-                      </FadeOutBadge>
-                    ))}
-                  </div>
-                )}
-
-                {dismemberPromptRendered && lastDismemberPrompt?.combatantId === c.id && (
-                  <DismembermentPrompt
-                    mode={lastDismemberPrompt.mode}
-                    closing={dismemberPromptClosing}
-                    onPick={(tag) => addDismemberment(c.id, tag)}
-                    onDismiss={() => setDismemberPrompt(null)}
-                  />
-                )}
-              </div>
-            </div>
-          ))}
+              )
+            })}
+          </div>
         </div>
       ) : view === 'vehicles' ? (
-        <div style={{ flex: 1, minHeight: 0 }}>{vehiclesView}</div>
+        <div className="it-body">{vehiclesView}</div>
       ) : (
         <EncounterBuilder
           playerCharacters={playerCharacters}
-          monsterQuery={monsterQuery}
-          setMonsterQuery={setMonsterQuery}
           savedEncounters={savedEncounters}
           setSavedEncounters={setSavedEncounters}
           encounterDraft={encounterDraft}
@@ -839,8 +772,6 @@ export function InitiativeTracker({
 
 interface EncounterBuilderProps {
   playerCharacters: Map<string, CharacterSheet>
-  monsterQuery: string
-  setMonsterQuery: (q: string) => void
   savedEncounters: SavedEncounter[]
   setSavedEncounters: (list: SavedEncounter[]) => void
   encounterDraft: Record<string, number>
@@ -852,8 +783,6 @@ interface EncounterBuilderProps {
 
 function EncounterBuilder({
   playerCharacters,
-  monsterQuery,
-  setMonsterQuery,
   savedEncounters,
   setSavedEncounters,
   encounterDraft,
@@ -863,26 +792,7 @@ function EncounterBuilder({
   onAddEncounterToTracker
 }: EncounterBuilderProps): JSX.Element {
   const { monsters: allMonsters } = useAllMonsters()
-  // Empty query still shows a default alphabetical page rather than nothing
-  // — clicking into the search bar opens a browsable dropdown even before
-  // typing, not just a search-results list once you have.
-  const filtered = useMemo(() => {
-    const q = monsterQuery.trim().toLowerCase()
-    const source = q ? allMonsters.filter((m) => m.name.toLowerCase().includes(q)) : allMonsters
-    return [...source].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 20)
-  }, [allMonsters, monsterQuery])
-  const [searchOpen, setSearchOpen] = useState(false)
-  const searchWrapperRef = useRef<HTMLDivElement>(null)
-  const { rendered: searchResultsRendered, closing: searchResultsClosing } = useMountAnimation(searchOpen && filtered.length > 0)
-
-  useEffect(() => {
-    if (!searchOpen) return
-    function handleClickOutside(e: MouseEvent): void {
-      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) setSearchOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [searchOpen])
+  const sortedMonsters = useMemo(() => [...allMonsters].sort((a, b) => a.name.localeCompare(b.name)), [allMonsters])
 
   const partyLevels = useMemo(
     () => [...playerCharacters.values()].map((c) => c.classes.reduce((sum, cl) => sum + cl.level, 0) || 1),
@@ -1074,213 +984,153 @@ function EncounterBuilder({
   }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div className="gb-card" style={{ padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div className="gb-label" style={{ margin: 0 }}>
-          Generate Encounter
+    <div className="it-body eb">
+      <section className="eb-section">
+        <div className="eb-head">
+          <span>Encounter</span>
+          {draftMonsters.length > 0 && (
+            <>
+              <small>
+                {draftMonsters.length} {draftMonsters.length === 1 ? 'creature' : 'creatures'}
+              </small>
+              <button type="button" className="gb-enc-link" onClick={() => setEncounterDraft({})}>
+                Clear
+              </button>
+            </>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <input
-            className="gb-input"
-            type="number"
-            min={1}
-            placeholder={`Party size${partyLevels.length ? ` (${partyLevels.length})` : ''}`}
-            value={partySizeInput}
-            onChange={(e) => setPartySizeInput(e.target.value)}
-            style={{ fontSize: 12, flex: 1 }}
-          />
-          <input
-            className="gb-input"
-            type="number"
-            min={1}
-            max={20}
-            placeholder={`Avg level${partyLevels.length ? ` (${Math.round(partyLevels.reduce((a, b) => a + b, 0) / partyLevels.length)})` : ''}`}
-            value={partyLevelInput}
-            onChange={(e) => setPartyLevelInput(e.target.value)}
-            style={{ fontSize: 12, flex: 1 }}
-          />
-        </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
-          {partyOverride
-            ? `Generating for a hypothetical party of ${partyOverride.length} at level ${partyOverride[0]}.`
-            : partyLevels.length
-              ? `Generating for the ${partyLevels.length} connected player${partyLevels.length === 1 ? '' : 's'} — fill in both fields above to plan for a different party instead.`
-              : 'No players connected yet — fill in both fields above to generate against a hypothetical party.'}
-        </p>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {(['easy', 'medium', 'hard', 'deadly'] as const).map((tier) => (
-            <Button key={tier} variant="secondary" onClick={() => generateEncounter(tier)} style={{ fontSize: 11, padding: '4px 6px', flex: 1 }}>
-              {DIFFICULTY_LABELS[tier]}
-            </Button>
-          ))}
-        </div>
-      </div>
+        <MonsterPicker monsters={sortedMonsters} onPick={(m) => addToDraft(m.index)} placeholder="Add monsters…" />
 
-      <div ref={searchWrapperRef} style={{ position: 'relative' }}>
-        <input
-          className="gb-input"
-          placeholder="Search monsters to add…"
-          value={monsterQuery}
-          onFocus={() => setSearchOpen(true)}
-          onChange={(e) => {
-            setMonsterQuery(e.target.value)
-            setSearchOpen(true)
-          }}
-          style={{ fontSize: 12, width: '100%' }}
-        />
-        {searchResultsRendered && (
-          <div
-            className={searchResultsClosing ? 'gb-pop-out' : 'gb-fade-in'}
-            style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}
-          >
-            {filtered.map((m) => (
-              <HoverDetailCard key={m.index} bodyHtml={renderStatblockHtml(m)} width={460} interceptWheel={false}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    addToDraft(m.index)
-                    setMonsterQuery('')
-                    setSearchOpen(false)
-                  }}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 6,
-                    width: '100%',
-                    padding: '4px 6px',
-                    border: 'none',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--bg-sunken)',
-                    color: 'var(--text-primary)',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.name}
-                    {isCustomMonster(m.index) && <span style={{ color: 'var(--text-muted)' }}> · custom</span>}
-                    {'packName' in m && typeof m.packName === 'string' && <span style={{ color: 'var(--text-muted)' }}> · {m.packName}</span>}
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>CR {formatCr(m.crNumeric)}</span>
-                </button>
-              </HoverDetailCard>
-            ))}
+        {draftMonsters.length === 0 ? (
+          <div className="gb-enc-empty">Add monsters above, generate an encounter below, or load one from your library.</div>
+        ) : (
+          <div className="gb-enc-cards">
+            {Object.entries(encounterDraft).map(([index, count]) => {
+              const monster = allMonsters.find((m) => m.index === index)
+              if (!monster) return null
+              return (
+                <HoverDetailCard key={index} bodyHtml={renderStatblockHtml(monster)} width={460} interceptWheel={false}>
+                  <div className="gb-enc-card">
+                    <div className="gb-enc-card-head">
+                      <span className="gb-enc-card-name">{monster.name}</span>
+                      <span className="gb-enc-cr">CR {formatCr(monster.crNumeric)}</span>
+                    </div>
+                    <div className="gb-enc-card-type">{[monster.size, monster.type].filter(Boolean).join(' ')}</div>
+                    <div className="gb-enc-card-stats">
+                      <span title="Armor Class">
+                        <b>{(monster.ac ?? '—').split(' ')[0]}</b> AC
+                      </span>
+                      <span title="Hit Points">
+                        <b>{(monster.hp ?? '—').split(' ')[0]}</b> HP
+                      </span>
+                      <span title="XP each">
+                        <b>{monster.xp.toLocaleString()}</b> XP
+                      </span>
+                    </div>
+                    <div className="gb-enc-stepper">
+                      <button type="button" onClick={() => removeFromDraft(index)} aria-label={`One fewer ${monster.name}`}>
+                        <MinusIcon size={11} />
+                      </button>
+                      <span>×{count}</span>
+                      <button type="button" onClick={() => addToDraft(index)} aria-label={`One more ${monster.name}`}>
+                        <PlusIcon size={11} />
+                      </button>
+                    </div>
+                  </div>
+                </HoverDetailCard>
+              )
+            })}
           </div>
         )}
-      </div>
 
-      <div className="gb-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span>Encounter</span>
         {draftMonsters.length > 0 && (
-          <button type="button" className="gb-enc-link" onClick={() => setEncounterDraft({})}>
-            Clear
-          </button>
-        )}
-      </div>
-      {draftMonsters.length === 0 ? (
-        <div className="gb-enc-empty">Search above, generate one, or load one from your library below.</div>
-      ) : (
-        <div className="gb-enc-cards">
-          {Object.entries(encounterDraft).map(([index, count]) => {
-            const monster = allMonsters.find((m) => m.index === index)
-            if (!monster) return null
-            return (
-              <HoverDetailCard key={index} bodyHtml={renderStatblockHtml(monster)} width={460} interceptWheel={false}>
-                <div className="gb-enc-card">
-                  <div className="gb-enc-card-head">
-                    <span className="gb-enc-card-name">{monster.name}</span>
-                    <span className="gb-enc-cr">CR {formatCr(monster.crNumeric)}</span>
-                  </div>
-                  <div className="gb-enc-card-type">{[monster.size, monster.type].filter(Boolean).join(' ')}</div>
-                  <div className="gb-enc-card-stats">
-                    <span title="Armor Class">
-                      <b>{(monster.ac ?? '—').split(' ')[0]}</b> AC
-                    </span>
-                    <span title="Hit Points">
-                      <b>{(monster.hp ?? '—').split(' ')[0]}</b> HP
-                    </span>
-                    <span title="XP each">
-                      <b>{monster.xp.toLocaleString()}</b> XP
-                    </span>
-                  </div>
-                  <div className="gb-enc-stepper">
-                    <button type="button" onClick={() => removeFromDraft(index)} aria-label={`One fewer ${monster.name}`}>
-                      −
+          <div className="eb-summary">
+            <div className="eb-summary-top">
+              <strong className={`gb-enc-tier gb-enc-tier--${difficulty.difficulty}`}>{DIFFICULTY_LABELS[difficulty.difficulty]}</strong>
+              <span>
+                {difficulty.adjustedXp.toLocaleString()} XP <small>(×{difficulty.multiplier})</small>
+              </span>
+            </div>
+            <DifficultyMeter adjustedXp={difficulty.adjustedXp} thresholds={difficulty.partyThresholds} />
+            <small className="eb-muted">About {difficulty.xpPerPlayer.toLocaleString()} XP each for the party if they win</small>
+            {(['easy', 'medium', 'hard', 'deadly'] as const).map((tier) => {
+              const suggestions = suggestionsFor(tier)
+              if (suggestions.length === 0) return null
+              return (
+                <div key={tier} className="eb-suggest">
+                  <small className="eb-muted">Add one for {DIFFICULTY_LABELS[tier]}:</small>
+                  {suggestions.map((s) => (
+                    <button key={s.index} type="button" className="it-tag eb-chip" onClick={() => addToDraft(s.index)} title={`Add a ${s.name} (CR ${formatCr(s.crNumeric)})`}>
+                      <PlusIcon size={9} />
+                      {s.name}
                     </button>
-                    <span>×{count}</span>
-                    <button type="button" onClick={() => addToDraft(index)} aria-label={`One more ${monster.name}`}>
-                      +
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              </HoverDetailCard>
-            )
-          })}
-        </div>
-      )}
-
-      {draftMonsters.length > 0 && (
-        <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <strong className={`gb-enc-tier gb-enc-tier--${difficulty.difficulty}`}>{DIFFICULTY_LABELS[difficulty.difficulty]}</strong>
-            <span style={{ color: 'var(--text-secondary)' }}>
-              {difficulty.adjustedXp.toLocaleString()} XP <span style={{ color: 'var(--text-muted)' }}>(×{difficulty.multiplier})</span>
-            </span>
+              )
+            })}
           </div>
-          <DifficultyMeter adjustedXp={difficulty.adjustedXp} thresholds={difficulty.partyThresholds} />
-          <div style={{ color: 'var(--text-muted)' }}>
-            {draftMonsters.length} creature{draftMonsters.length === 1 ? '' : 's'} · ~{difficulty.xpPerPlayer.toLocaleString()} XP per player if won
-          </div>
-          {(['easy', 'medium', 'hard', 'deadly'] as const).map((tier) => {
-            const suggestions = suggestionsFor(tier)
-            if (suggestions.length === 0) return null
-            return (
-              <div key={tier}>
-                <span style={{ color: 'var(--text-muted)' }}>Room for {DIFFICULTY_LABELS[tier]} (add one):</span>{' '}
-                {suggestions.map((s) => (
-                  <button
-                    key={s.index}
-                    type="button"
-                    onClick={() => addToDraft(s.index)}
-                    className="gb-badge"
-                    style={{ marginRight: 4, marginTop: 2, cursor: 'pointer', border: 'none' }}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            )
-          })}
-        </div>
-      )}
+        )}
 
-      {draftMonsters.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <input className="gb-input" placeholder="Encounter name…" value={encounterName} onChange={(e) => setEncounterName(e.target.value)} style={{ fontSize: 12, flex: 1 }} />
+        {draftMonsters.length > 0 && (
+          <div className="eb-save">
+            <input className="gb-input" placeholder="Name it to save it…" value={encounterName} onChange={(e) => setEncounterName(e.target.value)} aria-label="Encounter name" />
+            <input className="gb-input" placeholder="Tags (forest, boss…)" value={encounterTags} onChange={(e) => setEncounterTags(e.target.value)} aria-label="Tags" />
+            <div className="eb-save-actions">
+              <Button variant="secondary" onClick={saveEncounter} disabled={!encounterName.trim()} className="it-btn" title={encounterName.trim() ? 'Keep it in your library' : 'Give it a name first'}>
+                Save to library
+              </Button>
+              <Button variant="primary" onClick={() => onAddEncounterToTracker(draftMonsters)} className="it-btn">
+                Add to tracker
+              </Button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="eb-section">
+        <div className="eb-head">
+          <span>Generate one</span>
+        </div>
+        <div className="eb-party">
+          <label>
+            <small>Party size</small>
+            <input className="gb-input" type="number" min={1} placeholder={partyLevels.length ? String(partyLevels.length) : '4'} value={partySizeInput} onChange={(e) => setPartySizeInput(e.target.value)} />
+          </label>
+          <label>
+            <small>Level</small>
             <input
               className="gb-input"
-              placeholder="Tags (forest, boss…)"
-              value={encounterTags}
-              onChange={(e) => setEncounterTags(e.target.value)}
-              style={{ fontSize: 12, flex: 1 }}
+              type="number"
+              min={1}
+              max={20}
+              placeholder={partyLevels.length ? String(Math.round(partyLevels.reduce((a, b) => a + b, 0) / partyLevels.length)) : '1'}
+              value={partyLevelInput}
+              onChange={(e) => setPartyLevelInput(e.target.value)}
             />
-          </div>
-          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={saveEncounter} disabled={!encounterName.trim()} style={{ fontSize: 11, padding: '3px 8px' }}>
-              Save to library
-            </Button>
-            <Button variant="primary" onClick={() => onAddEncounterToTracker(draftMonsters)} style={{ fontSize: 11, padding: '3px 8px' }}>
-              Add to Tracker
-            </Button>
-          </div>
+          </label>
         </div>
-      )}
+        <small className="eb-muted">
+          {partyOverride
+            ? `For a party of ${partyOverride.length} at level ${partyOverride[0]}.`
+            : partyLevels.length
+              ? `For the ${partyLevels.length} player${partyLevels.length === 1 ? '' : 's'} here now. Fill in both to plan for another party.`
+              : 'Nobody connected: fill in both to plan for a party.'}
+        </small>
+        <div className="eb-tiers">
+          {(['easy', 'medium', 'hard', 'deadly'] as const).map((tier) => (
+            <button key={tier} type="button" className={`eb-tier eb-tier--${tier}`} onClick={() => generateEncounter(tier)} title={`Replace the encounter with a random ${DIFFICULTY_LABELS[tier]} one`}>
+              {DIFFICULTY_LABELS[tier]}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {savedEncounters.length > 0 && (
-        <>
-          <div className="gb-label">Encounter Library</div>
+        <section className="eb-section">
+          <div className="eb-head">
+            <span>Your library</span>
+            <small>{savedEncounters.length}</small>
+          </div>
           {libraryTags.length > 0 && (
             <div className="gb-enc-tags">
               {libraryTags.map((tag) => (
@@ -1308,16 +1158,16 @@ function EncounterBuilder({
                     Edit
                   </button>
                   <button type="button" className="gb-enc-link" onClick={() => onAddEncounterToTracker(monsters)} disabled={monsters.length === 0}>
-                    Add to Tracker
+                    Add to tracker
                   </button>
-                  <button type="button" onClick={() => deleteEncounter(enc.id)} style={removeBtnStyle} aria-label={`Delete ${enc.name}`}>
+                  <button type="button" className="it-remove eb-delete" onClick={() => deleteEncounter(enc.id)} title={`Delete ${enc.name}`} aria-label={`Delete ${enc.name}`}>
                     <XIcon size={12} />
                   </button>
                 </div>
               </div>
             ))}
           </div>
-        </>
+        </section>
       )}
     </div>
   )
@@ -1349,7 +1199,7 @@ function DifficultyMeter({ adjustedXp, thresholds }: { adjustedXp: number; thres
   )
 }
 
-const ICON_STAT_SIZE = 26
+const ICON_STAT_SIZE = 16
 
 /**
  * An icon with its editable value in a small column underneath, instead of
@@ -1368,7 +1218,8 @@ function IconValueColumn({
   value,
   onChange,
   inputTitle,
-  placeholder
+  placeholder,
+  className
 }: {
   icon: JSX.Element
   iconTitle?: string
@@ -1377,42 +1228,20 @@ function IconValueColumn({
   onChange: (value: string) => void
   inputTitle?: string
   placeholder?: string
+  className?: string
 }): JSX.Element {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flexShrink: 0, width: ICON_STAT_SIZE }}>
+    <div className={`it-stat${className ? ` ${className}` : ''}`}>
       {onIconClick ? (
-        <button
-          type="button"
-          onClick={onIconClick}
-          title={iconTitle}
-          style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-        >
+        <button type="button" className="it-stat-icon it-stat-icon--button" onClick={onIconClick} title={iconTitle} aria-label={iconTitle}>
           {icon}
         </button>
       ) : (
-        <span title={iconTitle} style={{ display: 'flex' }}>
+        <span className="it-stat-icon" title={iconTitle}>
           {icon}
         </span>
       )}
-      <input
-        type="number"
-        className="gb-icon-value-input"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        title={inputTitle ?? iconTitle}
-        style={{
-          width: '100%',
-          textAlign: 'center',
-          fontSize: 11,
-          fontWeight: 800,
-          lineHeight: 1,
-          padding: 0,
-          border: 'none',
-          background: 'transparent',
-          color: 'var(--text-primary)'
-        }}
-      />
+      <input type="number" className="gb-icon-value-input it-stat-value" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} title={inputTitle ?? iconTitle} aria-label={inputTitle ?? iconTitle} />
     </div>
   )
 }
@@ -1457,67 +1286,44 @@ function HpIconColumn({
     setAmount('')
   }
 
-  const valueInputStyle: CSSProperties = {
-    width: 20,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: 800,
-    lineHeight: 1,
-    padding: 0,
-    border: 'none',
-    background: 'transparent',
-    color: 'var(--text-primary)'
-  }
+  const ratio = maxHp > 0 ? Math.max(0, Math.min(1, currentHp / maxHp)) : 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <button type="button" onClick={() => setPending('damage')} title="Apply damage" style={{ ...roundBtnStyle, width: 16, height: 16, fontSize: 10, color: 'var(--danger)' }}>
-          −
+    <div className="it-hp">
+      <div className="it-hp-top">
+        <button type="button" className="it-hp-btn it-hp-btn--dmg" onClick={() => setPending('damage')} title="Apply damage" aria-label="Apply damage">
+          <MinusIcon size={11} />
         </button>
-        <HeartIcon size={ICON_STAT_SIZE} style={{ color: 'var(--danger)' }} />
-        <button type="button" onClick={() => setPending('heal')} title="Apply healing" style={{ ...roundBtnStyle, width: 16, height: 16, fontSize: 10, color: 'var(--success)' }}>
-          +
+        {pending ? (
+          <input
+            ref={inputRef}
+            type="number"
+            min={0}
+            className="gb-input it-hp-amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyPending()
+              else if (e.key === 'Escape') cancelPending()
+            }}
+            onBlur={cancelPending}
+            placeholder={pending === 'damage' ? 'Dmg' : 'Heal'}
+            title={pending === 'damage' ? 'Damage amount — Enter to apply' : 'Heal amount — Enter to apply'}
+          />
+        ) : (
+          <span className="it-hp-vals">
+            <input type="number" className="gb-icon-value-input it-hp-cur" value={currentHp} onChange={(e) => onSetHp(Number(e.target.value))} title="Current HP" aria-label="Current HP" />
+            <span>/</span>
+            <input type="number" className="gb-icon-value-input it-hp-max" value={maxHp} onChange={(e) => onSetMaxHp(Number(e.target.value))} title="Max HP" aria-label="Max HP" />
+          </span>
+        )}
+        <button type="button" className="it-hp-btn it-hp-btn--heal" onClick={() => setPending('heal')} title="Apply healing" aria-label="Apply healing">
+          <PlusIcon size={11} />
         </button>
       </div>
-      {pending ? (
-        <input
-          ref={inputRef}
-          type="number"
-          min={0}
-          className="gb-input"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') applyPending()
-            else if (e.key === 'Escape') cancelPending()
-          }}
-          onBlur={cancelPending}
-          placeholder={pending === 'damage' ? 'Dmg' : 'Heal'}
-          style={{ width: 52, fontSize: 12, padding: '3px 4px' }}
-          title={pending === 'damage' ? 'Damage amount — Enter to apply' : 'Heal amount — Enter to apply'}
-        />
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <input
-            type="number"
-            className="gb-icon-value-input"
-            value={currentHp}
-            onChange={(e) => onSetHp(Number(e.target.value))}
-            title="Current HP"
-            style={valueInputStyle}
-          />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/</span>
-          <input
-            type="number"
-            className="gb-icon-value-input"
-            value={maxHp}
-            onChange={(e) => onSetMaxHp(Number(e.target.value))}
-            title="Max HP"
-            style={{ ...valueInputStyle, fontWeight: 700, color: 'var(--text-secondary)' }}
-          />
-        </div>
-      )}
+      <div className="it-hp-bar" aria-hidden="true">
+        <i className={ratio <= 0.25 ? 'it-hp-low' : ratio <= 0.5 ? 'it-hp-mid' : undefined} style={{ width: `${ratio * 100}%` }} />
+      </div>
     </div>
   )
 }
@@ -1835,15 +1641,10 @@ function AddStatusEffectControl({ options, onAdd }: { options: string[]; onAdd: 
   }, [open])
 
   return (
-    <div ref={wrapperRef} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        title="Add status effect"
-        className="gb-badge"
-        style={{ fontSize: 10, cursor: 'pointer', border: '1px dashed var(--border-subtle)', background: 'none', color: 'var(--text-muted)' }}
-      >
-        + Status
+    <div ref={wrapperRef} className="it-add-status-wrap">
+      <button type="button" onClick={() => setOpen((o) => !o)} title="Add a status effect" className={`it-tag it-add-status${open ? ' it-add-status--open' : ''}`}>
+        <PlusIcon size={9} />
+        Status
       </button>
       {rendered && (
         <div
@@ -1921,42 +1722,4 @@ function DeathSaveRow({ label, count, color, onChange }: { label: string; count:
       })}
     </div>
   )
-}
-
-function innerTabStyle(active: boolean): CSSProperties {
-  return {
-    flex: 1,
-    padding: '4px 0',
-    borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border-subtle)',
-    background: active ? 'var(--accent-subtle)' : 'transparent',
-    color: active ? 'var(--accent-hover)' : 'var(--text-secondary)',
-    fontSize: 11,
-    fontWeight: 700,
-    cursor: 'pointer'
-  }
-}
-
-const removeBtnStyle: CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--text-muted)',
-  cursor: 'pointer',
-  fontSize: 14,
-  lineHeight: 1,
-  padding: '0 4px'
-}
-
-const roundBtnStyle: CSSProperties = {
-  background: 'var(--bg-sunken)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-sm)',
-  color: 'var(--text-primary)',
-  cursor: 'pointer',
-  fontSize: 14,
-  width: 22,
-  height: 22,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
 }

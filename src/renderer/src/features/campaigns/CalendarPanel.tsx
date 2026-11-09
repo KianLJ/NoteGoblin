@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import { useCalendar } from './useCalendar'
 import { CalendarCreatorWizard } from './CalendarCreatorWizard'
@@ -10,6 +10,9 @@ import { renderedScale } from '../../ui/renderedScale'
 import {
   activeSeasonForDate,
   addDays,
+  advanceTime,
+  parseTimeOfDay,
+  partOfDay,
   cloudinessLabel,
   dayNoteFor,
   eraForYear,
@@ -34,7 +37,8 @@ import {
   type EventRepeat
 } from '@shared/calendar'
 import type { Note } from '@shared/ipc'
-import { ArrowLeftIcon, ArrowRightIcon, SunIcon, XIcon } from '../../ui/icons'
+import { ArrowLeftIcon, ArrowRightIcon, PencilIcon, PlusIcon, SunIcon, XIcon } from '../../ui/icons'
+import './calendar.css'
 
 interface CalendarPanelProps {
   sessionId: string | null
@@ -67,7 +71,6 @@ function loadDayPanelHeight(): number | null {
 export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: CalendarPanelProps): JSX.Element {
   const { calendar, loading, error, save, remove } = useCalendar(sessionId ?? undefined, campaignId)
   const [wizardOpen, setWizardOpen] = useState(false)
-  const [timeDraft, setTimeDraft] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   // Browsing a different date than the campaign's actual current one is
   // purely local view state — it never touches the saved calendar, so a
@@ -170,13 +173,18 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
 
   if (!config) {
     return (
-      <div style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
-          {readOnly ? "The DM hasn't set up a calendar for this campaign yet." : 'No calendar yet for this campaign.'}
-        </p>
+      <div className="cal-start">
+        <span className="cal-start-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+            <path d="M3.5 10h17M8 3v4M16 3v4" />
+          </svg>
+        </span>
+        <strong>{readOnly ? 'No calendar yet' : 'Give this campaign a calendar'}</strong>
+        <span>{readOnly ? "The DM hasn't set one up." : 'Months, weekdays, seasons and weather, moons, and the events that fall on each day.'}</span>
         {!readOnly && (
           <Button variant="primary" onClick={() => setWizardOpen(true)}>
-            Create Calendar
+            Make a calendar
           </Button>
         )}
         {!readOnly && wizardOpen && (
@@ -243,10 +251,15 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
     await save({ ...config, selectedLocationId: locationId })
   }
 
-  async function commitTimeOfDay(): Promise<void> {
-    if (!config || timeDraft === null) return
-    if (timeDraft !== config.timeOfDay) await save({ ...config, timeOfDay: timeDraft })
-    setTimeDraft(null)
+  /** A new time (and, past midnight, a new day): the view follows when the day changes. */
+  async function setTime(patch: Pick<CalendarConfig, 'currentDate' | 'timeOfDay'>): Promise<void> {
+    if (!config || readOnly) return
+    const moved = !sameDate(patch.currentDate, config.currentDate)
+    await save({ ...config, ...patch })
+    if (moved) {
+      setViewedDate(null)
+      setSelectedDate(null)
+    }
   }
 
   async function commitDayNote(date: CalendarDate, text: string): Promise<void> {
@@ -291,148 +304,96 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
   const sunHours = sunHoursForDate(config, selected!)
   const daytime = sameDate(selected!, config.currentDate) ? isDaytime(config, selected!, config.timeOfDay) : null
   const selectedEvents = eventsOnDate(config, selected!)
+  const todaySeason = activeSeasonForDate(config, config.currentDate)
+  const todayWeekday = config.weekdays[weekdayIndexForDate(config, config.currentDate)]
+  const browsingAway = !sameDate(viewed!, config.currentDate) || !sameDate(selected!, config.currentDate)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: 'var(--space-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
-          <strong style={{ fontFamily: 'var(--font-display)', fontSize: 16 }}>{config.name}</strong>
-          {!readOnly && (
-            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-              <button
-                type="button"
-                className="gb-btn gb-btn--ghost"
-                style={{ fontSize: 11, padding: '2px 8px' }}
-                onClick={() => setWizardOpen(true)}
-              >
-                Edit
-              </button>
-              <ConfirmButton
-                label="Delete"
-                confirmLabel="Confirm?"
-                variant="ghost"
-                danger
-                style={{ fontSize: 11, padding: '2px 8px' }}
-                title="Delete this campaign's calendar — this can't be undone"
-                onConfirm={() => void remove()}
-              />
-            </div>
-          )}
-        </div>
-        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>{formatCalendarDate(config, config.currentDate)}</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>Time of day:</span>
-          {readOnly ? (
-            <span>{config.timeOfDay}</span>
-          ) : (
-            <input
-              className="gb-input"
-              style={{ width: 80, fontSize: 12, padding: '2px 6px' }}
-              value={timeDraft ?? config.timeOfDay}
-              onChange={(e) => setTimeDraft(e.target.value)}
-              onBlur={commitTimeOfDay}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              }}
-              placeholder="HH:MM"
-            />
-          )}
+    <div className="cal">
+      <header className="cal-today">
+        <span className="cal-today-day" style={todaySeason?.color ? { background: todaySeason.color } : undefined}>
+          {config.currentDate.day}
+        </span>
+        <div className="cal-today-text">
+          <strong>{todayWeekday?.name}</strong>
+          <span>{formatCalendarDate(config, config.currentDate)}</span>
+          <small>{config.name}</small>
         </div>
         {!readOnly && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-            <button
-              type="button"
-              className="gb-btn gb-btn--secondary"
-              style={{ fontSize: 12, padding: '4px 10px' }}
-              title="Previous day"
-              onClick={() => advanceDay(-1)}
-            >
-              <ArrowLeftIcon size={12} />
+          <div className="cal-today-actions">
+            <button type="button" className="cal-icon-btn" onClick={() => setWizardOpen(true)} title="Edit this calendar" aria-label="Edit this calendar">
+              <PencilIcon size={13} />
             </button>
-            <button type="button" className="gb-btn gb-btn--secondary" style={{ fontSize: 12 }} onClick={goToToday}>
-              Today
-            </button>
-            <button
-              type="button"
-              className="gb-btn gb-btn--secondary"
-              style={{ fontSize: 12, padding: '4px 10px' }}
-              title="Next day"
-              onClick={() => advanceDay(1)}
-            >
-              <ArrowRightIcon size={12} />
-            </button>
+            <ConfirmButton
+              label={<TrashIcon />}
+              confirmLabel="Delete?"
+              variant="ghost"
+              danger
+              className="cal-icon-btn cal-icon-btn--danger"
+              title="Delete this campaign's calendar — this can't be undone"
+              onConfirm={() => void remove()}
+            />
           </div>
         )}
-        {config.locations.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            {readOnly ? (
-              config.selectedLocationId && (
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                  {config.locations.find((l) => l.id === config.selectedLocationId)?.name}
-                </p>
-              )
-            ) : (
-              <select
-                className="gb-input"
-                style={{ fontSize: 12, padding: '2px 6px' }}
-                value={config.selectedLocationId ?? ''}
-                onChange={(e) => selectLocation(e.target.value || null)}
-              >
-                <option value="">No location (season default)</option>
-                {config.locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+      </header>
+
+      <div className="cal-controls">
+        {!readOnly && (
+          <button type="button" className="cal-step" title="Back a day" aria-label="Back a day" onClick={() => advanceDay(-1)}>
+            <ArrowLeftIcon size={13} />
+          </button>
         )}
+        <TimeOfDay config={config} readOnly={readOnly} onChange={(patch) => void setTime(patch)} />
+        {!readOnly && (
+          <button type="button" className="cal-step" title="On a day" aria-label="On a day" onClick={() => advanceDay(1)}>
+            <ArrowRightIcon size={13} />
+          </button>
+        )}
+        {config.locations.length > 0 &&
+          (readOnly ? (
+            config.selectedLocationId && <span className="cal-place">{config.locations.find((l) => l.id === config.selectedLocationId)?.name}</span>
+          ) : (
+            <select className="gb-input cal-place-select" value={config.selectedLocationId ?? ''} onChange={(e) => selectLocation(e.target.value || null)} aria-label="Where the party is" title="Where the party is: sets the weather">
+              <option value="">No location (season default)</option>
+              {config.locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          ))}
       </div>
 
-      <div ref={splitRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-3)' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
-            <div style={{ display: 'inline-flex', border: '1px solid var(--border-subtle)', borderRadius: 6, overflow: 'hidden' }}>
+      <div ref={splitRef} className="cal-split">
+        <div className="cal-grid-area">
+          <div className="cal-modes">
+            <div className="cal-segment" role="tablist" aria-label="Show">
               {(['day', 'week', 'month'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setViewMode(mode)}
-                  style={{
-                    border: 'none',
-                    padding: '3px 12px',
-                    fontSize: 11,
-                    textTransform: 'capitalize',
-                    cursor: 'pointer',
-                    background: viewMode === mode ? 'var(--accent-subtle)' : 'transparent',
-                    color: viewMode === mode ? 'var(--text-primary)' : 'var(--text-muted)'
-                  }}
-                >
-                  {mode}
+                <button key={mode} type="button" role="tab" aria-selected={viewMode === mode} className={viewMode === mode ? 'cal-seg cal-seg--on' : 'cal-seg'} onClick={() => setViewMode(mode)}>
+                  {mode === 'day' ? 'Day' : mode === 'week' ? 'Week' : 'Month'}
                 </button>
               ))}
             </div>
+            {browsingAway && (
+              <button type="button" className="cal-back-today" onClick={goToToday} title="Back to the campaign's current day">
+                Today
+              </button>
+            )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <button type="button" className="gb-btn gb-btn--ghost" style={{ padding: '2px 8px' }} onClick={() => shiftView(-1)}>
-              ‹
+          <div className="cal-nav">
+            <button type="button" className="cal-step" onClick={() => shiftView(-1)} aria-label={`Previous ${viewMode}`} title={`Previous ${viewMode}`}>
+              <ArrowLeftIcon size={13} />
             </button>
-            <button
-              type="button"
-              onClick={() => setJumpOpen((v) => !v)}
-              title="Go to any era, year, month or day"
-              aria-expanded={jumpOpen}
-              style={{ textAlign: 'center', background: jumpOpen ? 'var(--accent-subtle)' : 'none', border: 0, borderRadius: 6, padding: '2px 10px', cursor: 'pointer', color: 'inherit', font: 'inherit' }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 14 }}>
-                {label.title} <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>▾</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label.subtitle}</div>
+            <button type="button" className={`cal-nav-title${jumpOpen ? ' cal-nav-title--open' : ''}`} onClick={() => setJumpOpen((v) => !v)} title="Go to any era, year, month or day" aria-expanded={jumpOpen}>
+              <strong>
+                {label.title}
+                <ChevronDownIcon />
+              </strong>
+              <small>{label.subtitle}</small>
             </button>
-            <button type="button" className="gb-btn gb-btn--ghost" style={{ padding: '2px 8px' }} onClick={() => shiftView(1)}>
-              ›
+            <button type="button" className="cal-step" onClick={() => shiftView(1)} aria-label={`Next ${viewMode}`} title={`Next ${viewMode}`}>
+              <ArrowRightIcon size={13} />
             </button>
           </div>
 
@@ -456,225 +417,160 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
             />
           )}
 
-          {viewMode === 'day' && (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {viewMode === 'day' ? (
+            <div className="cal-day-big">
               <DayCell
                 label={String(viewed!.day)}
                 big
                 isSelected={sameDate(viewed!, selected!)}
                 isToday={sameDate(viewed!, config.currentDate)}
+                eventColors={eventsOnDate(config, viewed!).map((e) => e.color)}
                 onClick={() => setSelectedDate(viewed)}
                 onSetActive={readOnly ? undefined : () => setAsCurrentDay(viewed!)}
               />
             </div>
-          )}
-
-          {viewMode !== 'day' && (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${config.weekdays.length}, minmax(${CELL_SIZE}px, 1fr))`,
-                  gap: 2,
-                  width: '100%',
-                  maxWidth: config.weekdays.length * CELL_SIZE * 2.4
-                }}
-              >
-                {config.weekdays.map((w, i) => (
-                  <div key={i} style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', paddingBottom: 4 }}>
-                    {w.abbreviation}
-                  </div>
-                ))}
-                {viewMode === 'month'
-                  ? monthCells.map((day, i) =>
-                      day === null ? (
-                        <div key={i} style={{ aspectRatio: '1' }} />
-                      ) : (
-                        <DayCell
-                          key={i}
-                          label={String(day)}
-                          isSelected={sameDate({ year: viewed!.year, monthIndex: viewed!.monthIndex, day }, selected!)}
-                          isToday={
-                            day === config.currentDate.day &&
-                            viewed!.year === config.currentDate.year &&
-                            viewed!.monthIndex === config.currentDate.monthIndex
-                          }
-                          eventColors={eventsOnDate(config, { year: viewed!.year, monthIndex: viewed!.monthIndex, day }).map((e) => e.color)}
-                          onClick={() => setSelectedDate({ year: viewed!.year, monthIndex: viewed!.monthIndex, day })}
-                          onSetActive={
-                            readOnly ? undefined : () => setAsCurrentDay({ year: viewed!.year, monthIndex: viewed!.monthIndex, day })
-                          }
-                        />
-                      )
-                    )
-                  : weekCells.map((date, i) => (
+          ) : (
+            <div className="cal-grid" style={{ gridTemplateColumns: `repeat(${config.weekdays.length}, minmax(${CELL_SIZE}px, 1fr))`, maxWidth: config.weekdays.length * CELL_SIZE * 2.4 }}>
+              {config.weekdays.map((w, i) => (
+                <div key={i} className="cal-wd" title={w.name}>
+                  {w.abbreviation}
+                </div>
+              ))}
+              {viewMode === 'month'
+                ? monthCells.map((day, i) =>
+                    day === null ? (
+                      <div key={i} aria-hidden="true" />
+                    ) : (
                       <DayCell
                         key={i}
-                        label={String(date.day)}
-                        isSelected={sameDate(date, selected!)}
-                        isToday={sameDate(date, config.currentDate)}
-                        eventColors={eventsOnDate(config, date).map((e) => e.color)}
-                        onClick={() => setSelectedDate(date)}
-                        onSetActive={readOnly ? undefined : () => setAsCurrentDay(date)}
+                        label={String(day)}
+                        isSelected={sameDate({ year: viewed!.year, monthIndex: viewed!.monthIndex, day }, selected!)}
+                        isToday={day === config.currentDate.day && viewed!.year === config.currentDate.year && viewed!.monthIndex === config.currentDate.monthIndex}
+                        eventColors={eventsOnDate(config, { year: viewed!.year, monthIndex: viewed!.monthIndex, day }).map((e) => e.color)}
+                        onClick={() => setSelectedDate({ year: viewed!.year, monthIndex: viewed!.monthIndex, day })}
+                        onSetActive={readOnly ? undefined : () => setAsCurrentDay({ year: viewed!.year, monthIndex: viewed!.monthIndex, day })}
                       />
-                    ))}
-              </div>
+                    )
+                  )
+                : weekCells.map((date, i) => (
+                    <DayCell
+                      key={i}
+                      label={String(date.day)}
+                      isSelected={sameDate(date, selected!)}
+                      isToday={sameDate(date, config.currentDate)}
+                      eventColors={eventsOnDate(config, date).map((e) => e.color)}
+                      onClick={() => setSelectedDate(date)}
+                      onSetActive={readOnly ? undefined : () => setAsCurrentDay(date)}
+                    />
+                  ))}
             </div>
           )}
         </div>
 
         <div
+          className="cal-resize"
           onPointerDown={(e) => {
             e.preventDefault()
             hasManuallyResizedRef.current = true
             setResizing(true)
           }}
           title="Drag to resize"
-          style={{
-            height: 6,
-            flexShrink: 0,
-            cursor: 'row-resize',
-            borderTop: '1px solid var(--border-subtle)',
-            borderBottom: '1px solid var(--border-subtle)',
-            background: 'var(--bg-surface-raised)'
-          }}
-        />
+          role="separator"
+          aria-orientation="horizontal"
+        >
+          <i />
+        </div>
 
-        <div style={{ height: dayPanelHeight, flexShrink: 0, overflowY: 'auto', padding: 'var(--space-3)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
-            <strong style={{ fontSize: 13 }}>{formatCalendarDate(config, selected!)}</strong>
+        <div className="cal-day" style={{ height: dayPanelHeight }}>
+          <div className="cal-day-head">
+            <strong>{formatCalendarDate(config, selected!)}</strong>
             {!readOnly && !sameDate(selected!, config.currentDate) && (
-              <button
-                type="button"
-                className="gb-btn gb-btn--ghost"
-                style={{ fontSize: 11, padding: '2px 8px' }}
-                title="Also available by right-clicking any day"
-                onClick={() => setAsCurrentDay(selected!)}
-              >
-                Set as Current Day
+              <button type="button" className="cal-small-btn" title="Also: right-click any day" onClick={() => setAsCurrentDay(selected!)}>
+                Make it today
               </button>
             )}
           </div>
 
-          {activeSeason && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
-              <span style={{ width: 9, height: 9, borderRadius: '50%', background: activeSeason.color, flexShrink: 0 }} />
-              <span>{activeSeason.name}</span>
-            </div>
-          )}
-          {selectedWeather ? (
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-              {selectedWeather.temperature}°{config.temperatureUnit} · {RAIN_LABELS[selectedWeather.rain]} ·{' '}
-              {cloudinessLabel(selectedWeather.cloudiness)} · {selectedWeather.windMph} mph wind
-            </p>
-          ) : (
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>No season covers this date yet.</p>
-          )}
-          {sunHours && (
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-              <SunIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
-              {formatHour(sunHours.sunrise)}–{formatHour(sunHours.sunset)}
-              {daytime !== null && <span style={{ color: 'var(--text-muted)' }}> · {daytime ? 'Daytime' : 'Night'} now</span>}
-            </p>
-          )}
-          {config.moons.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
-              {config.moons.map((moon) => {
-                const { phase, illumination } = moonPhaseForDate(config, moon, selected!)
-                return (
-                  <div key={moon.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: moon.color, flexShrink: 0 }} />
-                    <span>
-                      {moon.name}: {phase} ({illumination}%)
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          <div style={{ marginTop: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Events</span>
-              {!readOnly && (
-                <button
-                  type="button"
-                  className="gb-btn gb-btn--ghost"
-                  style={{ fontSize: 11, padding: '2px 8px' }}
-                  onClick={() =>
-                    setEditingEvent({
-                      id: uuid(),
-                      name: '',
-                      description: '',
-                      category: '',
-                      color: '#7a8fd1',
-                      date: selected!,
-                      repeat: 'none',
-                      linkedNoteId: null
-                    })
-                  }
-                >
-                  + Add Event
-                </button>
+          <dl className="cal-facts">
+            {activeSeason && (
+              <>
+                <dt>Season</dt>
+                <dd>
+                  <span className="cal-dot" style={{ background: activeSeason.color }} />
+                  {activeSeason.name}
+                </dd>
+              </>
+            )}
+            <dt>Weather</dt>
+            <dd>
+              {selectedWeather ? (
+                `${selectedWeather.temperature}°${config.temperatureUnit} · ${RAIN_LABELS[selectedWeather.rain]} · ${cloudinessLabel(selectedWeather.cloudiness)} · ${selectedWeather.windMph} mph wind`
+              ) : (
+                <span className="cal-muted">No season covers this date yet</span>
               )}
-            </div>
-            {selectedEvents.length === 0 ? (
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>None yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {selectedEvents.map((ev) => (
-                  <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: ev.color, flexShrink: 0 }} />
-                    <button
-                      type="button"
-                      onClick={() => !readOnly && setEditingEvent(ev)}
-                      title={ev.description || undefined}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        textAlign: 'left',
-                        background: 'none',
-                        border: 'none',
-                        padding: 0,
-                        cursor: readOnly ? 'default' : 'pointer',
-                        color: 'var(--text-primary)',
-                        fontSize: 12,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {ev.name}
-                      {ev.category && <span style={{ color: 'var(--text-muted)' }}> · {ev.category}</span>}
-                    </button>
-                    {!readOnly && (
-                      <ConfirmButton
-                        label={<XIcon size={12} />}
-                        confirmLabel="Sure?"
-                        variant="ghost"
-                        danger
-                        style={{ fontSize: 11, padding: '2px 6px', flexShrink: 0 }}
-                        onConfirm={() => deleteEvent(ev.id)}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
+            </dd>
+            {sunHours && (
+              <>
+                <dt>Sun</dt>
+                <dd>
+                  <SunIcon size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
+                  {formatHour(sunHours.sunrise)}–{formatHour(sunHours.sunset)}
+                  {daytime !== null && <span className="cal-muted"> · {daytime ? 'daytime' : 'night'} now</span>}
+                </dd>
+              </>
+            )}
+            {config.moons.map((moon) => {
+              const { phase, illumination } = moonPhaseForDate(config, moon, selected!)
+              return (
+                <Fragment key={moon.id}>
+                  <dt>{moon.name}</dt>
+                  <dd>
+                    <span className="cal-dot" style={{ background: moon.color }} />
+                    {phase} <span className="cal-muted">({illumination}%)</span>
+                  </dd>
+                </Fragment>
+              )
+            })}
+          </dl>
+
+          <div className="cal-sub">
+            <span>Events</span>
+            {!readOnly && (
+              <button
+                type="button"
+                className="cal-small-btn"
+                onClick={() => setEditingEvent({ id: uuid(), name: '', description: '', category: '', color: '#7a8fd1', date: selected!, repeat: 'none', linkedNoteId: null })}
+              >
+                <PlusIcon size={10} />
+                Add event
+              </button>
             )}
           </div>
-
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 4 }}>
-              Notes
+          {selectedEvents.length === 0 ? (
+            <p className="cal-muted cal-none">Nothing on this day.</p>
+          ) : (
+            <div className="cal-events">
+              {selectedEvents.map((ev) => (
+                <div key={ev.id} className="cal-event">
+                  <span className="cal-dot" style={{ background: ev.color }} />
+                  <button type="button" className="cal-event-name" onClick={() => !readOnly && setEditingEvent(ev)} title={ev.description || undefined} disabled={readOnly}>
+                    {ev.name}
+                    {ev.category && <span className="cal-muted"> · {ev.category}</span>}
+                  </button>
+                  {!readOnly && <ConfirmButton label={<XIcon size={12} />} confirmLabel="Sure?" variant="ghost" danger className="cal-icon-btn" onConfirm={() => deleteEvent(ev.id)} />}
+                </div>
+              ))}
             </div>
-            <DayNoteEditor key={`${selected!.year}-${selected!.monthIndex}-${selected!.day}`} config={config} date={selected!} readOnly={readOnly} onCommit={commitDayNote} />
+          )}
+
+          <div className="cal-sub">
+            <span>Notes</span>
           </div>
+          <DayNoteEditor key={`${selected!.year}-${selected!.monthIndex}-${selected!.day}`} config={config} date={selected!} readOnly={readOnly} onCommit={commitDayNote} />
         </div>
       </div>
 
-      {error && (
-        <p style={{ margin: 0, padding: 'var(--space-2) var(--space-3)', fontSize: 12, color: 'var(--danger, #e05555)' }}>{error}</p>
-      )}
+      {error && <p className="cal-error">{error}</p>}
 
       {!readOnly && wizardOpen && (
         <CalendarCreatorWizard
@@ -700,6 +596,131 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
         />
       )}
     </div>
+  )
+}
+
+const TIME_PRESETS: [string, string][] = [
+  ['Dawn', '06:00'],
+  ['Morning', '09:00'],
+  ['Midday', '12:00'],
+  ['Afternoon', '15:00'],
+  ['Dusk', '18:00'],
+  ['Evening', '21:00'],
+  ['Midnight', '00:00']
+]
+
+const TIME_STEPS: [string, number, string][] = [
+  ['−1 hr', -1, 'Back an hour'],
+  ['−10 min', -1 / 6, 'Back ten minutes'],
+  ['+10 min', 1 / 6, 'On ten minutes'],
+  ['+1 hr', 1, 'On an hour'],
+  ['+8 hrs', 8, 'On eight hours (a long rest)']
+]
+
+/**
+ * The campaign's time of day: the time and what part of the day it is. The DM
+ * clicks it for steps that move time on (rolling into the next day past
+ * midnight), quick picks like Dawn or Dusk, and an exact time.
+ */
+function TimeOfDay({
+  config,
+  readOnly,
+  onChange
+}: {
+  config: CalendarConfig
+  readOnly: boolean
+  onChange: (patch: Pick<CalendarConfig, 'currentDate' | 'timeOfDay'>) => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  const hour = parseTimeOfDay(config.timeOfDay)
+  const at = (timeOfDay: string): void => onChange({ currentDate: config.currentDate, timeOfDay })
+
+  return (
+    <div ref={ref} className="cal-time-wrap">
+      <button
+        type="button"
+        className={`cal-time${open ? ' cal-time--open' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+        disabled={readOnly}
+        title={readOnly ? 'The time of day in the campaign' : 'Change the time of day'}
+        aria-expanded={readOnly ? undefined : open}
+      >
+        <ClockIcon />
+        <strong>{config.timeOfDay || (readOnly ? 'No time set' : 'Set the time')}</strong>
+        {hour !== null && <small>{partOfDay(hour)}</small>}
+      </button>
+      {open && (
+        <div className="cal-time-pop" role="dialog" aria-label="Time of day">
+          <div className="cal-time-steps">
+            {TIME_STEPS.map(([label, hours, title]) => (
+              <button key={label} type="button" onClick={() => onChange(advanceTime(config, hours))} title={title}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="cal-time-presets">
+            {TIME_PRESETS.map(([label, time]) => (
+              <button key={label} type="button" className={config.timeOfDay === time ? 'cal-time-preset--on' : undefined} onClick={() => at(time)}>
+                <strong>{label}</strong>
+                <small>{time}</small>
+              </button>
+            ))}
+          </div>
+          <div className="cal-time-exact">
+            <label>
+              <span>Exact time</span>
+              <input type="time" className="gb-input" value={config.timeOfDay} onChange={(e) => e.target.value && at(e.target.value)} />
+            </label>
+            {config.timeOfDay && (
+              <button type="button" className="cal-small-btn" onClick={() => at('')}>
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClockIcon(): JSX.Element {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 4.8V8l2.2 1.6" />
+    </svg>
+  )
+}
+
+function ChevronDownIcon(): JSX.Element {
+  return (
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginLeft: 4, opacity: 0.6 }}>
+      <path d="M3 4.5l3 3 3-3" />
+    </svg>
+  )
+}
+
+function TrashIcon(): JSX.Element {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
+    </svg>
   )
 }
 
@@ -941,14 +962,13 @@ function DayNoteEditor({
   const [draft, setDraft] = useState(saved)
 
   if (readOnly) {
-    return <p style={{ margin: 0, fontSize: 12, color: saved ? 'var(--text-secondary)' : 'var(--text-muted)' }}>{saved || 'No notes for this day.'}</p>
+    return <p className={saved ? 'cal-note-read' : 'cal-muted cal-none'}>{saved || 'No notes for this day.'}</p>
   }
 
   return (
     <textarea
-      className="gb-input"
+      className="gb-input cal-note"
       rows={3}
-      style={{ fontSize: 12, width: '100%' }}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
@@ -978,10 +998,10 @@ function DayCell({
   /** Right-click shortcut for "set as current day" — omitted (native context menu shows instead) for read-only viewers. */
   onSetActive?: () => void
 }): JSX.Element {
-  const size = big ? CELL_SIZE * 2.4 : CELL_SIZE
   return (
     <button
       type="button"
+      className={['cal-cell', big && 'cal-cell--big', isToday && 'cal-cell--today', isSelected && 'cal-cell--selected'].filter(Boolean).join(' ')}
       onClick={onClick}
       onContextMenu={
         onSetActive &&
@@ -990,26 +1010,16 @@ function DayCell({
           onSetActive()
         })
       }
-      title={onSetActive ? "View this day's details — right-click to set as the current day" : "View this day's details"}
-      style={{
-        position: 'relative',
-        // A big cell is the day view's one day; the rest stretch with the month grid, staying square.
-        ...(big ? { width: size, height: size } : { width: '100%', aspectRatio: '1', minWidth: size }),
-        border: isToday ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-        borderRadius: 4,
-        background: isSelected ? 'var(--accent-subtle)' : 'transparent',
-        color: 'var(--text-primary)',
-        fontSize: big ? 20 : 12,
-        cursor: 'pointer'
-      }}
+      title={onSetActive ? "This day's details — right-click to make it today" : "This day's details"}
+      aria-pressed={isSelected}
     >
       {label}
       {eventColors && eventColors.length > 0 && (
-        <div style={{ position: 'absolute', bottom: 2, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 1 }}>
+        <span className="cal-cell-dots" aria-hidden="true">
           {eventColors.slice(0, 3).map((color, i) => (
-            <span key={i} style={{ width: 3, height: 3, borderRadius: '50%', background: color, display: 'inline-block' }} />
+            <i key={i} style={{ background: color }} />
           ))}
-        </div>
+        </span>
       )}
     </button>
   )
@@ -1034,5 +1044,5 @@ function buildWeekGrid(config: CalendarConfig, anchor: CalendarDate): CalendarDa
 }
 
 function Empty({ text }: { text: string }): JSX.Element {
-  return <p style={{ padding: 'var(--space-3)', fontSize: 13, color: 'var(--text-muted)' }}>{text}</p>
+  return <p className="cal-muted cal-empty">{text}</p>
 }

@@ -5,6 +5,7 @@
     "src/preload/**/*",
     "src/server/**/*",
     "shared/**/*",
+    "src/renderer/src/color.ts",
     "db/**/*",
     "tests/**/*",
     "vitest.config.ts"

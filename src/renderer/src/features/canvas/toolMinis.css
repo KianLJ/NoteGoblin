@@ -1,0 +1,307 @@
+/* Tools' small views, shown under the title bar while their box is minimized. Theme tokens only. */
+
+.gb-canvas-node-compact {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 10px 10px;
+  overflow: hidden;
+}
+
+.mini-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Music. */
+.mini-music {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mini-music-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mini-eq {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  padding: 9px 8px;
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  color: var(--accent);
+}
+.mini-eq i {
+  width: 4px;
+  height: 30%;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.45;
+}
+.mini-music--playing .mini-eq i {
+  opacity: 1;
+  animation: mini-eq 900ms ease-in-out infinite alternate;
+}
+.mini-music--playing .mini-eq i:nth-child(2) {
+  animation-duration: 700ms;
+  animation-delay: -200ms;
+}
+.mini-music--playing .mini-eq i:nth-child(3) {
+  animation-duration: 1100ms;
+  animation-delay: -500ms;
+}
+.mini-music--playing .mini-eq i:nth-child(4) {
+  animation-duration: 800ms;
+  animation-delay: -350ms;
+}
+.mini-music-text,
+.mini-date-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mini-music-text strong,
+.mini-date-text strong,
+.mini-turn strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mini-music-text small,
+.mini-date-text small,
+.mini-turn small {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mini-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.mini-round {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.mini-round:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mini-round--big {
+  width: 38px;
+  height: 38px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+/* Sound board: recent pads. */
+.mini-pads {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  height: 100%;
+}
+.mini-pad {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--border-subtle);
+  border-bottom-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.mini-pad:active {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+  background: var(--accent-subtle);
+}
+
+/* Calendar: the day. */
+.mini-date {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mini-date-day {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+}
+
+/* Timer. */
+.mini-timer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mini-timer-time {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.mini-timer .gb-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.mini-timer.gb-timer--warn .mini-timer-time {
+  color: var(--warning, var(--accent));
+}
+.mini-timer.gb-timer--done .mini-timer-time {
+  color: var(--danger);
+}
+
+/* Initiative: whose turn. */
+.mini-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.mini-turn strong {
+  font-size: 16px;
+}
+.mini-hp {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.mini-hp i {
+  display: block;
+  height: 100%;
+  background: var(--success);
+}
+.mini-hp i.mini-hp--low {
+  background: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-music--playing .mini-eq i {
+    animation: none;
+  }
+}
+@keyframes mini-eq {
+  from {
+    height: 20%;
+  }
+  to {
+    height: 100%;
+  }
+}
+
+/* Players / party: faces. */
+.mini-party {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mini-party small {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.mini-faces {
+  display: flex;
+}
+.mini-face {
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-surface);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+.mini-face:first-child {
+  margin-left: 0;
+}
+.mini-face--more {
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+/* Sessions: the live scene. */
+.mini-scene {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mini-scene-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mini-scene-text small {
+  font-size: 11px;
+  color: var(--accent-hover);
+}
+.mini-scene-text strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mini-scene-open {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 10px;
+}

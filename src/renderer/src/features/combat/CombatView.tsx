@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { sortedByInitiative, withCombatantHp, type Combatant } from '@shared/encounter'
-import { activeBattle, canStand, MAX_TOKEN_SIZE, tokenCentre, turnToken, fogEverything, hiddenCombatantIds, isFogged, isTestUser, newBattle, type Ambient, type BattleMap, type MapImage, type Pt, type TemplateKind } from '@shared/battleMap'
+import { activeBattle, canStand, startArea, MAX_TOKEN_SIZE, tokenCentre, turnToken, fogEverything, hiddenCombatantIds, isFogged, isTestUser, newBattle, type Ambient, type BattleMap, type MapImage, type Pt, type TemplateKind } from '@shared/battleMap'
 import { lightsOf, LIGHT_PRESETS, viewerKey, viewerSources, visionActive } from '@shared/vision'
 import { buildCheckRollEntry, diceGroups } from '@shared/dice'
 import { deriveSheet } from '@shared/content/sheet'
@@ -986,8 +986,9 @@ function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m:
           className="gs-chip"
           onClick={() => {
             // The next free square down the starting area's left edge; drag it into place from there.
-            for (let x = 0; x < 200; x++)
-              for (let y = 0; y < map.rows; y++)
+            const area = startArea(map)
+            for (let x = area.x0; x < area.x0 + 200; x++)
+              for (let y = area.y0; y < area.y1; y++)
                 if (!map.partyStarts.some((q) => q.x === x && q.y === y) && canStand(map, { x, y, size: 1 })) {
                   onChange({ ...map, partyStarts: [...map.partyStarts, { x, y }] })
                   return

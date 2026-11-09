@@ -12,10 +12,10 @@ describe('battle map', () => {
 
   it('puts the party on the left and enemies on the right, sized and not overlapping', () => {
     const map = placeTokens(emptyBattleMap(), [c('pc', 'player'), c('ogre', 'monster'), c('pc2', 'player')], (x) => (x.id === 'ogre' ? sizeInSquares('Large') : 1))
-    expect(map.tokens.pc).toEqual({ x: 0, y: 0, size: 1 })
-    expect(map.tokens.pc2).toEqual({ x: 0, y: 1, size: 1 })
-    expect(map.tokens.ogre).toEqual({ x: 22, y: 0, size: 2 })
-    expect(canStand(map, { x: 23, y: 1, size: 1 })).toBe(false)
+    expect(map.tokens.pc).toEqual({ x: -12, y: -1, size: 1 })
+    expect(map.tokens.pc2).toEqual({ x: -12, y: 0, size: 1 })
+    expect(map.tokens.ogre).toEqual({ x: 10, y: -1, size: 2 })
+    expect(canStand(map, { x: 11, y: 0, size: 1 })).toBe(false)
   })
 
   it('drops tokens for combatants who left, and leaves an unchanged map alone', () => {
@@ -148,8 +148,8 @@ describe('an endless map', () => {
   it('reaches as far as what is on it', async () => {
     const { mapBounds, normalizeBattleMap } = await import('@shared/battleMap')
     const map = { ...emptyBattleMap(), images: [{ id: 'i', src: 'data:image/png;base64,AA', x: -10, y: -4, w: 5, h: 5 }], tokens: { a: { x: 40, y: 3, size: 2 } } }
-    expect(mapBounds(map)).toEqual({ x0: -10, y0: -4, x1: 42, y1: 16 })
-    expect(mapBounds(map, 2)).toEqual({ x0: -12, y0: -6, x1: 44, y1: 18 })
+    expect(mapBounds(map)).toEqual({ x0: -12, y0: -8, x1: 42, y1: 8 })
+    expect(mapBounds(map, 2)).toEqual({ x0: -14, y0: -10, x1: 44, y1: 10 })
     // An old map's background image becomes a placed image over the grid it had.
     expect(normalizeBattleMap({ cols: 30, rows: 20, image: 'data:image/png;base64,AA' }).images).toEqual([{ id: 'background', src: 'data:image/png;base64,AA', x: 0, y: 0, w: 30, h: 20 }])
   })

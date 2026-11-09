@@ -1,4 +1,4 @@
-import { hexToHsl, hslToHex } from './color'
+import { hexToHsl, hslMatchingBrightness } from './color'
 
 /** Debounced push of the current theme/font choices up to the relay account, so they follow the user to another device. Every local mutator below calls this; fire-and-forget and silently a no-op without a relay connection (see identity:push-prefs), so this never needs its own error handling here. */
 let pushPrefsTimer: ReturnType<typeof setTimeout> | undefined
@@ -41,14 +41,6 @@ export const COLOR_TOKENS: ColorToken[] = [
 
 export const TINTABLE_GROUPS = ['Backgrounds', 'Borders', 'Text', 'Accent'] as const
 
-/** One representative token per tintable group, used to seed the group's swatch with a sensible starting color and to read back "what color is this group roughly showing right now". */
-export const GROUP_REPRESENTATIVE_TOKEN: Record<(typeof TINTABLE_GROUPS)[number], string> = {
-  Backgrounds: '--bg-surface',
-  Borders: '--border-strong',
-  Text: '--text-primary',
-  Accent: '--accent'
-}
-
 /** The stylesheet's own default values (theme.css), hardcoded here so tinting always has a stable lightness ladder to recolor, independent of whatever inline overrides currently happen to be applied. */
 const DEFAULT_COLORS: Record<ResolvedTheme, Record<string, string>> = {
   light: {
@@ -74,7 +66,7 @@ const DEFAULT_COLORS: Record<ResolvedTheme, Record<string, string>> = {
     '--bg-surface': '#302921',
     '--bg-surface-raised': '#453b2c',
     '--bg-sunken': '#150f0a',
-    '--border-subtle': '#453b2c',
+    '--border-subtle': '#6b5c45',
     '--border-strong': '#d6c69c',
     '--text-primary': '#f2ead6',
     '--text-secondary': '#c7b995',
@@ -171,64 +163,91 @@ export function setThemeMode(mode: ThemeMode): void {
   schedulePrefsPush()
 }
 
-/** Recolors every token in `group` to `pickedHex`'s hue/saturation, each keeping its own default lightness — the "greyscale with this color laid on top" effect, so light/dark relationships within the group stay intact. */
-export function tintGroup(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[number], pickedHex: string): void {
+/** Recolors every token in `group` to `pickedHex`'s hue (and saturation, times `satScale`), each keeping its default's brightness — so contrast between text, borders and backgrounds stays what it was, whatever the hue. */
+function tintGroup(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[number], pickedHex: string, satScale = 1): void {
   const { h, s } = hexToHsl(pickedHex)
   const overrides = getOverrides(theme)
   for (const token of COLOR_TOKENS.filter((t) => t.group === group)) {
-    const defaultHex = DEFAULT_COLORS[theme][token.key]
-    const { l } = hexToHsl(defaultHex)
-    overrides[token.key] = hslToHex(h, s, l)
+    overrides[token.key] = hslMatchingBrightness(h, s * satScale, DEFAULT_COLORS[theme][token.key])
   }
   saveOverrides(theme, overrides)
   localStorage.setItem(groupColorKey(theme, group), pickedHex)
-  if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
-  schedulePrefsPush()
 }
 
-export function resetGroup(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[number]): void {
+function resetGroup(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[number]): void {
   const overrides = getOverrides(theme)
-  for (const token of COLOR_TOKENS.filter((t) => t.group === group)) {
-    delete overrides[token.key]
-  }
+  for (const token of COLOR_TOKENS.filter((t) => t.group === group)) delete overrides[token.key]
   saveOverrides(theme, overrides)
   localStorage.removeItem(groupColorKey(theme, group))
-  if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
+}
+
+const BOTH: ResolvedTheme[] = ['light', 'dark']
+
+function reapply(): void {
+  applyOverridesToRoot(resolveMode(getStoredMode()))
   schedulePrefsPush()
 }
 
-/** The last color picked for a group, or its representative token's current default if it hasn't been tinted — what the group's swatch should show. */
-export function getGroupColor(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[number]): string {
-  const stored = localStorage.getItem(groupColorKey(theme, group))
-  if (stored) return stored
-  return DEFAULT_COLORS[theme][GROUP_REPRESENTATIVE_TOKEN[group]]
+/** The accent (buttons, highlights, links) in `hex`'s colour, in both light and dark; null goes back to the default. */
+export function setAccentTone(hex: string | null): void {
+  for (const theme of BOTH) {
+    if (hex) tintGroup(theme, 'Accent', hex)
+    else resetGroup(theme, 'Accent')
+  }
+  reapply()
 }
 
-export function isGroupTinted(theme: ResolvedTheme, group: (typeof TINTABLE_GROUPS)[number]): boolean {
-  return localStorage.getItem(groupColorKey(theme, group)) !== null
+/**
+ * Backgrounds, borders and text all leaning towards `hex`, in both light and
+ * dark; null goes back to the default parchment. Text takes less of it than
+ * the backgrounds, so it stays easy to read.
+ */
+export function setBackgroundTone(hex: string | null): void {
+  for (const theme of BOTH) {
+    if (hex) {
+      tintGroup(theme, 'Backgrounds', hex)
+      tintGroup(theme, 'Borders', hex, 0.8)
+      tintGroup(theme, 'Text', hex, 0.5)
+    } else for (const group of ['Backgrounds', 'Borders', 'Text'] as const) resetGroup(theme, group)
+  }
+  reapply()
 }
 
-export function setColorOverride(theme: ResolvedTheme, key: string, hex: string): void {
-  const overrides = getOverrides(theme)
-  overrides[key] = hex
-  saveOverrides(theme, overrides)
-  if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
-  schedulePrefsPush()
+/** The accent or background colour picked (null for the default). */
+export function getTone(kind: 'accent' | 'background'): string | null {
+  return localStorage.getItem(groupColorKey(resolveMode(getStoredMode()), kind === 'accent' ? 'Accent' : 'Backgrounds'))
 }
 
-export function resetColorOverride(theme: ResolvedTheme, key: string): void {
-  const overrides = getOverrides(theme)
-  delete overrides[key]
-  saveOverrides(theme, overrides)
-  if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
-  schedulePrefsPush()
+/** What a picked colour actually comes out as for `token` in the theme showing now: its hue, the token's own brightness. */
+export function toneResult(hex: string, token: string): string {
+  const theme = resolveMode(getStoredMode())
+  const { h, s } = hexToHsl(hex)
+  return hslMatchingBrightness(h, s, DEFAULT_COLORS[theme][token])
 }
 
-export function resetAllColorOverrides(theme: ResolvedTheme): void {
-  localStorage.removeItem(overridesKey(theme))
-  for (const group of TINTABLE_GROUPS) localStorage.removeItem(groupColorKey(theme, group))
-  if (resolveMode(getStoredMode()) === theme) applyOverridesToRoot(theme)
-  schedulePrefsPush()
+/** A status colour (success or danger) in both light and dark; null goes back to the default. */
+export function setStatusColor(key: '--success' | '--danger', hex: string | null): void {
+  for (const theme of BOTH) {
+    const overrides = getOverrides(theme)
+    if (hex) overrides[key] = hex
+    else delete overrides[key]
+    saveOverrides(theme, overrides)
+  }
+  reapply()
+}
+
+/** The default colour of `token` in the theme showing now. */
+export function defaultColor(token: string): string {
+  return DEFAULT_COLORS[resolveMode(getStoredMode())][token]
+}
+
+/** Every colour back to the defaults, in both light and dark. */
+export function resetAllColorOverrides(): void {
+  for (const theme of BOTH) {
+    localStorage.removeItem(overridesKey(theme))
+    for (const group of TINTABLE_GROUPS) localStorage.removeItem(groupColorKey(theme, group))
+  }
+  reapply()
 }
 
 /**

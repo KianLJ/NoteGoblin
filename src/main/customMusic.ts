@@ -67,6 +67,12 @@ export function removeCustomMusicTrack(userDataDir: string, groupId: string, tra
   save(userDataDir, config)
 }
 
+export function renameCustomMusicTrack(userDataDir: string, groupId: string, trackId: string, title: string): void {
+  const config = load(userDataDir)
+  config[groupId] = (config[groupId] ?? []).map((t) => (t.id === trackId ? { ...t, title } : t))
+  save(userDataDir, config)
+}
+
 /** Looks a track id up across every group — the custom-music:// protocol handler (main/index.ts) doesn't know which group a given request belongs to, only the id in the URL. */
 export function resolveCustomMusicPath(userDataDir: string, trackId: string): string | null {
   return getCustomMusicTrack(userDataDir, trackId)?.path ?? null

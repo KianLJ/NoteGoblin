@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AppApi,
   CampaignChangeEvent,
@@ -272,7 +272,9 @@ const api: AppApi = {
     },
     listCustom: () => ipcRenderer.invoke('music:list-custom'),
     addCustomTrack: (groupId) => ipcRenderer.invoke('music:add-custom-track', groupId),
-    removeCustomTrack: (groupId, trackId) => ipcRenderer.invoke('music:remove-custom-track', groupId, trackId)
+    addCustomFiles: (groupId, files) => ipcRenderer.invoke('music:add-custom-files', groupId, files.map((f) => webUtils.getPathForFile(f))),
+    removeCustomTrack: (groupId, trackId) => ipcRenderer.invoke('music:remove-custom-track', groupId, trackId),
+    renameCustomTrack: (groupId, trackId, title) => ipcRenderer.invoke('music:rename-custom-track', groupId, trackId, title)
   },
   ambient: {
     broadcast: (groupId, layerId, level, fadeMs) => ipcRenderer.invoke('ambient:broadcast', groupId, layerId, level, fadeMs),
@@ -288,7 +290,7 @@ const api: AppApi = {
   sfxBoard: {
     broadcast: (sfxId) => ipcRenderer.invoke('sfx-board:broadcast', sfxId),
     onPlay: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, sfxId: string): void => callback(sfxId)
+      const listener = (_event: Electron.IpcRendererEvent, sfxId: string, custom?: { title: string; mimeType: string; dataBase64: string }): void => callback(sfxId, custom)
       ipcRenderer.on('ws:sfx-played', listener)
       return () => ipcRenderer.removeListener('ws:sfx-played', listener)
     }
@@ -304,6 +306,8 @@ const api: AppApi = {
   relay: {
     status: () => ipcRenderer.invoke('relay:status'),
     myUserId: () => ipcRenderer.invoke('relay:my-user-id'),
+    getAvatar: () => ipcRenderer.invoke('relay:avatar:get'),
+    setAvatar: (avatar: string | null) => ipcRenderer.invoke('relay:avatar:set', avatar),
     friends: {
       list: () => ipcRenderer.invoke('relay:friends:list'),
       listRequests: () => ipcRenderer.invoke('relay:friends:list-requests'),

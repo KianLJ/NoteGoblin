@@ -99,6 +99,16 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
   const [vp, setVp] = useState<Viewport>(layout.viewport)
   const vpRef = useRef(vp)
   vpRef.current = vp
+  // The zoom the boxes are laid out at (CSS zoom), which catches up with the view's zoom once zooming stops.
+  // Laid out at their real on-screen size, every box draws sharp text at any zoom; a scale transform alone
+  // stretches the layers Chromium gives scrolling areas, which is what blurred music, the calendar and the rest.
+  // While a zoom is under way the difference is a quick scale, so zooming stays smooth.
+  const [laidOutZoom, setLaidOutZoom] = useState(vp.zoom)
+  useEffect(() => {
+    if (vp.zoom === laidOutZoom) return
+    const t = setTimeout(() => setLaidOutZoom(vp.zoom), 160)
+    return () => clearTimeout(t)
+  }, [vp.zoom, laidOutZoom])
   const [panning, setPanning] = useState(false)
   const [pendingReveal, setPendingReveal] = useState<string | null>(null)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
@@ -320,7 +330,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
       <CanvasNode
         key={item.id}
         id={item.id}
-        rect={node!}
+        // A tool's small view is shown at its own size, even in a layout saved before it had one.
+        rect={node!.minimized && item.miniSize ? { ...node!, ...item.miniSize } : node!}
         z={node!.z}
         // A pinned box shows at 100%, so dragging it moves it pixel for pixel.
         zoom={node!.pinned ? 1 : vp.zoom}
@@ -331,7 +342,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         pinned={node!.pinned}
         onTogglePin={() => setLayout((l) => setPinned(l, item.id, !node!.pinned, vpRef.current))}
         minimized={isCollection || !!node!.minimized}
-        onToggleMinimize={isCollection ? () => nav?.enter(item.id.slice(COLLECTION_PREFIX.length)) : () => setLayout((l) => setMinimized(l, item.id, !node!.minimized))}
+        onToggleMinimize={isCollection ? () => nav?.enter(item.id.slice(COLLECTION_PREFIX.length)) : () => setLayout((l) => setMinimized(l, item.id, !node!.minimized, item.miniSize))}
+        mini={item.mini}
         tileOpenTitle={isCollection ? 'Open' : undefined}
         onMoveOut={nav?.path.length ? () => nav.moveOut(item.id) : undefined}
         minContent={MIN_CONTENT[dynamicKind(item.id)]}
@@ -381,7 +393,9 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     >
       {/* The light the scene's music (or a fight) casts over the table — see useCanvasMood.ts. */}
       <div className="gb-canvas-mood" aria-hidden="true" />
-      <div className="gb-canvas-world" style={{ transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})` }}>
+      {/* Whole pixels, so nothing on the canvas sits between two. */}
+      <div className="gb-canvas-world" style={{ transform: `translate(${Math.round(vp.x)}px, ${Math.round(vp.y)}px)${vp.zoom === laidOutZoom ? '' : ` scale(${vp.zoom / laidOutZoom})`}` }}>
+        <div className="gb-canvas-zoom" style={{ zoom: laidOutZoom }}>
         {sequence && <SequenceArrows nodes={sequence.map((id) => findNode(layout, id)).filter((n) => n && !n.pinned) as Rect[]} />}
         {rendered.filter((r) => !r.node!.pinned).map(renderNode)}
         {sequence?.map((id, i) => {
@@ -392,6 +406,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
             </span>
           ) : null
         })}
+        </div>
       </div>
       <div className="gb-canvas-pinned">{rendered.filter((r) => r.node!.pinned).map(renderNode)}</div>
 

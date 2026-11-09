@@ -161,7 +161,7 @@ export function stopMusic(): void {
 /** Tracks a connected player has received from the DM's own broadcast (see MusicChangedFrame's doc comment) — decoded once into a blob URL and cached here by trackId, never persisted (a fresh session gets a fresh cache; the DM re-sends the data every time regardless, since the relay never stores anything either). */
 const receivedCustomTracks = new Map<string, MusicTrack>()
 
-function base64ToBlobUrl(base64: string, mimeType: string): string {
+export function base64ToBlobUrl(base64: string, mimeType: string): string {
   const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)

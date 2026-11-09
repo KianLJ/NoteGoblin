@@ -14,11 +14,14 @@ export interface FriendSummary {
   online: boolean
   /** Set once Milestone 2 lands — the session id a friend is currently hosting, if any. */
   hostingSessionId?: string
+  /** Profile picture as a data URL, if they set one. */
+  avatar?: string
 }
 
 export interface FriendRequest {
   userId: string
   username: string
+  avatar?: string
 }
 
 export type RelayStatus = 'connected' | 'connecting' | 'unavailable'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultCalendarConfig, eraForYear, latestEra, type CalendarConfig } from '@shared/calendar'
+import { advanceTime, defaultCalendarConfig, eraForYear, latestEra, partOfDay, type CalendarConfig } from '@shared/calendar'
 
 function withEras(): CalendarConfig {
   return {
@@ -22,5 +22,40 @@ describe('calendar eras', () => {
     expect(eraForYear(config, 999)?.id).toBe('a')
     expect(eraForYear(config, 1492)?.id).toBe('b')
     expect(eraForYear(config, 0)).toBeNull()
+  })
+})
+
+describe('advanceTime', () => {
+  const day = (timeOfDay: string): CalendarConfig => ({
+    ...defaultCalendarConfig(),
+    weekdays: [{ name: 'One', abbreviation: 'O' }],
+    months: [
+      { name: 'A', length: 30 },
+      { name: 'B', length: 30 }
+    ],
+    currentDate: { year: 5, monthIndex: 0, day: 30 },
+    timeOfDay
+  })
+
+  it('moves the time on within the day', () => {
+    expect(advanceTime(day('08:15'), 1 / 6)).toEqual({ currentDate: { year: 5, monthIndex: 0, day: 30 }, timeOfDay: '08:25' })
+  })
+
+  it('rolls over midnight into the next day, and the next month', () => {
+    expect(advanceTime(day('22:00'), 8)).toEqual({ currentDate: { year: 5, monthIndex: 1, day: 1 }, timeOfDay: '06:00' })
+  })
+
+  it('goes back past midnight into the day before', () => {
+    expect(advanceTime(day('00:30'), -1)).toEqual({ currentDate: { year: 5, monthIndex: 0, day: 29 }, timeOfDay: '23:30' })
+  })
+
+  it('counts from midnight when no time is set', () => {
+    expect(advanceTime(day(''), 1).timeOfDay).toBe('01:00')
+  })
+})
+
+describe('partOfDay', () => {
+  it('names the time of day', () => {
+    expect([2, 6.5, 9, 12, 15, 18, 20, 23].map(partOfDay)).toEqual(['Dead of night', 'Dawn', 'Morning', 'Midday', 'Afternoon', 'Dusk', 'Evening', 'Night'])
   })
 })

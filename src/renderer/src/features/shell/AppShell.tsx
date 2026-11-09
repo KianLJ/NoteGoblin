@@ -29,7 +29,9 @@ import { useCharacterCloudSync } from '../player/useCharacterCloudSync'
 import { MusicPanel } from '../audio/MusicPanel'
 import { SoundBoardPanel } from '../audio/SoundBoardPanel'
 import type { CanvasHandle } from '../canvas/Canvas'
-import type { ToolContents } from '../canvas/toolItems'
+import { toolFull, type ToolContents } from '../canvas/toolItems'
+import { AccountButton } from '../account/AccountSettingsButton'
+import { MusicMini, SoundBoardMini } from '../canvas/toolMinis'
 import { KeepAliveOutlet, useKeepAliveHost } from '../canvas/KeepAlive'
 import { entryNodeId, putEntry } from '../canvas/canvasEntries'
 import { DYNAMIC_SIZE } from '@shared/canvasTools'
@@ -380,8 +382,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     ),
     ...(mode === 'dm'
       ? {
-          music: <KeepAliveOutlet host={musicHost} />,
-          soundboard: <SoundBoardPanel sessionId={hostedSessionId} />
+          music: { full: <KeepAliveOutlet host={musicHost} />, mini: <MusicMini sessionId={hostedSessionId} /> },
+          soundboard: { full: <SoundBoardPanel sessionId={hostedSessionId} />, mini: <SoundBoardMini sessionId={hostedSessionId} /> }
         }
       : {})
   }
@@ -411,6 +413,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           className="gb-no-drag"
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0, flexShrink: 1 }}
         >
+          <AccountButton displayName={displayName} />
           <ModeToggle
             mode={mode}
             onChange={(m) => {
@@ -507,7 +510,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
                   </button>
                 )}
               >
-                {sharedTools.soundboard}
+                {toolFull(sharedTools.soundboard)}
               </HeaderPopover>
             </>
           )}
@@ -536,7 +539,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           />
           {classic ? (
             <HeaderPopover width={300} trigger={(toggle) => <FriendsButton onOpen={toggle} />}>
-              {sharedTools.friends}
+              {toolFull(sharedTools.friends)}
             </HeaderPopover>
           ) : (
             <FriendsButton
@@ -547,7 +550,6 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               }}
             />
           )}
-          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{displayName}</span>
           <VersionBadge
             variant="inline"
             onWhatsNew={(entries) => {

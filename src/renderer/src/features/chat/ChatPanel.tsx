@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { FriendSummary } from '@shared/relay'
 import { useCampaignChat } from './useCampaignChat'
 import { useRelayMessages, useUnreadMessageNotifications } from './useRelayMessages'
-import { PlayersIcon } from '../campaigns/panelIcons'
+import { ChatIcon, PlayersIcon } from '../campaigns/panelIcons'
+import { ArrowLeftIcon } from '../../ui/icons'
+import './chat.css'
 import { UserIcon } from '../player/icons'
 
 interface ChatPanelProps {
@@ -78,13 +80,13 @@ export function ChatPanel({ campaignId, sessionId, myUserId, onUnreadTotalChange
   }, [partyUnread, friendsUnreadCount])
 
   return (
-    <div style={containerStyle}>
-      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+    <div className="ms">
+      <div className="ms-tabs" role="tablist" aria-label="Conversations">
         <SectionTabButton icon={<PlayersIcon />} label="Party" active={section === 'party'} count={partyUnread} onClick={() => setSection('party')} />
         <SectionTabButton icon={<UserIcon />} label="Friends" active={section === 'friends'} count={friendsUnread.length} onClick={() => setSection('friends')} />
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <div className="ms-body-area">
         <div style={{ display: section === 'party' ? 'block' : 'none', height: '100%' }}>
           <PartySection campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} />
         </div>
@@ -127,7 +129,7 @@ function PartySection({
   }
 
   return (
-    <div style={sectionStyle}>
+    <div className="ms-section">
       <MessageList
         listRef={listRef}
         emptyText="No messages yet — say hi."
@@ -190,8 +192,8 @@ function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null
 
   if (selectedId && selected) {
     return (
-      <div style={sectionStyle}>
-        <ThreadHeader label={selected.username} onBack={() => selectThread(null)} />
+      <div className="ms-section">
+        <ThreadHeader label={selected.username} picture={selected.avatar} onBack={() => selectThread(null)} />
         <MessageList
           listRef={listRef}
           emptyText={`No messages with ${selected.username} yet.`}
@@ -204,12 +206,12 @@ function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null
   }
 
   return (
-    <div style={sectionStyle}>
+    <div className="ms-section">
       {friends.length === 0 ? (
         <EmptyState text="Add a friend to start messaging them." />
       ) : (
         <ThreadPicker
-          items={friends.map((f) => ({ id: f.userId, label: f.username, sublabel: f.online ? 'Online' : undefined, unread: unreadFriendIds.has(f.userId) }))}
+          items={friends.map((f) => ({ id: f.userId, label: f.username, picture: f.avatar, sublabel: f.online ? 'Online' : undefined, unread: unreadFriendIds.has(f.userId) }))}
           onSelect={selectThread}
         />
       )}
@@ -231,15 +233,21 @@ interface MessageItem {
 
 function MessageList({ listRef, items, emptyText }: { listRef: React.RefObject<HTMLDivElement>; items: MessageItem[]; emptyText: string }): JSX.Element {
   return (
-    <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {items.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 'auto', textAlign: 'center' }}>{emptyText}</p>}
-      {items.map((item) => (
-        <div key={item.id} style={{ fontSize: 12, lineHeight: 1.4 }}>
-          <span style={{ fontWeight: 700, color: item.isMine ? 'var(--accent)' : 'var(--text-primary)' }}>{item.isMine ? 'You' : item.senderName}</span>{' '}
-          <span style={{ color: 'var(--text-secondary)', wordBreak: 'break-word' }}>{item.body}</span>{' '}
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatTime(item.createdAt)}</span>
-        </div>
-      ))}
+    <div ref={listRef} className="ms-list">
+      {items.length === 0 && <EmptyState text={emptyText} />}
+      {items.map((item, i) => {
+        // A run of messages from one person shows their name once, at its start.
+        const first = i === 0 || items[i - 1].senderName !== item.senderName || items[i - 1].isMine !== item.isMine
+        return (
+          <div key={item.id} className={`ms-msg${item.isMine ? ' ms-msg--mine' : ''}${first ? ' ms-msg--first' : ''}`}>
+            {first && !item.isMine && <span className="ms-sender">{item.senderName}</span>}
+            <div className="ms-bubble" title={new Date(item.createdAt).toLocaleString()}>
+              <span className="ms-body">{item.body}</span>
+              <span className="ms-time">{formatTime(item.createdAt)}</span>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -258,22 +266,20 @@ function Composer({
   disabled?: boolean
 }): JSX.Element {
   return (
-    <div style={{ display: 'flex', gap: 4, padding: 'var(--space-2)', flexShrink: 0 }}>
-      <input
-        className="gb-input"
-        placeholder={placeholder}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onSend()
-        }}
-        style={{ flex: 1, fontSize: 12, padding: '5px 8px' }}
-      />
-      <button type="button" onClick={onSend} disabled={disabled || !value.trim()} className="gb-btn gb-btn--primary" style={{ fontSize: 12, padding: '5px 10px' }}>
-        Send
+    <form
+      className="ms-composer"
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSend()
+      }}
+    >
+      <input placeholder={placeholder} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={placeholder} />
+      <button type="submit" disabled={disabled || !value.trim()} className="ms-send" title="Send" aria-label="Send">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M2 2.5l12 5.5-12 5.5 1.6-5.5zM3.6 8h6" />
+        </svg>
       </button>
-    </div>
+    </form>
   )
 }
 
@@ -281,68 +287,53 @@ function ThreadPicker({
   items,
   onSelect
 }: {
-  items: { id: string; label: string; sublabel?: string; unread?: boolean }[]
+  items: { id: string; label: string; picture?: string; sublabel?: string; unread?: boolean }[]
   onSelect: (id: string) => void
 }): JSX.Element {
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+    <div className="ms-threads">
       {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onSelect(item.id)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: 'var(--space-2) var(--space-3)',
-            border: 'none',
-            borderBottom: '1px solid var(--border-subtle)',
-            background: 'transparent',
-            color: 'var(--text-primary)',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: 'pointer',
-            textAlign: 'left'
-          }}
-        >
-          {item.unread && <span title="New" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />}
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
-          {item.sublabel && (
-            <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)', flexShrink: 0 }}>{item.sublabel}</span>
-          )}
+        <button key={item.id} type="button" className={`ms-thread${item.unread ? ' ms-thread--unread' : ''}`} onClick={() => onSelect(item.id)}>
+          <span className="ms-avatar" aria-hidden="true">
+            {item.picture ? <img className="gb-face-img" src={item.picture} alt="" /> : item.label.trim().charAt(0).toUpperCase()}
+            {item.sublabel && <i />}
+          </span>
+          <span className="ms-thread-text">
+            <strong>{item.label}</strong>
+            <small>{item.unread ? 'New message' : (item.sublabel ?? 'Offline')}</small>
+          </span>
+          {item.unread && <span className="ms-dot" title="New" />}
         </button>
       ))}
     </div>
   )
 }
 
-function ThreadHeader({ label, onBack }: { label: string; onBack: () => void }): JSX.Element {
+function ThreadHeader({ label, picture, onBack }: { label: string; picture?: string; onBack: () => void }): JSX.Element {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px var(--space-2)', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-      <button
-        type="button"
-        onClick={onBack}
-        title="Back"
-        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }}
-      >
-        ‹
+    <div className="ms-thread-head">
+      <button type="button" className="ms-back" onClick={onBack} title="Back to friends" aria-label="Back to friends">
+        <ArrowLeftIcon size={13} />
       </button>
-      <strong style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</strong>
+      <span className="ms-avatar ms-avatar--small" aria-hidden="true">
+        {picture ? <img className="gb-face-img" src={picture} alt="" /> : label.trim().charAt(0).toUpperCase()}
+      </span>
+      <strong>{label}</strong>
     </div>
   )
 }
 
 function EmptyState({ text }: { text: string }): JSX.Element {
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, textAlign: 'center', padding: '0 var(--space-3)' }}>{text}</p>
+    <div className="ms-empty">
+      <ChatIcon />
+      <span>{text}</span>
     </div>
   )
 }
 
 function ErrorLine({ text }: { text: string }): JSX.Element {
-  return <p style={{ fontSize: 11, color: 'var(--danger)', margin: '0 var(--space-2)' }}>{text}</p>
+  return <p className="ms-error">{text}</p>
 }
 
 function formatTime(createdAt: string): string {
@@ -364,63 +355,10 @@ function SectionTabButton({
   onClick: () => void
 }): JSX.Element {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      style={{
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 5,
-        padding: '5px 8px',
-        flex: 1,
-        border: 'none',
-        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-        background: 'transparent',
-        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-        fontSize: 11,
-        fontWeight: 700,
-        cursor: 'pointer',
-        whiteSpace: 'nowrap'
-      }}
-    >
+    <button type="button" role="tab" aria-selected={active} className={`ms-tab${active ? ' ms-tab--on' : ''}`} onClick={onClick}>
       {icon}
       {label}
-      {!!count && (
-        <span
-          style={{
-            minWidth: 15,
-            height: 15,
-            padding: '0 3px',
-            borderRadius: '999px',
-            background: 'var(--accent)',
-            color: 'var(--accent-contrast, #fff)',
-            fontSize: 9,
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            lineHeight: 1
-          }}
-        >
-          {count > 9 ? '9+' : count}
-        </span>
-      )}
+      {!!count && <span className="ms-badge">{count > 9 ? '9+' : count}</span>}
     </button>
   )
-}
-
-const containerStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%',
-  background: 'var(--bg-sunken)'
-}
-
-const sectionStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%'
 }
