@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CloseIcon, FileIcon, PlusIcon } from '../campaigns/icons'
-import { UserIcon } from './icons'
-import type { PlayerWorkspace, PlayerTabRef } from './usePlayerWorkspace'
+import { UserIcon } from '../player/icons'
+import type { PlayerWorkspace, PlayerTabRef } from '../player/usePlayerWorkspace'
 
 interface PlayerWorkspaceHeaderBarProps {
   workspace: PlayerWorkspace

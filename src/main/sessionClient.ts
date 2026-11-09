@@ -60,14 +60,16 @@ export function joinSession(
   sessionId: string,
   relayToken: string,
   relayUsername: string,
-  window: BrowserWindow
+  window: BrowserWindow,
+  /** Joining the session this app is itself hosting — dev builds only (see registerIpc.ts's sessions:join). */
+  self = false
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   leaveSession()
   clientWindow = window
 
   return new Promise((resolve) => {
     const ws = new WebSocket(
-      `${wsUrl(sessionId)}?token=${encodeURIComponent(relayToken)}&role=player&username=${encodeURIComponent(relayUsername)}`
+      `${wsUrl(sessionId)}?token=${encodeURIComponent(relayToken)}&role=player&username=${encodeURIComponent(relayUsername)}${self ? '&self=1' : ''}`
     )
     let settled = false
 

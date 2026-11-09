@@ -5,6 +5,7 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { applyFont, applyFontScale, getStoredFontId, getStoredFontScale, initTheme } from './theme'
 import './styles/global.css'
 import './styles/primitives.css'
+import './features/canvas/canvas.css'
 
 initTheme()
 applyFont(getStoredFontId())

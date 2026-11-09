@@ -56,6 +56,7 @@ const api: AppApi = {
     invite: (friendUserId) => ipcRenderer.invoke('sessions:invite', friendUserId),
     join: (sessionId) => ipcRenderer.invoke('sessions:join', sessionId),
     leave: () => ipcRenderer.invoke('sessions:leave'),
+    setViewRole: (role) => ipcRenderer.invoke('sessions:set-view-role', role),
     onDisconnected: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: { reason: 'dm-left' | 'connection-lost' }): void =>
         callback(payload.reason)
@@ -149,7 +150,7 @@ const api: AppApi = {
       ipcRenderer.invoke('sessionDecks:removeScene', campaignId, deckId, noteId, sessionId),
     getLive: (campaignId, sessionId) => ipcRenderer.invoke('sessionDecks:getLive', campaignId, sessionId),
     present: (campaignId, deckId) => ipcRenderer.invoke('sessionDecks:present', campaignId, deckId),
-    setScene: (sceneIndex) => ipcRenderer.invoke('sessionDecks:setScene', sceneIndex),
+    setScene: (sceneIndex, campaignId, deckId) => ipcRenderer.invoke('sessionDecks:setScene', sceneIndex, campaignId, deckId),
     stopPresenting: () => ipcRenderer.invoke('sessionDecks:stopPresenting'),
     onSceneChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, update: SceneChangedUpdate): void => callback(update)
@@ -232,6 +233,7 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('ws:initiative', listener)
     },
     setMine: (initiative) => ipcRenderer.invoke('initiative:set-mine', initiative),
+    get: () => ipcRenderer.invoke('initiative:get'),
     onPlayerSet: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, update: PlayerInitiativeUpdate): void => callback(update)
       ipcRenderer.on('ws:player-initiative', listener)

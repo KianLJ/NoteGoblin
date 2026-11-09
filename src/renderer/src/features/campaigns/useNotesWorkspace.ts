@@ -5,8 +5,9 @@ import { playSfx } from '../audio/soundEffects'
 /**
  * Owns notes/tabs state for one open campaign. Called once at the AppShell
  * level (always, even when no campaign is open — campaignId is then null and
- * this is a no-op) so both the header's tab strip and the sidebar/editor body
- * share a single source of truth instead of each fetching independently.
+ * this is a no-op) so the workspace canvas's note boxes, the notes tree and
+ * the Sessions tool share a single source of truth. Each open tab is one
+ * note box on the canvas; the active tab is the box last clicked into.
  */
 
 function tabsStorageKey(campaignId: string): string {
@@ -113,12 +114,12 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     setActiveId(noteId)
   }
 
-  /** Wikilink navigation replaces the active tab's slot instead of always adding a new one — the "preview tab" pattern (VS Code, Obsidian): clicking through a chain of links doesn't leave a trail of tabs behind. Switches to the target's existing tab instead of duplicating it if it's already open. Explicit "open in new tab" still goes through openNote. */
-  function navigateToNote(noteId: string): void {
+  /** Wikilink navigation replaces the active tab's slot (or `fromId`'s — the note whose link was followed) instead of always adding a new one — the "preview tab" pattern (VS Code, Obsidian): clicking through a chain of links doesn't leave a trail of tabs behind. Switches to the target's existing tab instead of duplicating it if it's already open. Explicit "open in new tab" still goes through openNote. */
+  function navigateToNote(noteId: string, fromId: string | null = activeId): void {
     setOpenTabs((tabs) => {
       if (tabs.includes(noteId)) return tabs
-      if (activeId === null) return [...tabs, noteId]
-      return tabs.map((id) => (id === activeId ? noteId : id))
+      if (fromId === null || !tabs.includes(fromId)) return [...tabs, noteId]
+      return tabs.map((id) => (id === fromId ? noteId : id))
     })
     setActiveId(noteId)
   }
@@ -128,17 +129,6 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
       const next = tabs.filter((id) => id !== noteId)
       setActiveId((current) => (current === noteId ? (next[next.length - 1] ?? null) : current))
       return next
-    })
-  }
-
-  /** Drag-and-drop tab reordering — moves `draggedId` to sit just before `targetId` in the strip. A no-op if either id isn't currently an open tab. */
-  function moveTab(draggedId: string, targetId: string): void {
-    if (draggedId === targetId) return
-    setOpenTabs((tabs) => {
-      if (!tabs.includes(draggedId) || !tabs.includes(targetId)) return tabs
-      const withoutDragged = tabs.filter((id) => id !== draggedId)
-      const targetIndex = withoutDragged.indexOf(targetId)
-      return [...withoutDragged.slice(0, targetIndex), draggedId, ...withoutDragged.slice(targetIndex)]
     })
   }
 
@@ -316,11 +306,7 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
   }
 
   const activeNote = notes?.find((n) => n.id === activeId) ?? null
-  // Memoized: AppShell's dmTabOrder-reconciling effect depends on this array's
-  // identity, and a fresh reference on every render (this used to rebuild
-  // unconditionally) made that effect fire on every render forever — a
-  // permanent low-priority re-render loop across the whole app, not just
-  // while a note tab was actually open/closing.
+  // Memoized so a background refresh that changes no open note doesn't hand the canvas a new list.
   const tabNotes = useMemo(
     () => (notes ? (openTabs.map((id) => notes.find((n) => n.id === id)).filter(Boolean) as Note[]) : []),
     [notes, openTabs]
@@ -337,7 +323,6 @@ export function useNotesWorkspace(sessionId: string | undefined, campaignId: str
     openNote,
     navigateToNote,
     closeTab,
-    moveTab,
     createNote,
     saveNote,
     deleteNote,

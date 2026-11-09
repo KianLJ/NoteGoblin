@@ -272,6 +272,94 @@
   color: var(--bg-surface);
 }
 
+/* A rollable bit of a statblock — a check, save, skill, attack or damage (see
+   shared/statblockRolls.ts). A two-part chip: the number that's rolled on a
+   solid accent tab (<b>), its context beside it on the pale accent (<span>),
+   brackets and all — "[5](1d6 + 2)", "[+4] to hit", "Dex [+5]". */
+.gb-statblock-roll {
+  display: inline-flex;
+  align-items: stretch;
+  vertical-align: baseline;
+  padding: 0;
+  margin: 1px 0;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: 0.92em;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: box-shadow 120ms ease, transform 80ms ease;
+}
+.gb-statblock-roll > b {
+  padding: 0 6px;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.gb-statblock-roll > span {
+  padding: 0 7px 0 5px;
+  font-weight: 600;
+}
+.gb-statblock-roll > span:first-child {
+  padding: 0 5px 0 7px;
+}
+.gb-statblock-roll > span:empty {
+  display: none;
+}
+.gb-statblock-roll:hover {
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+  transform: translateY(-1px);
+}
+.gb-statblock-roll:hover > span {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.gb-statblock-roll:active {
+  transform: translateY(0);
+}
+/* A rollable statblock's abilities — six tiles in place of the table, each
+   with its modifier as a big roll button. */
+.gb-ability-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 6px;
+  margin: 0.5em 0;
+}
+.gb-ability-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+.gb-ability-tile-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.gb-ability-tile-score {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.gb-ability-tile .gb-statblock-roll {
+  margin: 0;
+  font-size: 1.15em;
+}
+.gb-ability-tile .gb-statblock-roll > b {
+  padding: 2px 12px;
+}
+.gb-ability-tile--empty .gb-ability-tile-score {
+  font-size: 15px;
+}
+
 /* Inline `` `oneshot: <cueId>` `` Sound Board button — see markdown.ts's
    `codespan` renderer (Preview) and MarkdownLiveEditor.tsx's OneShotWidget
    (Write). Same shape as .gb-dice-roll above but its own color so a page

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DiceRollLogEntry } from '@shared/dice'
-import { ensureDiceLogListening, getDiceLog, subscribeDiceLog } from './diceLogStore'
+import { ensureDiceLogListening, getDiceLog, subscribeDiceLog } from '../dice/diceLogStore'
 
 const VISIBLE_MS = 5000
 

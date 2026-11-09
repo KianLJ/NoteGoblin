@@ -185,6 +185,7 @@ function StatblockPreview(): JSX.Element {
   )
 }
 import { CharacterSheetEditor } from '../features/player/CharacterSheetEditor'
+import { CanvasShowcase } from './canvasShowcase'
 import { applyFont, applyFontScale, getStoredFontId, getStoredFontScale, initTheme } from '../theme'
 import '../styles/global.css'
 import '../styles/primitives.css'
@@ -399,6 +400,8 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
       <VehiclesPreview />
     ) : new URLSearchParams(location.search).has('statblock') ? (
       <StatblockPreview />
+    ) : new URLSearchParams(location.search).has('showcase') ? (
+      <CanvasShowcase scene={new URLSearchParams(location.search).get('showcase') ?? 'overview'} />
     ) : new URLSearchParams(location.search).has('calendar') ? (
       <div style={{ width: 360, height: '100vh', borderRight: '1px solid var(--border-subtle)' }}>
         <CalendarPanel sessionId={null} campaignId="camp" readOnly={false} />

@@ -12,7 +12,7 @@ import { dependents, enableProblems } from '@shared/content/packFiles'
 import { contentPackSchema } from '@shared/content/schema'
 import { SessionDeckRepo, type SessionDeckRow } from '../repositories/sessionDeckRepo'
 import { UserRepo } from '../repositories/userRepo'
-import { stripDmAsides, type SessionScene } from '@shared/sessionDeck'
+import { stripDmAsides, type SessionScene, sceneRevealed, withRevealFlags } from '@shared/sessionDeck'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
 import {
@@ -569,9 +569,19 @@ export function listNotes(
   // but a player shouldn't be able to find one at all — via this list, a
   // wikilink, anything — until the DM has actually presented its deck at
   // least once (see markDeckPresented/listSessionDecks's matching filter).
-  const visibleRows = viewerIsDm
-    ? rows
-    : rows.filter((row) => !row.scene_deck_id || !!new SessionDeckRepo(db).findById(row.scene_deck_id)?.presented_at)
+  // Nor, after that, a scene the DM hasn't presented yet (see revealScene).
+  const deckRepo = new SessionDeckRepo(db)
+  const decks = new Map<string, SessionDeckRow | undefined>()
+  const sceneShown = (row: NoteRow): boolean => {
+    if (!row.scene_deck_id) return true
+    if (!decks.has(row.scene_deck_id)) decks.set(row.scene_deck_id, deckRepo.findById(row.scene_deck_id))
+    const deck = decks.get(row.scene_deck_id)
+    if (!deck?.presented_at) return false
+    const scenes = parseScenes(deck.scenes_json)
+    const scene = scenes.find((s) => s.noteId === row.id)
+    return !!scene && sceneRevealed(scene, scenes, true)
+  }
+  const visibleRows = viewerIsDm ? rows : rows.filter(sceneShown)
   return { ok: true, data: visibleRows.map((row) => toNoteJson(userRepo, row, viewerIsDm)) }
 }
 
@@ -1488,14 +1498,15 @@ function parseScenes(raw: string): SessionScene[] {
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter(
-        (s): s is { noteId: unknown; encounterId?: unknown; moodId?: unknown; trackId?: unknown } =>
+        (s): s is { noteId: unknown; encounterId?: unknown; moodId?: unknown; trackId?: unknown; revealed?: unknown } =>
           typeof s === 'object' && s !== null && typeof s.noteId === 'string'
       )
       .map((s) => ({
         noteId: s.noteId as string,
         encounterId: typeof s.encounterId === 'string' ? s.encounterId : null,
         moodId: typeof s.moodId === 'string' ? s.moodId : null,
-        trackId: typeof s.trackId === 'string' ? s.trackId : null
+        trackId: typeof s.trackId === 'string' ? s.trackId : null,
+        ...(typeof s.revealed === 'boolean' ? { revealed: s.revealed } : {})
       }))
   } catch {
     return []
@@ -1514,11 +1525,14 @@ function validateSceneReorder(existing: SessionScene[], input: unknown): { scene
     const encounterId = (s as { encounterId?: unknown }).encounterId
     const moodId = (s as { moodId?: unknown }).moodId
     const trackId = (s as { trackId?: unknown }).trackId
+    const revealed = existing.find((e) => e.noteId === noteId)?.revealed
     scenes.push({
       noteId,
       encounterId: typeof encounterId === 'string' ? encounterId : null,
       moodId: typeof moodId === 'string' ? moodId : null,
-      trackId: typeof trackId === 'string' ? trackId : null
+      trackId: typeof trackId === 'string' ? trackId : null,
+      // Only presenting reveals a scene (revealScene) — a reorder keeps what's stored.
+      ...(revealed !== undefined ? { revealed } : {})
     })
   }
   if (scenes.length !== existing.length || new Set(scenes.map((s) => s.noteId)).size !== existing.length) {
@@ -1564,7 +1578,10 @@ export function listSessionDecks(db: DatabaseType, campaignId: string, userId: s
       .filter((row) => isDm || row.presented_at !== null)
       .map((row) => {
         const deck = toSessionDeckJson(row)
-        return isDm ? deck : { ...deck, scenes: deck.scenes.map((s) => ({ noteId: s.noteId, encounterId: null, moodId: null, trackId: null })) }
+        if (isDm) return deck
+        // Players get only the scenes the DM has presented — what's still to come stays the DM's.
+        const shown = deck.scenes.filter((s) => sceneRevealed(s, deck.scenes, true))
+        return { ...deck, scenes: shown.map((s) => ({ noteId: s.noteId, encounterId: null, moodId: null, trackId: null })) }
       })
   }
 }
@@ -1580,6 +1597,24 @@ export function markDeckPresented(db: DatabaseType, campaignId: string, deckId: 
   if (!existing || existing.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
   deckRepo.markPresented(deckId)
   return { ok: true, data: undefined }
+}
+
+/**
+ * Only the DM — presenting a scene reveals it to players for good (see listSessionDecks/listNotes). Call it
+ * before markDeckPresented on a first presentation. Returns whether anything changed (players then need to
+ * refetch).
+ */
+export function revealScene(db: DatabaseType, campaignId: string, deckId: string, userId: string, sceneIndex: number): ServiceResult<boolean> {
+  const campaign = makeCampaignRepo(db).findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can present a scene.' }
+  const deckRepo = new SessionDeckRepo(db)
+  const deck = deckRepo.findById(deckId)
+  if (!deck || deck.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
+  const scenes = withRevealFlags(parseScenes(deck.scenes_json), deck.presented_at !== null)
+  if (!scenes[sceneIndex] || scenes[sceneIndex].revealed) return { ok: true, data: false }
+  deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes.map((s, i) => (i === sceneIndex ? { ...s, revealed: true } : s))) })
+  return { ok: true, data: true }
 }
 
 /** Only the DM can create a session deck. */
@@ -1662,7 +1697,7 @@ export function addSceneToDeck(db: DatabaseType, campaignId: string, deckId: str
     sceneDeckId: deckId
   })
 
-  const scenes = [...parseScenes(deck.scenes_json), { noteId: note.id, encounterId: null, moodId: null, trackId: null }]
+  const scenes = [...withRevealFlags(parseScenes(deck.scenes_json), deck.presented_at !== null), { noteId: note.id, encounterId: null, moodId: null, trackId: null, revealed: false }]
   deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes) })
 
   return { ok: true, data: toNoteJson(userRepo, note, true) }

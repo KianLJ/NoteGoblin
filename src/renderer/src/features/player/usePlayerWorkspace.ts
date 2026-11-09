@@ -227,13 +227,13 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     setActiveTabState(ref)
   }
 
-  /** Wikilink navigation replaces the active tab's slot instead of always adding a new one (the "preview tab" pattern) — switches to the target's existing tab instead of duplicating it if it's already open. Explicit "open in new tab" still goes through openTab. */
-  function navigateToNote(noteId: string): void {
+  /** Wikilink navigation replaces the active tab's slot (or `from`'s — the tab whose link was followed) instead of always adding a new one (the "preview tab" pattern) — switches to the target's existing tab instead of duplicating it if it's already open. Explicit "open in new tab" still goes through openTab. */
+  function navigateToNote(noteId: string, from: PlayerTabRef | null = activeTab): void {
     const ref: PlayerTabRef = { kind: 'note', id: noteId }
     setTabs((prev) => {
       if (prev.some((t) => sameTab(t, ref))) return prev
-      if (!activeTab) return [...prev, ref]
-      return prev.map((t) => (sameTab(t, activeTab) ? ref : t))
+      if (!from || !prev.some((t) => sameTab(t, from))) return [...prev, ref]
+      return prev.map((t) => (sameTab(t, from) ? ref : t))
     })
     setActiveTabState(ref)
   }
@@ -248,7 +248,7 @@ export function usePlayerWorkspace(sessionId: string | undefined) {
     })
   }
 
-  /** Drag-and-drop tab reordering — moves `dragged` to sit just before `target` in the strip. A no-op if either ref isn't currently an open tab. */
+  /** Drag-and-drop tab reordering, for the classic screens' tab strip — moves `dragged` to sit just before `target`. A no-op if either ref isn't currently an open tab. */
   function moveTab(dragged: PlayerTabRef, target: PlayerTabRef): void {
     if (sameTab(dragged, target)) return
     setTabs((prev) => {

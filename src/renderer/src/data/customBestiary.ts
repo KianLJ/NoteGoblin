@@ -5,7 +5,8 @@ import { xpForCr } from '@shared/encounter'
 const STORAGE_KEY = 'gb-custom-monsters'
 
 function crToNumeric(cr: string): number {
-  const trimmed = cr.trim()
+  // The SRD's CRs carry their XP: "1/4 (50 XP)".
+  const trimmed = cr.trim().split(' ')[0]
   if (trimmed.includes('/')) {
     const [n, d] = trimmed.split('/').map(Number)
     return d ? n / d : 0
@@ -45,6 +46,17 @@ export function saveCustomMonster(data: StatblockData): BestiaryMonster {
   all.push(monster)
   saveAll(all)
   return monster
+}
+
+/** A creature with its CR's number and XP worked out again from its `cr` (after an edit changed it). */
+export function withCr<T extends BestiaryMonster>(monster: T): T {
+  const cr = monster.cr ?? '0'
+  return { ...monster, crNumeric: crToNumeric(cr), xp: xpForCr(cr.trim().split(' ')[0]) }
+}
+
+/** Changes a creature saved on this device, where it is. */
+export function updateCustomMonster(monster: BestiaryMonster): void {
+  saveAll(loadCustomMonsters().map((m) => (m.index === monster.index ? withCr(monster) : m)))
 }
 
 export function removeCustomMonster(index: string): void {

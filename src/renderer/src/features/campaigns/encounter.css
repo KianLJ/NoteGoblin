@@ -1,0 +1,225 @@
+/* The Initiative tracker's Encounter Builder (InitiativeTracker.tsx): the draft as monster cards, a difficulty meter, and the library. */
+
+.gb-enc-empty {
+  padding: var(--space-3);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.gb-enc-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.gb-enc-card,
+.gb-enc-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.gb-enc-card-head,
+.gb-enc-saved-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.gb-enc-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.gb-enc-cr {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ink-900);
+  color: var(--parchment-50);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.gb-enc-card-type {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.gb-enc-card-stats {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.gb-enc-card-stats b {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-enc-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+
+.gb-enc-stepper button {
+  width: 28px;
+  height: 24px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.gb-enc-stepper button:hover {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.gb-enc-stepper span {
+  font-weight: 700;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-enc-tier {
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.gb-enc-tier--trivial { color: var(--text-muted); }
+.gb-enc-tier--easy { color: var(--moss-500); }
+.gb-enc-tier--medium { color: #a8822a; }
+.gb-enc-tier--hard { color: var(--ember-500); }
+.gb-enc-tier--deadly { color: var(--blood-500); }
+
+.gb-enc-meter {
+  position: relative;
+  height: 10px;
+  margin: 2px 0 16px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+
+.gb-enc-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
+
+.gb-enc-meter-fill--trivial { background: var(--text-muted); }
+.gb-enc-meter-fill--easy { background: var(--moss-500); }
+.gb-enc-meter-fill--medium { background: #a8822a; }
+.gb-enc-meter-fill--hard { background: var(--ember-500); }
+.gb-enc-meter-fill--deadly { background: var(--blood-500); }
+
+.gb-enc-meter-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--border-strong);
+  opacity: 0.55;
+}
+
+.gb-enc-meter-tick span {
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.gb-enc-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gb-enc-link:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.gb-enc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gb-enc-tag {
+  padding: 1px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.gb-enc-tag--on {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+
+.gb-enc-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+
+.gb-enc-saved {
+  border-top-color: var(--border-strong);
+}
+
+.gb-enc-saved-tags {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.gb-enc-saved-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.gb-enc-saved-actions > :last-child {
+  margin-left: auto;
+}

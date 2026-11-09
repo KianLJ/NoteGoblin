@@ -228,7 +228,10 @@ export function broadcastActiveCampaignChanged(): void {
  * each player's copy is computed fresh rather than one shared payload; a
  * monster's real name/exact HP/AC/position never leaves this process.
  */
+let lastInitiative: InitiativeState | null = null
+
 export function broadcastInitiative(state: InitiativeState): void {
+  lastInitiative = state
   for (const p of players.values()) {
     const frame: InitiativeFrame = { type: 'initiative', state: sanitizeForPlayer(state, p.userId) }
     sendToRelay(p.userId, frame)
@@ -689,6 +692,9 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (dmWindow) dmWindow.webContents.send('ws:battle-map-player-move', { combatantId, x, y })
       return { reqId: frame.reqId, ok: true, data: undefined }
     }
+    // A player opening their turn order mid-fight — the tracker as it stands, rather than waiting for the next change.
+    case 'initiative.get':
+      return { reqId: frame.reqId, ok: true, data: lastInitiative ? sanitizeForPlayer(lastInitiative, userId) : null }
     case 'initiative.setMine': {
       const initiative = typeof p.initiative === 'number' ? p.initiative : null
       if (dmWindow) dmWindow.webContents.send('ws:player-initiative', { userId, initiative })

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '../../ui/Button'
 import { useFriends } from './useFriends'
 import type { Mode } from '../shell/ModeToggle'
 
-interface FriendsMenuProps {
+interface FriendsPanelProps {
   mode: Mode
   hostedSessionId: string | null
   onJoinedSession: (sessionId: string, label: string) => void
@@ -17,7 +17,7 @@ interface FriendsMenuProps {
 }
 
 /** Friends list + presence + session hosting/joining, all backed by the relay — no IP addresses or invite codes anymore. Start/Stop Hosting and Leave used to live here too — they moved to CampaignSwitcher.tsx/CharacterSwitcher.tsx respectively, next to whichever campaign/character they actually apply to. */
-export function FriendsMenu({
+export function FriendsPanel({
   mode,
   hostedSessionId,
   onJoinedSession,
@@ -25,9 +25,8 @@ export function FriendsMenu({
   connectedLabel,
   activeCampaignName,
   onResync
-}: FriendsMenuProps): JSX.Element {
+}: FriendsPanelProps): JSX.Element {
   const { status, friends, incomingRequests, error, sendRequest, accept, decline, remove } = useFriends()
-  const [open, setOpen] = useState(false)
   const [username, setUsername] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
@@ -36,17 +35,6 @@ export function FriendsMenu({
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set())
   const [joinBusyId, setJoinBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const onlineCount = friends.filter((f) => f.online).length
 
   async function handleSendRequest(): Promise<void> {
     const trimmed = username.trim()
@@ -98,37 +86,11 @@ export function FriendsMenu({
       return
     }
     onJoinedSession(sessionId, `${friendUsername}'s Table`)
-    setOpen(false)
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="gb-btn gb-btn--secondary"
-        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-      >
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: status === 'connected' ? 'var(--success)' : 'var(--text-muted)'
-          }}
-        />
-        Friends{onlineCount > 0 ? ` (${onlineCount})` : ''}
-        {incomingRequests.length > 0 && (
-          <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }}>
-            {incomingRequests.length}
-          </span>
-        )}
-      </button>
-
-      {open && (
         <div
-          className="gb-card"
-          style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 300, zIndex: 20 }}
+          style={{ padding: 'var(--space-3) var(--space-4)', overflowY: 'auto' }}
         >
           {status !== 'connected' && (
             <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 'var(--space-2)' }}>
@@ -236,7 +198,7 @@ export function FriendsMenu({
           {friends.length === 0 ? (
             <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No friends yet — add one by username above.</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {friends.map((friend) => (
                 <div
                   key={friend.userId}
@@ -303,7 +265,29 @@ export function FriendsMenu({
             </p>
           )}
         </div>
+  )
+}
+
+/** The header's friends status — relay connection, who's online, requests waiting — which opens the Friends tool on the canvas. */
+export function FriendsButton({ onOpen }: { onOpen: () => void }): JSX.Element {
+  const { status, friends, incomingRequests } = useFriends()
+  const onlineCount = friends.filter((f) => f.online).length
+  return (
+    <button type="button" onClick={onOpen} className="gb-btn gb-btn--secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          background: status === 'connected' ? 'var(--success)' : 'var(--text-muted)'
+        }}
+      />
+      Friends{onlineCount > 0 ? ` (${onlineCount})` : ''}
+      {incomingRequests.length > 0 && (
+        <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }}>
+          {incomingRequests.length}
+        </span>
       )}
-    </div>
+    </button>
   )
 }

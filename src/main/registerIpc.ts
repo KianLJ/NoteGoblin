@@ -445,10 +445,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return result.ok ? { ok: true, data: undefined } : result
   })
 
+  // Which view the window is showing. In a dev build you can host a session and also join it as a player (see
+  // sessions:join below) — both use the same session id, so this is what tells the player's calls from the DM's own.
+  let viewRole: 'dm' | 'player' = 'dm'
+  ipcMain.handle('sessions:set-view-role', (_event, role: 'dm' | 'player'): void => {
+    viewRole = role === 'player' ? 'player' : 'dm'
+  })
+
+  /** Whether a call naming `sessionId` is the DM working their own hosted session — not the dev build's self-joined player, whose calls go over the relay like any player's. */
+  function isOwnHostedCall(sessionId: string): boolean {
+    if (getHostedSession()?.sessionId !== sessionId) return false
+    return !(viewRole === 'player' && getJoinedSession()?.sessionId === sessionId)
+  }
+
   ipcMain.handle('sessions:join', async (_event, sessionId: string): Promise<ApiResult<void>> => {
     const relaySession = getRelaySession()
     if (!relaySession) return { ok: false, error: 'Not connected to the relay.' }
-    const result = await joinSession(sessionId, relaySession.token, relaySession.username, mainWindow)
+    // Joining your own hosted session as a player is a dev-build testing aid only.
+    const self = getHostedSession()?.sessionId === sessionId
+    if (self && app.isPackaged) return { ok: false, error: "You can't join your own session." }
+    const result = await joinSession(sessionId, relaySession.token, relaySession.username, mainWindow, self)
     if (!result.ok) return result
     setJoinedSession({ sessionId })
     return { ok: true, data: undefined }
@@ -1024,6 +1040,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('sessionDecks:present', (_event, campaignId: string, deckId: string): void => {
     const me = ensureMyHostUser()
     if (!('error' in me)) {
+      // Its first scene is shown to the table now (before the deck's marked presented — see revealScene).
+      campaignService.revealScene(me.db, campaignId, deckId, me.userId, 0)
       const result = campaignService.markDeckPresented(me.db, campaignId, deckId, me.userId)
       // Flips the deck from invisible-to-players to visible — even a player
       // just sitting on the Sessions tab (not yet auto-followed anything)
@@ -1033,7 +1051,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
     if (getHostedSession()) startPresentingDeck(campaignId, deckId)
   })
-  ipcMain.handle('sessionDecks:setScene', (_event, sceneIndex: number): void => {
+  ipcMain.handle('sessionDecks:setScene', (_event, sceneIndex: number, campaignId?: string, deckId?: string): void => {
+    // Stepping onto a scene shows it to the table for good; players refetch to see it.
+    if (typeof campaignId === 'string' && typeof deckId === 'string' && Number.isInteger(sceneIndex)) {
+      const me = ensureMyHostUser()
+      if (!('error' in me)) {
+        const result = campaignService.revealScene(me.db, campaignId, deckId, me.userId, sceneIndex)
+        if (result.ok && result.data && getHostedSession()) broadcastCampaignChanged(campaignId)
+      }
+    }
     if (getHostedSession()) setLiveScene(sceneIndex)
   })
   ipcMain.handle('sessionDecks:stopPresenting', (): void => {
@@ -1436,7 +1462,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     'characters:sync-selected',
     (_event, sessionId: string, character: CharacterSheet | null): void => {
-      if (getHostedSession()?.sessionId === sessionId) return // nothing to sync to yourself
+      if (isOwnHostedCall(sessionId)) return // nothing to sync to yourself
       void sendSessionRequest('characters.sync', { character })
     }
   )
@@ -1489,7 +1515,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // their own hosted session (handled entirely in-process, no network) or a
   // player who joined someone else's (forwarded over the relay socket).
   ipcMain.handle('presence:subscribe', (_event, sessionId: string, campaignId: string): void => {
-    if (getHostedSession()?.sessionId === sessionId) {
+    if (isOwnHostedCall(sessionId)) {
       subscribeDmPresence(campaignId, mainWindow)
     } else {
       void sendSessionRequest('presence.subscribe', { campaignId })
@@ -1499,7 +1525,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     'presence:select-character',
     (_event, sessionId: string, characterName: string | null): void => {
-      if (getHostedSession()?.sessionId === sessionId) {
+      if (isOwnHostedCall(sessionId)) {
         // The DM doesn't announce a "selected character" for their own view —
         // presence.subscribe already drives what ConnectedPlayersList shows.
         return
@@ -1583,6 +1609,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // forwarded to the DM's renderer (see sessionHost.ts's 'initiative.setMine'
   // case) rather than back through this same player's own IPC, since the DM
   // is the one who actually owns the tracker's combatant list.
+  ipcMain.handle('initiative:get', (): Promise<ApiResult<PlayerVisibleInitiativeState | null>> => sendSessionRequest<PlayerVisibleInitiativeState | null>('initiative.get', {}))
+
   ipcMain.handle('initiative:set-mine', (_event, initiative: number | null): void => {
     void sendSessionRequest('initiative.setMine', { initiative })
   })
@@ -1595,7 +1623,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // its true copy to its own local log before this fires, so there's
   // nothing to wait for.
   ipcMain.handle('dice:broadcast', (_event, sessionId: string, roll: DiceRollLogEntry): void => {
-    if (getHostedSession()?.sessionId === sessionId) broadcastDiceRoll(roll)
+    if (isOwnHostedCall(sessionId)) broadcastDiceRoll(roll)
     else void sendSessionRequest('dice.roll', { roll })
   })
 
@@ -1715,7 +1743,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (getHostedSession()) pushCharacterHp(targetUserId, hp)
   })
   ipcMain.handle('dice:force-roll', (_event, sessionId: string, targetUserId: string, request: ForceRollRequest): void => {
-    if (getHostedSession()?.sessionId === sessionId) pushForceRoll(targetUserId, request)
+    if (isOwnHostedCall(sessionId)) pushForceRoll(targetUserId, request)
   })
 
   // --- Discord Rich Presence -------------------------------------------------

@@ -11,13 +11,12 @@ import {
   getStoredAmbientLevel,
   setStoredAmbientLevel
 } from './soundSettings'
-import { MusicNoteIcon } from '../shell/icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 import { ensureCustomMusicLoaded, subscribeCustomMusic, getCustomTracks, findCustomTrack, addCustomTrack, removeCustomTrack } from './customMusicStore'
 import { useCalendar } from '../campaigns/useCalendar'
 import { weatherForDate, type RainLevel } from '@shared/calendar'
 
-interface MusicButtonProps {
+interface MusicPanelProps {
   /** The DM's hosted session id — null while not hosting, in which case picking a mood always plays locally-only regardless of the broadcast toggle below (nobody's connected to receive it anyway). */
   sessionId: string | null
   /** The DM's active campaign, if any — read only to check that campaign's calendar for today's weather (see the calendar-driven ambience effect below). Null skips that entirely, same as a campaign with no calendar configured. */
@@ -69,8 +68,7 @@ function closestAmbientLevelIndex(level: number): number {
 }
 
 /** DM-only header button — Goblin Bard's mood picker. Picking a mood plays a random track from it on loop and (while hosting) broadcasts that exact track to every connected player; picking a different mood, or skipping within one, crossfades. */
-export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps): JSX.Element {
-  const [open, setOpen] = useState(false)
+export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): JSX.Element {
   const [musicState, setMusicState] = useState(() => getMusicState())
   const [fadeMs, setFadeMs] = useState(DEFAULT_FADE_MS)
   const [volume, setVolume] = useState(() => getStoredMusicVolume())
@@ -83,7 +81,6 @@ export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps):
   // lazily per option the first time its mood is actually shown, rather
   // than eagerly for every mood in the library up front.
   const [ambientLevels, setAmbientLevels] = useState<Record<string, number>>({})
-  const containerRef = useRef<HTMLDivElement>(null)
   // Every ambient layer key ("groupId:layerId") this session's weather
   // effect has itself raised and hasn't been manually overridden since —
   // see that effect's own doc comment for why tracking this (rather than
@@ -204,15 +201,6 @@ export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [musicState.playing, musicState.groupId, calendar])
 
-  useEffect(() => {
-    if (!open) return
-    function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [open])
-
   function handleVolumeChange(next: number): void {
     setVolume(next)
     setMusicVolume(next)
@@ -223,53 +211,19 @@ export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps):
   const nowPlayingTrack = musicState.trackId ? (findTrack(musicState.trackId) ?? findCustomTrack(musicState.trackId)) : null
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="gb-btn gb-btn--secondary"
-        title="Goblin Bard"
-        style={{ padding: 'var(--space-2)', display: 'flex', position: 'relative' }}
-      >
-        <MusicNoteIcon />
-        {musicState.playing && (
-          <span
-            style={{
-              position: 'absolute',
-              top: 3,
-              right: 3,
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: 'var(--accent)'
-            }}
-          />
-        )}
-      </button>
-
-      {open && (
+    <>
         <div
-          className="gb-card"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            width: 360,
-            // The ambient section pushed this panel's natural height past
-            // the window on a shorter screen (it used to just barely fit
-            // without it) — capped and scrollable now instead of running
-            // off the bottom with no way to reach what's cut off.
-            maxHeight: 'calc(100vh - 80px)',
+            minHeight: 0,
             overflowY: 'auto',
-            padding: 'var(--space-4)',
-            zIndex: 20,
+            padding: 'var(--space-3) var(--space-4)',
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--space-3)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 16, fontWeight: 600 }}>Goblin Bard</span>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 15 }}>Goblin Bard</span>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               {nowPlaying ? nowPlaying.label : 'Silent'}
             </span>
@@ -283,7 +237,7 @@ export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps):
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Broadcast to players</span>
           </label>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6 }}>
             {MUSIC_LIBRARY.map((group) => {
               const active = musicState.groupId === group.id
               const customTracks = getCustomTracks(group.id)
@@ -411,7 +365,7 @@ export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps):
                   <span className="gb-label" style={{ margin: 0 }}>
                     Ambient
                   </span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 10, rowGap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', columnGap: 10, rowGap: 6 }}>
                     {layers.map((layer) => {
                       const level = ambientLevels[`${groupId}:${layer.id}`] ?? 0
                       const activeIndex = closestAmbientLevelIndex(level)
@@ -484,9 +438,8 @@ export function MusicButton({ sessionId, campaignId = null }: MusicButtonProps):
 
           <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-muted)' }}>Music by alkakrab</div>
         </div>
-      )}
       <ContextMenu state={trackMenu} onClose={() => setTrackMenu(null)} />
-    </div>
+    </>
   )
 }
 

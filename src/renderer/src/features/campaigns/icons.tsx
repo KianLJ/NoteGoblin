@@ -290,3 +290,31 @@ export function StatblockIcon(): JSX.Element {
     </svg>
   )
 }
+
+/** A monster: a paw print — for adding a monster's statblock, and its box. */
+export function PawIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path
+        d="M8 8.4c-1.7 0-3.4 1.7-3.4 3.5 0 1.1.8 1.8 1.8 1.8.6 0 1-.3 1.6-.3s1 .3 1.6.3c1 0 1.8-.7 1.8-1.8 0-1.8-1.7-3.5-3.4-3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+      <ellipse cx="3.1" cy="7.1" rx="1.2" ry="1.5" stroke="currentColor" strokeWidth="1.1" />
+      <ellipse cx="5.9" cy="4.1" rx="1.2" ry="1.6" stroke="currentColor" strokeWidth="1.1" />
+      <ellipse cx="10.1" cy="4.1" rx="1.2" ry="1.6" stroke="currentColor" strokeWidth="1.1" />
+      <ellipse cx="12.9" cy="7.1" rx="1.2" ry="1.5" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  )
+}
+
+/** A sticky note: a square of paper with a folded-up corner. */
+export function StickyIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M2.5 2.5h11v7.5l-3.5 3.5h-7.5v-11Z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+      <path d="M13.5 10h-3.5v3.5M5 5.5h6M5 8h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}

@@ -1,0 +1,212 @@
+// Dev-only: the canvas and its newer pieces with sample content, for screenshots in the "What's new" post.
+// Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor). Not part of the app build.
+import { useState } from 'react'
+import { Canvas } from '../features/canvas/Canvas'
+import { TOOL_ICONS } from '../features/canvas/toolIcons'
+import { TimerDockButton, TimerPanel, setSessionTimer } from '../features/canvas/SessionTimer'
+import { StickyNote } from '../features/canvas/StickyNote'
+import { DiceButton } from '../features/dice/DiceButton'
+import { StatblockCard } from '../features/campaigns/StatblockCard'
+import { MonsterEditor } from '../features/bestiary/MonsterEditor'
+import { SessionsList, type SessionDecksApi } from '../features/campaigns/SessionTimeline'
+import { readingOrder } from '@shared/canvasLayout'
+import { FileIcon, PawIcon, StickyIcon } from '../features/campaigns/icons'
+import { BESTIARY } from '../data/bestiary'
+import { startTimer } from '@shared/sessionTimer'
+import type { CanvasLayout } from '@shared/canvasLayout'
+import type { CanvasItem } from '../features/canvas/toolItems'
+import type { CanvasNav } from '../features/canvas/useCanvasLayout'
+import { WhatsNewView } from '../features/shell/WhatsNew'
+import '../features/canvas/canvas.css'
+import '../styles/animations.css'
+
+const goblin = BESTIARY.find((m) => m.index === 'goblin') ?? BESTIARY[0]
+const ogre = BESTIARY.find((m) => m.index === 'ogre') ?? BESTIARY[0]
+
+const NOTE_HTML = `<h2>The Sunken Crypt</h2><p>Beneath the old chapel, water has crept into the burial halls. The party hears chanting long before they see the candles.</p><ul><li>Three goblin scavengers guard the stair</li><li>The ogre <strong>Brakka</strong> sleeps in the ossuary</li><li>A <em>silver key</em> hangs from the priest's statue</li></ul>`
+
+function noteBox(id: string, title: string, html: string): CanvasItem {
+  return {
+    id: `note:${id}`,
+    title,
+    icon: <FileIcon />,
+    size: { w: 420, h: 360 },
+    content: <div className="gb-markdown" style={{ padding: 'var(--space-4)', overflowY: 'auto' }} dangerouslySetInnerHTML={{ __html: html }} />
+  }
+}
+
+const OVERVIEW: CanvasLayout = {
+  viewport: { x: 0, y: 0, zoom: 1 },
+  nodes: [
+    { id: 'note:crypt', x: 32, y: 32, w: 400, h: 336, z: 1 },
+    { id: 'monster:goblin', x: 448, y: 32, w: 400, h: 560, z: 3 },
+    { id: 'sticky:a', x: 32, y: 384, w: 224, h: 176, z: 4 },
+    { id: 'sticky:b', x: 272, y: 400, w: 160, h: 144, z: 5 },
+    { id: 'timer', x: 864, y: 32, w: 320, h: 208, z: 2 },
+    { id: 'collection:act1', x: 896, y: 288, w: 96, h: 96, z: 6 },
+    { id: 'collection:act2', x: 1024, y: 288, w: 96, h: 96, z: 7 }
+  ],
+  collections: {
+    act1: { name: 'Act One: The Chapel', layout: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [] } },
+    act2: { name: 'Act Two: Below', layout: { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [] } }
+  }
+}
+
+const nav: CanvasNav = { path: [], names: [], placed: new Set(), root: OVERVIEW, enterPath: () => {}, update: () => {}, enter: () => {}, exitTo: () => {}, rename: () => {}, moveOut: () => {} }
+
+function Overview(): JSX.Element {
+  const [layout, setLayout] = useState(OVERVIEW)
+  const items: CanvasItem[] = [
+    noteBox('crypt', 'The Sunken Crypt', NOTE_HTML),
+    { id: 'monster:goblin', title: goblin.name, icon: <PawIcon />, size: { w: 400, h: 560 }, content: <StatblockCard monster={goblin} /> },
+    {
+      id: 'sticky:a',
+      title: 'Ask about the key',
+      icon: <StickyIcon />,
+      size: { w: 224, h: 176 },
+      className: 'gb-canvas-node--sticky gb-sticky--yellow',
+      content: <StickyNote mode="dm" sticky={{ kind: 'sticky', id: 'a', color: 'yellow', text: 'Ask about the key\nMira owes the priest a favour — use it if they stall.' }} />
+    },
+    {
+      id: 'sticky:b',
+      title: 'Break at 9',
+      icon: <StickyIcon />,
+      size: { w: 160, h: 144 },
+      className: 'gb-canvas-node--sticky gb-sticky--mint',
+      content: <StickyNote mode="dm" sticky={{ kind: 'sticky', id: 'b', color: 'mint', text: 'Break at 9\nPizza 🍕' }} />
+    },
+    { id: 'timer', title: 'Session Timer', icon: TOOL_ICONS.timer, size: { w: 320, h: 208 }, content: <TimerPanel /> }
+  ]
+  return (
+    <div style={{ height: '100vh', display: 'flex' }}>
+      <Canvas
+        mode="dm"
+        layout={layout}
+        setLayout={setLayout}
+        items={items}
+        toolIcons={TOOL_ICONS}
+        hiddenTools={['codex', 'timer']}
+        nav={nav}
+        contextMenu={() => ({
+          add: [
+            { label: 'Party note', icon: <FileIcon />, onSelect: () => {} },
+            { label: 'DM-only note', icon: <FileIcon />, onSelect: () => {} },
+            { label: 'Monster statblock…', icon: <PawIcon />, onSelect: () => {} }
+          ],
+          open: [{ label: 'Open Elowen’s sheet', icon: <StickyIcon />, onSelect: () => {} }]
+        })}
+        dock={<TimerDockButton onOpen={() => {}} onClose={() => {}} />}
+        floating={<DiceButton sessionId={null} />}
+        corner={
+          <>
+            <button type="button" className="gb-btn gb-btn--secondary" style={{ flex: 1 }}>
+              The Gloomwood Saga
+            </button>
+          </>
+        }
+      />
+    </div>
+  )
+}
+
+function StatblockShot(): JSX.Element {
+  return (
+    <div style={{ height: '100vh', overflowY: 'auto', padding: 'var(--space-5)', background: 'var(--bg-canvas)' }}>
+      <div style={{ maxWidth: 460, margin: '0 auto' }}>
+        <StatblockCard monster={ogre} />
+      </div>
+    </div>
+  )
+}
+
+const SCENES = ['Rumours at the Gilded Goose', 'The road to the chapel', 'Goblins on the stair', 'The ossuary', 'Brakka wakes', 'The silver key']
+const fakeDecks: SessionDecksApi = {
+  decks: [
+    {
+      id: 'deck',
+      campaignId: 'camp',
+      title: 'Session 12: Below the Chapel',
+      createdAt: '',
+      updatedAt: '',
+      scenes: SCENES.map((_, i) => ({ noteId: `s${i}`, encounterId: i === 2 ? 'enc' : null, moodId: i === 0 ? 'tavernRespite' : i === 3 ? 'dungeonDread' : i === 4 ? 'combatBoss' : null, trackId: null }))
+    }
+  ],
+  loading: false,
+  live: { deckId: 'deck', sceneIndex: 2 },
+  createDeck: async () => undefined,
+  renameDeck: async () => {},
+  reorderScenes: async () => {},
+  removeDeck: async () => {},
+  addScene: async () => undefined,
+  removeScene: async () => {},
+  present: () => {},
+  setLiveSceneIndex: () => {},
+  stopPresenting: () => {}
+}
+
+const SCENE_TEXT = [
+  'The innkeeper lowers her voice: the chapel bell rang at midnight, and nobody has rung it in forty years.',
+  'Mud, crows, and a cart with one wheel. :: If they search it, the priest’s satchel is gone.',
+  'Three goblins crouch on the broken stair, picking through a priest’s satchel. One wears the silver key on a string.',
+  'Bones stacked to the ceiling. Something breathes behind them.'
+]
+const SESSION_LAYOUT: CanvasLayout = {
+  viewport: { x: 24, y: 64, zoom: 0.8 },
+  nodes: [
+    { id: 'note:s0', x: 16, y: 32, w: 400, h: 240, z: 1 },
+    { id: 'note:s1', x: 512, y: 16, w: 400, h: 240, z: 2 },
+    { id: 'note:s2', x: 1008, y: 48, w: 400, h: 240, z: 3 },
+    { id: 'note:s3', x: 512, y: 400, w: 400, h: 240, z: 4 },
+    { id: 'sessions', x: 1008, y: 384, w: 400, h: 320, z: 5 }
+  ]
+}
+
+function SessionsShot(): JSX.Element {
+  const [layout, setLayout] = useState(SESSION_LAYOUT)
+  const sceneIds = SCENE_TEXT.map((_, i) => `note:s${i}`)
+  const items: CanvasItem[] = [
+    ...SCENE_TEXT.map((text, i) => ({
+      ...noteBox(`s${i}`, SCENES[i], `<h2>${SCENES[i]}</h2><p>${text}</p>`),
+      className: i === 2 ? 'gb-canvas-node--live' : undefined,
+      noClose: true
+    })),
+    { id: 'sessions', title: 'Sessions', icon: TOOL_ICONS.sessions, size: { w: 400, h: 320 }, content: <SessionsList api={fakeDecks} onOpen={() => {}} onNew={() => {}} onDelete={() => {}} onRename={() => {}} shelved={() => false} onUnshelve={() => {}} /> }
+  ]
+  const sessionNav: CanvasNav = { ...nav, path: ['deck'], names: [{ id: 'deck', name: 'Session 12: Below the Chapel', sessionDeckId: 'deck' }] }
+  return (
+    <div style={{ height: '100vh', display: 'flex' }}>
+      <Canvas
+        mode="dm"
+        layout={layout}
+        setLayout={setLayout}
+        items={items}
+        toolIcons={TOOL_ICONS}
+        hiddenTools={['codex', 'timer']}
+        nav={sessionNav}
+        sequence={readingOrder(layout.nodes.filter((n) => sceneIds.includes(n.id)))}
+        crumbExtra={
+          <button type="button" className="gb-btn gb-btn--secondary gb-session-crumb-action" style={{ fontSize: 12 }}>
+            Stop presenting
+          </button>
+        }
+        floating={<DiceButton sessionId={null} />}
+      />
+    </div>
+  )
+}
+
+export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
+  if (scene === 'editor') return <MonsterEditor monster={goblin} onClose={() => {}} onSaved={() => {}} />
+  if (scene === 'statblock') return <StatblockShot />
+  if (scene === 'whatsnew')
+    return (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', containerType: 'inline-size' }}>
+        <WhatsNewView entries={[{ version: '0.10.0', title: 'A table you lay out yourself', highlights: [] }]} />
+      </div>
+    )
+  if (scene === 'sessions') return <SessionsShot />
+  return <Overview />
+}
+
+// A timer partway through a session, so the dock and the timer box have something to show.
+setSessionTimer(startTimer(3 * 3600_000, Date.now() - 35 * 60_000))

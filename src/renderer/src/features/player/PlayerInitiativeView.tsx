@@ -26,9 +26,20 @@ export function PlayerInitiativeView({ sessionId }: PlayerInitiativeViewProps): 
   const [myInitiativeDraft, setMyInitiativeDraft] = useState('')
 
   useEffect(() => {
-    return window.goblin.initiative.onUpdate((update) => {
+    // The fight as it stands when this opens — later changes arrive as pushes.
+    let cancelled = false
+    if (sessionId) {
+      void window.goblin.initiative.get().then((result) => {
+        if (!cancelled && result.ok && result.data) setState(result.data)
+      })
+    }
+    const unsubscribe = window.goblin.initiative.onUpdate((update) => {
       if (update.sessionId === sessionId) setState(update.state)
     })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [sessionId])
 
   function submitMyInitiative(): void {

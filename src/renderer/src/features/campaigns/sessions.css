@@ -1,0 +1,497 @@
+
+.gb-session-menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.gb-session-menu-icon:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-session-menu-icon--danger:hover {
+  color: var(--danger);
+}
+
+.gb-session-menu-confirm {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  color: var(--parchment-50);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gb-session-menu-new {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gb-scene-live {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--parchment-50);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.7;
+}
+
+/* The presenter, pinned to the top of the canvas while a session is live. */
+.gb-presenter {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+}
+
+.gb-presenter-scene {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  min-width: 140px;
+  max-width: 260px;
+  text-align: center;
+}
+
+.gb-presenter-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gb-presenter-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gb-presenter-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+}
+
+.gb-presenter-step:disabled {
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.gb-presenter-action {
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gb-presenter-action:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.gb-session-start {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.gb-session-start strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+/* A scene's cues, atop its note (SceneCues.tsx): an encounter tile and a music tile. */
+.gb-cues {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.gb-cue {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.gb-cue:hover {
+  border-color: var(--border-strong);
+}
+
+.gb-cue--set {
+  border-style: solid;
+}
+
+.gb-cue--fight.gb-cue--set {
+  border-color: color-mix(in srgb, var(--blood-500) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--blood-500) 8%, var(--bg-surface));
+}
+
+.gb-cue--music.gb-cue--set {
+  border-color: color-mix(in srgb, var(--moss-500) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--moss-500) 8%, var(--bg-surface));
+}
+
+.gb-cue-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-size: 17px;
+}
+
+.gb-cue--fight.gb-cue--set .gb-cue-icon {
+  background: var(--blood-500);
+  color: var(--parchment-50);
+}
+
+.gb-cue--music.gb-cue--set .gb-cue-icon {
+  background: var(--moss-500);
+  color: var(--parchment-50);
+}
+
+.gb-cue-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.gb-cue-kind {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gb-cue-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-cue:not(.gb-cue--set) .gb-cue-name {
+  color: var(--text-secondary);
+}
+
+.gb-cue-detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The whole tile is its picker: an invisible native select over it. */
+.gb-cue-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.gb-cue-picker:disabled {
+  cursor: default;
+}
+
+.gb-cue-extra {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: center;
+}
+
+.gb-cue-track {
+  max-width: 130px;
+  padding: 2px 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+}
+
+.gb-cue-preview,
+.gb-cue-clear {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gb-cue-preview:hover {
+  background: var(--moss-500);
+  color: var(--parchment-50);
+}
+
+.gb-cue-clear:hover {
+  background: var(--accent-subtle);
+  color: var(--danger);
+}
+
+/* The Sessions box: one row per session. */
+.gb-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  overflow-y: auto;
+}
+
+.gb-session-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 4px 4px 0;
+  border-radius: var(--radius-sm);
+}
+
+.gb-session-row--live {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.gb-session-row .gb-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.gb-session-row-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gb-session-row-open:hover {
+  background: var(--bg-sunken);
+}
+
+.gb-session-row-title {
+  max-width: 100%;
+  font-family: var(--font-display);
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gb-session-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* A player's Sessions box (PlayerSessions.tsx): the session, its scenes as numbered tabs, the picked scene's words. */
+.gb-psession {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.gb-psession-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gb-psession-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gb-psession-scenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gb-psession-scene {
+  position: relative;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gb-psession-scene--on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+/* The DM's scene: a red dot on its tab. */
+.gb-psession-scene--live::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-surface);
+}
+
+.gb-psession-behind {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--accent-subtle);
+  font-size: 12px;
+}
+
+.gb-psession-behind button {
+  border: none;
+  background: none;
+  color: var(--accent-hover);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gb-psession-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.gb-psession-scene-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.gb-psession-scene-head h2 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+}

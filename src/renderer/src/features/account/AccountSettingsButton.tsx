@@ -1,3 +1,4 @@
+import { setClassicLayout, useClassicLayout } from '../classic/classicLayout'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { useMountAnimation } from '../../ui/useMountAnimation'
@@ -90,6 +91,7 @@ function AccountSettingsForm(): JSX.Element {
   const [systemFonts, setSystemFonts] = useState<string[] | null>(null)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [soundOpen, setSoundOpen] = useState(false)
+  const classicLayout = useClassicLayout()
   const [sfxEnabled, setSfxEnabledState] = useState<boolean>(() => getStoredSfxEnabled())
   const [sfxVolume, setSfxVolumeState] = useState<number>(() => getStoredSfxVolume())
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -345,6 +347,13 @@ function AccountSettingsForm(): JSX.Element {
       </button>
       {appearanceOpen && (
         <>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 'var(--space-3)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={classicLayout} onChange={(e) => setClassicLayout(e.target.checked)} style={{ marginTop: 2 }} />
+            <span style={{ fontSize: 13 }}>
+              Classic layout
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>The DM and player screens with sidebars and tabs, as before the canvas.</span>
+            </span>
+          </label>
           <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-3)' }}>
             {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
               <button

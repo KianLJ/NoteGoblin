@@ -19,8 +19,8 @@ interface ModeToggleProps {
 const OPTIONS: Array<{ mode: Mode | 'workshop' | 'combat'; label: string; icon: JSX.Element }> = [
   { mode: 'dm', label: 'DM Mode', icon: <DmModeIcon /> },
   { mode: 'player', label: 'Player Mode', icon: <PlayerModeIcon /> },
-  { mode: 'workshop', label: 'Homebrew Workshop', icon: <WorkshopModeIcon /> },
-  { mode: 'combat', label: 'Combat', icon: <CombatModeIcon /> }
+  { mode: 'combat', label: 'Combat', icon: <CombatModeIcon /> },
+  { mode: 'workshop', label: 'Homebrew Workshop', icon: <WorkshopModeIcon /> }
 ]
 
 export function ModeToggle({ mode, onChange, disabledMode, disabledReason, workshop, onWorkshop, combat, onCombat }: ModeToggleProps): JSX.Element {

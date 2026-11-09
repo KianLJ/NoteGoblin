@@ -134,7 +134,10 @@ export class Session extends Server<Env> {
         return
       }
     } else {
-      if (!data || data.dmUserId === payload.userId || !data.allowedPlayerIds.includes(payload.userId)) {
+      // The session's own DM joining as a player too (?self=1) — the desktop app's dev build allows it, for
+      // testing the player side against your own campaign. Only ever your own session, so no invite needed.
+      const selfJoin = !!data && data.dmUserId === payload.userId && url.searchParams.get('self') === '1'
+      if (!data || (!selfJoin && (data.dmUserId === payload.userId || !data.allowedPlayerIds.includes(payload.userId)))) {
         connection.close(4003, 'Not invited to this session')
         return
       }

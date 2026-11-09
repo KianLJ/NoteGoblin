@@ -6,7 +6,7 @@ import { Button } from '../../ui/Button'
 import { Modal } from '../../ui/Modal'
 import { useLastTruthy } from '../../ui/useLastTruthy'
 import { ConfirmButton } from '../../ui/ConfirmButton'
-import { getStoredFontScale } from '../../theme'
+import { renderedScale } from '../../ui/renderedScale'
 import {
   activeSeasonForDate,
   addDays,
@@ -103,6 +103,8 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
     const observer = new ResizeObserver(() => {
       if (hasManuallyResizedRef.current) return
       const half = Math.round(el.getBoundingClientRect().height / 2)
+      // Hidden (its canvas box minimized, or too small to show) — not a real size to follow.
+      if (half === 0) return
       setDayPanelHeight(Math.max(MIN_DAY_PANEL_HEIGHT, half))
     })
     observer.observe(el)
@@ -139,7 +141,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
     function handleMove(e: PointerEvent): void {
       if (!splitRef.current) return
       const rect = splitRef.current.getBoundingClientRect()
-      const scale = getStoredFontScale()
+      const scale = renderedScale(splitRef.current)
       const fromBottom = (rect.bottom - e.clientY) / scale
       setDayPanelHeight(Math.max(MIN_DAY_PANEL_HEIGHT, fromBottom))
     }
@@ -469,16 +471,24 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
 
           {viewMode !== 'day' && (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${config.weekdays.length}, ${CELL_SIZE}px)`, gap: 2 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${config.weekdays.length}, minmax(${CELL_SIZE}px, 1fr))`,
+                  gap: 2,
+                  width: '100%',
+                  maxWidth: config.weekdays.length * CELL_SIZE * 2.4
+                }}
+              >
                 {config.weekdays.map((w, i) => (
-                  <div key={i} style={{ width: CELL_SIZE, fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', paddingBottom: 4 }}>
+                  <div key={i} style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', paddingBottom: 4 }}>
                     {w.abbreviation}
                   </div>
                 ))}
                 {viewMode === 'month'
                   ? monthCells.map((day, i) =>
                       day === null ? (
-                        <div key={i} style={{ width: CELL_SIZE, height: CELL_SIZE }} />
+                        <div key={i} style={{ aspectRatio: '1' }} />
                       ) : (
                         <DayCell
                           key={i}
@@ -983,8 +993,8 @@ function DayCell({
       title={onSetActive ? "View this day's details — right-click to set as the current day" : "View this day's details"}
       style={{
         position: 'relative',
-        width: size,
-        height: size,
+        // A big cell is the day view's one day; the rest stretch with the month grid, staying square.
+        ...(big ? { width: size, height: size } : { width: '100%', aspectRatio: '1', minWidth: size }),
         border: isToday ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
         borderRadius: 4,
         background: isSelected ? 'var(--accent-subtle)' : 'transparent',

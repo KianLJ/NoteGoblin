@@ -1,5 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { useMountAnimation } from './useMountAnimation'
+import { createPortal } from 'react-dom'
+import { popupLayer } from './popupLayer'
 
 interface ModalProps {
   onClose: () => void
@@ -34,7 +36,7 @@ export function Modal({ onClose, children, width = 560, dismissible = true, open
 
   if (!rendered) return null
 
-  return (
+  return createPortal(
     <div
       onMouseDown={(e) => {
         if (dismissible && e.target === e.currentTarget) onClose()
@@ -64,6 +66,7 @@ export function Modal({ onClose, children, width = 560, dismissible = true, open
       >
         {children}
       </div>
-    </div>
+    </div>,
+    popupLayer()
   )
 }

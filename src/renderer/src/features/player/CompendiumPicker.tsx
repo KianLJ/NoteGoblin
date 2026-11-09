@@ -1,18 +1,28 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button } from '../../ui/Button'
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button } from "../../ui/Button";
+import { HoverDetailCard } from "./HoverDetailCard";
+import type { DetailField } from "./CompendiumDetailModal";
 
 interface CompendiumPickerProps<T> {
-  search: (query: string) => T[]
-  getLabel: (item: T) => string
-  getSublabel?: (item: T) => string
-  onPick: (item: T) => void
-  onAddCustom: () => void
-  buttonLabel: string
-  searchPlaceholder: string
-  disabled?: boolean
-  disabledReason?: string
+  search: (query: string) => T[];
+  getLabel: (item: T) => string;
+  getSublabel?: (item: T) => string;
+  onPick: (item: T) => void;
+  onAddCustom: () => void;
+  buttonLabel: string;
+  searchPlaceholder: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  /** What hovering a result shows (a spell's full details) — beside the list, never over it. Omitted: no hover. */
+  getHover?: (item: T) => {
+    title: string;
+    subtitle?: string;
+    fields: DetailField[];
+    description: string;
+    extra?: { label: string; value: string };
+  };
   /** Optional filter controls (e.g. a spell-level or damage-type select) rendered between the search box and the results — the caller owns the filter state and folds it into its `search` callback. */
-  filters?: ReactNode
+  filters?: ReactNode;
 }
 
 /** "+ Add" button that opens a small search popover over the compendium (SRD spells/weapons/equipment), with a "Custom…" escape hatch for anything outside SRD scope — used identically across SpellsTab, CombatTab's Attacks, and InventoryTab. */
@@ -26,39 +36,49 @@ export function CompendiumPicker<T>({
   searchPlaceholder,
   disabled,
   disabledReason,
-  filters
+  filters,
+  getHover,
 }: CompendiumPickerProps<T>): JSX.Element {
-  const [open, setOpen] = useState(false)
-  const [openUpward, setOpenUpward] = useState(false)
-  const [query, setQuery] = useState('')
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      )
+        setOpen(false);
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  const results = open ? search(query) : []
+  const results = open ? search(query) : [];
 
   // The popover has a rough max height (search box + filters + results list + custom
   // button); if there isn't room below the trigger button to fit it before the bottom
   // of the viewport, flip it to open upward instead of letting it run off-screen.
-  const POPOVER_APPROX_HEIGHT = 360
+  const POPOVER_APPROX_HEIGHT = 360;
 
   function handleToggle(): void {
     if (!open && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - rect.bottom
-      setOpenUpward(spaceBelow < POPOVER_APPROX_HEIGHT && rect.top > spaceBelow)
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUpward(
+        spaceBelow < POPOVER_APPROX_HEIGHT && rect.top > spaceBelow,
+      );
     }
-    setOpen((o) => !o)
+    setOpen((o) => !o);
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', display: 'inline-block' }}>
+    <div
+      ref={containerRef}
+      style={{ position: "relative", display: "inline-block" }}
+    >
       <button
         type="button"
         className="gb-btn gb-btn--secondary"
@@ -73,14 +93,16 @@ export function CompendiumPicker<T>({
         <div
           className="gb-card"
           style={{
-            position: 'absolute',
-            ...(openUpward ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }),
+            position: "absolute",
+            ...(openUpward
+              ? { bottom: "calc(100% + 4px)" }
+              : { top: "calc(100% + 4px)" }),
             left: 0,
             width: 300,
-            maxHeight: '80vh',
-            overflowY: 'auto',
+            maxHeight: "80vh",
+            overflowY: "auto",
             zIndex: 30,
-            padding: 'var(--space-3)'
+            padding: "var(--space-3)",
           }}
         >
           <input
@@ -89,50 +111,92 @@ export function CompendiumPicker<T>({
             placeholder={searchPlaceholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ marginBottom: filters ? 6 : 'var(--space-2)' }}
+            style={{ marginBottom: filters ? 6 : "var(--space-2)" }}
           />
-          {filters && <div style={{ marginBottom: 'var(--space-2)' }}>{filters}</div>}
-          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {filters && (
+            <div style={{ marginBottom: "var(--space-2)" }}>{filters}</div>
+          )}
+          <div
+            style={{
+              maxHeight: 220,
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+            }}
+          >
             {results.length === 0 ? (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>No matches.</p>
+              <p
+                style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}
+              >
+                No matches.
+              </p>
             ) : (
-              results.map((item, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => {
-                    onPick(item)
-                    setOpen(false)
-                    setQuery('')
-                  }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '5px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: 'none',
-                    background: 'transparent',
-                    cursor: 'pointer',
-                    fontSize: 13
-                  }}
-                >
-                  {getLabel(item)}
-                  {getSublabel && (
-                    <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>{getSublabel(item)}</span>
-                  )}
-                </button>
-              ))
+              results.map((item, i) => {
+                const row = (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      onPick(item);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "5px 8px",
+                      borderRadius: "var(--radius-sm)",
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    {getLabel(item)}
+                    {getSublabel && (
+                      <span
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: 11,
+                          marginLeft: 6,
+                        }}
+                      >
+                        {getSublabel(item)}
+                      </span>
+                    )}
+                  </button>
+                );
+                return getHover ? (
+                  // The list scrolls itself, so the wheel stays with it.
+                  <HoverDetailCard
+                    key={i}
+                    {...getHover(item)}
+                    interceptWheel={false}
+                  >
+                    {row}
+                  </HoverDetailCard>
+                ) : (
+                  row
+                );
+              })
             )}
           </div>
-          <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 'var(--space-2)', paddingTop: 'var(--space-2)' }}>
+          <div
+            style={{
+              borderTop: "1px solid var(--border-subtle)",
+              marginTop: "var(--space-2)",
+              paddingTop: "var(--space-2)",
+            }}
+          >
             <Button
               variant="ghost"
-              style={{ width: '100%', fontSize: 12 }}
+              style={{ width: "100%", fontSize: 12 }}
               onClick={() => {
-                onAddCustom()
-                setOpen(false)
-                setQuery('')
+                onAddCustom();
+                setOpen(false);
+                setQuery("");
               }}
             >
               + Custom…
@@ -141,5 +205,5 @@ export function CompendiumPicker<T>({
         </div>
       )}
     </div>
-  )
+  );
 }

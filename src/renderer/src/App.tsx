@@ -98,6 +98,8 @@ function ScaledApp({ children }: { children: ReactNode }): JSX.Element {
       }}
     >
       {children}
+      {/* Menus and dialogs portal here (see ui/popupLayer.ts): inside this font-scale box, so their maths holds, but outside the workspace canvas's zoom. */}
+      <div id="gb-popup-layer" />
     </div>
   )
 }

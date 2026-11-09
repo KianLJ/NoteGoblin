@@ -1,31 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { SFX_LIBRARY, type SfxCue } from '../../data/sfxLibrary'
 import { playSfxCue } from './sfxBoardEngine'
 import { getStoredSfxBoardBroadcastEnabled, setSfxBoardBroadcastEnabled } from './soundSettings'
 
-interface SoundBoardButtonProps {
+interface SoundBoardPanelProps {
   /** The DM's hosted session id — null while not hosting, in which case a cue always plays locally-only regardless of the broadcast toggle below (nobody's connected to receive it anyway). */
   sessionId: string | null
 }
 
-/** DM-only header button — a searchable, categorized board of one-shot combat/magic/creature cues (see sfxLibrary.ts). Clicking a cue plays it immediately and (while hosting with broadcasting on) tells every connected player to play the same one. */
-export function SoundBoardButton({ sessionId }: SoundBoardButtonProps): JSX.Element {
-  const [open, setOpen] = useState(false)
+/** DM-only canvas tool — a searchable, categorized board of one-shot combat/magic/creature cues (see sfxLibrary.ts). Clicking a cue plays it immediately and (while hosting with broadcasting on) tells every connected player to play the same one. */
+export function SoundBoardPanel({ sessionId }: SoundBoardPanelProps): JSX.Element {
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [broadcastEnabled, setBroadcastEnabledState] = useState(() => getStoredSfxBoardBroadcastEnabled())
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const totalCues = useMemo(() => SFX_LIBRARY.reduce((sum, c) => sum + c.cues.length, 0), [])
-
-  useEffect(() => {
-    if (!open) return
-    function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [open])
 
   function toggleCategory(id: string): void {
     setExpanded((prev) => {
@@ -53,38 +42,17 @@ export function SoundBoardButton({ sessionId }: SoundBoardButtonProps): JSX.Elem
     : []
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="gb-btn gb-btn--secondary"
-        title="Sound Board"
-        style={{ padding: 'var(--space-2)', display: 'flex' }}
-      >
-        <SoundBoardIcon />
-      </button>
-
-      {open && (
         <div
-          className="gb-card"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            width: 340,
-            maxHeight: 'calc(100vh - 80px)',
+            minHeight: 0,
             overflow: 'hidden',
-            padding: 'var(--space-4)',
-            zIndex: 20,
+            padding: 'var(--space-3) var(--space-4)',
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--space-3)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 16, fontWeight: 600 }}>Sound Board</span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{totalCues} cues</span>
-          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{totalCues} cues</span>
 
           <label
             title="On: every connected player hears the same cue you trigger. Off: it only plays from this device — for playing in person around one table."
@@ -110,12 +78,16 @@ export function SoundBoardButton({ sessionId }: SoundBoardButtonProps): JSX.Elem
             style={{ width: '100%' }}
           />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', maxHeight: 380 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', flex: 1, minHeight: 0 }}>
             {searching ? (
               searchResults.length === 0 ? (
                 <span style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 2px' }}>No cues match &ldquo;{query}&rdquo;</span>
               ) : (
-                searchResults.map(({ cue, categoryLabel }) => <CueRow key={cue.id} cue={cue} sublabel={categoryLabel} onPlay={() => handlePlay(cue)} />)
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 2 }}>
+                  {searchResults.map(({ cue, categoryLabel }) => (
+                    <CueRow key={cue.id} cue={cue} sublabel={categoryLabel} onPlay={() => handlePlay(cue)} />
+                  ))}
+                </div>
               )
             ) : (
               SFX_LIBRARY.map((category) => {
@@ -152,7 +124,7 @@ export function SoundBoardButton({ sessionId }: SoundBoardButtonProps): JSX.Elem
                       </div>
                     )}
                     {!isEmpty && isOpen && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 0 8px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2, padding: '4px 0 8px' }}>
                         {category.cues.map((cue) => (
                           <CueRow key={cue.id} cue={cue} onPlay={() => handlePlay(cue)} />
                         ))}
@@ -164,8 +136,6 @@ export function SoundBoardButton({ sessionId }: SoundBoardButtonProps): JSX.Elem
             )}
           </div>
         </div>
-      )}
-    </div>
   )
 }
 
@@ -227,7 +197,7 @@ function PlayPadIcon(): JSX.Element {
 }
 
 /** A 2x2 grid of pads — reads as "soundboard" the way a music note reads as "music." */
-function SoundBoardIcon(): JSX.Element {
+export function SoundBoardIcon(): JSX.Element {
   return (
     <svg width="17" height="17" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2" fill="currentColor" opacity="0.85" />

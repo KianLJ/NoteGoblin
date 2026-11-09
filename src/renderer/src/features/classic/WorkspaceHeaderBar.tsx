@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { CloseIcon, FileIcon, PlusIcon, StatblockIcon } from './icons'
-import type { NotesWorkspace } from './useNotesWorkspace'
+import { CloseIcon, FileIcon, PlusIcon, StatblockIcon } from '../campaigns/icons'
+import type { NotesWorkspace } from '../campaigns/useNotesWorkspace'
 import type { Campaign } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
-import type { DmTabRef } from '../shell/AppShell'
+import type { DmTabRef } from './useClassicDmTabs'
 
 interface WorkspaceHeaderBarProps {
   campaign: Campaign

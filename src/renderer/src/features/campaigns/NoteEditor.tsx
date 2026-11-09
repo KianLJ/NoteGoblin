@@ -12,8 +12,7 @@ import { playSfxCue } from '../audio/sfxBoardEngine'
 import type { DiceGroup } from '@shared/dice'
 import { useSessionDecks } from './useSessionDecks'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
-import { MUSIC_LIBRARY } from '../../data/musicLibrary'
-import { getCustomTracks } from '../audio/customMusicStore'
+import { SceneCues } from './SceneCues'
 
 // The Codex's code loads the first time the picker opens.
 const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
@@ -25,6 +24,8 @@ interface NoteEditorProps {
   /** The hosted (DM) or joined (player) session id, if any — passed straight through to an inline `dice: ...` roll (see performRoll in diceLogStore.ts) so it reaches the rest of the table, not just this note's own log. */
   sessionId: string | null
   onSave: (patch: { title?: string; bodyMarkdown?: string }) => void
+  /** The title as it's typed, before it's saved — for showing it elsewhere live (a session's timeline). */
+  onTitleDraft?: (title: string) => void
   /** Wikilink target matched an existing note by title — navigates by replacing the active tab (the "preview tab" pattern), not adding a new one. */
   onNavigateToNote: (noteId: string) => void
   /** Right-click a wikilink > "Open in new tab" — the explicit escape hatch for when you actually want a real, separate tab instead of reusing the active one. */
@@ -71,6 +72,7 @@ export function NoteEditor({
   notes,
   sessionId,
   onSave,
+  onTitleDraft,
   onNavigateToNote,
   onOpenInNewTab,
   onCreateAndLinkNote,
@@ -324,6 +326,7 @@ export function NoteEditor({
           onChange={(e) => {
             if (readOnly) return
             setTitle(e.target.value)
+            onTitleDraft?.(e.target.value)
             scheduleSave({ title: e.target.value })
           }}
           onFocus={() => {
@@ -357,60 +360,7 @@ export function NoteEditor({
         </div>
       </div>
 
-      {scene && !readOnly && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)', fontSize: 11, minWidth: 0 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-            <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Encounter:</span>
-            <select
-              className="gb-input"
-              value={scene.encounterId ?? ''}
-              onChange={(e) => updateScene({ encounterId: e.target.value || null })}
-              style={{ fontSize: 11, padding: '2px 4px', maxWidth: 120 }}
-            >
-              <option value="">None</option>
-              {savedEncounters.map((enc) => (
-                <option key={enc.id} value={enc.id}>
-                  {enc.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-            <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Mood:</span>
-            <select
-              className="gb-input"
-              value={scene.moodId ?? ''}
-              onChange={(e) => updateScene({ moodId: e.target.value || null, trackId: null })}
-              style={{ fontSize: 11, padding: '2px 4px', maxWidth: 120 }}
-            >
-              <option value="">None</option>
-              {MUSIC_LIBRARY.filter((g) => g.tracks.length > 0 || getCustomTracks(g.id).length > 0).map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {scene.moodId && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-              <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>Track:</span>
-              <select
-                className="gb-input"
-                value={scene.trackId ?? ''}
-                onChange={(e) => updateScene({ trackId: e.target.value || null })}
-                style={{ fontSize: 11, padding: '2px 4px', maxWidth: 140 }}
-              >
-                <option value="">Random from mood</option>
-                {[...(MUSIC_LIBRARY.find((g) => g.id === scene.moodId)?.tracks ?? []), ...getCustomTracks(scene.moodId)].map((track) => (
-                  <option key={track.id} value={track.id}>
-                    {track.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-      )}
+      {scene && !readOnly && <SceneCues scene={scene} encounters={savedEncounters} onChange={updateScene} />}
 
       <div
         style={{

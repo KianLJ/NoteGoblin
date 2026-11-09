@@ -27,6 +27,7 @@ import { formatCr } from '../../data/bestiary'
 import { isCustomMonster } from '../../data/customBestiary'
 import { useAllMonsters } from '../../data/useAllMonsters'
 import { loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
+import './encounter.css'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { Button } from '../../ui/Button'
 import { playTurnFlowSfx, playMonsterSfx } from '../audio/sfxBoardEngine'
@@ -1021,20 +1022,39 @@ function EncounterBuilder({
     })
   }
 
+  const [encounterTags, setEncounterTags] = useState('')
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
+
   function saveEncounter(): void {
     if (!encounterName.trim() || draftMonsters.length === 0) return
     const monsterIndexes = Object.entries(encounterDraft).flatMap(([index, count]) => Array(count).fill(index))
-    const next = [...savedEncounters, { id: crypto.randomUUID(), name: encounterName.trim(), monsterIndexes, createdAt: new Date().toISOString() }]
+    const tags = [...new Set(encounterTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))]
+    const next = [...savedEncounters, { id: crypto.randomUUID(), name: encounterName.trim(), monsterIndexes, tags, createdAt: new Date().toISOString() }]
     saveSavedEncounters(next)
     setSavedEncounters(next)
     setEncounterName('')
+    setEncounterTags('')
     setEncounterDraft({})
   }
+
+  // The library, each with its monsters and how hard it'd be for the party right now — filtered by a picked tag.
+  const library = useMemo(
+    () =>
+      savedEncounters.map((enc) => {
+        const monsters = enc.monsterIndexes.map((i) => allMonsters.find((m) => m.index === i)).filter((m): m is BestiaryMonster => !!m)
+        return { enc, monsters, result: computeEncounterDifficulty(effectivePartyLevels, monsters.map((m) => m.xp)) }
+      }),
+    [savedEncounters, allMonsters, effectivePartyLevels]
+  )
+  const libraryTags = useMemo(() => [...new Set(savedEncounters.flatMap((e) => e.tags ?? []))].sort(), [savedEncounters])
+  const shownLibrary = tagFilter ? library.filter((l) => l.enc.tags?.includes(tagFilter)) : library
 
   function loadEncounterIntoDraft(enc: SavedEncounter): void {
     const counts: Record<string, number> = {}
     for (const index of enc.monsterIndexes) counts[index] = (counts[index] ?? 0) + 1
     setEncounterDraft(counts)
+    setEncounterName(enc.name)
+    setEncounterTags((enc.tags ?? []).join(', '))
   }
 
   function deleteEncounter(id: string): void {
@@ -1150,24 +1170,46 @@ function EncounterBuilder({
         )}
       </div>
 
-      <div className="gb-label">Encounter</div>
+      <div className="gb-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span>Encounter</span>
+        {draftMonsters.length > 0 && (
+          <button type="button" className="gb-enc-link" onClick={() => setEncounterDraft({})}>
+            Clear
+          </button>
+        )}
+      </div>
       {draftMonsters.length === 0 ? (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Search above to add monsters.</p>
+        <div className="gb-enc-empty">Search above, generate one, or load one from your library below.</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className="gb-enc-cards">
           {Object.entries(encounterDraft).map(([index, count]) => {
             const monster = allMonsters.find((m) => m.index === index)
             if (!monster) return null
             return (
               <HoverDetailCard key={index} bodyHtml={renderStatblockHtml(monster)} width={460} interceptWheel={false}>
-                <div className="gb-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px' }}>
-                  <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{monster.name}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                    <button type="button" onClick={() => removeFromDraft(index)} style={roundBtnStyle}>
+                <div className="gb-enc-card">
+                  <div className="gb-enc-card-head">
+                    <span className="gb-enc-card-name">{monster.name}</span>
+                    <span className="gb-enc-cr">CR {formatCr(monster.crNumeric)}</span>
+                  </div>
+                  <div className="gb-enc-card-type">{[monster.size, monster.type].filter(Boolean).join(' ')}</div>
+                  <div className="gb-enc-card-stats">
+                    <span title="Armor Class">
+                      <b>{(monster.ac ?? '—').split(' ')[0]}</b> AC
+                    </span>
+                    <span title="Hit Points">
+                      <b>{(monster.hp ?? '—').split(' ')[0]}</b> HP
+                    </span>
+                    <span title="XP each">
+                      <b>{monster.xp.toLocaleString()}</b> XP
+                    </span>
+                  </div>
+                  <div className="gb-enc-stepper">
+                    <button type="button" onClick={() => removeFromDraft(index)} aria-label={`One fewer ${monster.name}`}>
                       −
                     </button>
-                    <span style={{ fontSize: 12, minWidth: 14, textAlign: 'center' }}>{count}</span>
-                    <button type="button" onClick={() => addToDraft(index)} style={roundBtnStyle}>
+                    <span>×{count}</span>
+                    <button type="button" onClick={() => addToDraft(index)} aria-label={`One more ${monster.name}`}>
                       +
                     </button>
                   </div>
@@ -1179,19 +1221,22 @@ function EncounterBuilder({
       )}
 
       {draftMonsters.length > 0 && (
-        <div className="gb-card" style={{ padding: 'var(--space-2)', fontSize: 12 }}>
-          <div>
-            Difficulty: <strong style={{ color: 'var(--accent)' }}>{DIFFICULTY_LABELS[difficulty.difficulty]}</strong>
+        <div className="gb-card" style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <strong className={`gb-enc-tier gb-enc-tier--${difficulty.difficulty}`}>{DIFFICULTY_LABELS[difficulty.difficulty]}</strong>
+            <span style={{ color: 'var(--text-secondary)' }}>
+              {difficulty.adjustedXp.toLocaleString()} XP <span style={{ color: 'var(--text-muted)' }}>(×{difficulty.multiplier})</span>
+            </span>
           </div>
-          <div style={{ color: 'var(--text-secondary)' }}>
-            {difficulty.adjustedXp.toLocaleString()} adjusted XP (×{difficulty.multiplier}) · {difficulty.totalXp.toLocaleString()} total
+          <DifficultyMeter adjustedXp={difficulty.adjustedXp} thresholds={difficulty.partyThresholds} />
+          <div style={{ color: 'var(--text-muted)' }}>
+            {draftMonsters.length} creature{draftMonsters.length === 1 ? '' : 's'} · ~{difficulty.xpPerPlayer.toLocaleString()} XP per player if won
           </div>
-          <div style={{ color: 'var(--text-secondary)' }}>~{difficulty.xpPerPlayer.toLocaleString()} XP per player if won</div>
           {(['easy', 'medium', 'hard', 'deadly'] as const).map((tier) => {
             const suggestions = suggestionsFor(tier)
             if (suggestions.length === 0) return null
             return (
-              <div key={tier} style={{ marginTop: 4 }}>
+              <div key={tier}>
                 <span style={{ color: 'var(--text-muted)' }}>Room for {DIFFICULTY_LABELS[tier]} (add one):</span>{' '}
                 {suggestions.map((s) => (
                   <button
@@ -1211,44 +1256,95 @@ function EncounterBuilder({
       )}
 
       {draftMonsters.length > 0 && (
-        <div style={{ display: 'flex', gap: 4 }}>
-          <input
-            className="gb-input"
-            placeholder="Encounter name…"
-            value={encounterName}
-            onChange={(e) => setEncounterName(e.target.value)}
-            style={{ fontSize: 12, flex: 1 }}
-          />
-          <Button variant="secondary" onClick={saveEncounter} disabled={!encounterName.trim()} style={{ fontSize: 11, padding: '3px 8px' }}>
-            Save
-          </Button>
-          <Button variant="primary" onClick={() => onAddEncounterToTracker(draftMonsters)} style={{ fontSize: 11, padding: '3px 8px' }}>
-            Add to Tracker
-          </Button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input className="gb-input" placeholder="Encounter name…" value={encounterName} onChange={(e) => setEncounterName(e.target.value)} style={{ fontSize: 12, flex: 1 }} />
+            <input
+              className="gb-input"
+              placeholder="Tags (forest, boss…)"
+              value={encounterTags}
+              onChange={(e) => setEncounterTags(e.target.value)}
+              style={{ fontSize: 12, flex: 1 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+            <Button variant="secondary" onClick={saveEncounter} disabled={!encounterName.trim()} style={{ fontSize: 11, padding: '3px 8px' }}>
+              Save to library
+            </Button>
+            <Button variant="primary" onClick={() => onAddEncounterToTracker(draftMonsters)} style={{ fontSize: 11, padding: '3px 8px' }}>
+              Add to Tracker
+            </Button>
+          </div>
         </div>
       )}
 
       {savedEncounters.length > 0 && (
         <>
-          <div className="gb-label">Saved Encounters</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {savedEncounters.map((enc) => (
-              <div key={enc.id} className="gb-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px' }}>
-                <button
-                  type="button"
-                  onClick={() => loadEncounterIntoDraft(enc)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, textAlign: 'left', flex: 1 }}
-                >
-                  {enc.name} <span style={{ color: 'var(--text-muted)' }}>({enc.monsterIndexes.length})</span>
+          <div className="gb-label">Encounter Library</div>
+          {libraryTags.length > 0 && (
+            <div className="gb-enc-tags">
+              {libraryTags.map((tag) => (
+                <button key={tag} type="button" className={tagFilter === tag ? 'gb-enc-tag gb-enc-tag--on' : 'gb-enc-tag'} onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>
+                  {tag}
                 </button>
-                <button type="button" onClick={() => deleteEncounter(enc.id)} style={removeBtnStyle}>
-                  <XIcon size={12} />
-                </button>
+              ))}
+            </div>
+          )}
+          <div className="gb-enc-library">
+            {shownLibrary.map(({ enc, monsters, result }) => (
+              <div key={enc.id} className="gb-enc-saved">
+                <div className="gb-enc-saved-head">
+                  <span className="gb-enc-card-name">{enc.name}</span>
+                  <strong className={`gb-enc-tier gb-enc-tier--${result.difficulty}`}>{DIFFICULTY_LABELS[result.difficulty]}</strong>
+                </div>
+                <div className="gb-enc-card-type">
+                  {Object.entries(countByName(monsters))
+                    .map(([name, n]) => (n > 1 ? `${n}× ${name}` : name))
+                    .join(', ') || 'No monsters found'}
+                </div>
+                {(enc.tags?.length ?? 0) > 0 && <div className="gb-enc-saved-tags">{enc.tags!.map((t) => `#${t}`).join(' ')}</div>}
+                <div className="gb-enc-saved-actions">
+                  <button type="button" className="gb-enc-link" onClick={() => loadEncounterIntoDraft(enc)}>
+                    Edit
+                  </button>
+                  <button type="button" className="gb-enc-link" onClick={() => onAddEncounterToTracker(monsters)} disabled={monsters.length === 0}>
+                    Add to Tracker
+                  </button>
+                  <button type="button" onClick={() => deleteEncounter(enc.id)} style={removeBtnStyle} aria-label={`Delete ${enc.name}`}>
+                    <XIcon size={12} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+function countByName(monsters: BestiaryMonster[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const m of monsters) counts[m.name] = (counts[m.name] ?? 0) + 1
+  return counts
+}
+
+/**
+ * How hard the draft is, as a bar: it fills with the adjusted XP, coloured by
+ * the tier it's reached, with a tick at each of the party's thresholds (Easy,
+ * Medium, Hard, Deadly). Runs a little past Deadly so an overkill fight shows.
+ */
+function DifficultyMeter({ adjustedXp, thresholds }: { adjustedXp: number; thresholds: Record<'easy' | 'medium' | 'hard' | 'deadly', number> }): JSX.Element {
+  const max = Math.max(thresholds.deadly * 1.3, 1)
+  const tier = adjustedXp >= thresholds.deadly ? 'deadly' : adjustedXp >= thresholds.hard ? 'hard' : adjustedXp >= thresholds.medium ? 'medium' : adjustedXp >= thresholds.easy ? 'easy' : 'trivial'
+  return (
+    <div className="gb-enc-meter" role="meter" aria-valuenow={adjustedXp} aria-valuemin={0} aria-valuemax={max} aria-label="Encounter difficulty">
+      <div className={`gb-enc-meter-fill gb-enc-meter-fill--${tier}`} style={{ width: `${Math.min(100, (adjustedXp / max) * 100)}%` }} />
+      {(['easy', 'medium', 'hard', 'deadly'] as const).map((t) => (
+        <span key={t} className="gb-enc-meter-tick" style={{ left: `${(thresholds[t] / max) * 100}%` }} title={`${DIFFICULTY_LABELS[t]}: ${thresholds[t].toLocaleString()} XP`}>
+          <span>{DIFFICULTY_LABELS[t]}</span>
+        </span>
+      ))}
     </div>
   )
 }

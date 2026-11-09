@@ -10,13 +10,20 @@ interface ChangelogProps {
   currentVersion?: string | null
   /** The auto-updater's status, shown above the list with Check for updates (omitted: no updates block). */
   update?: UpdateStatus
+  /** Reopens the "What's new" window for the version running. */
+  onShowWhatsNew?: () => void
 }
 
-export function Changelog({ onClose, currentVersion, update }: ChangelogProps): JSX.Element {
+export function Changelog({ onClose, currentVersion, update, onShowWhatsNew }: ChangelogProps): JSX.Element {
   return (
     <Modal onClose={onClose} width={480}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
-        <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>What's new</h2>
+        <h2 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>Changelog</h2>
+        {onShowWhatsNew && (
+          <button type="button" className="gb-btn gb-btn--secondary" style={{ marginLeft: 'auto', marginRight: 8, fontSize: 12, padding: '4px 10px' }} onClick={onShowWhatsNew}>
+            ✦ What's new in this version
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}

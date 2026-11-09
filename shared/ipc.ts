@@ -273,6 +273,8 @@ export interface AppApi {
     invite: (friendUserId: string) => Promise<ApiResult<void>>
     join: (sessionId: string) => Promise<ApiResult<void>>
     leave: () => Promise<void>
+    /** Which view the window is showing — lets a dev build host and play its own session at once (see registerIpc.ts's isOwnHostedCall). */
+    setViewRole: (role: 'dm' | 'player') => Promise<void>
     /** Fires when a joined session drops unexpectedly (DM closed the app, network dropped) — never for a manual `leave()` call. */
     onDisconnected: (callback: (reason: 'dm-left' | 'connection-lost') => void) => () => void
   }
@@ -396,7 +398,8 @@ export interface AppApi {
     /** DM-only — starts presenting `deckId` from its first scene. */
     present: (campaignId: string, deckId: string) => Promise<void>
     /** DM-only — moves the live cursor within whatever's currently being presented. */
-    setScene: (sceneIndex: number) => Promise<void>
+    /** `campaignId`/`deckId`: the deck being presented — its scene is revealed to players for good. */
+    setScene: (sceneIndex: number, campaignId?: string, deckId?: string) => Promise<void>
     /** DM-only — ends the live presentation. */
     stopPresenting: () => Promise<void>
     /** Fires for every connected participant (DM included) whenever the live cursor changes — filter on `update.campaignId` before applying. */
@@ -519,6 +522,8 @@ export interface AppApi {
     onUpdate: (callback: (update: InitiativeUpdate) => void) => () => void
     /** Player-only — sets your own initiative on the DM's tracker. */
     setMine: (initiative: number | null) => Promise<void>
+    /** Player-only — the joined DM's tracker as it stands now (null when there's no fight). */
+    get: () => Promise<ApiResult<PlayerVisibleInitiativeState | null>>
     /** DM-only — fires when a connected player sets their own initiative. */
     onPlayerSet: (callback: (update: PlayerInitiativeUpdate) => void) => () => void
   }

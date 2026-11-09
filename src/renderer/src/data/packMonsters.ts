@@ -5,7 +5,7 @@ import { SRD_PACK_ID, srdPack } from '@shared/content/srd'
 import { PACK_FORMAT_VERSION } from '@shared/content/schema'
 import { monsterEntry, packMonsterRecords } from '@shared/content/monsters'
 import { BESTIARY, type BestiaryMonster } from './bestiary'
-import { loadCustomMonsters, saveCustomMonster } from './customBestiary'
+import { isCustomMonster, loadCustomMonsters, saveCustomMonster, updateCustomMonster, withCr } from './customBestiary'
 import type { StatblockData } from '../statblock'
 
 // Creatures from content packs (docs/homebrew-engine.md, phase 8). A pack
@@ -104,6 +104,43 @@ export async function saveMonster(data: StatblockData): Promise<{ name: string }
     if (!error) return { name: String(entry.name) }
   }
   return saveCustomMonster(data)
+}
+
+/**
+ * Saves a creature from the monster editor. One that's already yours (in My
+ * Creatures, or still on this device) changes where it is; any other (the
+ * SRD's, another pack's) is saved to My Creatures as your own copy, which is
+ * what comes back. Falls back to a copy on this device when the pack can't be
+ * written, like saveMonster.
+ */
+export async function saveEditedMonster(edited: PackMonster): Promise<{ monster: PackMonster } | { error: string }> {
+  // Still on this device (not a pack's — creatures moved into My Creatures keep their old "custom-" index).
+  if (!edited.packId && isCustomMonster(edited.index)) {
+    updateCustomMonster(edited)
+    return { monster: withCr(edited) }
+  }
+  const found = await personalPack()
+  const ownId = edited.packId === PERSONAL_MONSTER_PACK_ID && edited.fullId ? edited.fullId.slice(edited.fullId.indexOf(':') + 1) : null
+  if ('error' in found) {
+    if (ownId) return found
+    const { index: _index, ...copy } = edited
+    void _index
+    return { monster: saveCustomMonster(copy) }
+  }
+  const monsters = found.pack.monsters ?? []
+  if (ownId && monsters.some((m) => m.id === ownId)) {
+    const entry = { ...monsterEntry(edited as unknown as Record<string, unknown>, []), id: ownId }
+    const error = await savePersonalPack({ ...found.pack, monsters: monsters.map((m) => (m.id === ownId ? entry : m)) })
+    return error ? { error } : { monster: withCr(edited) }
+  }
+  // A copy: a new id (and no borrowed index, so it doesn't stand in for the original).
+  const { index: _index, ...copy } = edited
+  void _index
+  const entry = monsterEntry(copy as unknown as Record<string, unknown>, monsters.map((m) => String(m.id)))
+  const error = await savePersonalPack({ ...found.pack, monsters: [...monsters, entry] })
+  if (error) return { error }
+  const fullId = `${PERSONAL_MONSTER_PACK_ID}:${String(entry.id)}`
+  return { monster: withCr({ ...edited, name: String(entry.name), index: `pack:${fullId}`, packId: PERSONAL_MONSTER_PACK_ID, packName: 'My Creatures', fullId }) }
 }
 
 /** Removes a creature from the My Creatures pack. */

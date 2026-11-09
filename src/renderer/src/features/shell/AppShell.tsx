@@ -1,29 +1,43 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ModeToggle, type Mode } from './ModeToggle'
 import { WindowControls } from './WindowControls'
 import { VersionBadge } from './VersionBadge'
+import { WhatsNewView } from './WhatsNew'
+import { CHANGELOG, type ChangelogEntry } from '../../data/changelog'
 import { BestiaryIcon, PacksIcon } from './icons'
 import { ContentPacksModal } from '../content/ContentPacksModal'
-import { FriendsMenu } from '../friends/FriendsMenu'
+import { FriendsButton, FriendsPanel } from '../friends/FriendsPanel'
 import { MessagesButton } from '../chat/MessagesButton'
 import { NotificationToasts } from '../notifications/NotificationToasts'
 import { RollAnimationOverlay } from '../dice/RollAnimationOverlay'
 import { useNotifications } from '../notifications/useNotifications'
 import { CampaignWorkspace } from '../campaigns/CampaignWorkspace'
-import { WorkspaceHeaderBar } from '../campaigns/WorkspaceHeaderBar'
 import { useNotesWorkspace } from '../campaigns/useNotesWorkspace'
 import { PlayerWorkspaceBody } from '../player/PlayerWorkspaceBody'
-import { PlayerWorkspaceHeaderBar } from '../player/PlayerWorkspaceHeaderBar'
 import { usePlayerWorkspace } from '../player/usePlayerWorkspace'
+import { useClassicLayout } from '../classic/classicLayout'
+import { useClassicDmTabs } from '../classic/useClassicDmTabs'
+import { ClassicCampaignWorkspace } from '../classic/ClassicCampaignWorkspace'
+import { ClassicPlayerWorkspaceBody } from '../classic/ClassicPlayerWorkspaceBody'
+import { WorkspaceHeaderBar } from '../classic/WorkspaceHeaderBar'
+import { PlayerWorkspaceHeaderBar } from '../classic/PlayerWorkspaceHeaderBar'
+import { HeaderPopover } from '../classic/HeaderPopover'
+import { TOOL_ICONS } from '../canvas/toolIcons'
+import { Modal } from '../../ui/Modal'
 import { useCharacterCloudSync } from '../player/useCharacterCloudSync'
-import { MusicButton } from '../audio/MusicButton'
-import { SoundBoardButton } from '../audio/SoundBoardButton'
+import { MusicPanel } from '../audio/MusicPanel'
+import { SoundBoardPanel } from '../audio/SoundBoardPanel'
+import type { CanvasHandle } from '../canvas/Canvas'
+import type { ToolContents } from '../canvas/toolItems'
+import { KeepAliveOutlet, useKeepAliveHost } from '../canvas/KeepAlive'
+import { entryNodeId, putEntry } from '../canvas/canvasEntries'
+import { DYNAMIC_SIZE } from '@shared/canvasTools'
 import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
 import { ensureAmbientListening } from '../audio/ambientEngine'
 import { ensureSfxBoardListening } from '../audio/sfxBoardEngine'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import { useApplyActivePacks, useCampaignPacks } from '../content/usePacks'
-import type { BestiaryMonster } from '../../data/bestiary'
 
 // Loaded the first time they open, so the app starts without their code.
 const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
@@ -54,8 +68,6 @@ const IDLE_PRESENCE_LINES = [
 interface AppShellProps {
   displayName: string
 }
-
-export type DmTabRef = { kind: 'note'; id: string } | { kind: 'monster'; id: string }
 
 export function AppShell({ displayName }: AppShellProps): JSX.Element {
   const [mode, setMode] = useState<Mode>('dm')
@@ -135,7 +147,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   // Ctrl+Tab (and the toggle itself) can't accidentally step away from a
   // hosted or joined game — DM is locked while you've joined someone else's
   // session, Player is locked while you're hosting your own.
-  const lockedMode: Mode | undefined = hostedSessionId ? 'player' : joinedSession ? 'dm' : undefined
+  // Dev builds leave both modes open, so you can host and also join your own session as a player to test it.
+  const lockedMode: Mode | undefined = import.meta.env.DEV ? undefined : hostedSessionId ? 'player' : joinedSession ? 'dm' : undefined
   // Combat is the DM's map in DM mode, or the DM's map as shared with you while you're in their session
   // (out of one, the tab's still there, saying how to get to the fight).
   const combatShown = combatOpen
@@ -162,6 +175,11 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [lockedMode])
+
+  // Main tells a dev build's self-joined player's calls from the DM's own by the view showing (registerIpc.ts's isOwnHostedCall).
+  useEffect(() => {
+    void window.goblin.sessions.setViewRole(mode === 'player' ? 'player' : 'dm')
+  }, [mode])
 
   // Your own relay account id — this is what a note/folder you author over a
   // joined session gets stamped with as authorUserId (see sessionHost.ts's
@@ -299,7 +317,6 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       })
     })
   }, [])
-  const [viewedPlayerUserId, setViewedPlayerUserId] = useState<string | null>(null)
   // The DM's test players play the DM's own characters; in the Combat tab they're treated like connected players.
   const testSheets = useTestPlayerSheets(mode === 'dm')
   const combatCharacters = useMemo(() => (testSheets.size ? new Map([...playerCharacters, ...testSheets]) : playerCharacters), [playerCharacters, testSheets])
@@ -321,73 +338,53 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     []
   )
 
-  // Enemy statblock tabs opened from the Initiative tracker (see
-  // InitiativeTracker.tsx's onSelectMonster) — a separate open list from
-  // note tabs (each keyed by the monster's Bestiary/custom index, deduped
-  // the same way notes dedupe by note id) so the DM can have several
-  // enemies' cards open side by side, switching between them the same way
-  // note tabs work. `activeMonsterTab` null means no monster tab is the
-  // active view right now (a note, or nothing, is showing instead).
-  const [monsterTabs, setMonsterTabs] = useState<BestiaryMonster[]>([])
-  const [activeMonsterTab, setActiveMonsterTab] = useState<string | null>(null)
-
-  function openMonsterTab(monster: BestiaryMonster): void {
-    setMonsterTabs((prev) => (prev.some((m) => m.index === monster.index) ? prev : [...prev, monster]))
-    setActiveMonsterTab(monster.index)
-    setViewedPlayerUserId(null)
-  }
-
-  function closeMonsterTab(index: string): void {
-    setMonsterTabs((prev) => {
-      const next = prev.filter((m) => m.index !== index)
-      setActiveMonsterTab((current) => (current === index ? (next[next.length - 1]?.index ?? null) : current))
-      return next
-    })
-  }
-
-  /**
-   * The DM header's tab strip mixes two independently-owned lists — note
-   * tabs (useNotesWorkspace's own ordered, persisted `openTabs`) and monster
-   * tabs (above) — but a single drag can only reorder items within one JS
-   * array. This is the merged visual order both render from, letting a note
-   * and a monster tab drag-reorder against each other the same way the
-   * player side's PlayerTabRef strip already does across notes/characters.
-   * Reconciled (not recomputed from scratch) whenever either source list
-   * changes, so existing positions survive — only a newly-opened tab gets
-   * appended, and a closed one just drops out.
-   */
-  const [dmTabOrder, setDmTabOrder] = useState<DmTabRef[]>([])
-  useEffect(() => {
-    setDmTabOrder((prev) => {
-      const noteIds = new Set(workspace.tabNotes.map((n) => n.id))
-      const monsterIds = new Set(monsterTabs.map((m) => m.index))
-      const kept = prev.filter((t) => (t.kind === 'note' ? noteIds.has(t.id) : monsterIds.has(t.id)))
-      const keptNoteIds = new Set(kept.filter((t) => t.kind === 'note').map((t) => t.id))
-      const keptMonsterIds = new Set(kept.filter((t) => t.kind === 'monster').map((t) => t.id))
-      const newNotes: DmTabRef[] = workspace.tabNotes.filter((n) => !keptNoteIds.has(n.id)).map((n) => ({ kind: 'note', id: n.id }))
-      const newMonsters: DmTabRef[] = monsterTabs.filter((m) => !keptMonsterIds.has(m.index)).map((m) => ({ kind: 'monster', id: m.index }))
-      return [...kept, ...newNotes, ...newMonsters]
-    })
-  }, [workspace.tabNotes, monsterTabs])
-
-  function moveDmTab(dragged: DmTabRef, target: DmTabRef): void {
-    if (dragged.kind === target.kind && dragged.id === target.id) return
-    setDmTabOrder((prev) => {
-      const withoutDragged = prev.filter((t) => !(t.kind === dragged.kind && t.id === dragged.id))
-      const targetIndex = withoutDragged.findIndex((t) => t.kind === target.kind && t.id === target.id)
-      if (targetIndex === -1) return prev
-      return [...withoutDragged.slice(0, targetIndex), dragged, ...withoutDragged.slice(targetIndex)]
-    })
-  }
-
-  /** Switches which monster tab (if any) is the active view — null deactivates all of them (a note, or nothing, shows instead), same "explicit null clears it" convention as onViewPlayerUserId. Activating a real one also drops the player-character view, same mutual-exclusivity every other "takes over the main pane" view already has. */
-  function selectMonsterTab(index: string | null): void {
-    setActiveMonsterTab(index)
-    if (index) setViewedPlayerUserId(null)
-  }
-
-  const [bestiaryOpen, setBestiaryOpen] = useState(false)
+  // Whichever workspace canvas is showing (DM or player) — the header's buttons open their tools on it.
+  const canvasRef = useRef<CanvasHandle>(null)
+  // Music keeps running while its box is closed (see canvas/KeepAlive.tsx).
+  const musicHost = useKeepAliveHost()
+  const playerSessionId = joinedSession?.sessionId ?? null
   const [packsOpen, setPacksOpen] = useState(false)
+  // The classic layout (Settings → Appearance): the old sidebar screens, with the Codex and What's New as pop-ups.
+  const classic = useClassicLayout()
+  const dmTabs = useClassicDmTabs(workspace)
+  const [bestiaryOpen, setBestiaryOpen] = useState(false)
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
+  // The versions the What's New box shows: the ones just updated through, or (reopened later) the newest.
+  const [whatsNewEntries, setWhatsNewEntries] = useState<ChangelogEntry[]>(() => CHANGELOG.slice(0, 1))
+
+  const sharedTools: ToolContents = {
+    codex: (
+      <Suspense fallback={null}>
+        <Bestiary
+          embedded
+          hideMonsters={mode === 'player' && !!joinedSession}
+          sessionId={mode === 'dm' ? hostedSessionId : playerSessionId}
+          onAddToCanvas={(entry) => {
+            putEntry(mode, entry)
+            canvasRef.current?.openAt(entryNodeId(entry), entry.kind === 'monster' ? DYNAMIC_SIZE.monster : DYNAMIC_SIZE.entry)
+          }}
+        />
+      </Suspense>
+    ),
+    whatsnew: <WhatsNewView entries={whatsNewEntries} />,
+    friends: (
+      <FriendsPanel
+        mode={mode}
+        hostedSessionId={hostedSessionId}
+        invitedSessionIds={invitedSessionIds}
+        onJoinedSession={handleJoinedSession}
+        connectedLabel={joinedSession?.label ?? null}
+        activeCampaignName={playerWorkspace.activeCampaign?.name ?? null}
+        onResync={playerWorkspace.resync}
+      />
+    ),
+    ...(mode === 'dm'
+      ? {
+          music: <KeepAliveOutlet host={musicHost} />,
+          soundboard: <SoundBoardPanel sessionId={hostedSessionId} />
+        }
+      : {})
+  }
 
   return (
     // height:100% (not 100vh) deliberately — this box is nested inside
@@ -435,23 +432,23 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             }}
           />
 
-          {!workshopOpen && !combatShown && mode === 'dm' && activeCampaign && (
+          {classic && !workshopOpen && !combatShown && mode === 'dm' && activeCampaign && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
               <WorkspaceHeaderBar
                 campaign={activeCampaign}
                 workspace={workspace}
-                monsterTabs={monsterTabs}
-                activeMonsterTab={activeMonsterTab}
-                onSelectMonsterTab={selectMonsterTab}
-                onCloseMonsterTab={closeMonsterTab}
-                tabOrder={dmTabOrder}
-                onMoveTab={moveDmTab}
+                monsterTabs={dmTabs.monsterTabs}
+                activeMonsterTab={dmTabs.activeMonsterTab}
+                onSelectMonsterTab={dmTabs.selectMonsterTab}
+                onCloseMonsterTab={dmTabs.closeMonsterTab}
+                tabOrder={dmTabs.dmTabOrder}
+                onMoveTab={dmTabs.moveDmTab}
               />
             </>
           )}
 
-          {!workshopOpen && !combatShown && mode === 'player' && playerWorkspace.tabItems.length > 0 && (
+          {classic && !workshopOpen && !combatShown && mode === 'player' && playerWorkspace.tabItems.length > 0 && (
             <>
               <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
               <PlayerWorkspaceHeaderBar workspace={playerWorkspace} />
@@ -471,57 +468,100 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
         >
           <button
             type="button"
-            onClick={() => setBestiaryOpen(true)}
             className="gb-btn gb-btn--secondary"
-            title="Codex"
+            title="Codex — right-click to close it"
             style={{ padding: 'var(--space-2)', display: 'flex' }}
+            onClick={() => {
+              if (classic) return setBestiaryOpen(true)
+              setWorkshopOpen(false)
+              setCombatOpen(false)
+              canvasRef.current?.openTool('codex')
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              canvasRef.current?.closeTool('codex')
+            }}
           >
             <BestiaryIcon />
           </button>
-          <button
-            type="button"
-            onClick={() => setPacksOpen(true)}
-            className="gb-btn gb-btn--secondary"
-            title="Content Packs"
-            style={{ padding: 'var(--space-2)', display: 'flex' }}
-          >
+          <button type="button" className="gb-btn gb-btn--secondary" title="Content Packs" style={{ padding: 'var(--space-2)', display: 'flex' }} onClick={() => setPacksOpen(true)}>
             <PacksIcon />
           </button>
-          {mode === 'dm' && <MusicButton sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} />}
-          {mode === 'dm' && <SoundBoardButton sessionId={hostedSessionId} />}
+          {classic && mode === 'dm' && (
+            <>
+              <HeaderPopover
+                width={360}
+                trigger={(toggle) => (
+                  <button type="button" className="gb-btn gb-btn--secondary" title="Goblin Bard" style={{ padding: 'var(--space-2)', display: 'flex' }} onClick={toggle}>
+                    {TOOL_ICONS.music}
+                  </button>
+                )}
+              >
+                <KeepAliveOutlet host={musicHost} />
+              </HeaderPopover>
+              <HeaderPopover
+                width={340}
+                trigger={(toggle) => (
+                  <button type="button" className="gb-btn gb-btn--secondary" title="Sound Board" style={{ padding: 'var(--space-2)', display: 'flex' }} onClick={toggle}>
+                    {TOOL_ICONS.soundboard}
+                  </button>
+                )}
+              >
+                {sharedTools.soundboard}
+              </HeaderPopover>
+            </>
+          )}
+          {import.meta.env.DEV && hostedSessionId && !joinedSession && (
+            <button
+              type="button"
+              className="gb-btn gb-btn--secondary"
+              title="Dev build only: join the session you're hosting as a player, to test the player side"
+              style={{ fontSize: 12 }}
+              onClick={async () => {
+                const result = await window.goblin.sessions.join(hostedSessionId)
+                if (result.ok) handleJoinedSession(hostedSessionId, 'Your own table (dev)')
+                else {
+                  setDisconnectMessage(result.error)
+                  setTimeout(() => setDisconnectMessage(null), 6000)
+                }
+              }}
+            >
+              Join as player (dev)
+            </button>
+          )}
           <MessagesButton
             campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
-            sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}
+            sessionId={mode === 'dm' ? hostedSessionId : playerSessionId}
             myUserId={myRelayUserId}
           />
-          <FriendsMenu
-            mode={mode}
-            hostedSessionId={hostedSessionId}
-            invitedSessionIds={invitedSessionIds}
-            onJoinedSession={handleJoinedSession}
-            connectedLabel={joinedSession?.label ?? null}
-            activeCampaignName={playerWorkspace.activeCampaign?.name ?? null}
-            onResync={playerWorkspace.resync}
-          />
+          {classic ? (
+            <HeaderPopover width={300} trigger={(toggle) => <FriendsButton onOpen={toggle} />}>
+              {sharedTools.friends}
+            </HeaderPopover>
+          ) : (
+            <FriendsButton
+              onOpen={() => {
+                setWorkshopOpen(false)
+                setCombatOpen(false)
+                canvasRef.current?.openTool('friends')
+              }}
+            />
+          )}
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{displayName}</span>
-          <VersionBadge variant="inline" />
+          <VersionBadge
+            variant="inline"
+            onWhatsNew={(entries) => {
+              setWhatsNewEntries(entries)
+              if (classic) return setWhatsNewOpen(true)
+              setWorkshopOpen(false)
+              setCombatOpen(false)
+              canvasRef.current?.openTool('whatsnew')
+            }}
+          />
         </div>
 
         <WindowControls />
       </header>
-
-      {packsOpen && (
-        <ContentPacksModal
-          onClose={() => setPacksOpen(false)}
-          role={mode === 'dm' ? 'dm' : 'player'}
-          campaign={
-            mode === 'dm'
-              ? activeCampaign && { id: activeCampaign.id, name: activeCampaign.name }
-              : playerWorkspace.activeCampaign && { id: playerWorkspace.activeCampaign.id, name: playerWorkspace.activeCampaign.name }
-          }
-          playerCampaignPacks={playerWorkspace.campaignPacks}
-        />
-      )}
 
       {disconnectMessage && (
         <div
@@ -569,7 +609,37 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
         </main>
       )}
       <main style={{ flex: 1, display: workshopOpen || combatShown ? 'none' : 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {mode === 'dm' ? (
+        {classic ? (
+          mode === 'dm' ? (
+            <ClassicCampaignWorkspace
+              campaign={activeCampaign}
+              workspace={workspace}
+              onSwitchCampaign={setActiveCampaign}
+              onCampaignDeleted={() => setActiveCampaign(null)}
+              hostedSessionId={hostedSessionId}
+              onHostedSessionChange={setHostedSessionId}
+              playerCharacters={playerCharacters}
+              onOpenCombat={() => {
+                setWorkshopOpen(false)
+                setCombatOpen(true)
+              }}
+              viewedPlayerUserId={dmTabs.viewedPlayerUserId}
+              onViewPlayerUserId={dmTabs.setViewedPlayerUserId}
+              monsterTabs={dmTabs.monsterTabs}
+              activeMonsterTab={dmTabs.activeMonsterTab}
+              onOpenMonsterTab={dmTabs.openMonsterTab}
+              onSelectMonsterTab={dmTabs.setActiveMonsterTab}
+            />
+          ) : (
+            <ClassicPlayerWorkspaceBody
+              workspace={playerWorkspace}
+              myUserId={myRelayUserId}
+              sessionId={joinedSession?.sessionId ?? null}
+              connectedLabel={joinedSession?.label ?? null}
+              onLeaveSession={() => setJoinedSession(null)}
+            />
+          )
+        ) : mode === 'dm' ? (
           <CampaignWorkspace
             campaign={activeCampaign}
             workspace={workspace}
@@ -578,16 +648,13 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             hostedSessionId={hostedSessionId}
             onHostedSessionChange={setHostedSessionId}
             playerCharacters={playerCharacters}
+            combatCharacters={combatCharacters}
             onOpenCombat={() => {
               setWorkshopOpen(false)
               setCombatOpen(true)
             }}
-            viewedPlayerUserId={viewedPlayerUserId}
-            onViewPlayerUserId={setViewedPlayerUserId}
-            monsterTabs={monsterTabs}
-            activeMonsterTab={activeMonsterTab}
-            onOpenMonsterTab={openMonsterTab}
-            onSelectMonsterTab={setActiveMonsterTab}
+            sharedTools={sharedTools}
+            canvasRef={canvasRef}
           />
         ) : (
           <PlayerWorkspaceBody
@@ -596,21 +663,39 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             sessionId={joinedSession?.sessionId ?? null}
             connectedLabel={joinedSession?.label ?? null}
             onLeaveSession={() => setJoinedSession(null)}
+            sharedTools={sharedTools}
+            canvasRef={canvasRef}
           />
         )}
       </main>
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
       <RollAnimationOverlay />
+      {packsOpen && (
+        <ContentPacksModal
+          onClose={() => setPacksOpen(false)}
+          role={mode === 'dm' ? 'dm' : 'player'}
+          campaign={
+            mode === 'dm'
+              ? activeCampaign && { id: activeCampaign.id, name: activeCampaign.name }
+              : playerWorkspace.activeCampaign && { id: playerWorkspace.activeCampaign.id, name: playerWorkspace.activeCampaign.name }
+          }
+          playerCampaignPacks={playerWorkspace.campaignPacks}
+        />
+      )}
       {bestiaryOpen && (
         <Suspense fallback={null}>
-          <Bestiary
-            onClose={() => setBestiaryOpen(false)}
-            hideMonsters={mode === 'player' && !!joinedSession}
-            sessionId={mode === 'dm' ? hostedSessionId : (joinedSession?.sessionId ?? null)}
-          />
+          <Bestiary onClose={() => setBestiaryOpen(false)} hideMonsters={mode === 'player' && !!joinedSession} sessionId={mode === 'dm' ? hostedSessionId : playerSessionId} />
         </Suspense>
       )}
+      {whatsNewOpen && (
+        <Modal onClose={() => setWhatsNewOpen(false)} width={720}>
+          <div style={{ height: 'min(70vh, 640px)', display: 'flex', flexDirection: 'column', containerType: 'inline-size' }}>
+            <WhatsNewView entries={whatsNewEntries} />
+          </div>
+        </Modal>
+      )}
+      {mode === 'dm' && createPortal(<MusicPanel sessionId={hostedSessionId} campaignId={activeCampaign?.id ?? null} />, musicHost)}
     </div>
   )
 }

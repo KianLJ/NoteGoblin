@@ -28,8 +28,8 @@ import { getDiceLog, subscribeDiceLog } from '../dice/diceLogStore'
 import { useVehicles } from '../vehicles/useVehicles'
 import { crewLabel, gunnerBonusFromSheet } from '../vehicles/crewBonus'
 import { XIcon } from '../../ui/icons'
-import { canRedoBattleMap, canUndoBattleMap, redoBattleMap, setLibrary, switchBattle, undoBattleMap, useBattleLibrary, useBattleMap, useEncounter } from './encounterStore'
-import { loadSavedEncounters } from '../../data/savedEncounters'
+import { applyEncounterPlacements, canRedoBattleMap, canUndoBattleMap, redoBattleMap, setLibrary, switchBattle, undoBattleMap, useBattleLibrary, useBattleMap, useEncounter } from './encounterStore'
+import { encounterPlacements, loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import { initiativeModifierFor, monsterToCombatant } from '../campaigns/InitiativeTracker'
 import { playSfx } from '../audio/soundEffects'
 import { CharacterTabs, HpControls, InitiativeField, MonsterAbilities, Stat, hpChange } from './CombatPanels'
@@ -465,6 +465,8 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
  * battles, link a saved encounter, and load that encounter's enemies.
  */
 function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[]) => void }): JSX.Element {
+  const [map] = useBattleMap()
+  const [savedTo, setSavedTo] = useState<string | null>(null)
   const library = useBattleLibrary()
   const battle = activeBattle(library)
   const [open, setOpen] = useState(false)
@@ -589,6 +591,7 @@ function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[
                 className="gb-btn gb-btn--primary"
                 style={{ ...tiny, alignSelf: 'flex-start' }}
                 onClick={() => {
+                  applyEncounterPlacements(linked.id)
                   onLoadEnemies(linked.monsterIndexes)
                   setOpen(false)
                 }}
@@ -597,6 +600,7 @@ function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[
                 Load enemies
               </button>
             )}
+            {encounters.length > 0 && <SavePositions encounters={encounters} placements={map.placements} preferred={linked?.id ?? null} savedTo={savedTo} onSaved={(list, id) => { setEncounters(list); setSavedTo(id) }} />}
           </div>
         </>
       )}
@@ -605,6 +609,64 @@ function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[
 }
 
 const tiny = { fontSize: 12, padding: '2px 8px' } as const
+
+/**
+ * Saves where an encounter's monsters stand on this map into the encounter itself, so loading it from a session
+ * scene (on any battle) puts them back there. Only that encounter's own monsters' spots go in.
+ */
+function SavePositions({
+  encounters,
+  placements,
+  preferred,
+  savedTo,
+  onSaved
+}: {
+  encounters: SavedEncounter[]
+  placements: BattleMap['placements']
+  preferred: string | null
+  savedTo: string | null
+  onSaved: (list: SavedEncounter[], id: string) => void
+}): JSX.Element {
+  const [pick, setPick] = useState(preferred ?? encounters[0].id)
+  const enc = encounters.find((e) => e.id === pick) ?? encounters[0]
+  const spots = encounterPlacements(enc, placements)
+  const count = Object.keys(spots).length
+  return (
+    <>
+      <div style={{ height: 1, background: 'var(--border-subtle)' }} />
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span className="gb-label" style={{ margin: 0 }}>
+          Save enemy positions to an encounter
+        </span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <select className="gb-input" value={enc.id} onChange={(e) => setPick(e.target.value)} style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '3px 6px' }}>
+            {encounters.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+                {e.placements && Object.keys(e.placements).length ? ' · positions saved' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="gb-btn gb-btn--secondary"
+            style={tiny}
+            disabled={count === 0}
+            title={count ? `Saves where its ${count} enem${count === 1 ? 'y stands' : 'ies stand'} on this map` : 'None of its monsters are on this map'}
+            onClick={() => {
+              const list = loadSavedEncounters().map((e) => (e.id === enc.id ? { ...e, placements: spots } : e))
+              saveSavedEncounters(list)
+              onSaved(list, enc.id)
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </label>
+      {savedTo === enc.id && <span style={{ color: 'var(--text-muted)' }}>Saved. Loading “{enc.name}” from a scene puts its enemies back here.</span>}
+    </>
+  )
+}
 
 
 interface AttackLine {

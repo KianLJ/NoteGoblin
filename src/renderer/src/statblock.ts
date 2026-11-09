@@ -1,5 +1,6 @@
 import { abilityModifier, formatModifier } from '@shared/dnd5e'
 import { escapeHtml, inlineTextHtml } from './markdown'
+import { markEntry, markInitiative, markSaves, markSkills, rollButtonHtml } from '@shared/statblockRolls'
 
 /**
  * Renders a ```statblock fenced code block (see markdown.ts's `code`
@@ -168,24 +169,37 @@ function abilityCell(score: string | undefined): string {
   return `<td>${n} (${formatModifier(abilityModifier(n))})</td>`
 }
 
-function metaLine(label: string, value: string | undefined): string {
-  if (!value) return ''
-  return `<div class="gb-statblock-line"><strong>${escapeHtml(label)}</strong> ${inlineTextHtml(value)}</div>`
+/** The rollable statblock's abilities: six tiles, each its name, score and a big modifier button rolling the check. */
+function abilityTiles(data: StatblockData): string {
+  const tiles = ABILITY_LABELS.map(([key, label]) => {
+    const n = data[key] ? parseInt(data[key]!, 10) : NaN
+    if (Number.isNaN(n)) return `<div class="gb-ability-tile gb-ability-tile--empty"><span class="gb-ability-tile-name">${label}</span><span class="gb-ability-tile-score">—</span></div>`
+    const mod = abilityModifier(n)
+    return `<div class="gb-ability-tile"><span class="gb-ability-tile-name">${label}</span>${rollButtonHtml(`<b>${formatModifier(mod)}</b>`, { kind: 'check', label: `${label} Check`, modifier: mod })}<span class="gb-ability-tile-score">${n}</span></div>`
+  }).join('')
+  return `<div class="gb-ability-tiles">${tiles}</div>`
 }
 
-function entrySection(title: string, entries: StatblockEntry[] | undefined): string {
+function metaLine(label: string, value: string | undefined, mark?: (html: string) => string): string {
+  if (!value) return ''
+  const html = inlineTextHtml(value)
+  return `<div class="gb-statblock-line"><strong>${escapeHtml(label)}</strong> ${mark ? mark(html) : html}</div>`
+}
+
+function entrySection(title: string, entries: StatblockEntry[] | undefined, rollable: boolean): string {
   if (!entries || entries.length === 0) return ''
   const rows = entries
-    .map(
-      (e) =>
-        `<div class="gb-statblock-entry"><span class="gb-statblock-entry-name">${escapeHtml(e.name)}.</span> ${inlineTextHtml(e.desc)}</div>`
-    )
+    .map((e) => {
+      const desc = inlineTextHtml(e.desc)
+      return `<div class="gb-statblock-entry"><span class="gb-statblock-entry-name">${escapeHtml(e.name)}.</span> ${rollable ? markEntry(desc, e.name) : desc}</div>`
+    })
     .join('')
   return `<h4 class="gb-statblock-section">${escapeHtml(title)}</h4>${rows}`
 }
 
 /** `showSaveButton` defaults on for the note-preview use case (see markdown.ts) where "this came from a note, maybe save it to the Bestiary" makes sense; pass false when rendering a monster that's already a Bestiary/custom entry (e.g. viewing an enemy's card from the initiative tracker), where the button would just be a pointless re-save of itself. */
-export function renderStatblockHtml(data: StatblockData, showSaveButton = true): string {
+/** `rollable` turns its checks, saves, skills, initiative, attacks and damage into roll buttons (see shared/statblockRolls.ts) — for a host that handles their clicks (campaigns/StatblockCard.tsx). */
+export function renderStatblockHtml(data: StatblockData, showSaveButton = true, rollable = false): string {
   const subtitleParts = [data.size, data.type, data.alignment].filter(Boolean).join(', ')
   const abilityHeader = ABILITY_LABELS.map(([, label]) => `<th>${label}</th>`).join('')
   const abilityRow = ABILITY_LABELS.map(([key]) => abilityCell(data[key])).join('')
@@ -211,14 +225,14 @@ export function renderStatblockHtml(data: StatblockData, showSaveButton = true):
     subtitleParts ? `<div class="gb-statblock-subtitle">${escapeHtml(subtitleParts)}</div>` : '',
     '<hr class="gb-statblock-rule" />',
     metaLine('Armor Class', data.ac),
-    metaLine('Initiative', data.initiative),
+    metaLine('Initiative', data.initiative, rollable ? markInitiative : undefined),
     metaLine('Hit Points', data.hp),
     metaLine('Speed', data.speed),
     '<hr class="gb-statblock-rule" />',
-    `<table class="gb-statblock-abilities"><thead><tr>${abilityHeader}</tr></thead><tbody><tr>${abilityRow}</tr></tbody></table>`,
+    rollable ? abilityTiles(data) : `<table class="gb-statblock-abilities"><thead><tr>${abilityHeader}</tr></thead><tbody><tr>${abilityRow}</tr></tbody></table>`,
     '<hr class="gb-statblock-rule" />',
-    metaLine('Saving Throws', data.saves),
-    metaLine('Skills', data.skills),
+    metaLine('Saving Throws', data.saves, rollable ? markSaves : undefined),
+    metaLine('Skills', data.skills, rollable ? markSkills : undefined),
     metaLine('Damage Vulnerabilities', data.damage_vulnerabilities),
     metaLine('Damage Resistances', data.damage_resistances),
     metaLine('Damage Immunities', data.damage_immunities),
@@ -226,12 +240,12 @@ export function renderStatblockHtml(data: StatblockData, showSaveButton = true):
     metaLine('Senses', data.senses),
     metaLine('Languages', data.languages),
     metaLine('Challenge', data.cr),
-    entrySection('Traits', data.traits),
-    entrySection('Actions', data.actions),
-    entrySection('Bonus Actions', data.bonus_actions),
-    entrySection('Reactions', data.reactions),
-    entrySection('Legendary Actions', data.legendary_actions),
-    entrySection('Lair Actions', data.lair_actions),
+    entrySection('Traits', data.traits, rollable),
+    entrySection('Actions', data.actions, rollable),
+    entrySection('Bonus Actions', data.bonus_actions, rollable),
+    entrySection('Reactions', data.reactions, rollable),
+    entrySection('Legendary Actions', data.legendary_actions, rollable),
+    entrySection('Lair Actions', data.lair_actions, rollable),
     '</div>'
   ].join('')
 }

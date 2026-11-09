@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LockIcon } from './icons'
 import { NoteTreeSection, type ClipboardItem, type ClipboardState } from './NoteTreeSection'
-import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { getStoredFontScale } from '../../theme'
+import { renderedScale } from '../../ui/renderedScale'
 import type { Folder, Note } from '@shared/ipc'
 
 interface NoteSidebarProps {
@@ -31,8 +30,6 @@ interface NoteSidebarProps {
   onMoveFolder: (folderId: string, parentFolderId: string | null, visibility: 'dm' | 'shared' | 'private') => void
   onPasteNote: (sourceNoteId: string, targetFolderId: string | null, targetVisibility: 'dm' | 'shared' | 'private') => void
   onPasteFolder: (sourceFolderId: string, targetParentId: string | null, targetVisibility: 'dm' | 'shared' | 'private') => void
-  /** The campaign switcher + account settings — rendered here so they're visually part of the sidebar, not a floating overlay. */
-  footer: ReactNode
 }
 
 const MIN_PANE_HEIGHT = 60
@@ -56,8 +53,7 @@ export function NoteSidebar({
   onMoveNote,
   onMoveFolder,
   onPasteNote,
-  onPasteFolder,
-  footer
+  onPasteFolder
 }: NoteSidebarProps): JSX.Element {
   const storageBase = campaignId ?? 'none'
   const [partyHeight, setPartyHeight] = useState(240)
@@ -81,7 +77,7 @@ export function NoteSidebar({
       // resize scale× faster than the actual drag.
       const raw = e.clientY - rect.top
       const clamped = Math.min(rect.height - MIN_PANE_HEIGHT, Math.max(MIN_PANE_HEIGHT, raw))
-      setPartyHeight(clamped / getStoredFontScale())
+      setPartyHeight(clamped / renderedScale(splitRef.current))
     }
     function handleUp(): void {
       setDragging(false)
@@ -97,17 +93,19 @@ export function NoteSidebar({
   // partyHeight is a fixed pixel value chosen (by default or by dragging)
   // against whatever the split's available height was at the time — it never
   // otherwise reconciles against the container. Without this, shrinking the
-  // window (or the sidebar) below that value leaves the Party pane still
+  // window (or the box) below that value leaves the Party pane still
   // claiming its old height (flexShrink: 0), pushing the divider/DM Only pane
-  // — and visually, the footer below them — out of their normal, "locked"
-  // position instead of the split just compressing. Re-clamp on every resize.
+  // out of their normal, "locked" position instead of the split just
+  // compressing. Re-clamp on every resize.
   useEffect(() => {
     const el = splitRef.current
     if (!el) return
     const observer = new ResizeObserver(() => {
       // getBoundingClientRect is real screen pixels; partyHeight (prev) is in
       // the local, pre-scale unit it's rendered in — convert before comparing.
-      const height = el.getBoundingClientRect().height / getStoredFontScale()
+      const height = el.getBoundingClientRect().height / renderedScale(el)
+      // Hidden (its canvas box minimized, or too small to show) — not a real size to clamp to.
+      if (height === 0) return
       setPartyHeight((prev) => Math.min(prev, Math.max(MIN_PANE_HEIGHT, height - MIN_PANE_HEIGHT)))
     })
     observer.observe(el)
@@ -115,32 +113,10 @@ export function NoteSidebar({
   }, [])
 
   return (
-    <ResizableSidebar
-      defaultWidth={220}
-      collapseStorageKey="gb-sidebar-collapsed:notes"
-      widthStorageKey="gb-sidebar-width:notes"
-      footer={
-        <div
-          style={{
-            borderRight: '1px solid var(--border-subtle)',
-            borderTop: '1px solid var(--border-subtle)',
-            background: 'var(--bg-sunken)',
-            padding: 'var(--space-2)',
-            display: 'flex',
-            gap: 'var(--space-2)',
-            flexShrink: 0,
-            minWidth: 0
-          }}
-        >
-          {footer}
-        </div>
-      }
-    >
       <div
         ref={splitRef}
         style={{
           height: '100%',
-          borderRight: '1px solid var(--border-subtle)',
           background: 'var(--bg-sunken)',
           display: 'flex',
           flexDirection: 'column',
@@ -247,6 +223,5 @@ export function NoteSidebar({
           </>
         )}
       </div>
-    </ResizableSidebar>
   )
 }

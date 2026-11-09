@@ -525,6 +525,13 @@ export function SpellsTab({ character, onSave, readOnly, canRoll = !readOnly, se
             getLabel={(s: CompendiumSpell) => s.name}
             getSublabel={(s: CompendiumSpell) => `${spellLevelLabel(s.level)}${s.classes.length ? ` · ${s.classes.join(', ')}` : ''}${s.id.startsWith('pack:') ? ' · homebrew' : ''}`}
             onPick={addFromCompendium}
+            getHover={(s: CompendiumSpell) => ({
+              title: s.name,
+              subtitle: `${spellLevelLabel(s.level)} ${s.school}${s.ritual ? ' (ritual)' : ''}`,
+              fields: spellFields(s),
+              description: s.description,
+              extra: s.higherLevel ? { label: 'At Higher Levels', value: s.higherLevel } : undefined
+            })}
             onAddCustom={openCreateForm}
             buttonLabel="+ Add Spell"
             searchPlaceholder={packSpells.length ? 'Search spells…' : 'Search SRD spells…'}

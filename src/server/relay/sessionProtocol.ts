@@ -40,6 +40,7 @@ export type RequestKind =
   | 'presence.selectCharacter'
   | 'characters.sync'
   | 'characters.getPlayerCharacter'
+  | 'initiative.get'
   | 'initiative.setMine'
   | 'dice.roll'
   | 'sfxBoard.play'

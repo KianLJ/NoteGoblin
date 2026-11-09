@@ -11,8 +11,8 @@ interface MessagesButtonProps {
 }
 
 /**
- * Header-level Messages entry point — same popover pattern as FriendsMenu.tsx
- * right next to it. ChatPanel itself stays mounted at all times (just hidden
+ * Header-level Messages entry point — a popover rather than a canvas tool,
+ * so it's one click away whatever's on the canvas. ChatPanel itself stays mounted at all times (just hidden
  * via CSS when the popover's closed, not unmounted), so its own live unread
  * tracking (Party's local counter in particular — see ChatPanel.tsx) keeps
  * running in the background instead of resetting every time you close this.

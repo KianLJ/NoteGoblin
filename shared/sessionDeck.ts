@@ -22,6 +22,23 @@ export interface SessionScene {
   moodId: string | null
   /** A specific track id within `moodId` (bundled or one of the DM's own custom additions) — presenting this scene plays exactly this track instead of a random pick from the mood. Meaningless without `moodId` set; always null when it is null. */
   trackId: string | null
+  /**
+   * Shown to the table: set when the DM first presents this scene, never unset. Players only ever see revealed
+   * scenes (see campaignService.listSessionDecks/listNotes). Left out on decks presented before scenes were
+   * revealed one by one — on those, every scene counts as revealed (see sceneRevealed).
+   */
+  revealed?: boolean
+}
+
+/** Whether players may see a deck's scene — revealed, or on a deck presented before scenes were revealed one by one. */
+export function sceneRevealed(scene: SessionScene, scenes: SessionScene[], deckPresented: boolean): boolean {
+  if (scene.revealed) return true
+  return deckPresented && scenes.every((s) => s.revealed === undefined)
+}
+
+/** A deck's scenes with the old "everything presented is shown" rule written out as flags, before a new flag goes in. */
+export function withRevealFlags(scenes: SessionScene[], deckPresented: boolean): SessionScene[] {
+  return scenes.map((s) => ({ ...s, revealed: sceneRevealed(s, scenes, deckPresented) }))
 }
 
 export interface SessionDeck {

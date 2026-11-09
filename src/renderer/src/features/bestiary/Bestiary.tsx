@@ -3,6 +3,7 @@ import { BESTIARY_TYPES, formatCr, type BestiaryMonster } from '../../data/besti
 import { removeCustomMonster, isCustomMonster } from '../../data/customBestiary'
 import { PERSONAL_MONSTER_PACK_ID, moveLocalMonstersToPack, removePersonalMonster, type PackMonster } from '../../data/packMonsters'
 import { useAllMonsters } from '../../data/useAllMonsters'
+import { MonsterEditor, editsInPlace } from './MonsterEditor'
 import { XIcon } from '../../ui/icons'
 import { loadNpcs, createNpc, updateNpc, removeNpc, type Npc } from '../../data/npcs'
 import { generateNpcName } from '../../data/npcNames'
@@ -22,6 +23,9 @@ import { RACES } from '@shared/dnd5e'
 import { codexEntries, type CodexEntry } from '@shared/content/codexContent'
 import { HomebrewDetail } from './HomebrewDetail'
 import { WORKSHOP_SECTIONS } from '@shared/content/workshop'
+import { createPortal } from 'react-dom'
+import { popupLayer } from '../../ui/popupLayer'
+import type { CanvasEntry, CodexEntryKind } from '../canvas/canvasEntries'
 import { useActivePackRegistry } from '../content/pickerContent'
 import {
   EQUIPMENT,
@@ -35,7 +39,11 @@ import {
 } from '@shared/compendium'
 
 interface BestiaryProps {
-  onClose: () => void
+  onClose?: () => void
+  /** Fills a workspace canvas box instead of covering the screen — no backdrop, no close button, Escape left alone. */
+  embedded?: boolean
+  /** Offers "Add to canvas" for the selected monster, NPC, equipment, spell or magic item — it gets a box of its own. */
+  onAddToCanvas?: (entry: CanvasEntry) => void
   /** Present only when opened from a note's "Import from Bestiary" toolbar action — swaps the browse-only footer for an "Insert" button, restricts browsing to Monsters (the only category a note statblock can embed), and closes automatically once picked. */
   onPick?: (monster: BestiaryMonster) => void
   /** True only while a player is connected to a live campaign — monster stats are the DM's to reveal, not something to browse freely mid-game. Equipment/Spells/Magic Items stay open since none of that is secret. Never true for the DM's own view, or for a player who isn't currently connected to anyone. */
@@ -63,7 +71,7 @@ function toTitleCase(s: string): string {
  * own instead of only while building a character. Entirely local, no
  * network needed for any of it.
  */
-export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: BestiaryProps): JSX.Element {
+export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embedded = false, onAddToCanvas }: BestiaryProps): JSX.Element {
   useEffect(() => {
     void ensureCustomEntitySfxLoaded()
   }, [])
@@ -73,6 +81,8 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   const [selectedIndex, setSelectedIndex] = useState<string | null>(null)
   // Device-saved, pack (library + open campaign) and SRD creatures.
   const { monsters: everyMonster, refresh: refreshMonsters } = useAllMonsters()
+  // The creature open in the monster editor, if any.
+  const [editingMonster, setEditingMonster] = useState<PackMonster | null>(null)
   const [monsterNotice, setMonsterNotice] = useState<string | null>(null)
   const [movingMonsters, setMovingMonsters] = useState(false)
   const localMonsterCount = everyMonster.filter((m) => isCustomMonster(m.index)).length
@@ -104,12 +114,13 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
   const allMonsters: PackMonster[] = everyMonster
 
   useEffect(() => {
+    if (embedded) return
     function handleKeyDown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onClose?.()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [onClose, embedded])
 
   // Filters reset whenever the category changes — a leftover "Weapon" filter would just silently hide everything
   // once you switch to Spells, which has nothing called that.
@@ -262,24 +273,10 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
 
   const rarityOptions = useMemo(() => [...new Set(MAGIC_ITEMS.map((m) => m.rarity))].sort(), [])
 
-  return (
-    <div
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(20, 17, 12, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000
-      }}
-    >
+  const browser = (
       <div
-        className="gb-card"
-        style={{
+        className={embedded ? undefined : 'gb-card'}
+        style={embedded ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : {
           // % of the fixed, inset:0 backdrop (below), not vh/vw — vh/vw
           // always mean the *true* viewport, which no longer matches this
           // element's actual rendered size once App.tsx's font-scale
@@ -305,7 +302,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
             gap: 'var(--space-4)'
           }}
         >
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16, flexShrink: 0 }}>Codex</span>
+          {!embedded && <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16, flexShrink: 0 }}>Codex</span>}
           {!onPick && (
             <div style={{ display: 'flex', gap: 4, flex: 1 }}>
               {visibleCategories.map((c) => (
@@ -329,26 +326,29 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
               ))}
             </div>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              padding: 4,
-              flexShrink: 0
-            }}
-          >
-            <CloseIcon />
-          </button>
+          {!embedded && (
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                padding: 4,
+                flexShrink: 0
+              }}
+            >
+              <CloseIcon />
+            </button>
+          )}
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        <div className="gb-codex-split" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div
+            className="gb-codex-list"
             style={{
               width: 280,
               flexShrink: 0,
@@ -622,6 +622,44 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
               {effectiveCategory === 'Playing the Game' && (selectedTopic ? <RuleTopicDetail topic={selectedTopic} /> : <NoneSelected />)}
               {effectiveCategory === 'Homebrew' && (selectedHomebrew ? <HomebrewDetail entry={selectedHomebrew} /> : <NoneSelected />)}
             </div>
+            {!onPick && (() => {
+              const entry: CanvasEntry | null =
+                effectiveCategory === 'Monsters' && selectedMonster
+                  ? { kind: 'monster', monster: selectedMonster }
+                  : effectiveCategory === 'NPCs' && selectedNpc && !editingNpcId
+                    ? { kind: 'npc', id: selectedNpc.id, name: selectedNpc.name }
+                    : effectiveCategory === 'Equipment' && selectedEquipment
+                      ? { kind: 'equipment', id: selectedEquipment.id, name: selectedEquipment.name }
+                      : effectiveCategory === 'Spells' && selectedSpell
+                        ? { kind: 'spell', id: selectedSpell.id, name: selectedSpell.name }
+                        : effectiveCategory === 'Magic Items' && selectedMagicItem
+                          ? { kind: 'magicItem', id: selectedMagicItem.id, name: selectedMagicItem.name }
+                          : (effectiveCategory === 'Homebrew' || effectiveCategory === 'Spells') && selectedHomebrew
+                            ? { kind: 'homebrew', id: selectedHomebrew.key, name: selectedHomebrew.name }
+                            : null
+              const editable = effectiveCategory === 'Monsters' && selectedMonster
+              return (
+                ((entry && onAddToCanvas) || editable) && (
+                  <div style={{ padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+                    {editable && (
+                      <button
+                        type="button"
+                        className="gb-btn gb-btn--ghost"
+                        onClick={() => setEditingMonster(selectedMonster as PackMonster)}
+                        title={editsInPlace(selectedMonster as PackMonster) ? 'Change this creature' : 'Change it as your own copy, in My Creatures'}
+                      >
+                        ✎ {editsInPlace(selectedMonster as PackMonster) ? 'Edit' : 'Edit a copy'}
+                      </button>
+                    )}
+                    {entry && onAddToCanvas && (
+                      <button type="button" className="gb-btn gb-btn--secondary" onClick={() => onAddToCanvas(entry)} title="Give it a box of its own on the canvas">
+                        + Add to canvas
+                      </button>
+                    )}
+                  </div>
+                )
+              )
+            })()}
             {onPick && selectedMonster && (
               <div style={{ padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
                 <button type="button" className="gb-btn gb-btn--primary" onClick={() => onPick(selectedMonster)} style={{ width: '100%' }}>
@@ -632,7 +670,45 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null }: Be
           </div>
         </div>
       </div>
-    </div>
+  )
+
+  const withEditor = (
+    <>
+      {browser}
+      {editingMonster && (
+        <MonsterEditor
+          monster={editingMonster}
+          onClose={() => setEditingMonster(null)}
+          onSaved={(saved) => {
+            setEditingMonster(null)
+            refreshMonsters()
+            setSelectedIndex(saved.index)
+          }}
+        />
+      )}
+    </>
+  )
+
+  if (embedded) return withEditor
+  // Portaled: a note box on the zoomed workspace canvas can open this too.
+  return createPortal(
+    <div
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.()
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(20, 17, 12, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000
+      }}
+    >
+      {withEditor}
+    </div>,
+    popupLayer()
   )
 }
 
@@ -735,7 +811,46 @@ function DetailField({ label, value }: { label: string; value: string }): JSX.El
   )
 }
 
-function NpcDetail({ npc, onEdit }: { npc: Npc; onEdit: () => void }): JSX.Element {
+/**
+ * One Codex entry on its own, for its canvas box: an NPC, a piece of
+ * equipment, a spell or a magic item, looked up fresh (an NPC you've edited
+ * since shows its latest). Says so if it's gone.
+ */
+/** A content pack's entry on the canvas, read from the packs active now (it says so if its pack isn't). */
+function HomebrewEntryView({ entryKey }: { entryKey: string }): JSX.Element {
+  const { packs, registry } = useActivePackRegistry()
+  const entry = useMemo(() => codexEntries(registry, packs).find((e) => e.key === entryKey), [registry, packs, entryKey])
+  return (
+    <div style={{ overflowY: 'auto', padding: 'var(--space-4)' }}>
+      {entry ? <HomebrewDetail entry={entry} /> : <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>This homebrew isn’t in an active content pack right now.</div>}
+    </div>
+  )
+}
+
+export function CodexEntryView({ kind, id }: { kind: CodexEntryKind; id: string }): JSX.Element {
+  if (kind === 'homebrew') return <HomebrewEntryView entryKey={id} />
+  const npc = kind === 'npc' ? loadNpcs().find((n) => n.id === id) : undefined
+  const equipment = kind === 'equipment' ? EQUIPMENT.find((e) => e.id === id) : undefined
+  const spell = kind === 'spell' ? SPELLS.find((s) => s.id === id) : undefined
+  const magicItem = kind === 'magicItem' ? MAGIC_ITEMS.find((m) => m.id === id) : undefined
+  return (
+    <div style={{ overflowY: 'auto', padding: 'var(--space-4)' }}>
+      {npc ? (
+        <NpcDetail npc={npc} />
+      ) : equipment ? (
+        <EquipmentDetail item={equipment} />
+      ) : spell ? (
+        <SpellDetail spell={spell} />
+      ) : magicItem ? (
+        <MagicItemDetail item={magicItem} />
+      ) : (
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>This entry isn’t in the Codex any more.</div>
+      )}
+    </div>
+  )
+}
+
+function NpcDetail({ npc, onEdit }: { npc: Npc; onEdit?: () => void }): JSX.Element {
   return (
     <div>
       <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
@@ -762,9 +877,11 @@ function NpcDetail({ npc, onEdit }: { npc: Npc; onEdit: () => void }): JSX.Eleme
         <div style={{ flex: 1, minWidth: 0 }}>
           <DetailHeader name={npc.name || 'Unnamed NPC'} subtitle={[npc.race, npc.occupation].filter(Boolean).join(' · ')} />
         </div>
-        <button type="button" className="gb-btn gb-btn--secondary" onClick={onEdit} style={{ fontSize: 12, flexShrink: 0 }}>
-          Edit
-        </button>
+        {onEdit && (
+          <button type="button" className="gb-btn gb-btn--secondary" onClick={onEdit} style={{ fontSize: 12, flexShrink: 0 }}>
+            Edit
+          </button>
+        )}
       </div>
       {npc.notes && <p style={{ fontSize: 13, lineHeight: 1.6, marginTop: 'var(--space-3)', whiteSpace: 'pre-wrap' }}>{npc.notes}</p>}
     </div>

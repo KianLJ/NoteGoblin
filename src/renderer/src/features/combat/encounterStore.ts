@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { emptyInitiativeState, type InitiativeState } from '@shared/encounter'
 import { activeBattle, emptyBattleLibrary, emptyBattleMap, type BattleLibrary, type BattleMap } from '@shared/battleMap'
+import { loadSavedEncounters } from '../../data/savedEncounters'
 
 /**
  * The DM's live encounter — the initiative order and the battle map — held
@@ -102,12 +103,22 @@ export function switchBattle(id: string): void {
   resetBattleMap(activeBattle(library).map)
 }
 
-/** Opens the battle made for this saved encounter, if there is one (a session scene loading its encounter). */
+/**
+ * Opens the battle made for this saved encounter, if there is one (a session scene loading its encounter), and
+ * puts the encounter's saved enemy positions on whichever map is up — so its monsters land where they were saved.
+ * Call it before adding the monsters.
+ */
 export function switchToEncounterBattle(encounterId: string): boolean {
   const b = library.battles.find((x) => x.encounterId === encounterId)
-  if (!b) return false
-  switchBattle(b.id)
-  return true
+  if (b) switchBattle(b.id)
+  applyEncounterPlacements(encounterId)
+  return !!b
+}
+
+/** The saved encounter's enemy positions onto the map up now, for its monsters' tokens to take when they're placed. */
+export function applyEncounterPlacements(encounterId: string): void {
+  const saved = loadSavedEncounters().find((e) => e.id === encounterId)?.placements
+  if (saved && Object.keys(saved).length) setBattleMap((m) => ({ ...m, placements: { ...m.placements, ...saved } }), { record: false })
 }
 
 export function useBattleLibrary(): BattleLibrary {

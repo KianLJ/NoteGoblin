@@ -11,6 +11,13 @@ import type { Note } from '@shared/ipc'
  * is a separate, lighter push (sessionDecks.onSceneChanged) so clicking
  * "Next Scene" doesn't mean re-fetching every deck on every click.
  */
+// Every useSessionDecks in this window, told when any of them changes a campaign's decks — the Sessions box and a
+// scene note's own pickers each hold a copy, and one saving its stale copy would undo the other's change.
+const deckListeners = new Set<(campaignId: string) => Promise<void> | undefined>()
+async function decksChanged(campaignId: string): Promise<void> {
+  await Promise.all([...deckListeners].map((l) => l(campaignId)))
+}
+
 export function useSessionDecks(campaignId: string | null, sessionId: string | null, offlineDecks?: SessionDeck[] | null) {
   const isOffline = offlineDecks != null
   const [decks, setDecks] = useState<SessionDeck[]>([])
@@ -35,6 +42,15 @@ export function useSessionDecks(campaignId: string | null, sessionId: string | n
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (isOffline || !campaignId) return
+    const listener = (changed: string): Promise<void> | undefined => (changed === campaignId ? refresh() : undefined)
+    deckListeners.add(listener)
+    return () => {
+      deckListeners.delete(listener)
+    }
+  }, [campaignId, refresh, isOffline])
 
   useEffect(() => {
     if (isOffline) return
@@ -67,41 +83,47 @@ export function useSessionDecks(campaignId: string | null, sessionId: string | n
     if (isOffline || !campaignId) return undefined
     const result = await window.goblin.sessionDecks.create(campaignId, title, sessionId ?? undefined)
     if (!result.ok) return undefined
-    await refresh()
+    await decksChanged(campaignId)
     return result.data
   }
 
   async function renameDeck(deckId: string, title: string): Promise<void> {
     if (isOffline || !campaignId) return
     const result = await window.goblin.sessionDecks.update(campaignId, deckId, { title }, sessionId ?? undefined)
-    if (result.ok) setDecks((prev) => prev.map((d) => (d.id === deckId ? result.data : d)))
+    if (result.ok) {
+      setDecks((prev) => prev.map((d) => (d.id === deckId ? result.data : d)))
+      await decksChanged(campaignId)
+    }
   }
 
   /** Reorders and/or relinks encounters — `scenes` must be exactly this deck's existing scenes (see campaignService.validateSceneReorder), just reordered and/or with different encounterId values. */
   async function reorderScenes(deckId: string, scenes: SessionDeck['scenes']): Promise<void> {
     if (isOffline || !campaignId) return
     const result = await window.goblin.sessionDecks.update(campaignId, deckId, { scenes }, sessionId ?? undefined)
-    if (result.ok) setDecks((prev) => prev.map((d) => (d.id === deckId ? result.data : d)))
+    if (result.ok) {
+      setDecks((prev) => prev.map((d) => (d.id === deckId ? result.data : d)))
+      await decksChanged(campaignId)
+    }
   }
 
   async function removeDeck(deckId: string): Promise<void> {
     if (isOffline || !campaignId) return
     await window.goblin.sessionDecks.remove(campaignId, deckId, sessionId ?? undefined)
-    await refresh()
+    await decksChanged(campaignId)
   }
 
   async function addScene(deckId: string, title: string): Promise<Note | undefined> {
     if (isOffline || !campaignId) return undefined
     const result = await window.goblin.sessionDecks.addScene(campaignId, deckId, title, sessionId ?? undefined)
     if (!result.ok) return undefined
-    await refresh()
+    await decksChanged(campaignId)
     return result.data
   }
 
   async function removeScene(deckId: string, noteId: string): Promise<void> {
     if (isOffline || !campaignId) return
     await window.goblin.sessionDecks.removeScene(campaignId, deckId, noteId, sessionId ?? undefined)
-    await refresh()
+    await decksChanged(campaignId)
   }
 
   function present(deckId: string): void {
@@ -109,7 +131,7 @@ export function useSessionDecks(campaignId: string | null, sessionId: string | n
   }
 
   function setLiveSceneIndex(index: number): void {
-    if (!isOffline) void window.goblin.sessionDecks.setScene(index)
+    if (!isOffline) void window.goblin.sessionDecks.setScene(index, campaignId ?? undefined, live.deckId ?? undefined)
   }
 
   function stopPresenting(): void {
