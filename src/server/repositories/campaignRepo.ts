@@ -63,6 +63,11 @@ export class CampaignRepo {
       .run(campaignId, userId, role)
   }
 
+  listMembers(campaignId: string): Array<{ userId: string; role: CampaignRole }> {
+    const rows = this.db.prepare('SELECT user_id, role FROM campaign_members WHERE campaign_id = ?').all(campaignId) as { user_id: string; role: CampaignRole }[]
+    return rows.map((r) => ({ userId: r.user_id, role: r.role }))
+  }
+
   getRole(campaignId: string, userId: string): CampaignRole | null {
     const row = this.db
       .prepare('SELECT role FROM campaign_members WHERE campaign_id = ? AND user_id = ?')

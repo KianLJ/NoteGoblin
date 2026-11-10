@@ -584,6 +584,8 @@ export function InitiativeTracker({
               onSetDismembermentEnabled={(v) => patch({ dismembermentEnabled: v })}
               deathSavesPrivate={state.deathSavesPrivate}
               onSetDeathSavesPrivate={(v) => patch({ deathSavesPrivate: v })}
+              shuffleEnemyOrder={!!state.shuffleEnemyOrder}
+              onSetShuffleEnemyOrder={(v) => patch({ shuffleEnemyOrder: v })}
             />
           </div>
 
@@ -1299,12 +1301,16 @@ function TrackerSettingsMenu({
   dismembermentEnabled,
   onSetDismembermentEnabled,
   deathSavesPrivate,
-  onSetDeathSavesPrivate
+  onSetDeathSavesPrivate,
+  shuffleEnemyOrder,
+  onSetShuffleEnemyOrder
 }: {
   dismembermentEnabled: boolean
   onSetDismembermentEnabled: (value: boolean) => void
   deathSavesPrivate: boolean
   onSetDeathSavesPrivate: (value: boolean) => void
+  shuffleEnemyOrder: boolean
+  onSetShuffleEnemyOrder: (value: boolean) => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -1373,6 +1379,13 @@ function TrackerSettingsMenu({
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <input type="checkbox" checked={deathSavesPrivate} onChange={(e) => onSetDeathSavesPrivate(e.target.checked)} />
             Private death saves
+          </label>
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}
+            title="Players see the enemies in a random order, so where an enemy sits doesn't give away its initiative roll"
+          >
+            <input type="checkbox" checked={shuffleEnemyOrder} onChange={(e) => onSetShuffleEnemyOrder(e.target.checked)} />
+            Random enemy order for players
           </label>
         </div>
       )}

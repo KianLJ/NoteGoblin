@@ -136,6 +136,20 @@ describe('battles: remembered positions, party starts and hiding', () => {
     expect(order.turnIndex).toBe(-1)
   })
 
+  it('shows players the real enemy order unless the DM turns on random order', async () => {
+    const { sanitizeForPlayer } = await import('@shared/encounter')
+    const combatants = [c('pc', 'player', { userId: 'u1', initiative: 25 }), ...Array.from({ length: 8 }, (_, i) => c(`m${i}`, 'monster', { initiative: 20 - i }))]
+    const real = combatants.map((x) => x.id)
+    for (let i = 0; i < 5; i++) expect(sanitizeForPlayer({ ...emptyInitiativeState(), combatants }, 'u1').combatants.map((x) => x.id)).toEqual(real)
+    // On: the same enemies, the player still first; 8 enemies all landing in order every time would be a 1-in-40320⁵ fluke.
+    const shuffled = Array.from({ length: 5 }, () => sanitizeForPlayer({ ...emptyInitiativeState(), shuffleEnemyOrder: true, combatants }, 'u1').combatants.map((x) => x.id))
+    for (const ids of shuffled) {
+      expect(ids[0]).toBe('pc')
+      expect([...ids].sort()).toEqual([...real].sort())
+    }
+    expect(shuffled.some((ids) => ids.join() !== real.join())).toBe(true)
+  })
+
   it('reads a campaign saved before battles as a library of one', async () => {
     const { normalizeBattleLibrary } = await import('@shared/battleMap')
     const lib = normalizeBattleLibrary({ cols: 30, rows: 20, fog: [], templates: [], tokens: {} })

@@ -1,5 +1,5 @@
 // Dev-only: the canvas and its newer pieces with sample content, for screenshots in the "What's new" post.
-// Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor, =encounters, =cues). Not part of the app build.
+// Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor, =encounters, =cues, =hidden). Not part of the app build.
 import { useState } from 'react'
 import { Canvas } from '../features/canvas/Canvas'
 import { TOOL_ICONS } from '../features/canvas/toolIcons'
@@ -11,6 +11,8 @@ import { MonsterEditor } from '../features/bestiary/MonsterEditor'
 import { EncounterLibrary } from '../features/combat/EncounterLibrary'
 import { SessionPresenter, SessionsList, type SessionDecksApi } from '../features/campaigns/SessionTimeline'
 import { SceneCues } from '../features/campaigns/SceneCues'
+import { MarkdownLiveEditor } from '../features/campaigns/MarkdownLiveEditor'
+import { renderNoteMarkdown } from '../markdown'
 import { loadSavedEncounters } from '../data/savedEncounters'
 import type { Note } from '@shared/ipc'
 import { readingOrder } from '@shared/canvasLayout'
@@ -300,9 +302,27 @@ function CuesShot(): JSX.Element {
   )
 }
 
+// A note with a hidden (::) block: as you write it, and as it reads.
+const HIDDEN_NOTE = ['The party reaches the chapel door at dusk.', '', '::', 'The door is trapped: DC 14 Perception to spot the wire.', 'Brother Aldric is the cultist.', '::', '', 'Inside, candles are still burning.', '', ':: @u1', 'Ann knows the side door is unlocked.', '::'].join('\n')
+const SHOW_PLAYERS = [
+  { userId: 'u1', displayName: 'Ann' },
+  { userId: 'u2', displayName: 'Bram' }
+]
+function HiddenShot(): JSX.Element {
+  const titles = { current: new Set<string>() }
+  const notes = { current: [] as Note[] }
+  return (
+    <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, padding: 24, background: 'var(--bg-surface)' }}>
+      <MarkdownLiveEditor defaultValue={HIDDEN_NOTE} campaignId="camp" knownTitlesRef={titles} notesRef={notes} onChange={() => {}} onWikilinkClick={() => {}} players={SHOW_PLAYERS} />
+      <div className="gb-markdown" dangerouslySetInnerHTML={{ __html: renderNoteMarkdown(HIDDEN_NOTE, new Set(), 'camp', new Map(SHOW_PLAYERS.map((p) => [p.userId, p.displayName]))) }} />
+    </div>
+  )
+}
+
 export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
   if (scene === 'audio') return <AudioShot />
   if (scene === 'cues') return <CuesShot />
+  if (scene === 'hidden') return <HiddenShot />
   if (scene === 'encounters') return <EncountersShot />
   if (scene === 'editor') return <MonsterEditor monster={goblin} onClose={() => {}} onSaved={() => {}} />
   if (scene === 'statblock') return <StatblockShot />

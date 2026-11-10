@@ -247,6 +247,13 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     })
   }, [activeCampaign])
 
+  // DM: while hosting, this window gets the table's live updates — presenting's scene changes, players' edits —
+  // whatever's open on the canvas. (The Players box used to be the only thing subscribing, so with it closed,
+  // Present started for the players but the presenter bar never came up here.)
+  useEffect(() => {
+    if (hostedSessionId && activeCampaign) window.goblin.presence.subscribe(hostedSessionId, activeCampaign.id)
+  }, [hostedSessionId, activeCampaign])
+
   // Player: subscribe to presence once connected to a campaign, and keep the
   // rest of the table updated about which character you're currently on.
   useEffect(() => {

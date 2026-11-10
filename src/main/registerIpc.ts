@@ -599,6 +599,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   }
 
   ipcMain.handle(
+    'campaigns:players',
+    async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Array<{ userId: string; displayName: string }>>> => {
+      if (!sessionId || isOwnHostedCall(sessionId)) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        const result = campaignService.listCampaignPlayers(me.db, campaignId, me.userId)
+        return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest('campaigns.players', { campaignId })
+    }
+  )
+
+  ipcMain.handle(
     'campaigns:list',
     async (_event, sessionId?: string): Promise<ApiResult<Campaign[]>> => {
       if (!sessionId) {

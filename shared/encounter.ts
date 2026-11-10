@@ -70,6 +70,8 @@ export interface InitiativeState {
   deathSavesPrivate: boolean
   /** Per-encounter opt-in (defaults off) — a single hit dealing 1/4 or more of a combatant's max HP offers the DM a dismemberment (dice-rolled or manually chosen body part), and a hit that kills outright with damage at or past their full max HP offers a beheading/cut-in-half instead. Applies to any combatant taking damage, player or monster, not just monsters — see InitiativeTracker.tsx's applyDamageOrHeal. */
   dismembermentEnabled: boolean
+  /** Off by default: players see enemies in their real turn order. On, enemies are shuffled among themselves in each player's view, so where they sit doesn't give away their rolls (see sanitizeForPlayer). */
+  shuffleEnemyOrder?: boolean
   /** Index into `combatants` (already sorted by initiative, highest first) whose turn it is. -1 = combat not started yet. */
   turnIndex: number
   combatants: Combatant[]
@@ -170,7 +172,7 @@ export interface PlayerVisibleInitiativeState {
   combatants: PlayerVisibleCombatant[]
 }
 
-/** Fisher-Yates — used only to scramble monster display order for players (see sanitizeForPlayer), not anything gameplay-affecting. */
+/** Fisher-Yates — used only to scramble monster display order for players when the DM turns that on (see sanitizeForPlayer), not anything gameplay-affecting. */
 function shuffle<T>(items: T[]): T[] {
   const result = [...items]
   for (let i = result.length - 1; i > 0; i--) {
@@ -192,14 +194,14 @@ export function sanitizeForPlayer(state: InitiativeState, viewerUserId: string):
   // (see PlayerVisibleCombatant.initiative being real only for player
   // combatants below) — but its position in a real-initiative-sorted list
   // still leaks its roll relative to the other monsters (and to the
-  // player's own real initiative). Shuffling just the monster slots among
+  // player's own real initiative). With shuffleEnemyOrder on, shuffling just the monster slots among
   // themselves removes that, while player combatants keep their real
   // positions (normal party knowledge). Reshuffled fresh on every
   // broadcast/request, independently per viewer, so there's no stable
   // pattern to correlate against, and it fixes up turnIndex to still point
   // at whoever's actually active after the reorder.
   const activeId = state.turnIndex >= 0 ? sortedByInitiative(state.combatants)[state.turnIndex]?.id : undefined
-  const monsterSlots = ordered.reduce<number[]>((slots, c, i) => {
+  const monsterSlots = (state.shuffleEnemyOrder ? ordered : []).reduce<number[]>((slots, c, i) => {
     if (c.kind === 'monster' || (c.kind === 'vehicle' && !c.party)) slots.push(i)
     return slots
   }, [])

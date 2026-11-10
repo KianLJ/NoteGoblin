@@ -286,6 +286,8 @@ export interface AppApi {
   // reaching the DM's.
   campaigns: {
     list: (sessionId?: string) => Promise<ApiResult<Campaign[]>>
+    /** The campaign's players (not the DM) — whom a note's hidden block can be shown to. */
+    players: (campaignId: string, sessionId?: string) => Promise<ApiResult<Array<{ userId: string; displayName: string }>>>
     create: (name: string, sessionId?: string) => Promise<ApiResult<Campaign>>
     /** DM-only, always local (no sessionId) — you can only rename your own campaign. */
     rename: (campaignId: string, name: string) => Promise<ApiResult<Campaign>>

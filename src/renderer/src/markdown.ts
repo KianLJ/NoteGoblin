@@ -1,3 +1,4 @@
+import { hiddenBlockLabel, hiddenBlocks } from '@shared/sessionDeck'
 import { Marked, type Tokens } from 'marked'
 import DOMPurify from 'dompurify'
 import { WIKILINK_PATTERN, wikilinkAlias, wikilinkTarget } from './wikilink'
@@ -48,7 +49,23 @@ export function escapeHtml(value: string): string {
  * default export) so the wikilink extension's `knownTitles` closure never
  * leaks between notes.
  */
-export function renderNoteMarkdown(source: string, knownTitles: Set<string>, campaignId: string): string {
+/** A note's `::` hidden blocks (see shared/sessionDeck.ts) as boxes of their own, for whoever can see them. */
+function markHiddenBlocks(source: string, names?: Map<string, string>): string {
+  const lines = source.split('\n')
+  const blocks = hiddenBlocks(lines)
+  if (blocks.length === 0) return source
+  // Blank lines around the inner text, so it's still read as markdown inside the box.
+  for (const b of [...blocks].reverse()) {
+    if (b.close !== null) lines.splice(b.close, 1, '', '</div>', '')
+    const label = hiddenBlockLabel(b.audience, (id) => names?.get(id)).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+    lines.splice(b.open, 1, '', `<div class="gb-hidden-block" data-label="${label}">`, '')
+    if (b.close === null) lines.push('', '</div>', '')
+  }
+  return lines.join('\n')
+}
+
+/** `names`: players by id, so a hidden block's label can say who else sees it. */
+export function renderNoteMarkdown(source: string, knownTitles: Set<string>, campaignId: string, names?: Map<string, string>): string {
   try {
     const instance = new Marked({ gfm: true, breaks: true })
 
@@ -158,7 +175,7 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
       ]
     })
 
-    const html = instance.parse(source, { async: false }) as string
+    const html = instance.parse(markHiddenBlocks(source, names), { async: false }) as string
     const sanitize = (DOMPurify as unknown as { sanitize?: typeof DOMPurify.sanitize }).sanitize
     if (typeof sanitize !== 'function') {
       // DOMPurify couldn't find a DOM to bind to in this environment — fail

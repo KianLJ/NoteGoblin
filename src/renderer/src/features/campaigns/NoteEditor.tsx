@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { Note } from '@shared/ipc'
 import { renderNoteMarkdown } from '../../markdown'
-import { MarkdownLiveEditor, type MarkdownLiveEditorHandle } from './MarkdownLiveEditor'
+import { MarkdownLiveEditor, type MarkdownLiveEditorHandle, type TablePlayer } from './MarkdownLiveEditor'
 import { EyeIcon, ImageIcon, ImportFromCodexIcon, LinkIcon, PencilIcon, TableIcon } from './icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
 import { saveMonster } from '../../data/packMonsters'
@@ -300,7 +300,19 @@ export function NoteEditor({
     [notes, note.id, body]
   )
 
-  const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles, note.campaignId), [body, knownTitles, note.campaignId])
+  // The campaign's players: whom a hidden (::) block can be shown to, and the names on its label.
+  const [players, setPlayers] = useState<TablePlayer[]>([])
+  useEffect(() => {
+    let live = true
+    void window.goblin.campaigns.players(note.campaignId, sessionId ?? undefined).then((r) => {
+      if (live && r.ok) setPlayers(r.data)
+    })
+    return () => {
+      live = false
+    }
+  }, [note.campaignId, sessionId])
+  const playerNames = useMemo(() => new Map(players.map((p) => [p.userId, p.displayName])), [players])
+  const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles, note.campaignId, playerNames), [body, knownTitles, note.campaignId, playerNames])
   const linkableNotes = useMemo(
     () =>
       notes
@@ -458,6 +470,7 @@ export function NoteEditor({
           onWikilinkContextMenu={handleWikilinkContextMenu}
           onDiceRoll={rollFromDice}
           onOneShotPlay={playOneShot}
+          players={players}
           readOnly={readOnly}
         />
       </div>

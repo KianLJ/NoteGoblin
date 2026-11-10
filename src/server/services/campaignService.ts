@@ -12,7 +12,7 @@ import { dependents, enableProblems } from '@shared/content/packFiles'
 import { contentPackSchema } from '@shared/content/schema'
 import { SessionDeckRepo, type SessionDeckRow } from '../repositories/sessionDeckRepo'
 import { UserRepo } from '../repositories/userRepo'
-import { stripDmAsides, type SessionScene, readScene, sceneRevealed, withRevealFlags } from '@shared/sessionDeck'
+import { mergeHiddenBlocks, stripDmAsides, type SessionScene, readScene } from '@shared/sessionDeck'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
 import {
@@ -61,6 +61,7 @@ interface CampaignRepoLike {
   remove(id: string): void
   addMember(campaignId: string, userId: string, role: CampaignRole): void
   getRole(campaignId: string, userId: string): CampaignRole | null
+  listMembers(campaignId: string): Array<{ userId: string; role: CampaignRole }>
   touchContentVersion(id: string, timestamp: string): void
 }
 
@@ -227,13 +228,12 @@ function parseEditorUserIds(raw: string): string[] {
 }
 
 /**
- * `viewerIsDm` only matters for a scene note (row.scene_deck_id set) — its
- * `::`-prefixed lines are DM-only asides (see shared/sessionDeck.ts) that
- * must never reach a player, on ANY read path that can return this row, not
- * just the session-deck-specific one. A normal (non-scene) note ignores it
- * entirely since it has no such lines to strip.
+ * `canSeeHidden`: the viewer is the note's author or the DM. Anyone else
+ * (`viewerId`) gets the note with the `::` hidden blocks they aren't named on
+ * taken out (see shared/sessionDeck.ts), on every read path that can return
+ * this row.
  */
-function toNoteJson(userRepo: UserRepo, row: NoteRow, viewerIsDm: boolean): NoteJson {
+function toNoteJson(userRepo: UserRepo, row: NoteRow, canSeeHidden: boolean, viewerId?: string): NoteJson {
   const author = userRepo.findById(row.author_user_id)
   return {
     id: row.id,
@@ -241,7 +241,7 @@ function toNoteJson(userRepo: UserRepo, row: NoteRow, viewerIsDm: boolean): Note
     authorUserId: row.author_user_id,
     authorDisplayName: author?.display_name ?? 'Unknown',
     title: row.title,
-    bodyMarkdown: row.scene_deck_id && !viewerIsDm ? stripDmAsides(row.body_markdown) : row.body_markdown,
+    bodyMarkdown: canSeeHidden ? row.body_markdown : stripDmAsides(row.body_markdown, viewerId),
     visibility: row.visibility,
     folderId: row.folder_id,
     editorUserIds: parseEditorUserIds(row.editor_user_ids),
@@ -581,10 +581,11 @@ export function listNotes(
     if (!deck?.presented_at) return false
     const scenes = parseScenes(deck.scenes_json)
     const scene = scenes.find((s) => s.noteId === row.id)
-    return !!scene && sceneRevealed(scene, scenes, true)
+    return !!scene?.revealed
   }
   const visibleRows = viewerIsDm ? rows : rows.filter(sceneShown)
-  return { ok: true, data: visibleRows.map((row) => toNoteJson(userRepo, row, viewerIsDm)) }
+  // A note's `::` hidden blocks are for its author and the DM only.
+  return { ok: true, data: visibleRows.map((row) => toNoteJson(userRepo, row, viewerIsDm || row.author_user_id === userId, userId)) }
 }
 
 export function createNote(
@@ -626,7 +627,23 @@ export function createNote(
     visibility,
     folderId: resolvedFolderId
   })
-  return { ok: true, data: toNoteJson(userRepo, row, campaign.dm_user_id === userId) }
+  return { ok: true, data: toNoteJson(userRepo, row, true) }
+}
+
+/** The campaign's players (not the DM), by name — whom a note's hidden block can be shown to. Any member may ask. */
+export function listCampaignPlayers(db: DatabaseType, campaignId: string, userId: string): ServiceResult<Array<{ userId: string; displayName: string }>> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  const users = new UserRepo(db)
+  return {
+    ok: true,
+    data: campaignRepo
+      .listMembers(campaign.id)
+      .filter((m) => m.role !== 'dm' && m.userId !== campaign.dm_user_id)
+      .map((m) => ({ userId: m.userId, displayName: users.findById(m.userId)?.display_name ?? 'A player' }))
+  }
 }
 
 export function updateNote(
@@ -725,9 +742,11 @@ export function updateNote(
     if ('error' in folderCheck) return { ok: false, status: 400, error: folderCheck.error }
   }
 
+  // Someone who was never shown this note's hidden blocks saved it: the blocks go back in rather than being wiped.
+  const canSeeHidden = isAuthor || isDm
   const updated = noteRepo.update(note.id, {
     title: typeof input.title === 'string' ? input.title.trim() : undefined,
-    bodyMarkdown: typeof input.bodyMarkdown === 'string' ? input.bodyMarkdown : undefined,
+    bodyMarkdown: typeof input.bodyMarkdown === 'string' ? (canSeeHidden ? input.bodyMarkdown : mergeHiddenBlocks(note.body_markdown, input.bodyMarkdown, userId)) : undefined,
     ...(folderId !== undefined ? { folderId } : {}),
     ...(visibility ? { visibility } : {}),
     ...(editorUserIds !== undefined ? { editorUserIds } : {}),
@@ -739,7 +758,7 @@ export function updateNote(
   // move and miss it. Surfacing a clean error here beats crashing on
   // `undefined.author_user_id` in toNoteJson.
   if (!updated) return { ok: false, status: 404, error: 'Note not found after update — try again.' }
-  return { ok: true, data: toNoteJson(userRepo, updated, isDm) }
+  return { ok: true, data: toNoteJson(userRepo, updated, canSeeHidden, userId) }
 }
 
 export function deleteNote(
@@ -1562,14 +1581,15 @@ export function listSessionDecks(db: DatabaseType, campaignId: string, userId: s
       // nothing to browse ahead of the DM's narration. Once presented, a
       // deck stays visible forever (presented_at never resets), so past
       // sessions stay browsable exactly like the DM's own view.
-      .filter((row) => isDm || row.presented_at !== null)
       .map((row) => {
         const deck = toSessionDeckJson(row)
         if (isDm) return deck
         // Players get only the scenes the DM has presented — what's still to come stays the DM's.
-        const shown = deck.scenes.filter((s) => sceneRevealed(s, deck.scenes, true))
+        const shown = deck.scenes.filter((s) => s.revealed)
         return { ...deck, scenes: shown.map((s) => ({ noteId: s.noteId, encounterIds: [], music: [] })) }
       })
+      // And a session with nothing presented yet isn't listed for them at all.
+      .filter((deck) => isDm || deck.scenes.length > 0)
   }
 }
 
@@ -1598,7 +1618,7 @@ export function revealScene(db: DatabaseType, campaignId: string, deckId: string
   const deckRepo = new SessionDeckRepo(db)
   const deck = deckRepo.findById(deckId)
   if (!deck || deck.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
-  const scenes = withRevealFlags(parseScenes(deck.scenes_json), deck.presented_at !== null)
+  const scenes = parseScenes(deck.scenes_json)
   if (!scenes[sceneIndex] || scenes[sceneIndex].revealed) return { ok: true, data: false }
   deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes.map((s, i) => (i === sceneIndex ? { ...s, revealed: true } : s))) })
   return { ok: true, data: true }
@@ -1684,7 +1704,7 @@ export function addSceneToDeck(db: DatabaseType, campaignId: string, deckId: str
     sceneDeckId: deckId
   })
 
-  const scenes = [...withRevealFlags(parseScenes(deck.scenes_json), deck.presented_at !== null), { noteId: note.id, encounterIds: [], music: [], revealed: false }]
+  const scenes = [...parseScenes(deck.scenes_json), { noteId: note.id, encounterIds: [], music: [], revealed: false }]
   deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes) })
 
   return { ok: true, data: toNoteJson(userRepo, note, true) }

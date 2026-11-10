@@ -547,6 +547,8 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
     typeof p[key] === 'object' && p[key] !== null ? (p[key] as Record<string, unknown>) : {}
 
   switch (frame.kind) {
+    case 'campaigns.players':
+      return fromService(frame.reqId, campaignService.listCampaignPlayers(db, str('campaignId'), userId))
     case 'campaigns.list':
       return fromService(frame.reqId, campaignService.listCampaigns(db, userId))
     case 'campaigns.create':

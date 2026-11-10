@@ -6,6 +6,7 @@ import editorShot from '../assets/whatsnew/0.10.0/editor.jpg'
 import cuesShot from '../assets/whatsnew/0.11.1/cues.jpg'
 import encountersShot from '../assets/whatsnew/0.11.1/encounters.jpg'
 import woundsShot from '../assets/whatsnew/0.11.1/wounds.png'
+import hiddenShot from '../assets/whatsnew/0.11.2/hidden.png'
 
 export interface WhatsNewSection {
   heading: string
@@ -30,6 +31,27 @@ export interface WhatsNewPost {
 
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
+  {
+    version: '0.11.2',
+    title: 'Secrets in any note',
+    intro: 'Hidden text now works everywhere, and you choose who gets to read it. Plus a few fixes to presenting and the turn order.',
+    sections: [
+      {
+        heading: 'Hide part of any note',
+        body: 'Select some lines, right-click and choose Hide from other players. Only you and the DM can read them now, in any note, not just session scenes. To let someone in, right-click inside the hidden part and tick them under Who else can see it, or pick them straight away with Hide, but let one player see it. Hidden parts show as a tinted box that says who else sees it, and Unhide puts the text back for everyone. If someone who can’t see a hidden part edits the note, the hidden part is kept.',
+        image: hiddenShot,
+        caption: 'Two hidden parts: one for nobody else, one Ann can also read, with the right-click menu open.'
+      },
+      {
+        heading: 'Presenting fixed',
+        body: 'Pressing Present brings up your presenting controls again, whether or not the Players box is open. Players now see a session only once you present it, and only the scenes you’ve shown them.'
+      },
+      {
+        heading: 'The turn order, your way',
+        body: 'Players now see the enemies in their real turn order. If you’d rather keep enemies’ initiative a mystery, turn on Random enemy order for players in the initiative tracker’s settings. Players can also see every combatant’s wounds on their Combat screen, enemies and allies alike.'
+      }
+    ]
+  },
   {
     version: '0.11.1',
     title: 'Busier scenes, and an encounter library',

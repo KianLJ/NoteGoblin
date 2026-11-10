@@ -66,6 +66,7 @@ const api: AppApi = {
   },
   campaigns: {
     list: (sessionId) => ipcRenderer.invoke('campaigns:list', sessionId),
+    players: (campaignId, sessionId) => ipcRenderer.invoke('campaigns:players', campaignId, sessionId),
     create: (name, sessionId) => ipcRenderer.invoke('campaigns:create', name, sessionId),
     rename: (campaignId, name) => ipcRenderer.invoke('campaigns:rename', campaignId, name),
     delete: (campaignId) => ipcRenderer.invoke('campaigns:delete', campaignId),

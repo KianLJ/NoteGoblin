@@ -47,22 +47,11 @@ export interface SessionScene {
   music: SceneMusic[]
   /**
    * Shown to the table: set when the DM first presents this scene, never unset. Players only ever see revealed
-   * scenes (see campaignService.listSessionDecks/listNotes). Left out on decks presented before scenes were
-   * revealed one by one — on those, every scene counts as revealed (see sceneRevealed).
+   * scenes, and a session only once one of its scenes is (see campaignService.listSessionDecks/listNotes).
    */
   revealed?: boolean
 }
 
-/** Whether players may see a deck's scene — revealed, or on a deck presented before scenes were revealed one by one. */
-export function sceneRevealed(scene: SessionScene, scenes: SessionScene[], deckPresented: boolean): boolean {
-  if (scene.revealed) return true
-  return deckPresented && scenes.every((s) => s.revealed === undefined)
-}
-
-/** A deck's scenes with the old "everything presented is shown" rule written out as flags, before a new flag goes in. */
-export function withRevealFlags(scenes: SessionScene[], deckPresented: boolean): SessionScene[] {
-  return scenes.map((s) => ({ ...s, revealed: sceneRevealed(s, scenes, deckPresented) }))
-}
 
 export interface SessionDeck {
   id: string
@@ -81,34 +70,114 @@ export interface LiveSceneState {
 
 /**
  * A block bounded by a line that's just `::` and the next line that's just
- * `::` is a DM-only section — NPC lines to remember, mood cues, private
- * hints to self, often spanning several lines/paragraphs of their own
- * formatting — kept in the DM's own editor view but never sent to players
- * at all (stripped server-side in campaignService's toNoteJson, not just
- * hidden client-side, so it never leaves the DM's machine):
+ * `::` is hidden: in any note, only its author and the DM see it — NPC
+ * lines to remember, mood cues, a player's private plans, often several
+ * lines/paragraphs of their own formatting. It's stripped on the host
+ * (campaignService's toNoteJson) before the note goes to anyone else, not
+ * just hidden in their app, so it never reaches them:
  *
  *   ::
- *   **Description**
- *   - Rain outside.
- *
  *   **NPCs**
  *   - Martha Reed (bartender)
  *   ::
  *
- * An unclosed trailing `::` (the DM started a hidden section and hasn't
- * closed it yet) strips to the end of the note rather than leaking the rest
- * verbatim — better to over-hide a still-being-written aside than reveal one.
+ * An unclosed trailing `::` (a hidden section still being written) hides to
+ * the end of the note rather than leaking the rest — better to over-hide
+ * than reveal.
  */
-export function stripDmAsides(bodyMarkdown: string): string {
+// A fence: `::` alone, or an opening `::` naming who else may see the block — `:: @<userId> @<userId>`.
+const FENCE = /^\s*::((?:\s+@[\w.:-]+)*)\s*$/
+
+export function isHiddenFence(line: string): boolean {
+  return FENCE.test(line)
+}
+
+/** The ids an opening fence names (`:: @a @b`) — the players besides the writer and the DM who may see its block. */
+export function fenceAudience(line: string): string[] {
+  const m = FENCE.exec(line)
+  return m ? [...m[1].matchAll(/@([\w.:-]+)/g)].map((x) => x[1]) : []
+}
+
+/** An opening fence for these players (bare `::` for nobody else). */
+export function fenceFor(audience: string[]): string {
+  return ['::', ...audience.map((id) => `@${id}`)].join(' ')
+}
+
+export interface HiddenBlock {
+  open: number
+  /** null: it runs to the end of the note. */
+  close: number | null
+  /** Who else may see it, from its opening fence. */
+  audience: string[]
+}
+
+/** The hidden blocks in a note's lines. */
+export function hiddenBlocks(lines: string[]): HiddenBlock[] {
+  const blocks: HiddenBlock[] = []
+  let open: number | null = null
+  lines.forEach((line, i) => {
+    if (!isHiddenFence(line)) return
+    if (open === null) open = i
+    else {
+      blocks.push({ open, close: i, audience: fenceAudience(lines[open]) })
+      open = null
+    }
+  })
+  if (open !== null) blocks.push({ open, close: null, audience: fenceAudience(lines[open]) })
+  return blocks
+}
+
+/** A note's text as someone who isn't its writer or the DM gets it: the hidden blocks they're not named on taken out. */
+export function stripDmAsides(bodyMarkdown: string, viewerId?: string): string {
   const lines = bodyMarkdown.split('\n')
-  const kept: string[] = []
-  let hidden = false
-  for (const line of lines) {
-    if (line.trim() === '::') {
-      hidden = !hidden
+  const hidden = new Set<number>()
+  for (const b of hiddenBlocks(lines)) {
+    if (viewerId && b.audience.includes(viewerId)) continue
+    for (let i = b.open; i <= (b.close ?? lines.length - 1); i++) hidden.add(i)
+  }
+  return lines.filter((_, i) => !hidden.has(i)).join('\n')
+}
+
+/**
+ * Someone who couldn't see some of a note's hidden blocks (another player
+ * editing a shared note) saved `edited`: puts those blocks from `stored`
+ * back, so their save never wipes what they were never shown. Each goes back
+ * after the line it followed (the nearest non-blank line before it), found
+ * again in the edited text; if that line's gone, the block goes at the end
+ * rather than being lost. Blocks they could see were in what they edited.
+ */
+export function mergeHiddenBlocks(stored: string, edited: string, viewerId?: string): string {
+  const lines = stored.split('\n')
+  const blocks = hiddenBlocks(lines).filter((b) => !(viewerId && b.audience.includes(viewerId)))
+  if (blocks.length === 0) return edited
+  const out = edited.split('\n')
+  let searchFrom = 0
+  const atEnd: string[][] = []
+  for (const b of blocks) {
+    const body = lines.slice(b.open, (b.close ?? lines.length - 1) + 1)
+    let a = b.open - 1
+    while (a >= 0 && lines[a].trim() === '') a--
+    // A line inside a block they couldn't see isn't an anchor they had.
+    const anchor = a >= 0 && !blocks.some((o) => a >= o.open && a <= (o.close ?? lines.length - 1)) ? lines[a] : null
+    if (anchor === null && a < 0) {
+      out.splice(searchFrom, 0, ...body)
+      searchFrom += body.length
       continue
     }
-    if (!hidden) kept.push(line)
+    const at = anchor === null ? -1 : out.indexOf(anchor, searchFrom)
+    if (at === -1) {
+      atEnd.push(body)
+      continue
+    }
+    out.splice(at + 1, 0, ...body)
+    searchFrom = at + 1 + body.length
   }
-  return kept.join('\n')
+  for (const body of atEnd) out.push(...body)
+  return out.join('\n')
+}
+
+/** What a hidden block says about who sees it, besides its writer and the DM. */
+export function hiddenBlockLabel(audience: string[], nameOf: (userId: string) => string | undefined): string {
+  if (audience.length === 0) return 'Hidden from other players'
+  return `Hidden · also shown to ${audience.map((id) => nameOf(id) ?? 'a player').join(', ')}`
 }

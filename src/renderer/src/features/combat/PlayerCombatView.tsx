@@ -5,6 +5,7 @@
 // actions and spells, all kept on their sheet. A fellow player's numbers,
 // actions and spells can be looked at too. They can drag their own token
 // (not through walls); the DM's app checks the move and sends the map back out.
+import { WoundTags } from '../campaigns/WoundTags'
 import { useEffect, useMemo, useState } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
@@ -241,6 +242,7 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter, campai
                     {c.dead ? (c.kind === 'vehicle' ? 'Wrecked' : 'Down') : c.currentHp !== null ? `${c.currentHp}/${c.maxHp} HP` : INJURY_LABEL[c.injury]}
                     {c.statusEffects.length ? ` · ${c.statusEffects.join(', ')}` : ''}
                   </span>
+                  <WoundTags list={c.dismemberments} />
                 </span>
               </button>
             ))}
@@ -382,6 +384,7 @@ function MyCharacter({
       <HpControls temp onHp={(amount, kind) => onSave(hpChange(character.currentHp, character.tempHp ?? 0, derived.maxHp, amount, kind))} />
       {character.currentHp <= 0 && <div style={{ fontSize: 12, color: 'var(--danger)' }}>You’re down — roll your death saves on your sheet.</div>}
       <Conditions list={combatant?.statusEffects ?? []} />
+      <WoundTags list={combatant?.dismemberments ?? []} />
       {/* Your own place aboard a vehicle, if you're at one of its stations: just your station and your guns. */}
       <Aboard heading vehicles={vehicles} userId={myId} character={character} round={round} rollCheck={(label, modifier) => rollCheck(label, modifier)} rollDice={rollDice} />
       <CharacterTabs character={character} sessionId={sessionId} onSave={onSave} />
@@ -410,6 +413,7 @@ function FellowPlayer({ c, sessionId }: { c: PlayerVisibleCombatant; sessionId: 
         <Stat value={c.initiative === null ? '–' : `${c.initiative}`} label="Init" />
       </div>
       <Conditions list={c.statusEffects} />
+      <WoundTags list={c.dismemberments} />
       {sheet ? <CharacterTabs character={sheet} sessionId={sessionId} /> : <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>They haven’t got a character open.</p>}
     </div>
   )
@@ -444,6 +448,7 @@ function PartyShip({ c, vehicle: v, character, sessionId, round }: { c: PlayerVi
           <>
             <VehicleDamage vehicle={v} readOnly />
             <Conditions list={c.statusEffects} />
+            <WoundTags list={c.dismemberments} />
             <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>Hired crew: {crewLabel(shipCrew(v))}. The DM looks after the ship’s damage.</p>
           </>
         }
@@ -494,6 +499,7 @@ function OtherCombatant({ c }: { c: PlayerVisibleCombatant }): JSX.Element {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       <Heading name={c.name} sub={c.dead ? (c.kind === 'vehicle' ? 'Wrecked' : 'Down') : c.currentHp !== null ? `${c.currentHp}/${c.maxHp} HP` : INJURY_LABEL[c.injury]} />
       <Conditions list={c.statusEffects} />
+      <WoundTags list={c.dismemberments} />
     </div>
   )
 }

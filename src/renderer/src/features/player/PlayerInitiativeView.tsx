@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import '../campaigns/initiative.css'
+import { WoundTags } from '../campaigns/WoundTags'
 import { INJURY_LABELS, type InjuryLevel, type PlayerVisibleInitiativeState } from '@shared/encounter'
 
 interface PlayerInitiativeViewProps {
@@ -126,18 +126,7 @@ export function PlayerInitiativeView({ sessionId }: PlayerInitiativeViewProps): 
               ))}
             </div>
           )}
-          {c.dismemberments.length > 0 && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-              {c.dismemberments.map((tag) => (
-                <span key={tag} className="it-tag it-tag--wound">
-                  <svg width={10} height={10} viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M8 1.5C8 1.5 3.5 6.6 3.5 9.9a4.5 4.5 0 0 0 9 0C12.5 6.6 8 1.5 8 1.5Z" fill="currentColor" />
-                  </svg>
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
+          <WoundTags list={c.dismemberments} />
         </div>
       ))}
     </div>

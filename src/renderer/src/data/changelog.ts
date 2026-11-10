@@ -7,6 +7,19 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.2',
+    title: 'Secrets in any note',
+    highlights: [
+      'Hidden (::) text works in every note: only its writer and the DM can read it',
+      'Select lines, right-click and Hide them; right-click inside a hidden part to choose which players can also see it, or to Unhide it',
+      'Hidden parts show as a labelled box saying who else sees them, and edits by people who can’t see them keep them',
+      'Present brings up your presenting controls again, even with the Players box closed',
+      'Players only see a session once you present it, and only the scenes you’ve shown',
+      'Players see enemies in their real turn order unless you turn on Random enemy order for players',
+      'Players can see every combatant’s wounds on their Combat screen'
+    ]
+  },
+  {
     version: '0.11.1',
     title: 'Busier scenes, and an encounter library',
     highlights: [

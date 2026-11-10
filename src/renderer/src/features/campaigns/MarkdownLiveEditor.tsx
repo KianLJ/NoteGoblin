@@ -1,4 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
+import { fenceFor, hiddenBlockLabel, hiddenBlocks, type HiddenBlock } from '@shared/sessionDeck'
 import { Compartment, EditorState, StateField, type Extension, type Range, type Text } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, WidgetType, keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
@@ -25,6 +27,11 @@ import { parseDiceCodeSpan, type DieSides } from '@shared/dice'
 import type { Note } from '@shared/ipc'
 import { DICE_ICON_SVG, SPEAKER_ICON_SVG } from '../../ui/iconMarkup'
 
+export interface TablePlayer {
+  userId: string
+  displayName: string
+}
+
 export interface MarkdownLiveEditorHandle {
   insertText: (text: string) => void
   focus: () => void
@@ -49,6 +56,8 @@ interface MarkdownLiveEditorProps {
   onDiceRoll?: (dice: { sides: DieSides; count: number; modifier: number }) => void
   /** Clicked an inline `` `oneshot: <cueId>` `` Sound Board widget (see OneShotWidget below) — same shape Preview mode's click handler reads off the button's data attribute. */
   onOneShotPlay?: (cueId: string) => void
+  /** The campaign's players, for a hidden block's "who else sees it" (right-click) and its label. */
+  players?: TablePlayer[]
   /** Blocks actual document edits at the CodeMirror level (no cursor, no typing, paste rejected) — not a CSS overlay, which only stops mouse-driven interaction and leaves keyboard input (e.g. Tab-focusing in) still able to "type" locally even though nothing would ever save. Reconfigurable live via a Compartment since editorUserIds can change while a note's already open. */
   readOnly?: boolean
 }
@@ -576,6 +585,127 @@ function livePreviewExtension(
   return [field, clickHandler, imagePasteHandler, imageDropHandler]
 }
 
+// --- Hidden (::) blocks: marked out while you write, and Hide / Unhide on right-click ---
+
+/**
+ * Every `::` hidden block marked out: its lines tinted, its opening fence
+ * labelled with who else sees it (and the raw `@id`s there kept out of
+ * sight — the label names them). Rebuilt on every change, and when the
+ * player list arrives (an empty dispatch), since the names come from it.
+ */
+function hiddenBlockField(playersRef: { current: TablePlayer[] }): StateField<DecorationSet> {
+  return StateField.define<DecorationSet>({
+    create: (state) => hiddenDecorations(state.doc, playersRef.current),
+    update: (_value, tr) => hiddenDecorations(tr.state.doc, playersRef.current),
+    provide: (f) => EditorView.decorations.from(f)
+  })
+}
+
+function hiddenDecorations(doc: Text, players: TablePlayer[]): DecorationSet {
+  const lines = doc.toString().split('\n')
+  const ranges: Range<Decoration>[] = []
+  const nameOf = (id: string): string | undefined => players.find((p) => p.userId === id)?.displayName
+  for (const b of hiddenBlocks(lines)) {
+    const last = b.close ?? lines.length - 1
+    for (let i = b.open; i <= last; i++) {
+      const line = doc.line(i + 1)
+      if (i === b.open) {
+        ranges.push(Decoration.line({ class: 'cm-hidden-line cm-hidden-open', attributes: { 'data-label': hiddenBlockLabel(b.audience, nameOf) } }).range(line.from))
+        const ids = line.text.indexOf('@')
+        if (ids >= 0) ranges.push(Decoration.replace({}).range(line.from + ids, line.to))
+      } else {
+        ranges.push(Decoration.line({ class: i === b.close ? 'cm-hidden-line cm-hidden-close' : 'cm-hidden-line' }).range(line.from))
+      }
+    }
+  }
+  return Decoration.set(ranges, true)
+}
+
+/** The hidden block the cursor's in, if any. */
+function blockAt(view: EditorView): HiddenBlock | undefined {
+  const lines = view.state.doc.toString().split('\n')
+  const n = view.state.doc.lineAt(view.state.selection.main.head).number - 1
+  return hiddenBlocks(lines).find((b) => n >= b.open && n <= (b.close ?? lines.length - 1))
+}
+
+/** Wraps the selected lines in `::` fences — the whole lines, since a hidden block is lines of its own. `audience`: players who may still see it. */
+function hideSelection(view: EditorView, audience: string[] = []): void {
+  const { doc, selection } = view.state
+  const sel = selection.main
+  const first = doc.lineAt(sel.from)
+  // A selection ending at the very start of a line doesn't take that line in.
+  const last = doc.lineAt(sel.to > sel.from && doc.lineAt(sel.to).from === sel.to ? sel.to - 1 : sel.to)
+  view.dispatch({ changes: [{ from: first.from, insert: `${fenceFor(audience)}\n` }, { from: last.to, insert: '\n::' }] })
+  view.focus()
+}
+
+/** Takes away the `::` fences around the block the cursor's in, leaving its text shown to everyone. */
+function unhideAt(view: EditorView): void {
+  const block = blockAt(view)
+  if (!block) return
+  const { doc } = view.state
+  const open = doc.line(block.open + 1)
+  const changes = [{ from: open.from, to: Math.min(open.to + 1, doc.length) }]
+  if (block.close !== null) {
+    const close = doc.line(block.close + 1)
+    changes.push({ from: close.from - 1, to: close.to })
+  }
+  view.dispatch({ changes })
+  view.focus()
+}
+
+/** Changes who else may see the block the cursor's in, by rewriting its opening fence. */
+function setAudienceAt(view: EditorView, audience: string[]): void {
+  const block = blockAt(view)
+  if (!block) return
+  const open = view.state.doc.line(block.open + 1)
+  view.dispatch({ changes: { from: open.from, to: open.to, insert: fenceFor(audience) } })
+}
+
+/**
+ * Right-click: on a selection, Hide (from everyone, or picking players who may
+ * still see it); inside a hidden block, tick who else sees it, or Unhide.
+ * `onMenu` shows the app's own menu.
+ */
+function hideMenuHandler(onMenu: { current: (menu: ContextMenuState | null) => void }, playersRef: { current: TablePlayer[] }): Extension {
+  return EditorView.domEventHandlers({
+    contextmenu(event, view) {
+      if (!view.state.facet(EditorView.editable)) return false
+      const block = blockAt(view)
+      const hasSelection = !view.state.selection.main.empty
+      if (!block && !hasSelection) return false
+      event.preventDefault()
+      const players = playersRef.current
+      const noPlayers = [{ label: 'No players in this campaign yet' }]
+      onMenu.current({
+        x: event.clientX,
+        y: event.clientY,
+        items: block
+          ? [
+              {
+                label: 'Who else can see it',
+                submenu: players.length
+                  ? players.map((p) => {
+                      const on = block.audience.includes(p.userId)
+                      return {
+                        label: `${on ? '✓' : '\u2003'}  ${p.displayName}`,
+                        onSelect: () => setAudienceAt(view, on ? block.audience.filter((id) => id !== p.userId) : [...block.audience, p.userId])
+                      }
+                    })
+                  : noPlayers
+              },
+              { label: 'Unhide — show to everyone', onSelect: () => unhideAt(view), separatorBefore: true }
+            ]
+          : [
+              { label: 'Hide from other players', onSelect: () => hideSelection(view) },
+              { label: 'Hide, but let one player see it', submenu: players.length ? players.map((p) => ({ label: p.displayName, onSelect: () => hideSelection(view, [p.userId]) })) : noPlayers }
+            ]
+      })
+      return true
+    }
+  })
+}
+
 const MAX_PASTED_IMAGE_BYTES = 8 * 1024 * 1024
 
 /** Reads an image file as a data: URI, resolving to its markdown (`![alt](data:...)`) or null if it's over the size cap. */
@@ -664,12 +794,15 @@ const imageDropHandler = EditorView.domEventHandlers({
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
   function MarkdownLiveEditor(
-    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay, readOnly },
+    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay, players, readOnly },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const readOnlyCompartment = useRef(new Compartment()).current
+    const [menu, setMenu] = useState<ContextMenuState | null>(null)
+    const setMenuRef = useRef(setMenu)
+    const playersRef = useRef<TablePlayer[]>(players ?? [])
 
     useEffect(() => {
       if (!containerRef.current) return
@@ -685,6 +818,8 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             markdown({ extensions: [GFM] }),
             EditorView.lineWrapping,
             livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay),
+            hiddenBlockField(playersRef),
+            hideMenuHandler(setMenuRef, playersRef),
             EditorView.updateListener.of((update) => {
               if (update.docChanged) onChange(update.state.doc.toString())
             }),
@@ -696,6 +831,22 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
               '.cm-scroller': { fontFamily: 'var(--font-body)', overflow: 'auto' },
               '.cm-gutters': { display: 'none' },
               '.cm-line': { padding: 0 },
+              // Hidden (::) blocks: tinted, with a rule down the side and a label on the opening line.
+              '.cm-line.cm-hidden-line': {
+                paddingLeft: '10px',
+                borderLeft: '3px solid color-mix(in srgb, var(--accent) 65%, transparent)',
+                background: 'color-mix(in srgb, var(--accent) 8%, transparent)'
+              },
+              '.cm-line.cm-hidden-open, .cm-line.cm-hidden-close': { color: 'var(--text-muted)' },
+              '.cm-line.cm-hidden-open::after': {
+                content: 'attr(data-label)',
+                marginLeft: '8px',
+                fontSize: '11px',
+                fontWeight: '700',
+                letterSpacing: '0.03em',
+                textTransform: 'uppercase',
+                color: 'var(--accent-hover)'
+              },
               '.cm-tooltip.cm-tooltip-autocomplete': {
                 background: 'var(--bg-surface)',
                 border: '1px solid var(--border-subtle)',
@@ -724,6 +875,12 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
       // old textarea did.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    // The player list arrives after the editor's made: labels redraw with their names.
+    useEffect(() => {
+      playersRef.current = players ?? []
+      viewRef.current?.dispatch({})
+    }, [players])
 
     // readOnly CAN change without a remount — e.g. the author grants you
     // edit access via the party sidebar while you already have the note
@@ -754,6 +911,11 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
       }
     }))
 
-    return <div ref={containerRef} style={{ height: '100%', overflow: 'auto' }} />
+    return (
+      <>
+        <div ref={containerRef} style={{ height: '100%', overflow: 'auto' }} />
+        <ContextMenu state={menu} onClose={() => setMenu(null)} />
+      </>
+    )
   }
 )

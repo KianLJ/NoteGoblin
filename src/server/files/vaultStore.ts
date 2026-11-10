@@ -237,6 +237,10 @@ export class CampaignFileRepo {
     writeCampaignJson(found.dir, found.json)
   }
 
+  listMembers(campaignId: string): Array<{ userId: string; role: CampaignRole }> {
+    return (findCampaignDir(campaignId)?.json.members ?? []).map((m) => ({ userId: m.userId, role: m.role }))
+  }
+
   getRole(campaignId: string, userId: string): CampaignRole | null {
     const found = findCampaignDir(campaignId)
     return found?.json.members.find((m) => m.userId === userId)?.role ?? null
