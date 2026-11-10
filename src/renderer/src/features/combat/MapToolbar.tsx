@@ -184,11 +184,20 @@ export function MapControls({ canUndo, canRedo, onUndo, onRedo, snap, onSnap, se
         </Svg>
       </button>
       <div style={{ width: 1, background: 'var(--border-subtle)', margin: '4px 2px' }} />
-      <button type="button" onClick={onSnap} title={snap ? 'Snapping to the grid — click to place freely' : 'Placing freely — click to snap to the grid'} aria-label="Snap to grid" aria-pressed={snap} style={railButton(snap)}>
+      {/* Labelled, not just an icon: a magnet alone didn't read as "snap to grid". */}
+      <button
+        type="button"
+        onClick={onSnap}
+        title={snap ? 'Things you place snap to the grid — click to place them freely' : 'Things you place go exactly where you drop them — click to snap them to the grid'}
+        aria-label="Snap to grid"
+        aria-pressed={snap}
+        style={{ ...railButton(snap), width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 10px 0 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
+      >
         <Svg>
-          <path d="M4 2v6a4 4 0 0 0 8 0V2" />
-          <path d="M4 5h3M9 5h3" />
+          <path d="M2 5.5h12M2 10.5h12M5.5 2v12M10.5 2v12" opacity={snap ? 0.9 : 0.45} />
+          {snap ? <circle cx="10.5" cy="10.5" r="2" fill="currentColor" stroke="none" /> : <circle cx="8.6" cy="12.4" r="1.8" fill="currentColor" stroke="none" />}
         </Svg>
+        {snap ? 'Snap on' : 'Snap off'}
       </button>
       <button type="button" onClick={onSettings} title="Map settings: lighting, sight, fog" aria-label="Map settings" aria-pressed={settingsOpen} style={railButton(settingsOpen)}>
         <Svg>

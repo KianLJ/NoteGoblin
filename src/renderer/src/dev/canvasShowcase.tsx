@@ -1,5 +1,5 @@
 // Dev-only: the canvas and its newer pieces with sample content, for screenshots in the "What's new" post.
-// Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor). Not part of the app build.
+// Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor, =encounters, =cues). Not part of the app build.
 import { useState } from 'react'
 import { Canvas } from '../features/canvas/Canvas'
 import { TOOL_ICONS } from '../features/canvas/toolIcons'
@@ -8,7 +8,11 @@ import { StickyNote } from '../features/canvas/StickyNote'
 import { DiceButton } from '../features/dice/DiceButton'
 import { StatblockCard } from '../features/campaigns/StatblockCard'
 import { MonsterEditor } from '../features/bestiary/MonsterEditor'
-import { SessionsList, type SessionDecksApi } from '../features/campaigns/SessionTimeline'
+import { EncounterLibrary } from '../features/combat/EncounterLibrary'
+import { SessionPresenter, SessionsList, type SessionDecksApi } from '../features/campaigns/SessionTimeline'
+import { SceneCues } from '../features/campaigns/SceneCues'
+import { loadSavedEncounters } from '../data/savedEncounters'
+import type { Note } from '@shared/ipc'
 import { readingOrder } from '@shared/canvasLayout'
 import { FileIcon, PawIcon, StickyIcon } from '../features/campaigns/icons'
 import { BESTIARY } from '../data/bestiary'
@@ -132,7 +136,7 @@ const fakeDecks: SessionDecksApi = {
       title: 'Session 12: Below the Chapel',
       createdAt: '',
       updatedAt: '',
-      scenes: SCENES.map((_, i) => ({ noteId: `s${i}`, encounterId: i === 2 ? 'enc' : null, moodId: i === 0 ? 'tavernRespite' : i === 3 ? 'dungeonDread' : i === 4 ? 'combatBoss' : null, trackId: null }))
+      scenes: SCENES.map((_, i) => ({ noteId: `s${i}`, encounterIds: i === 2 ? ['enc'] : [], music: i === 0 ? [{ moodId: 'tavernRespite', trackId: null }] : i === 3 ? [{ moodId: 'dungeonDread', trackId: null }] : i === 4 ? [{ moodId: 'combatBoss', trackId: null }] : [] }))
     }
   ],
   loading: false,
@@ -243,8 +247,63 @@ function AudioShot(): JSX.Element {
   )
 }
 
+/** ?showcase=encounters: the Encounter Library with a few saved encounters (written to this preview's storage once). */
+function EncountersShot(): JSX.Element {
+  if (!localStorage.getItem('gb-saved-encounters')) {
+    localStorage.setItem(
+      'gb-saved-encounters',
+      JSON.stringify([
+        { id: 'e1', name: 'Goblins on the stair', monsterIndexes: ['goblin', 'goblin', 'goblin'], tags: ['chapel'], createdAt: '', placements: { 'goblin#1': { x: 10, y: 4, size: 1 } } },
+        { id: 'e2', name: 'Brakka wakes', monsterIndexes: ['ogre', 'goblin', 'goblin'], tags: ['chapel', 'boss'], createdAt: '' },
+        { id: 'e3', name: 'Wolves on the road', monsterIndexes: ['wolf', 'wolf', 'wolf', 'wolf'], tags: ['forest'], createdAt: '' }
+      ])
+    )
+  }
+  return (
+    <div style={{ height: '100vh', width: 380, background: 'var(--bg-surface)', borderRight: '1px solid var(--border-subtle)' }}>
+      <EncounterLibrary playerCharacters={new Map()} />
+    </div>
+  )
+}
+
+// A scene with two encounters and two songs, while it's being presented: its cues in the box, and on the bar above.
+const CUE_SCENE = { noteId: 's2', encounterIds: ['e1', 'e2'], music: [{ moodId: 'dungeonDread', trackId: null }, { moodId: 'combatBoss', trackId: null }] }
+function CuesShot(): JSX.Element {
+  const [layout, setLayout] = useState<CanvasLayout>({ viewport: { x: 0, y: 0, zoom: 1 }, nodes: [{ id: 'note:s2', x: 320, y: 96, w: 640, h: 600, z: 1 }] })
+  const api: SessionDecksApi = { ...fakeDecks, decks: [{ ...fakeDecks.decks[0], scenes: fakeDecks.decks[0].scenes.map((sc, i) => (i === 2 ? CUE_SCENE : sc)) }] }
+  const notes = SCENES.map((title, i) => ({ id: `s${i}`, title }) as unknown as Note)
+  const items: CanvasItem[] = [
+    {
+      id: 'note:s2',
+      title: SCENES[2],
+      icon: <FileIcon />,
+      size: { w: 640, h: 600 },
+      className: 'gb-canvas-node--live',
+      noClose: true,
+      content: (
+        <div style={{ padding: 'var(--space-4)', overflowY: 'auto' }}>
+          <SceneCues scene={CUE_SCENE} encounters={loadSavedEncounters()} onChange={() => {}} />
+          <div className="gb-markdown">
+            <h2>{SCENES[2]}</h2>
+            <p>{SCENE_TEXT[2]}</p>
+            <p>If they parley, the goblins point down the stair: Brakka is waking, and they want no part of it.</p>
+          </div>
+        </div>
+      )
+    }
+  ]
+  return (
+    <div style={{ height: '100vh', display: 'flex', position: 'relative' }}>
+      <SessionPresenter api={api} notes={notes} hostedSessionId={null} onStep={() => {}} onLoadEncounter={() => {}} />
+      <Canvas mode="dm" layout={layout} setLayout={setLayout} items={items} toolIcons={TOOL_ICONS} hiddenTools={['codex', 'timer']} nav={nav} floating={<DiceButton sessionId={null} />} />
+    </div>
+  )
+}
+
 export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
   if (scene === 'audio') return <AudioShot />
+  if (scene === 'cues') return <CuesShot />
+  if (scene === 'encounters') return <EncountersShot />
   if (scene === 'editor') return <MonsterEditor monster={goblin} onClose={() => {}} onSaved={() => {}} />
   if (scene === 'statblock') return <StatblockShot />
   if (scene === 'whatsnew')

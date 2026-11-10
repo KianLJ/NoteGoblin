@@ -738,7 +738,161 @@
 .eb-tier--deadly {
   --tier: var(--danger);
 }
-.eb-delete {
-  opacity: 1;
-  margin-left: auto;
+
+/* A wound (InitiativeTracker.tsx's DismembermentPrompt): under the row after a big enough hit, tinted by how bad. */
+.it-wound {
+  --wound: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--wound) 45%, var(--border-subtle));
+  border-left: 3px solid var(--wound);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--wound) 8%, var(--bg-surface));
+}
+
+.it-wound[data-tier='major'] {
+  --wound: #d9822b;
+}
+
+.it-wound[data-tier='overkill'] {
+  --wound: var(--danger);
+}
+
+.it-wound-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.it-wound-icon {
+  flex-shrink: 0;
+  color: var(--wound, var(--danger));
+}
+
+.it-wound-head .it-wound-icon {
+  margin-top: 2px;
+}
+
+.it-wound-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.it-wound-titles strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--wound);
+}
+
+.it-wound-titles span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.it-wound-skip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.it-wound-skip:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.it-wound-parts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 4px;
+}
+
+.it-wound-part {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 60ms ease, color 60ms ease, border-color 60ms ease;
+}
+
+.it-wound-part:hover:not(:disabled) {
+  border-color: var(--wound);
+  color: var(--text-primary);
+}
+
+.it-wound-part:disabled {
+  cursor: default;
+}
+
+.it-wound-part--hit {
+  border-color: var(--wound);
+  background: var(--wound);
+  color: var(--parchment-50);
+  font-weight: 700;
+}
+
+.it-wound-roll {
+  border-color: var(--wound);
+  color: var(--wound);
+  font-weight: 700;
+}
+
+.it-wound-big {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.it-wound-big button {
+  padding: 10px 6px;
+  border: 1px solid var(--wound);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--wound);
+  font-family: var(--font-display);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.it-wound-big button:hover {
+  background: var(--wound);
+  color: var(--parchment-50);
+}
+
+/* A wound on a combatant: a red tag with a drop of blood. */
+.it-tag--wound {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.it-tag--wound button {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
 }

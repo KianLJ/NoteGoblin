@@ -61,6 +61,11 @@ protocol.registerSchemesAsPrivileged([
 // take on every build. Must be set before the app is ready.
 app.commandLine.appendSwitch('disable-smooth-scrolling')
 app.commandLine.appendSwitch('disable-features', 'SmoothScrolling')
+// The workspace canvas lays its boxes out with CSS `zoom` (see Canvas.tsx). This Chromium (126) still has the old
+// zoom, where things inside a zoomed box report unzoomed positions while the mouse reports screen ones, so a note's
+// text cursor (CodeMirror) and anything else that measures itself landed away from the mouse at any zoom but 100%.
+// Standardized zoom (on by default from Chromium 128) makes every measurement match the screen.
+app.commandLine.appendSwitch('enable-blink-features', 'StandardizedBrowserZoom')
 
 // Set once createWindow() actually runs (inside app.whenReady()) — the
 // 'second-instance' handler below needs to reach the real window instance,
@@ -148,13 +153,16 @@ app.whenReady().then(() => {
   })
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => (permission as string) === 'local-fonts')
 
+  // blob: — a player plays the DM's own songs and sounds from audio received over the session (musicEngine.ts's
+  // base64ToBlobUrl), and a profile picture is read from the picked file (avatar.ts). Without it both fail, but only
+  // in a built app: this policy isn't applied in dev.
   if (!isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: vault-asset:; media-src 'self' custom-music: custom-entity-sfx:;"
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: vault-asset:; media-src 'self' blob: custom-music: custom-entity-sfx:;"
           ]
         }
       })

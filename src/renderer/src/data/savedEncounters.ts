@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { Placement } from '@shared/battleMap'
 
 /** A DM-saved monster roster from the Initiative Tracker's Encounter Builder (InitiativeTracker.tsx) — local to this installation, in localStorage, same as custom monsters/NPCs. `monsterIndexes` has one entry per copy (three Goblins = the goblin's index repeated three times), matching how the builder's count draft serializes. */
@@ -26,12 +27,40 @@ export function loadSavedEncounters(): SavedEncounter[] {
   }
 }
 
+const listeners = new Set<() => void>()
+
 export function saveSavedEncounters(list: SavedEncounter[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
   } catch {
     /* best-effort */
   }
+  listeners.forEach((l) => l())
+}
+
+/** The saved encounters, kept current: every builder, library and picker shows the same list as it changes. */
+export function useSavedEncounters(): SavedEncounter[] {
+  const [list, setList] = useState(loadSavedEncounters)
+  useEffect(() => {
+    const update = (): void => setList(loadSavedEncounters())
+    listeners.add(update)
+    return () => {
+      listeners.delete(update)
+    }
+  }, [])
+  return list
+}
+
+// "Edit" in the Encounter Library opens the encounter in whichever encounter builder is showing (InitiativeTracker.tsx).
+const editListeners = new Set<(enc: SavedEncounter) => void>()
+
+export function requestEncounterEdit(enc: SavedEncounter): void {
+  editListeners.forEach((l) => l(enc))
+}
+
+export function onEncounterEditRequest(listener: (enc: SavedEncounter) => void): () => void {
+  editListeners.add(listener)
+  return () => editListeners.delete(listener)
 }
 
 /** The spots of an encounter's own monsters out of a map's remembered placements ("goblin#1", "goblin#2"…). */

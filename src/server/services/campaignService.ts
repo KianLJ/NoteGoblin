@@ -12,7 +12,7 @@ import { dependents, enableProblems } from '@shared/content/packFiles'
 import { contentPackSchema } from '@shared/content/schema'
 import { SessionDeckRepo, type SessionDeckRow } from '../repositories/sessionDeckRepo'
 import { UserRepo } from '../repositories/userRepo'
-import { stripDmAsides, type SessionScene, sceneRevealed, withRevealFlags } from '@shared/sessionDeck'
+import { stripDmAsides, type SessionScene, readScene, sceneRevealed, withRevealFlags } from '@shared/sessionDeck'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
 import {
@@ -1499,17 +1499,8 @@ function parseScenes(raw: string): SessionScene[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed
-      .filter(
-        (s): s is { noteId: unknown; encounterId?: unknown; moodId?: unknown; trackId?: unknown; revealed?: unknown } =>
-          typeof s === 'object' && s !== null && typeof s.noteId === 'string'
-      )
-      .map((s) => ({
-        noteId: s.noteId as string,
-        encounterId: typeof s.encounterId === 'string' ? s.encounterId : null,
-        moodId: typeof s.moodId === 'string' ? s.moodId : null,
-        trackId: typeof s.trackId === 'string' ? s.trackId : null,
-        ...(typeof s.revealed === 'boolean' ? { revealed: s.revealed } : {})
-      }))
+      .filter((s): s is { noteId: string } & Record<string, unknown> => typeof s === 'object' && s !== null && typeof s.noteId === 'string')
+      .map((s) => ({ ...readScene(s), ...(typeof s.revealed === 'boolean' ? { revealed: s.revealed } : {}) }))
   } catch {
     return []
   }
@@ -1524,15 +1515,9 @@ function validateSceneReorder(existing: SessionScene[], input: unknown): { scene
     if (typeof s !== 'object' || s === null) return { error: 'Invalid scene.' }
     const noteId = (s as { noteId?: unknown }).noteId
     if (typeof noteId !== 'string' || !existingIds.has(noteId)) return { error: 'Invalid scene.' }
-    const encounterId = (s as { encounterId?: unknown }).encounterId
-    const moodId = (s as { moodId?: unknown }).moodId
-    const trackId = (s as { trackId?: unknown }).trackId
     const revealed = existing.find((e) => e.noteId === noteId)?.revealed
     scenes.push({
-      noteId,
-      encounterId: typeof encounterId === 'string' ? encounterId : null,
-      moodId: typeof moodId === 'string' ? moodId : null,
-      trackId: typeof trackId === 'string' ? trackId : null,
+      ...readScene(s as { noteId: string } & Record<string, unknown>),
       // Only presenting reveals a scene (revealScene) — a reorder keeps what's stored.
       ...(revealed !== undefined ? { revealed } : {})
     })
@@ -1583,7 +1568,7 @@ export function listSessionDecks(db: DatabaseType, campaignId: string, userId: s
         if (isDm) return deck
         // Players get only the scenes the DM has presented — what's still to come stays the DM's.
         const shown = deck.scenes.filter((s) => sceneRevealed(s, deck.scenes, true))
-        return { ...deck, scenes: shown.map((s) => ({ noteId: s.noteId, encounterId: null, moodId: null, trackId: null })) }
+        return { ...deck, scenes: shown.map((s) => ({ noteId: s.noteId, encounterIds: [], music: [] })) }
       })
   }
 }
@@ -1699,7 +1684,7 @@ export function addSceneToDeck(db: DatabaseType, campaignId: string, deckId: str
     sceneDeckId: deckId
   })
 
-  const scenes = [...withRevealFlags(parseScenes(deck.scenes_json), deck.presented_at !== null), { noteId: note.id, encounterId: null, moodId: null, trackId: null, revealed: false }]
+  const scenes = [...withRevealFlags(parseScenes(deck.scenes_json), deck.presented_at !== null), { noteId: note.id, encounterIds: [], music: [], revealed: false }]
   deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes) })
 
   return { ok: true, data: toNoteJson(userRepo, note, true) }

@@ -3,6 +3,9 @@ import menuShot from '../assets/whatsnew/0.10.0/menu.jpg'
 import statblockShot from '../assets/whatsnew/0.10.0/statblock.png'
 import sessionsShot from '../assets/whatsnew/0.10.0/sessions.jpg'
 import editorShot from '../assets/whatsnew/0.10.0/editor.jpg'
+import cuesShot from '../assets/whatsnew/0.11.1/cues.jpg'
+import encountersShot from '../assets/whatsnew/0.11.1/encounters.jpg'
+import woundsShot from '../assets/whatsnew/0.11.1/wounds.png'
 
 export interface WhatsNewSection {
   heading: string
@@ -27,6 +30,35 @@ export interface WhatsNewPost {
 
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
+  {
+    version: '0.11.1',
+    title: 'Busier scenes, and an encounter library',
+    intro: 'A smaller update, mostly from your feedback: scenes can hold more, encounters have a home of their own, and a handful of things that weren’t working now are.',
+    sections: [
+      {
+        heading: 'Scenes with several fights and songs',
+        body: 'A scene can now have as many encounters and as much music as you like, each added from the top of its note. The first song plays when the scene comes up. While you present, every encounter and song for that scene sits on the bar at the top of the screen: one click loads a fight or plays a song for the table. New scene boxes also open bigger, so there’s room to write under the cues.',
+        image: cuesShot,
+        caption: 'A scene with two encounters and two songs, and the same cues on the presenter bar above it.'
+      },
+      {
+        heading: 'An encounter library of its own',
+        body: 'Saved encounters now live in the Encounter Library, a tool of its own on the canvas and a tab beside Selected in the Combat screen. Search or filter by tag, then open an encounter to load its enemies, save where they stand on the map, make it the encounter for the map that’s up, edit it in the builder or delete it. Saved positions come back whenever a scene loads the encounter.',
+        image: encountersShot,
+        caption: 'The Encounter Library in Combat: an encounter opened, with its enemies’ positions saved.'
+      },
+      {
+        heading: 'Wounds that match the tracker',
+        body: 'With dismemberment on, a big enough hit brings up a wound under that combatant: minor, major or a killing blow, tinted by how bad it is. Pick the body part or roll for it, or skip it. Wounds show as red tags on the combatant, for you and the players.',
+        image: woundsShot,
+        caption: 'A major wound waiting for a body part, and a goblin already short an ear.'
+      },
+      {
+        heading: 'Fixes',
+        body: 'Your own songs and sound effects now play for everyone at the table, and choosing a profile picture works in the installed app. Clicking or selecting text in a note lands where the mouse is at any canvas zoom. The music box’s volume and crossfade sliders stay inside the box, and the battle map’s snap button now says “Snap on” or “Snap off”.'
+      }
+    ]
+  },
   {
     version: '0.11.0',
     title: 'A fresh coat of paint, and a face for everyone',

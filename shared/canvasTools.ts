@@ -8,6 +8,7 @@ export type ToolKind =
   | 'players'
   | 'party'
   | 'initiative'
+  | 'encounters'
   | 'calendar'
   | 'sessions'
   | 'codex'
@@ -22,6 +23,7 @@ export const TOOL_META: Record<ToolKind, { title: string; w: number; h: number }
   players: { title: 'Players', w: 320, h: 480 },
   party: { title: 'Party', w: 320, h: 480 },
   initiative: { title: 'Initiative', w: 400, h: 480 },
+  encounters: { title: 'Encounters', w: 380, h: 520 },
   calendar: { title: 'Calendar', w: 352, h: 512 },
   sessions: { title: 'Sessions', w: 880, h: 640 },
   codex: { title: 'Codex', w: 800, h: 640 },
@@ -33,7 +35,7 @@ export const TOOL_META: Record<ToolKind, { title: string; w: number; h: number }
 }
 
 export const TOOLS_BY_MODE: Record<CanvasMode, ToolKind[]> = {
-  dm: ['notes', 'players', 'initiative', 'calendar', 'sessions', 'timer', 'codex', 'music', 'soundboard', 'friends', 'whatsnew'],
+  dm: ['notes', 'players', 'initiative', 'encounters', 'calendar', 'sessions', 'timer', 'codex', 'music', 'soundboard', 'friends', 'whatsnew'],
   player: ['notes', 'party', 'initiative', 'calendar', 'sessions', 'codex', 'friends', 'whatsnew']
 }
 
@@ -66,6 +68,7 @@ export const MIN_CONTENT: Record<string, { w: number; h: number }> = {
   players: { w: 220, h: 160 },
   party: { w: 220, h: 160 },
   initiative: { w: 300, h: 260 },
+  encounters: { w: 260, h: 220 },
   calendar: { w: 260, h: 300 },
   sessions: { w: 320, h: 280 },
   codex: { w: 360, h: 300 },

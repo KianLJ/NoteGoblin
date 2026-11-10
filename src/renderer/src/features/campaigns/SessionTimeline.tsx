@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Note } from '@shared/ipc'
-import type { SessionDeck } from '@shared/sessionDeck'
+import type { SceneMusic, SessionDeck } from '@shared/sessionDeck'
+import { cueLabel } from './SceneCues'
 import type { BestiaryMonster } from '../../data/bestiary'
 import { loadAllMonsters } from '../../data/packMonsters'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
@@ -19,14 +20,19 @@ export function resolveEncounterMonsters(enc: SavedEncounter): BestiaryMonster[]
   return enc.monsterIndexes.map((idx) => all.find((m) => m.index === idx)).filter((m): m is BestiaryMonster => !!m)
 }
 
-/** Moves the live presentation to `index`: the players follow, and the scene's music cue plays. */
+/** Plays one of a scene's music cues for the table: its track, or a random one from its mood. */
+export function playCue(cue: SceneMusic, hostedSessionId: string | null): void {
+  if (cue.trackId) playSpecificTrack(cue.trackId, 2500, hostedSessionId)
+  else pickMood(cue.moodId, 2500, hostedSessionId)
+}
+
+/** Moves the live presentation to `index`: the players follow, and the scene's first music cue plays. */
 export function goLive(api: SessionDecksApi, deck: SessionDeck, index: number, hostedSessionId: string | null): void {
   const scene = deck.scenes[index]
   if (!scene) return
   if (index !== api.live.sceneIndex) playSfx('sceneAdvance')
   api.setLiveSceneIndex(index)
-  if (scene.trackId) playSpecificTrack(scene.trackId, 2500, hostedSessionId)
-  else if (scene.moodId) pickMood(scene.moodId, 2500, hostedSessionId)
+  if (scene.music[0]) playCue(scene.music[0], hostedSessionId)
 }
 
 /**
@@ -196,7 +202,8 @@ export function SessionPresenter({
   const index = Math.max(0, api.live.sceneIndex)
   const scene = deck.scenes[index]
   const note = scene && notes.find((n) => n.id === scene.noteId)
-  const encounter = scene?.encounterId ? loadSavedEncounters().find((e) => e.id === scene.encounterId) : undefined
+  const saved = loadSavedEncounters()
+  const encounters = (scene?.encounterIds ?? []).map((id) => saved.find((e) => e.id === id)).filter((e): e is SavedEncounter => !!e)
 
   function step(to: number): void {
     goLive(api, deck!, to, hostedSessionId)
@@ -219,10 +226,25 @@ export function SessionPresenter({
       <button type="button" className="gb-presenter-step" disabled={index >= deck.scenes.length - 1} onClick={() => step(index + 1)} aria-label="Next scene">
         <ArrowRightIcon size={14} />
       </button>
-      {encounter && (
-        <button type="button" className="gb-presenter-action" onClick={() => onLoadEncounter(resolveEncounterMonsters(encounter), encounter.id)} title={`Load “${encounter.name}” into the fight`}>
-          ⚔ {encounter.name}
-        </button>
+      {(encounters.length > 0 || (scene?.music.length ?? 0) > 0) && (
+        <div className="gb-presenter-cues">
+          {encounters.map((enc) => (
+            <button key={enc.id} type="button" className="gb-presenter-action gb-presenter-action--fight" onClick={() => onLoadEncounter(resolveEncounterMonsters(enc), enc.id)} title={`Load “${enc.name}” into the fight`}>
+              ⚔ {enc.name}
+            </button>
+          ))}
+          {scene?.music.map((cue, i) => (
+            <button
+              key={i}
+              type="button"
+              className="gb-presenter-action gb-presenter-action--music"
+              onClick={() => playCue(cue, hostedSessionId)}
+              title={i === 0 ? 'Played when this scene came up — click to play it again' : 'Play this for the table'}
+            >
+              ♪ {cueLabel(cue)}
+            </button>
+          ))}
+        </div>
       )}
       <button type="button" className="gb-presenter-action" onClick={api.stopPresenting}>
         Stop

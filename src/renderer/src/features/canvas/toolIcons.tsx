@@ -12,6 +12,12 @@ export const TOOL_ICONS: Record<ToolKind, ReactNode> = {
   players: <PlayersIcon />,
   party: <PlayersIcon />,
   initiative: <InitiativeIcon />,
+  // Crossed swords: the saved encounters.
+  encounters: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2.5 2.5l8 8M13.5 2.5l-8 8M9.5 11.5l2 2M6.5 11.5l-2 2M10.5 12.5l2-2M5.5 12.5l-2-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  ),
   calendar: <CalendarIcon />,
   sessions: <SessionIcon />,
   codex: <BestiaryIcon />,

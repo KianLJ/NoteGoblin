@@ -495,3 +495,67 @@
   font-family: var(--font-display);
   font-size: 20px;
 }
+
+/* A scene's cues as two columns of tiles (SceneCues.tsx), each ending with a tile to add another. */
+.gb-cue-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gb-cue-col-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gb-cue--add {
+  align-items: center;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.gb-cue--add:hover {
+  color: var(--text-primary);
+}
+
+.gb-cue--add .gb-cue-icon {
+  background: none;
+  border: 1px dashed currentColor;
+}
+
+/* A music tile's mood, track and buttons wrap onto their own line under its name. */
+.gb-cue--music.gb-cue--set {
+  flex-wrap: wrap;
+}
+
+.gb-cue--music.gb-cue--set .gb-cue-extra {
+  flex-basis: 100%;
+  flex-wrap: wrap;
+}
+
+/* The live scene's cues on the presenter bar: encounters to load, music to play. */
+.gb-presenter {
+  max-width: calc(100% - 2 * var(--space-3));
+  flex-wrap: wrap;
+  justify-content: center;
+  border-radius: 24px;
+}
+
+.gb-presenter-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gb-presenter-action--fight {
+  border-color: color-mix(in srgb, var(--blood-500) 55%, var(--border-subtle));
+}
+
+.gb-presenter-action--music {
+  border-color: color-mix(in srgb, var(--moss-500) 55%, var(--border-subtle));
+}

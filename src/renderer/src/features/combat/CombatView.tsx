@@ -28,9 +28,9 @@ import { getDiceLog, subscribeDiceLog } from '../dice/diceLogStore'
 import { useVehicles } from '../vehicles/useVehicles'
 import { crewLabel, gunnerBonusFromSheet } from '../vehicles/crewBonus'
 import { XIcon } from '../../ui/icons'
-import { applyEncounterPlacements, canRedoBattleMap, canUndoBattleMap, redoBattleMap, setLibrary, switchBattle, undoBattleMap, useBattleLibrary, useBattleMap, useEncounter } from './encounterStore'
-import { encounterPlacements, loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
-import { initiativeModifierFor, monsterToCombatant } from '../campaigns/InitiativeTracker'
+import { canRedoBattleMap, canUndoBattleMap, redoBattleMap, setLibrary, switchBattle, undoBattleMap, useBattleLibrary, useBattleMap, useEncounter } from './encounterStore'
+import { loadSavedEncounters } from '../../data/savedEncounters'
+import { initiativeModifierFor } from '../campaigns/InitiativeTracker'
 import { playSfx } from '../audio/soundEffects'
 import { CharacterTabs, HpControls, InitiativeField, MonsterAbilities, Stat, hpChange } from './CombatPanels'
 import { ConfirmButton } from '../../ui/ConfirmButton'
@@ -38,6 +38,7 @@ import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { BattleMapView, HideToggle, LockToggle, type FogTool, type MapTool, type Sight, type WallDraw } from './BattleMapView'
 import { MapControls, RAIL, ToolOptions, ToolRail, railKey, type RailTool } from './MapToolbar'
 import { TestPlayersMenu } from './TestPlayersMenu'
+import { EncounterLibrary } from './EncounterLibrary'
 import { useRemoteDrags } from './useRemoteDrags'
 
 interface CombatViewProps {
@@ -159,6 +160,11 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
   // Tokens are placed (and the map saved and shared) by useBattleMapSync, mounted in the app shell.
 
   const selected = encounter.combatants.find((c) => c.id === selectedId) ?? null
+  // The right panel: the selected combatant, or the Encounter Library. Picking someone brings their numbers back up.
+  const [panel, setPanel] = useState<'detail' | 'encounters'>('detail')
+  useEffect(() => {
+    if (selectedId) setPanel('detail')
+  }, [selectedId])
 
   // Playing as a player (or the party): they see what their party sees (on a map with walls or darkness), and move only their own tokens, as on their screen.
   const vision = visionActive(map)
@@ -262,14 +268,7 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 var(--space-4)', borderBottom: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontFamily: 'var(--font-display)', fontSize: 17 }}>Combat</strong>
-        <BattleMenu
-          onLoadEnemies={(indexes) => {
-            // The encounter's monsters replace whatever monsters are in the fight; the party and vehicles stay.
-            const added = indexes.map((i) => monsters.find((m) => m.index === i)).filter((m): m is BestiaryMonster => !!m).map(monsterToCombatant)
-            setEncounter((s) => ({ ...s, turnIndex: -1, round: 1, combatants: [...s.combatants.filter((c) => c.kind !== 'monster'), ...added] }))
-            setHint(`${added.length} enem${added.length === 1 ? 'y' : 'ies'} loaded where they stood on this map last time. Roll initiative in the tracker on the left.`)
-          }}
-        />
+        <BattleMenu />
         {encounter.turnIndex >= 0 && <span className="gb-badge gb-badge--accent">Round {encounter.round}</span>}
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{encounter.combatants.length === 0 ? 'Add combatants in the tracker on the left, or load an encounter from a session scene.' : ''}</span>
         <div style={{ flex: 1 }} />
@@ -412,6 +411,19 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
 
         <ResizableSidebar defaultWidth={290} minWidth={220} maxWidth={480} handleSide="left" collapseStorageKey="gb-sidebar-collapsed:combat-detail" widthStorageKey="gb-sidebar-width:combat-detail">
         <aside style={{ height: '100%', borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div className="it-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={panel === 'detail'} className={`it-tab${panel === 'detail' ? ' it-tab--on' : ''}`} onClick={() => setPanel('detail')}>
+              {selected ? selected.name : 'Selected'}
+            </button>
+            <button type="button" role="tab" aria-selected={panel === 'encounters'} className={`it-tab${panel === 'encounters' ? ' it-tab--on' : ''}`} onClick={() => setPanel('encounters')}>
+              Encounters
+            </button>
+          </div>
+          {panel === 'encounters' ? (
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <EncounterLibrary playerCharacters={playerCharacters} />
+            </div>
+          ) : (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-3)' }}>
             {selected ? (
               <Detail
@@ -451,6 +463,7 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
               <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Click a token or a name in the initiative order to see its numbers and roll its attacks.</p>
             )}
           </div>
+          )}
           <RollLog />
         </aside>
         </ResizableSidebar>
@@ -462,11 +475,9 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
 /**
  * The battle that's up, as one button in the header (its name, and the
  * encounter it's for). It opens a small menu: switch, add, rename or delete
- * battles, link a saved encounter, and load that encounter's enemies.
+ * battles. The encounter it is for is picked, loaded and saved in EncounterCard.
  */
-function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[]) => void }): JSX.Element {
-  const [map] = useBattleMap()
-  const [savedTo, setSavedTo] = useState<string | null>(null)
+function BattleMenu(): JSX.Element {
   const library = useBattleLibrary()
   const battle = activeBattle(library)
   const [open, setOpen] = useState(false)
@@ -492,7 +503,7 @@ function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        title="Change battle, its encounter, or load its enemies"
+        title="Switch, add, rename or delete battles (its encounter is in the panel on the right)"
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 320, padding: '3px 10px', borderRadius: 999, border: `1px solid ${open ? 'var(--accent)' : 'var(--border-strong)'}`, background: 'var(--bg-surface-raised)', color: 'var(--text-primary)', font: 'inherit', fontSize: 12, cursor: 'pointer' }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{battle.name}</span>
@@ -570,37 +581,6 @@ function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[
                 />
               )}
             </div>
-            <div style={{ height: 1, background: 'var(--border-subtle)' }} />
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span className="gb-label" style={{ margin: 0 }}>
-                Encounter for this map
-              </span>
-              <select className="gb-input" value={battle.encounterId ?? ''} onChange={(e) => patch({ encounterId: e.target.value || null })} style={{ fontSize: 12, padding: '3px 6px' }} title="Loading this encounter from a session scene switches to this battle">
-                <option value="">None</option>
-                {encounters.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name} ({e.monsterIndexes.length})
-                  </option>
-                ))}
-              </select>
-            </label>
-            {encounters.length === 0 && <span style={{ color: 'var(--text-muted)' }}>Save encounters in the Initiative tab’s Build Encounter to link them here.</span>}
-            {linked && (
-              <button
-                type="button"
-                className="gb-btn gb-btn--primary"
-                style={{ ...tiny, alignSelf: 'flex-start' }}
-                onClick={() => {
-                  applyEncounterPlacements(linked.id)
-                  onLoadEnemies(linked.monsterIndexes)
-                  setOpen(false)
-                }}
-                title="Puts this encounter's monsters in the fight (replacing any already there), where they stood on this map last time"
-              >
-                Load enemies
-              </button>
-            )}
-            {encounters.length > 0 && <SavePositions encounters={encounters} placements={map.placements} preferred={linked?.id ?? null} savedTo={savedTo} onSaved={(list, id) => { setEncounters(list); setSavedTo(id) }} />}
           </div>
         </>
       )}
@@ -609,65 +589,6 @@ function BattleMenu({ onLoadEnemies }: { onLoadEnemies: (monsterIndexes: string[
 }
 
 const tiny = { fontSize: 12, padding: '2px 8px' } as const
-
-/**
- * Saves where an encounter's monsters stand on this map into the encounter itself, so loading it from a session
- * scene (on any battle) puts them back there. Only that encounter's own monsters' spots go in.
- */
-function SavePositions({
-  encounters,
-  placements,
-  preferred,
-  savedTo,
-  onSaved
-}: {
-  encounters: SavedEncounter[]
-  placements: BattleMap['placements']
-  preferred: string | null
-  savedTo: string | null
-  onSaved: (list: SavedEncounter[], id: string) => void
-}): JSX.Element {
-  const [pick, setPick] = useState(preferred ?? encounters[0].id)
-  const enc = encounters.find((e) => e.id === pick) ?? encounters[0]
-  const spots = encounterPlacements(enc, placements)
-  const count = Object.keys(spots).length
-  return (
-    <>
-      <div style={{ height: 1, background: 'var(--border-subtle)' }} />
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <span className="gb-label" style={{ margin: 0 }}>
-          Save enemy positions to an encounter
-        </span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <select className="gb-input" value={enc.id} onChange={(e) => setPick(e.target.value)} style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '3px 6px' }}>
-            {encounters.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-                {e.placements && Object.keys(e.placements).length ? ' · positions saved' : ''}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="gb-btn gb-btn--secondary"
-            style={tiny}
-            disabled={count === 0}
-            title={count ? `Saves where its ${count} enem${count === 1 ? 'y stands' : 'ies stand'} on this map` : 'None of its monsters are on this map'}
-            onClick={() => {
-              const list = loadSavedEncounters().map((e) => (e.id === enc.id ? { ...e, placements: spots } : e))
-              saveSavedEncounters(list)
-              onSaved(list, enc.id)
-            }}
-          >
-            Save
-          </button>
-        </div>
-      </label>
-      {savedTo === enc.id && <span style={{ color: 'var(--text-muted)' }}>Saved. Loading “{enc.name}” from a scene puts its enemies back here.</span>}
-    </>
-  )
-}
-
 
 interface AttackLine {
   name: string

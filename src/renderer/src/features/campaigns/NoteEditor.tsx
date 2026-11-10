@@ -13,6 +13,7 @@ import type { DiceGroup } from '@shared/dice'
 import { useSessionDecks } from './useSessionDecks'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import { SceneCues } from './SceneCues'
+import type { SessionScene } from '@shared/sessionDeck'
 
 // The Codex's code loads the first time the picker opens.
 const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
@@ -122,7 +123,7 @@ export function NoteEditor({
   const sceneIndex = sceneDeck ? sceneDeck.scenes.findIndex((s) => s.noteId === note.id) : -1
   const scene = sceneIndex >= 0 ? sceneDeck!.scenes[sceneIndex] : undefined
 
-  function updateScene(patch: Partial<{ encounterId: string | null; moodId: string | null; trackId: string | null }>): void {
+  function updateScene(patch: Partial<Pick<SessionScene, 'encounterIds' | 'music'>>): void {
     if (!sceneDeck || sceneIndex < 0) return
     const next = sceneDeck.scenes.map((s, i) => (i === sceneIndex ? { ...s, ...patch } : s))
     void reorderSceneDeckScenes(sceneDeck.id, next)

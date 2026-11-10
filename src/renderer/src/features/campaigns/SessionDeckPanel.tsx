@@ -207,7 +207,7 @@ export function SessionDeckPanel({
   const clampedIndex = Math.min(Math.max(selectedIndex, 0), Math.max(sceneCount - 1, 0))
   const currentScene = scenes[clampedIndex]
   const isBehind = readOnly && live.deckId === deck.id && live.sceneIndex !== clampedIndex && live.sceneIndex >= 0
-  const currentEncounter = currentScene?.encounterId ? savedEncounters.find((e) => e.id === currentScene.encounterId) : undefined
+  const currentEncounter = currentScene?.encounterIds[0] ? savedEncounters.find((e) => e.id === currentScene.encounterIds[0]) : undefined
 
   function selectScene(index: number): void {
     const next = Math.min(Math.max(index, 0), Math.max(sceneCount - 1, 0))
@@ -220,10 +220,11 @@ export function SessionDeckPanel({
     // Only an actual advance while live triggers the linked mood — reopening
     // the same scene you're already on (changed === false) shouldn't restart
     // the music, same reasoning as the sceneAdvance sfx above.
-    if (changed && isPresentingThisDeck && nextScene?.trackId) {
-      playSpecificTrack(nextScene.trackId, 2500, hostedSessionId)
-    } else if (changed && isPresentingThisDeck && nextScene?.moodId) {
-      pickMood(nextScene.moodId, 2500, hostedSessionId)
+    const cue = nextScene?.music[0]
+    if (changed && isPresentingThisDeck && cue?.trackId) {
+      playSpecificTrack(cue.trackId, 2500, hostedSessionId)
+    } else if (changed && isPresentingThisDeck && cue) {
+      pickMood(cue.moodId, 2500, hostedSessionId)
     }
   }
 

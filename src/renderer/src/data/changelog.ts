@@ -7,6 +7,19 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.1',
+    title: 'Busier scenes, and an encounter library',
+    highlights: [
+      'Scenes can have several encounters and several songs. The first song plays when the scene comes up, and every encounter and song is a button on the presenter bar while you present',
+      'New scene boxes open bigger, with room to write under the cues',
+      'The Encounter Library is its own tool on the canvas and a tab in Combat: load an encounter’s enemies, save their positions, make it the map’s encounter, edit or delete it',
+      'Dismemberment redesigned to match the tracker, with wound tags for you and the players',
+      'Your own songs and sound effects now play for the other players, and choosing a profile picture works in the installed app',
+      'Clicking and selecting text in notes lines up with the mouse at any canvas zoom',
+      'The music box’s volume and crossfade sliders stay inside the box, and the battle map’s snap button is labelled'
+    ]
+  },
+  {
     version: '0.11.0',
     title: 'A fresh coat of paint, and a face for everyone',
     highlights: [

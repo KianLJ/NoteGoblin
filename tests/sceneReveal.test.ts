@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { sceneRevealed, withRevealFlags, type SessionScene } from '../shared/sessionDeck'
+import { readScene, sceneRevealed, withRevealFlags, type SessionScene } from '../shared/sessionDeck'
 
-const scene = (noteId: string, revealed?: boolean): SessionScene => ({ noteId, encounterId: null, moodId: null, trackId: null, ...(revealed !== undefined ? { revealed } : {}) })
+const scene = (noteId: string, revealed?: boolean): SessionScene => ({ noteId, encounterIds: [], music: [], ...(revealed !== undefined ? { revealed } : {}) })
 
 describe('scene reveal', () => {
   it('shows players only the scenes the DM has presented', () => {
@@ -17,5 +17,13 @@ describe('scene reveal', () => {
     // Writing the flags out keeps that, so a new hidden scene can go beside them.
     expect(withRevealFlags(old, true).map((s) => s.revealed)).toEqual([true, true])
     expect(withRevealFlags(old, false).map((s) => s.revealed)).toEqual([false, false])
+  })
+
+  it('reads a scene saved with one encounter and one mood as lists, and drops anything malformed', () => {
+    expect(readScene({ noteId: 'a', encounterId: 'e1', moodId: 'tavern', trackId: null })).toEqual({ noteId: 'a', encounterIds: ['e1'], music: [{ moodId: 'tavern', trackId: null }] })
+    expect(readScene({ noteId: 'a', encounterId: null, moodId: null, trackId: null })).toEqual({ noteId: 'a', encounterIds: [], music: [] })
+    expect(
+      readScene({ noteId: 'a', encounterIds: ['e1', 'e1', 3, 'e2'], music: [{ moodId: 'dread', trackId: 't1' }, { moodId: '' }, null, { moodId: 'boss', trackId: 5 }] })
+    ).toEqual({ noteId: 'a', encounterIds: ['e1', 'e2'], music: [{ moodId: 'dread', trackId: 't1' }, { moodId: 'boss', trackId: null }] })
   })
 })

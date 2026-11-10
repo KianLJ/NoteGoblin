@@ -14,14 +14,37 @@
  * `::`-prefixed DM-only lines out of `bodyMarkdown` for non-DM readers on
  * every normal note read path, not just the session-deck one.
  */
+/** A scene's music cue: a Goblin Bard mood (see data/musicLibrary.ts), and a specific track in it or null for a random one. */
+export interface SceneMusic {
+  moodId: string
+  trackId: string | null
+}
+
+const MAX_CUES = 12
+
+/**
+ * A scene as stored or sent, made safe: its lists of encounters and music, or — saved before a scene could have
+ * several — its one encounter and one mood. Anything malformed is dropped. `revealed` is the caller's to set.
+ */
+export function readScene(raw: { noteId: string } & Record<string, unknown>): Omit<SessionScene, 'revealed'> {
+  const str = (v: unknown): v is string => typeof v === 'string' && v !== ''
+  const encounterIds = Array.isArray(raw.encounterIds) ? raw.encounterIds.filter(str) : str(raw.encounterId) ? [raw.encounterId] : []
+  const music: SceneMusic[] = Array.isArray(raw.music)
+    ? raw.music
+        .filter((m): m is { moodId: string; trackId?: unknown } => !!m && typeof m === 'object' && str((m as { moodId?: unknown }).moodId))
+        .map((m) => ({ moodId: m.moodId, trackId: str(m.trackId) ? m.trackId : null }))
+    : str(raw.moodId)
+      ? [{ moodId: raw.moodId, trackId: str(raw.trackId) ? raw.trackId : null }]
+      : []
+  return { noteId: raw.noteId, encounterIds: [...new Set(encounterIds)].slice(0, MAX_CUES), music: music.slice(0, MAX_CUES) }
+}
+
 export interface SessionScene {
   noteId: string
-  /** A saved encounter's id (see src/renderer/src/data/savedEncounters.ts) the DM can load into the Initiative Tracker with one click while presenting this scene — null if this scene has no combat. Purely a reference; the encounter's actual monster roster stays in the DM's local savedEncounters store, never duplicated here. */
-  encounterId: string | null
-  /** A Goblin Bard mood group id (see src/renderer/src/data/musicLibrary.ts) — presenting this scene picks a random track from it, same as clicking the mood in MusicButton.tsx. Null if this scene has no music cue. */
-  moodId: string | null
-  /** A specific track id within `moodId` (bundled or one of the DM's own custom additions) — presenting this scene plays exactly this track instead of a random pick from the mood. Meaningless without `moodId` set; always null when it is null. */
-  trackId: string | null
+  /** Saved encounters (see src/renderer/src/data/savedEncounters.ts) the DM can load into the fight with one click while presenting this scene. Only ids — each roster stays in the DM's own saved-encounter store. */
+  encounterIds: string[]
+  /** Music cues: the first plays when the scene comes up; any of them can be played from the presenter bar. */
+  music: SceneMusic[]
   /**
    * Shown to the table: set when the DM first presents this scene, never unset. Players only ever see revealed
    * scenes (see campaignService.listSessionDecks/listNotes). Left out on decks presented before scenes were

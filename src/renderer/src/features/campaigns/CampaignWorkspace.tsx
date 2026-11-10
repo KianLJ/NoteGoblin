@@ -8,6 +8,7 @@ import { monsterToCombatant } from './InitiativeTracker'
 import { FileIcon, PawIcon } from './icons'
 import { useKnownPlayerSheets } from './useKnownPlayerSheets'
 import { DmInitiativeTool } from './DmInitiativeTool'
+import { EncounterLibrary } from '../combat/EncounterLibrary'
 import { TimerDockButton, TimerMini, TimerPanel } from '../canvas/SessionTimer'
 import { CalendarMini, InitiativeMini, PartyMini, SessionsMini } from '../canvas/toolMinis'
 import { SceneDeleteButton, SessionPresenter, SessionsList } from './SessionTimeline'
@@ -50,7 +51,8 @@ import type { SessionDeck } from '@shared/sessionDeck'
 import { Button } from '../../ui/Button'
 
 /** A scene's box in its session's collection. */
-const SCENE_SIZE = { w: 420, h: 360 }
+// Room for the scene's cues at the top and still a good stretch of writing space under them.
+const SCENE_SIZE = { w: 560, h: 640 }
 
 // Loaded the first time a monster is picked, so the app starts without its code.
 const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
@@ -192,7 +194,7 @@ export function CampaignWorkspace({
     const deck = await decksApi.createDeck('Untitled Session')
     if (!deck) return
     const note = await decksApi.addScene(deck.id, 'Scene 1')
-    openSession(note ? { ...deck, scenes: [{ noteId: note.id, encounterId: null, moodId: null, trackId: null }] } : deck, at, false)
+    openSession(note ? { ...deck, scenes: [{ noteId: note.id, encounterIds: [], music: [] }] } : deck, at, false)
     if (note) addNoteLocally(note)
   }
 
@@ -328,6 +330,7 @@ export function CampaignWorkspace({
       full: <DmInitiativeTool sessionId={hostedSessionId ?? null} campaignId={campaign?.id ?? null} combatCharacters={combatCharacters} onOpenMonster={(m) => openMonster(m)} />,
       mini: <InitiativeMini />
     },
+    encounters: <EncounterLibrary playerCharacters={playerCharacters} />,
     timer: { full: <TimerPanel />, mini: <TimerMini /> },
     calendar: {
       full: <CalendarPanel sessionId={null} campaignId={campaign?.id ?? null} readOnly={false} notes={notes ?? []} />,

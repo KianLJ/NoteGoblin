@@ -1,4 +1,4 @@
-/* The Initiative tracker's Encounter Builder (InitiativeTracker.tsx): the draft as monster cards, a difficulty meter, and the library. */
+/* The Initiative tracker's Encounter Builder (InitiativeTracker.tsx): the draft as monster cards, and a difficulty meter. Saved encounters are in the Encounter Library (combat/EncounterLibrary.tsx). */
 
 .gb-enc-empty {
   padding: var(--space-3);
@@ -15,8 +15,7 @@
   gap: 6px;
 }
 
-.gb-enc-card,
-.gb-enc-saved {
+.gb-enc-card {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -28,8 +27,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-.gb-enc-card-head,
-.gb-enc-saved-head {
+.gb-enc-card-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -198,28 +196,7 @@
   color: var(--accent-hover);
 }
 
-.gb-enc-library {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 6px;
-}
-
-.gb-enc-saved {
-  border-top-color: var(--border-strong);
-}
-
-.gb-enc-saved-tags {
-  font-size: 11px;
-  color: var(--accent);
-}
-
-.gb-enc-saved-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 2px;
-}
-
-.gb-enc-saved-actions > :last-child {
-  margin-left: auto;
+.eb-saved-note {
+  margin: 0;
+  text-align: center;
 }

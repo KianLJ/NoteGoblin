@@ -25,7 +25,7 @@ import {
 } from '@shared/encounter'
 import { formatCr } from '../../data/bestiary'
 import { useAllMonsters } from '../../data/useAllMonsters'
-import { loadSavedEncounters, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
+import { loadSavedEncounters, onEncounterEditRequest, saveSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import './encounter.css'
 import './initiative.css'
 import { MonsterPicker } from './MonsterPicker'
@@ -190,7 +190,16 @@ export function InitiativeTracker({
   // Shared with the Combat tab (features/combat/encounterStore.ts), so both edit the same fight.
   const [state, setState] = useEncounter()
   const [view, setView] = useState<'tracker' | 'build' | 'vehicles'>('tracker')
-  const [savedEncounters, setSavedEncounters] = useState(() => loadSavedEncounters())
+  // An encounter the Encounter Library asked to edit (combat/EncounterLibrary.tsx): the builder opens with it.
+  const [editRequest, setEditRequest] = useState<SavedEncounter | null>(null)
+  useEffect(
+    () =>
+      onEncounterEditRequest((enc) => {
+        setEditRequest(enc)
+        setView('build')
+      }),
+    []
+  )
   const [encounterDraft, setEncounterDraft] = useState<Record<string, number>>({})
   const [encounterName, setEncounterName] = useState('')
   // Snapshots for Undo — pushed explicitly before a discrete action (remove,
@@ -705,7 +714,8 @@ export function InitiativeTracker({
                         </FadeOutBadge>
                       ))}
                       {c.dismemberments.map((tag) => (
-                        <FadeOutBadge key={tag} color="var(--danger)" onRemove={() => removeDismemberment(c.id, tag)}>
+                        <FadeOutBadge key={tag} className="it-tag it-tag--wound" onRemove={() => removeDismemberment(c.id, tag)}>
+                          <WoundIcon size={10} />
                           {tag}
                         </FadeOutBadge>
                       ))}
@@ -754,8 +764,8 @@ export function InitiativeTracker({
       ) : (
         <EncounterBuilder
           playerCharacters={playerCharacters}
-          savedEncounters={savedEncounters}
-          setSavedEncounters={setSavedEncounters}
+          editRequest={editRequest}
+          onEditRequestTaken={() => setEditRequest(null)}
           encounterDraft={encounterDraft}
           setEncounterDraft={setEncounterDraft}
           encounterName={encounterName}
@@ -772,8 +782,9 @@ export function InitiativeTracker({
 
 interface EncounterBuilderProps {
   playerCharacters: Map<string, CharacterSheet>
-  savedEncounters: SavedEncounter[]
-  setSavedEncounters: (list: SavedEncounter[]) => void
+  /** An encounter to open for editing (from the Encounter Library); taken once loaded. */
+  editRequest: SavedEncounter | null
+  onEditRequestTaken: () => void
   encounterDraft: Record<string, number>
   setEncounterDraft: (draft: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => void
   encounterName: string
@@ -783,8 +794,8 @@ interface EncounterBuilderProps {
 
 function EncounterBuilder({
   playerCharacters,
-  savedEncounters,
-  setSavedEncounters,
+  editRequest,
+  onEditRequestTaken,
   encounterDraft,
   setEncounterDraft,
   encounterName,
@@ -933,44 +944,43 @@ function EncounterBuilder({
   }
 
   const [encounterTags, setEncounterTags] = useState('')
-  const [tagFilter, setTagFilter] = useState<string | null>(null)
+  // The saved encounter being edited (opened from the Encounter Library): saving updates it rather than adding another.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [savedNote, setSavedNote] = useState<string | null>(null)
 
-  function saveEncounter(): void {
+  useEffect(() => {
+    if (!editRequest) return
+    const counts: Record<string, number> = {}
+    for (const index of editRequest.monsterIndexes) counts[index] = (counts[index] ?? 0) + 1
+    setEncounterDraft(counts)
+    setEncounterName(editRequest.name)
+    setEncounterTags((editRequest.tags ?? []).join(', '))
+    setEditingId(editRequest.id)
+    setSavedNote(null)
+    onEditRequestTaken()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest])
+
+  // Emptying the draft ends an edit.
+  useEffect(() => {
+    if (draftMonsters.length === 0) setEditingId(null)
+  }, [draftMonsters.length])
+
+  function saveEncounter(asNew = false): void {
     if (!encounterName.trim() || draftMonsters.length === 0) return
     const monsterIndexes = Object.entries(encounterDraft).flatMap(([index, count]) => Array(count).fill(index))
     const tags = [...new Set(encounterTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))]
-    const next = [...savedEncounters, { id: crypto.randomUUID(), name: encounterName.trim(), monsterIndexes, tags, createdAt: new Date().toISOString() }]
-    saveSavedEncounters(next)
-    setSavedEncounters(next)
+    const saved = loadSavedEncounters()
+    const updating = !asNew && editingId && saved.some((e) => e.id === editingId)
+    saveSavedEncounters(
+      updating
+        ? saved.map((e) => (e.id === editingId ? { ...e, name: encounterName.trim(), monsterIndexes, tags } : e))
+        : [...saved, { id: crypto.randomUUID(), name: encounterName.trim(), monsterIndexes, tags, createdAt: new Date().toISOString() }]
+    )
+    setSavedNote(`“${encounterName.trim()}” ${updating ? 'updated' : 'saved'} — find it in Encounters.`)
     setEncounterName('')
     setEncounterTags('')
     setEncounterDraft({})
-  }
-
-  // The library, each with its monsters and how hard it'd be for the party right now — filtered by a picked tag.
-  const library = useMemo(
-    () =>
-      savedEncounters.map((enc) => {
-        const monsters = enc.monsterIndexes.map((i) => allMonsters.find((m) => m.index === i)).filter((m): m is BestiaryMonster => !!m)
-        return { enc, monsters, result: computeEncounterDifficulty(effectivePartyLevels, monsters.map((m) => m.xp)) }
-      }),
-    [savedEncounters, allMonsters, effectivePartyLevels]
-  )
-  const libraryTags = useMemo(() => [...new Set(savedEncounters.flatMap((e) => e.tags ?? []))].sort(), [savedEncounters])
-  const shownLibrary = tagFilter ? library.filter((l) => l.enc.tags?.includes(tagFilter)) : library
-
-  function loadEncounterIntoDraft(enc: SavedEncounter): void {
-    const counts: Record<string, number> = {}
-    for (const index of enc.monsterIndexes) counts[index] = (counts[index] ?? 0) + 1
-    setEncounterDraft(counts)
-    setEncounterName(enc.name)
-    setEncounterTags((enc.tags ?? []).join(', '))
-  }
-
-  function deleteEncounter(id: string): void {
-    const next = savedEncounters.filter((e) => e.id !== id)
-    saveSavedEncounters(next)
-    setSavedEncounters(next)
   }
 
   // Suggests a handful of monsters (single-instance XP within the party's remaining budget for the target difficulty) whose CR roughly fits what's left, sorted strongest-first.
@@ -1076,8 +1086,13 @@ function EncounterBuilder({
             <input className="gb-input" placeholder="Name it to save it…" value={encounterName} onChange={(e) => setEncounterName(e.target.value)} aria-label="Encounter name" />
             <input className="gb-input" placeholder="Tags (forest, boss…)" value={encounterTags} onChange={(e) => setEncounterTags(e.target.value)} aria-label="Tags" />
             <div className="eb-save-actions">
-              <Button variant="secondary" onClick={saveEncounter} disabled={!encounterName.trim()} className="it-btn" title={encounterName.trim() ? 'Keep it in your library' : 'Give it a name first'}>
-                Save to library
+              {editingId && (
+                <Button variant="ghost" onClick={() => saveEncounter(true)} disabled={!encounterName.trim()} className="it-btn" title="Keep the one you opened as it was, and save this as another">
+                  Save as new
+                </Button>
+              )}
+              <Button variant="secondary" onClick={() => saveEncounter()} disabled={!encounterName.trim()} className="it-btn" title={encounterName.trim() ? 'Keep it in your Encounters library' : 'Give it a name first'}>
+                {editingId ? 'Save changes' : 'Save to library'}
               </Button>
               <Button variant="primary" onClick={() => onAddEncounterToTracker(draftMonsters)} className="it-btn">
                 Add to tracker
@@ -1125,58 +1140,9 @@ function EncounterBuilder({
         </div>
       </section>
 
-      {savedEncounters.length > 0 && (
-        <section className="eb-section">
-          <div className="eb-head">
-            <span>Your library</span>
-            <small>{savedEncounters.length}</small>
-          </div>
-          {libraryTags.length > 0 && (
-            <div className="gb-enc-tags">
-              {libraryTags.map((tag) => (
-                <button key={tag} type="button" className={tagFilter === tag ? 'gb-enc-tag gb-enc-tag--on' : 'gb-enc-tag'} onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>
-                  {tag}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="gb-enc-library">
-            {shownLibrary.map(({ enc, monsters, result }) => (
-              <div key={enc.id} className="gb-enc-saved">
-                <div className="gb-enc-saved-head">
-                  <span className="gb-enc-card-name">{enc.name}</span>
-                  <strong className={`gb-enc-tier gb-enc-tier--${result.difficulty}`}>{DIFFICULTY_LABELS[result.difficulty]}</strong>
-                </div>
-                <div className="gb-enc-card-type">
-                  {Object.entries(countByName(monsters))
-                    .map(([name, n]) => (n > 1 ? `${n}× ${name}` : name))
-                    .join(', ') || 'No monsters found'}
-                </div>
-                {(enc.tags?.length ?? 0) > 0 && <div className="gb-enc-saved-tags">{enc.tags!.map((t) => `#${t}`).join(' ')}</div>}
-                <div className="gb-enc-saved-actions">
-                  <button type="button" className="gb-enc-link" onClick={() => loadEncounterIntoDraft(enc)}>
-                    Edit
-                  </button>
-                  <button type="button" className="gb-enc-link" onClick={() => onAddEncounterToTracker(monsters)} disabled={monsters.length === 0}>
-                    Add to tracker
-                  </button>
-                  <button type="button" className="it-remove eb-delete" onClick={() => deleteEncounter(enc.id)} title={`Delete ${enc.name}`} aria-label={`Delete ${enc.name}`}>
-                    <XIcon size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {savedNote && draftMonsters.length === 0 && <p className="eb-muted eb-saved-note">{savedNote}</p>}
     </div>
   )
-}
-
-function countByName(monsters: BestiaryMonster[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const m of monsters) counts[m.name] = (counts[m.name] ?? 0) + 1
-  return counts
 }
 
 /**
@@ -1424,10 +1390,10 @@ function TrackerSettingsMenu({
  * dismissed without adding anything, for a hit the DM decides isn't
  * dramatic enough this time.
  */
-const DISMEMBERMENT_TIER: Record<'minor' | 'major' | 'overkill', { label: string; color: string }> = {
-  minor: { label: 'Minor Wound', color: 'var(--accent)' },
-  major: { label: 'Major Wound!', color: '#d9822b' },
-  overkill: { label: 'Killing Blow!', color: 'var(--danger)' }
+const DISMEMBERMENT_TIER: Record<'minor' | 'major' | 'overkill', { label: string; sub: string }> = {
+  minor: { label: 'Minor wound', sub: 'A quarter of their hit points in one hit — something small comes off' },
+  major: { label: 'Major wound', sub: 'Half their hit points in one hit — a whole limb' },
+  overkill: { label: 'Killing blow', sub: 'Every hit point and more in one blow' }
 }
 
 function DismembermentPrompt({
@@ -1445,68 +1411,39 @@ function DismembermentPrompt({
   const table = mode === 'minor' ? MINOR_DISMEMBERMENT_TABLE : mode === 'major' ? MAJOR_DISMEMBERMENT_TABLE : null
 
   return (
-    <div
-      className={closing ? 'gb-card gb-pop-out' : 'gb-card'}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        padding: 'var(--space-2)',
-        background: 'var(--bg-sunken)',
-        borderColor: tier.color,
-        borderWidth: 2,
-        boxShadow: `0 0 0 1px ${tier.color} inset`
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <strong style={{ fontSize: 12, color: tier.color, letterSpacing: '0.02em', textTransform: 'uppercase' }}>{tier.label}</strong>
-        <button
-          type="button"
-          onClick={onDismiss}
-          title="Dismiss"
-          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}
-        >
-          <XIcon size={12} />
+    <div className={closing ? 'it-wound gb-pop-out' : 'it-wound'} data-tier={mode} role="group" aria-label={tier.label}>
+      <div className="it-wound-head">
+        <WoundIcon />
+        <div className="it-wound-titles">
+          <strong>{tier.label}</strong>
+          <span>{tier.sub}</span>
+        </div>
+        <button type="button" className="it-wound-skip" onClick={onDismiss} title="No wound this time">
+          Skip
         </button>
       </div>
       {mode === 'overkill' ? (
-        <div style={{ display: 'flex', gap: 6 }}>
-          <DismembermentTile label="Beheaded" color={tier.color} onClick={() => onPick('Beheaded')} />
-          <DismembermentTile label="Bisected" color={tier.color} onClick={() => onPick('Bisected')} />
+        <div className="it-wound-big">
+          <button type="button" onClick={() => onPick('Beheaded')}>
+            Beheaded
+          </button>
+          <button type="button" onClick={() => onPick('Bisected')}>
+            Bisected
+          </button>
         </div>
       ) : (
-        table && <DismembermentRoller table={table} color={tier.color} onPick={onPick} />
+        table && <DismembermentRoller table={table} onPick={onPick} />
       )}
     </div>
   )
 }
 
-/** One overkill result (Beheaded/Bisected) — a proper full-width tile rather than a plain small button, since this is the single biggest moment the whole system offers. */
-function DismembermentTile({ label, color, onClick }: { label: string; color: string; onClick: () => void }): JSX.Element {
-  const [hover, setHover] = useState(false)
+/** A drop of blood — the wound prompt's mark, and a wound tag's. */
+function WoundIcon({ size = 14 }: { size?: number }): JSX.Element {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        flex: 1,
-        padding: '10px 6px',
-        borderRadius: 'var(--radius-sm)',
-        border: `1px solid ${color}`,
-        background: hover ? color : 'transparent',
-        color: hover ? 'var(--bg-surface)' : color,
-        fontSize: 12,
-        fontWeight: 700,
-        letterSpacing: '0.02em',
-        textTransform: 'uppercase',
-        cursor: 'pointer',
-        transition: 'background 100ms ease, color 100ms ease'
-      }}
-    >
-      {label}
-    </button>
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" className="it-wound-icon">
+      <path d="M8 1.5C8 1.5 3.5 6.6 3.5 9.9a4.5 4.5 0 0 0 9 0C12.5 6.6 8 1.5 8 1.5Z" fill="currentColor" />
+    </svg>
   )
 }
 
@@ -1514,15 +1451,13 @@ const ROLL_TICK_MS = 70
 const ROLL_TICKS = 10
 
 /**
- * The minor/major body-part picker — a grid of proper tiles (not small
- * dashed badges) for the DM to pick a specific part by hand (a player
- * targeted it directly), plus a Roll button that chases a highlight through
- * the tiles for a beat before landing on one and adding it, instead of the
- * result just appearing instantly. Chained setTimeout rather than
- * setInterval for the chase, same reasoning as RollAnimationOverlay's own
- * flicker — see that file's doc comment for why.
+ * The minor/major body-part picker: a tile per part for the DM to pick one
+ * by hand (a player aimed for it), or Roll, which chases a highlight through
+ * the tiles for a beat before landing on one and adding it. Chained
+ * setTimeout rather than setInterval for the chase, same reasoning as
+ * RollAnimationOverlay's own flicker — see that file's doc comment.
  */
-function DismembermentRoller({ table, color, onPick }: { table: string[]; color: string; onPick: (tag: string) => void }): JSX.Element {
+function DismembermentRoller({ table, onPick }: { table: string[]; onPick: (tag: string) => void }): JSX.Element {
   const [rollingIndex, setRollingIndex] = useState<number | null>(null)
   const [landedIndex, setLandedIndex] = useState<number | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -1547,44 +1482,25 @@ function DismembermentRoller({ table, color, onPick }: { table: string[]; color:
     tick(ROLL_TICKS)
   }
 
+  const busy = rollingIndex !== null || landedIndex !== null
   return (
-    <>
-      <Button
-        variant="secondary"
-        onClick={roll}
-        disabled={rollingIndex !== null || landedIndex !== null}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11, padding: '4px 8px' }}
-      >
+    <div className="it-wound-parts">
+      {table.map((tag, i) => (
+        <button
+          key={tag}
+          type="button"
+          className={rollingIndex === i || landedIndex === i ? 'it-wound-part it-wound-part--hit' : 'it-wound-part'}
+          onClick={() => onPick(tag)}
+          disabled={busy}
+        >
+          {tag}
+        </button>
+      ))}
+      <button type="button" className="it-wound-part it-wound-roll" onClick={roll} disabled={busy} title="Roll for where it lands">
         <DiceIcon size={13} style={{ color: 'currentColor' }} />
         Roll
-      </Button>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
-        {table.map((tag, i) => {
-          const active = rollingIndex === i || landedIndex === i
-          return (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => onPick(tag)}
-              disabled={rollingIndex !== null}
-              style={{
-                padding: '5px 4px',
-                borderRadius: 'var(--radius-sm)',
-                border: `1px solid ${active ? color : 'var(--border-subtle)'}`,
-                background: active ? color : 'var(--bg-surface-raised)',
-                color: active ? 'var(--bg-surface)' : 'var(--text-secondary)',
-                fontSize: 10,
-                fontWeight: active ? 700 : 400,
-                cursor: rollingIndex !== null ? 'default' : 'pointer',
-                transition: 'background 60ms ease, color 60ms ease, border-color 60ms ease'
-              }}
-            >
-              {tag}
-            </button>
-          )
-        })}
-      </div>
-    </>
+      </button>
+    </div>
   )
 }
 
@@ -1597,7 +1513,7 @@ function DismembermentRoller({ table, color, onPick }: { table: string[]; color:
  * which drives useMountAnimation exactly like a lone popover would, and
  * `onRemove` only actually fires once that animation has played out.
  */
-function FadeOutBadge({ children, color, onRemove }: { children: ReactNode; color?: string; onRemove: () => void }): JSX.Element | null {
+function FadeOutBadge({ children, color, className = 'gb-badge', onRemove }: { children: ReactNode; color?: string; className?: string; onRemove: () => void }): JSX.Element | null {
   const [leaving, setLeaving] = useState(false)
   const { rendered, closing } = useMountAnimation(!leaving)
 
@@ -1610,7 +1526,7 @@ function FadeOutBadge({ children, color, onRemove }: { children: ReactNode; colo
 
   return (
     <span
-      className={closing ? 'gb-badge gb-pop-out' : 'gb-badge'}
+      className={closing ? `${className} gb-pop-out` : className}
       style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color, borderColor: color }}
     >
       {children}

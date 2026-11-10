@@ -1,0 +1,152 @@
+/* The Encounter Library (EncounterLibrary.tsx): saved encounters as rows that open to their actions. */
+.el {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  height: 100%;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.el-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: var(--space-3);
+}
+
+.el-empty strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.el-find {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.el-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.el-row {
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+}
+
+.el-row--map {
+  border-left-color: var(--blood-500);
+}
+
+.el-row--open {
+  border-color: var(--border-strong);
+}
+
+.el-row-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--space-2);
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.el-row-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.el-row-head .gb-enc-tier {
+  font-size: 11px;
+}
+
+.el-row-roster,
+.el-row-flags {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.el-row-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.el-row-flags:empty {
+  display: none;
+}
+
+.el-flag {
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.el-flag--map {
+  border-color: color-mix(in srgb, var(--blood-500) 55%, transparent);
+  color: var(--blood-500);
+  font-weight: 700;
+}
+
+.el-flag--saved {
+  border-color: color-mix(in srgb, var(--moss-500) 55%, transparent);
+  color: var(--moss-500);
+  font-weight: 700;
+}
+
+.el-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.el-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.el-actions .gb-btn {
+  flex: 1 1 110px;
+  font-size: 12px;
+}
+
+.el-actions--quiet {
+  justify-content: space-between;
+}
+
+.el-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.el-delete:hover {
+  color: var(--danger);
+}
+
+.el-muted {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}

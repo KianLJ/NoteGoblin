@@ -211,9 +211,10 @@
   color: var(--text-on-accent);
   filter: brightness(1.08);
 }
+/* Drops below its button: the transport sits at the top of the Music box, so opening upwards ran out of the box. */
 .ab-slider-pop {
   position: absolute;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
   padding: 8px 10px;
