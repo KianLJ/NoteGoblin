@@ -371,6 +371,8 @@ export interface AppApi {
   }
   calendar: {
     get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignCalendar | null>>
+    /** An event's paired note, read-only — a player gets it only on the day the event falls on. */
+    eventNote: (campaignId: string, eventId: string, sessionId?: string) => Promise<ApiResult<Note>>
     save: (campaignId: string, config: CalendarConfig, sessionId?: string) => Promise<ApiResult<CampaignCalendar>>
     /** DM-only — irreversible, the client is expected to confirm with the user first. */
     remove: (campaignId: string, sessionId?: string) => Promise<ApiResult<void>>

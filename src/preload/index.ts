@@ -137,6 +137,7 @@ const api: AppApi = {
   },
   calendar: {
     get: (campaignId, sessionId) => ipcRenderer.invoke('calendar:get', campaignId, sessionId),
+    eventNote: (campaignId, eventId, sessionId) => ipcRenderer.invoke('calendar:event-note', campaignId, eventId, sessionId),
     save: (campaignId, config, sessionId) => ipcRenderer.invoke('calendar:save', campaignId, config, sessionId),
     remove: (campaignId, sessionId) => ipcRenderer.invoke('calendar:remove', campaignId, sessionId)
   },

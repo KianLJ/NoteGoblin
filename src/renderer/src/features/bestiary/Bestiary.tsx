@@ -437,7 +437,8 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                         type="button"
                         onClick={() => {
                           setSelectedIndex(m.index)
-                          playMonsterSfx(`monster:${m.index}`, m, sessionId)
+                          // Browsing the Codex is yours alone: the sound plays here, never for the table.
+                          playMonsterSfx(`monster:${m.index}`, m, null)
                         }}
                         className={rowClass(active)}
                       >
@@ -485,7 +486,7 @@ export function Bestiary({ onClose, onPick, hideMonsters, sessionId = null, embe
                     type="button"
                     onClick={() => {
                       setSelectedIndex(s.id)
-                      playSpellCastSfx(`spell:${s.id}`, s.id, s.school, sessionId)
+                      playSpellCastSfx(`spell:${s.id}`, s.id, s.school, null)
                     }}
                     className={rowClass(selectedSpell?.id === s.id)}
                   >

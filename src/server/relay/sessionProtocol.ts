@@ -13,6 +13,7 @@ import type { PlayerBattleMap } from '@shared/battleMap'
 
 export type RequestKind =
   | 'campaigns.list'
+  | 'calendar.eventNote'
   | 'campaigns.players'
   | 'campaigns.create'
   | 'campaigns.join'

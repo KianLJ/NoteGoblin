@@ -585,6 +585,8 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (result.ok) broadcastCampaignChanged(campaignId)
       return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
     }
+    case 'calendar.eventNote':
+      return fromService(frame.reqId, campaignService.getCalendarEventNote(db, str('campaignId'), str('eventId'), userId))
     case 'calendar.get':
       return fromService(frame.reqId, campaignService.getCalendar(db, str('campaignId'), userId))
     case 'calendar.save': {

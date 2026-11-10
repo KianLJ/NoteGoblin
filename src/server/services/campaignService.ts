@@ -31,8 +31,7 @@ import {
   type CalendarLocationClimateOverride,
   type CalendarDayNote,
   type CalendarMoon,
-  type CalendarEvent
-} from '@shared/calendar'
+  type CalendarEvent, eventOccursOnDate } from '@shared/calendar'
 
 /**
  * Campaign/note logic shared by two callers: the host's HTTP API (for remote
@@ -1367,6 +1366,33 @@ export function getCalendar(db: DatabaseType, campaignId: string, userId: string
   }
   const row = new CalendarRepo(db).findByCampaignId(campaignId)
   return { ok: true, data: row ? toCalendarJson(row) : null }
+}
+
+/**
+ * The note a calendar event is paired with, read-only. A player only gets it
+ * on the day the event falls on (the calendar's current day) — even a DM-only
+ * note, since pairing it is the DM putting it in front of the table — with
+ * the hidden (::) parts they aren't named on taken out. Never someone else's
+ * private note.
+ */
+export function getCalendarEventNote(db: DatabaseType, campaignId: string, eventId: string, userId: string): ServiceResult<NoteJson> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  const row = new CalendarRepo(db).findByCampaignId(campaignId)
+  const config = row ? toCalendarJson(row).config : null
+  const event = config?.events.find((e) => e.id === eventId)
+  if (!config || !event?.linkedNoteId) return { ok: false, status: 404, error: 'That event has no note.' }
+  const isDm = campaign.dm_user_id === userId
+  if (!isDm && !eventOccursOnDate(config, event, config.currentDate)) {
+    return { ok: false, status: 403, error: 'That event’s note opens on the day it happens.' }
+  }
+  const note = makeNoteRepo(db).findById(event.linkedNoteId)
+  if (!note || note.campaign_id !== campaignId) return { ok: false, status: 404, error: 'That note has been deleted.' }
+  const isAuthor = note.author_user_id === userId
+  if (note.visibility === 'private' && !isAuthor) return { ok: false, status: 403, error: 'That note is private.' }
+  return { ok: true, data: toNoteJson(new UserRepo(db), note, isDm || isAuthor, userId) }
 }
 
 /** Only the DM can create or edit their campaign's calendar — replaces the whole config (creation and every later edit, including just advancing the current date, all go through this one entry point). */

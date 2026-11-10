@@ -97,6 +97,10 @@ export function setCampaignSnapshot(
   return call(`/campaigns/${encodeURIComponent(campaignId)}`, 'POST', token, snapshot)
 }
 
+export function removeCampaignSnapshot(token: string, campaignId: string): Promise<ClientResult<{ ok: true }>> {
+  return call(`/campaigns-delete/${encodeURIComponent(campaignId)}`, 'POST', token, {})
+}
+
 /** A character sheet plus its derived numbers, for the read-only web viewer — see shared/cloudCharacter.ts. */
 export function setCloudCharacter(token: string, character: CloudCharacter): Promise<ClientResult<{ ok: true }>> {
   return call(`/characters/${encodeURIComponent(character.id)}`, 'POST', token, character)

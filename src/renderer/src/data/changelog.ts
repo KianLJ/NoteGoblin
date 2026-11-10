@@ -7,6 +7,18 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.3',
+    title: 'Notes on the calendar, and a round of fixes',
+    highlights: [
+      'Players can open the note paired with an event on the calendar’s current day, read-only',
+      'Starting a presentation opens the Sessions box for players who don’t have it out',
+      'Monster and spell sounds from the Codex only play for whoever clicked',
+      'Deleted campaigns no longer come back',
+      'The DM can write in the party chat again, and friend message notifications stay up',
+      'Pinned boxes can’t get stuck above the top of the canvas'
+    ]
+  },
+  {
     version: '0.11.2',
     title: 'Secrets in any note',
     highlights: [

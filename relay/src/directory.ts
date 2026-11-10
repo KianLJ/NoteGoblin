@@ -173,6 +173,7 @@ export class Directory extends Server<Env> {
     if (req.method === 'GET' && action === 'campaigns') return this.handleListCampaignSnapshots(req)
     if (req.method === 'GET' && segments[segments.length - 2] === 'campaigns') return this.handleGetCampaignSnapshot(req, action)
     if (req.method === 'POST' && segments[segments.length - 2] === 'campaigns') return this.handleSetCampaignSnapshot(req, action)
+    if (req.method === 'POST' && segments[segments.length - 2] === 'campaigns-delete') return this.handleDeleteCampaignSnapshot(req, action)
     if (req.method === 'GET' && action === 'characters') return this.handleListCharacters(req)
     if (req.method === 'GET' && segments[segments.length - 2] === 'characters') return this.handleGetCharacter(req, action)
     if (req.method === 'POST' && segments[segments.length - 2] === 'characters') return this.handleSetCharacter(req, action)
@@ -396,6 +397,14 @@ export class Directory extends Server<Env> {
       derived: body.derived
     }
     await this.ctx.storage.put(`character:${account.id}:${characterId}`, character)
+    return json({ ok: true })
+  }
+
+  /** A deleted campaign's synced copy goes too — otherwise the DM's app finds it again and brings the campaign back. */
+  private async handleDeleteCampaignSnapshot(req: Request, campaignId: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    await this.ctx.storage.delete(`campaign:${account.id}:${campaignId}`)
     return json({ ok: true })
   }
 

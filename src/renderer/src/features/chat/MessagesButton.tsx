@@ -47,7 +47,7 @@ export function MessagesButton({ campaignId, sessionId, myUserId }: MessagesButt
       {!open && toast && <MessageToast key={toast.id} toast={toast} />}
 
       <div className="gb-card ms-pop" style={{ display: open ? 'flex' : 'none' }}>
-        <ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} onUnreadTotalChange={setUnread} />
+        <ChatPanel campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} onUnreadTotalChange={setUnread} visible={open} />
       </div>
     </div>
   )

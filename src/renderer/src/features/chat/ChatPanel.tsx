@@ -14,6 +14,8 @@ interface ChatPanelProps {
   myUserId: string | null
   /** Fired whenever the combined Party+Friends unread count changes — lets MessagesButton.tsx show a badge on the header button without duplicating this panel's own unread tracking. Omitted entirely when this panel isn't hosted inside that button (there's currently no other caller). */
   onUnreadTotalChange?: (total: number) => void
+  /** Whether the panel is on screen (the Messages popover is open) — only then do messages count as seen. Defaults to true. */
+  visible?: boolean
 }
 
 type Section = 'party' | 'friends'
@@ -43,7 +45,7 @@ function loadSection(): Section {
  *    here too, but it was close enough to Friends to not earn its own
  *    panel — a DM/player still reach each other fine via Friends.)
  */
-export function ChatPanel({ campaignId, sessionId, myUserId, onUnreadTotalChange }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ campaignId, sessionId, myUserId, onUnreadTotalChange, visible = true }: ChatPanelProps): JSX.Element {
   const [section, setSection] = useState<Section>(loadSection)
 
   useEffect(() => {
@@ -62,16 +64,18 @@ export function ChatPanel({ campaignId, sessionId, myUserId, onUnreadTotalChange
   // any live party message that isn't your own while you're looking at a
   // different section, clear it the moment Party becomes active again.
   const [partyUnread, setPartyUnread] = useState(0)
+  // Party only counts as seen while it's on screen — the panel stays mounted behind a closed popover.
+  const partyOnScreen = visible && section === 'party'
   useEffect(() => {
     if (!campaignId) return
     return window.goblin.messages.onMessage((message) => {
       if (message.campaignId !== campaignId || message.channel !== 'party' || message.senderUserId === myUserId) return
-      setPartyUnread((prev) => (section === 'party' ? prev : prev + 1))
+      setPartyUnread((prev) => (partyOnScreen ? prev : prev + 1))
     })
-  }, [campaignId, myUserId, section])
+  }, [campaignId, myUserId, partyOnScreen])
   useEffect(() => {
-    if (section === 'party') setPartyUnread(0)
-  }, [section])
+    if (partyOnScreen) setPartyUnread(0)
+  }, [partyOnScreen])
 
   const friendsUnreadCount = friendsUnread.length
   useEffect(() => {
@@ -91,7 +95,7 @@ export function ChatPanel({ campaignId, sessionId, myUserId, onUnreadTotalChange
           <PartySection campaignId={campaignId} sessionId={sessionId} myUserId={myUserId} />
         </div>
         <div style={{ display: section === 'friends' ? 'block' : 'none', height: '100%' }}>
-          <FriendsSection myUserId={myUserId} unreadFriendIds={unreadFriendIds} />
+          <FriendsSection myUserId={myUserId} unreadFriendIds={unreadFriendIds} visible={visible && section === 'friends'} />
         </div>
       </div>
     </div>
@@ -145,7 +149,7 @@ function PartySection({
 // Friends — any relay friend, campaign-independent.
 // ---------------------------------------------------------------------------
 
-function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null; unreadFriendIds: Set<string> }): JSX.Element {
+function FriendsSection({ myUserId, unreadFriendIds, visible }: { myUserId: string | null; unreadFriendIds: Set<string>; visible: boolean }): JSX.Element {
   const [friends, setFriends] = useState<FriendSummary[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
@@ -154,7 +158,7 @@ function FriendsSection({ myUserId, unreadFriendIds }: { myUserId: string | null
       return null
     }
   })
-  const { messages, error, send } = useRelayMessages(selectedId, 'friend')
+  const { messages, error, send } = useRelayMessages(selectedId, 'friend', visible)
   const [draft, setDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
 

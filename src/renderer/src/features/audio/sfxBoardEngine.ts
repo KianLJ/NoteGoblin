@@ -119,7 +119,7 @@ export function playSpellCastSfx(entityKey: string, compendiumId: string | undef
   if (cue) playSfxCue(cue.id, sessionId)
 }
 
-/** Plays and broadcasts the Creatures cue matching a monster's own name/type (see findMonsterSfxCue) — called from Bestiary.tsx's Monsters row in the Codex, and from InitiativeTracker.tsx whenever a monster's turn comes up. `entityKey` (`monster:<bestiary index>`) is checked against a DM's own custom override first, same as playSpellCastSfx. */
+/** Plays (and with a session, broadcasts) the Creatures cue matching a monster's own name/type (see findMonsterSfxCue) — called from Bestiary.tsx's Monsters row in the Codex (locally only), and from InitiativeTracker.tsx whenever a monster's turn comes up. `entityKey` (`monster:<bestiary index>`) is checked against a DM's own custom override first, same as playSpellCastSfx. */
 export function playMonsterSfx(entityKey: string, monster: { name: string; type: string; index?: string }, sessionId: string | null): void {
   if (tryPlayCustomEntitySfx(entityKey)) return
   const cue = findMonsterSfxCue(monster)

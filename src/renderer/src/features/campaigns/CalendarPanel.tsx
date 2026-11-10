@@ -4,6 +4,7 @@ import { useCalendar } from './useCalendar'
 import { CalendarCreatorWizard } from './CalendarCreatorWizard'
 import { Button } from '../../ui/Button'
 import { Modal } from '../../ui/Modal'
+import { renderNoteMarkdown } from '../../markdown'
 import { useLastTruthy } from '../../ui/useLastTruthy'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { renderedScale } from '../../ui/renderedScale'
@@ -70,6 +71,8 @@ function loadDayPanelHeight(): number | null {
 /** Shared between RightPanel (DM) and PartySidebar (player) via the readOnly prop, same convention as CharacterSheetEditor — one component, not a forked copy. */
 export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: CalendarPanelProps): JSX.Element {
   const { calendar, loading, error, save, remove } = useCalendar(sessionId ?? undefined, campaignId)
+  // A player reading the note an event on today's date is paired with (or why it couldn't open).
+  const [reading, setReading] = useState<{ note: Note } | { error: string } | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   // Browsing a different date than the campaign's actual current one is
@@ -550,16 +553,31 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
             <p className="cal-muted cal-none">Nothing on this day.</p>
           ) : (
             <div className="cal-events">
-              {selectedEvents.map((ev) => (
+              {selectedEvents.map((ev) => {
+                // For a player, an event happening today that's paired with a note opens that note to read.
+                const readable = readOnly && !!ev.linkedNoteId && sameDate(selected!, config.currentDate) && !!campaignId
+                return (
                 <div key={ev.id} className="cal-event">
                   <span className="cal-dot" style={{ background: ev.color }} />
-                  <button type="button" className="cal-event-name" onClick={() => !readOnly && setEditingEvent(ev)} title={ev.description || undefined} disabled={readOnly}>
+                  <button
+                    type="button"
+                    className={readable ? 'cal-event-name cal-event-name--note' : 'cal-event-name'}
+                    onClick={() => {
+                      if (!readOnly) setEditingEvent(ev)
+                      else if (readable)
+                        void window.goblin.calendar.eventNote(campaignId!, ev.id, sessionId ?? undefined).then((r) => setReading(r.ok ? { note: r.data } : { error: r.error }))
+                    }}
+                    title={readable ? 'Read the note for this event' : ev.description || undefined}
+                    disabled={readOnly && !readable}
+                  >
                     {ev.name}
                     {ev.category && <span className="cal-muted"> · {ev.category}</span>}
+                    {readable && <span className="cal-event-read">Read note</span>}
                   </button>
                   {!readOnly && <ConfirmButton label={<XIcon size={12} />} confirmLabel="Sure?" variant="ghost" danger className="cal-icon-btn" onConfirm={() => deleteEvent(ev.id)} />}
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
@@ -572,6 +590,16 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
 
       {error && <p className="cal-error">{error}</p>}
 
+      <Modal open={reading !== null} onClose={() => setReading(null)} width={640}>
+        {reading && 'note' in reading ? (
+          <div className="cal-read-note">
+            <h2>{reading.note.title || 'Untitled'}</h2>
+            <div className="gb-markdown" dangerouslySetInnerHTML={{ __html: renderNoteMarkdown(reading.note.bodyMarkdown, new Set(notes.map((n) => (n.title || 'Untitled').toLowerCase())), reading.note.campaignId) }} />
+          </div>
+        ) : (
+          <p className="cal-muted">{reading && 'error' in reading ? reading.error : ''}</p>
+        )}
+      </Modal>
       {!readOnly && wizardOpen && (
         <CalendarCreatorWizard
           initial={config}

@@ -101,6 +101,21 @@ export function PlayerWorkspaceBody({
   const [layout, setLayout, nav] = useCanvasLayout('player')
   const entries = useCanvasEntries('player')
   const party = usePartyPresence(sessionId, !isOffline ? (activeCampaign?.id ?? null) : null)
+
+  // The DM starting a presentation brings the Sessions box out for a player who doesn't have it on their canvas
+  // (once per presentation — closing it again while the DM steps through leaves it closed).
+  const placedRef = useRef(nav.placed)
+  placedRef.current = nav.placed
+  const campaignIdForDecks = !isOffline ? (activeCampaign?.id ?? null) : null
+  useEffect(() => {
+    if (!sessionId || !campaignIdForDecks) return
+    let lastDeck: string | null = null
+    return window.goblin.sessionDecks.onSceneChanged((update) => {
+      if (update.campaignId !== campaignIdForDecks) return
+      if (update.deckId && update.deckId !== lastDeck && !placedRef.current.has('sessions')) canvasRef.current?.openTool('sessions')
+      lastDeck = update.deckId
+    })
+  }, [sessionId, campaignIdForDecks, canvasRef])
   // The turn order only learns about the fight from live pushes (no fetch on mount), so it keeps running while its box is closed.
   const initiativeHost = useKeepAliveHost()
 

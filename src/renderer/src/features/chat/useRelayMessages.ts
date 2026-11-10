@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RelayMessage, RelayNotification } from '@shared/relay'
 import { playSfx } from '../audio/soundEffects'
 
@@ -10,9 +10,13 @@ import { playSfx } from '../audio/soundEffects'
  * per-campaign SQLite, since both these kinds need to work regardless of
  * which campaign (if any) is currently open.
  */
-export function useRelayMessages(peerUserId: string | null, kind: 'friend' | 'whisper') {
+export function useRelayMessages(peerUserId: string | null, kind: 'friend' | 'whisper', visible = true) {
   const [messages, setMessages] = useState<RelayMessage[]>([])
   const [error, setError] = useState<string | null>(null)
+  // Whether the thread is actually on screen: the Messages popover stays mounted while it's closed, and a thread
+  // marked read behind a closed popover made a friend's message flash up and vanish before anyone saw it.
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
 
   useEffect(() => {
     if (!peerUserId) {
@@ -25,12 +29,15 @@ export function useRelayMessages(peerUserId: string | null, kind: 'friend' | 'wh
       if (result.ok) setMessages(result.data)
       else setError(result.error)
     })
-    // Opening a thread clears whatever was unread in it — same "you looked, it's read" convention every other unread indicator in the app uses.
-    void window.goblin.relay.messages.markRead(peerUserId, kind)
     return () => {
       cancelled = true
     }
   }, [peerUserId, kind])
+
+  // Looking at a thread clears whatever was unread in it — same "you looked, it's read" convention every other unread indicator in the app uses.
+  useEffect(() => {
+    if (peerUserId && visible) void window.goblin.relay.messages.markRead(peerUserId, kind)
+  }, [peerUserId, kind, visible])
 
   useEffect(() => {
     if (!peerUserId) return
@@ -43,7 +50,7 @@ export function useRelayMessages(peerUserId: string | null, kind: 'friend' | 'wh
         return [...prev, message]
       })
       // Already looking at this thread when the new message arrives — mark it read immediately rather than leaving a badge up for something already visible on screen.
-      if (message.senderUserId === peerUserId) void window.goblin.relay.messages.markRead(peerUserId, kind)
+      if (message.senderUserId === peerUserId && visibleRef.current) void window.goblin.relay.messages.markRead(peerUserId, kind)
     })
   }, [peerUserId, kind])
 

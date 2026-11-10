@@ -32,6 +32,25 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.11.3',
+    title: 'Notes on the calendar, and a round of fixes',
+    intro: 'A small update: players can read what an event is about on the day it happens, and a batch of things that were getting in the way are fixed.',
+    sections: [
+      {
+        heading: 'Read today’s event notes',
+        body: 'When an event on the calendar’s current day is paired with a note, players see a Read note tag on it. Clicking it opens the note to read, even a DM-only one, since pairing it puts it in front of the table. Hidden parts stay hidden, and on other days the note stays closed.'
+      },
+      {
+        heading: 'Presenting and sounds',
+        body: 'When you start presenting, players who don’t have the Sessions box out get it opened for them. Looking up a monster or a spell in the Codex now only plays its sound for you, not the whole table; casting a spell from a character sheet still plays for everyone.'
+      },
+      {
+        heading: 'Fixes',
+        body: 'Deleted campaigns stay deleted instead of coming back. The DM can write in the party chat again, and a friend’s message notification no longer disappears straight away. A pinned box can’t be dragged off the top of the canvas any more, and any that were stuck there come back into reach.'
+      }
+    ]
+  },
+  {
     version: '0.11.2',
     title: 'Secrets in any note',
     intro: 'Hidden text now works everywhere, and you choose who gets to read it. Plus a few fixes to presenting and the turn order.',

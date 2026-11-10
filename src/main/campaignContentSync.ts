@@ -1,10 +1,42 @@
-import type { BrowserWindow } from 'electron'
+import { app, type BrowserWindow } from 'electron'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Database as DatabaseType } from 'better-sqlite3'
 import * as relayClient from '@server/relay/relayClient'
 import { getRelaySession } from './relayState'
 import * as campaignService from '@server/services/campaignService'
 import type { NoteRow } from '@server/repositories/noteRepo'
 import type { FolderRow } from '@server/repositories/folderRepo'
+
+// Campaigns deleted on this computer: never brought back from a synced copy, even one the relay still holds (an
+// older relay without the delete, or one that was offline when the campaign was deleted).
+function deletedPath(): string {
+  return join(app.getPath('userData'), 'deleted-campaigns.json')
+}
+
+function deletedCampaigns(): Set<string> {
+  try {
+    return new Set(existsSync(deletedPath()) ? (JSON.parse(readFileSync(deletedPath(), 'utf-8')) as string[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+/** After a campaign's deleted: its synced copy goes from the relay, and it's remembered so it's never re-imported. */
+export async function forgetCampaign(campaignId: string): Promise<void> {
+  const pending = pushTimers.get(campaignId)
+  if (pending) clearTimeout(pending)
+  pushTimers.delete(campaignId)
+  const deleted = deletedCampaigns()
+  deleted.add(campaignId)
+  try {
+    writeFileSync(deletedPath(), JSON.stringify([...deleted]), 'utf-8')
+  } catch {
+    /* best-effort — the relay delete below still stops it coming back */
+  }
+  const session = getRelaySession()
+  if (session) await relayClient.removeCampaignSnapshot(session.token, campaignId)
+}
 
 // Debounced per campaign, same shape as theme.ts's schedulePrefsPush — a
 // burst of note/folder edits collapses into one push instead of one per
@@ -114,7 +146,9 @@ export async function discoverAndSyncCampaigns(db: DatabaseType, userId: string,
   const remoteList = await relayClient.listCampaignSnapshots(session.token)
   if (!remoteList.ok) return
 
+  const deleted = deletedCampaigns()
   for (const summary of remoteList.data) {
+    if (deleted.has(summary.campaignId)) continue
     const existing = campaignService.exportCampaignSnapshot(db, summary.campaignId, userId)
     // ok → already known locally, nothing to discover. status 403 → a row
     // with this id already exists locally under a different DM, which

@@ -1044,3 +1044,33 @@
   padding-left: 10px;
   border-left: 2px solid var(--accent-subtle);
 }
+
+/* A player's event that's on today and paired with a note: it opens the note to read. */
+.cal-event-name--note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal-event-read {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cal-event-name--note:hover .cal-event-read {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.cal-read-note {
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+.cal-read-note h2 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: 20px;
+}

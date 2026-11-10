@@ -324,6 +324,12 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     setVp(fitViewport(rendered.filter((r) => !r.node!.pinned).map((r) => r.node!), size.w, size.h - 56))
   }
 
+  // A pinned box sits in screen space, and the canvas clips what's outside it: its title bar always stays inside, so
+  // it can't be dropped (or left, from an older layout or a bigger window) where it can never be grabbed again.
+  function onScreen(r: Rect): Rect {
+    return { ...r, x: Math.min(Math.max(r.x, 64 - r.w), Math.max(0, size.w - 64)), y: Math.min(Math.max(r.y, 0), Math.max(0, size.h - 40)) }
+  }
+
   function renderNode({ item, node }: (typeof rendered)[number]): JSX.Element {
     const isCollection = item.id.startsWith(COLLECTION_PREFIX)
     return (
@@ -331,7 +337,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         key={item.id}
         id={item.id}
         // A tool's small view is shown at its own size, even in a layout saved before it had one.
-        rect={node!.minimized && item.miniSize ? { ...node!, ...item.miniSize } : node!}
+        rect={(node!.pinned ? onScreen : (x: Rect) => x)(node!.minimized && item.miniSize ? { ...node!, ...item.miniSize } : node!)}
         z={node!.z}
         // A pinned box shows at 100%, so dragging it moves it pixel for pixel.
         zoom={node!.pinned ? 1 : vp.zoom}
@@ -356,7 +362,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         onRectChange={(r) => {
           // Dropped onto a collection's tile: it goes in.
           const into = node!.pinned ? null : collectionUnder(item.id, r)
-          setLayout((l) => (into ? moveIntoCollection(setNodeRect(l, item.id, r), item.id, into) : setNodeRect(l, item.id, r)))
+          const rect = node!.pinned ? onScreen(r) : r
+          setLayout((l) => (into ? moveIntoCollection(setNodeRect(l, item.id, rect), item.id, into) : setNodeRect(l, item.id, rect)))
         }}
         onClose={item.noClose ? undefined : () => {
           // Closing a collection's tile breaks it up: what's inside comes back out here, nothing's lost.

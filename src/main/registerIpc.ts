@@ -18,7 +18,7 @@ import { SnapshotRepo, type CampaignSnapshot } from '@server/repositories/snapsh
 import { CampaignPackRepo, PackLibraryRepo } from '@server/repositories/packRepo'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { syncRelayAccount, changeRelayPassword, clearRelaySession, pullAndSendPrefs } from './relaySync'
-import { pullCampaignIfNewer, schedulePushCampaign, discoverAndSyncCampaigns } from './campaignContentSync'
+import { pullCampaignIfNewer, schedulePushCampaign, discoverAndSyncCampaigns, forgetCampaign } from './campaignContentSync'
 import { queueCloudCharacter, queueCloudCharacterRemoval } from './characterCloudSync'
 import type { CloudCharacter } from '@shared/cloudCharacter'
 import * as relayClient from '@server/relay/relayClient'
@@ -656,7 +656,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('campaigns:delete', async (_event, campaignId: string): Promise<ApiResult<void>> => {
     const me = ensureMyHostUser()
     if ('error' in me) return { ok: false, error: me.error }
-    return runService(() => campaignService.deleteCampaign(me.db, campaignId, me.userId))
+    const result = runService(() => campaignService.deleteCampaign(me.db, campaignId, me.userId))
+    // Its synced copy has to go too, or the next campaign list finds it and brings it back.
+    if (result.ok) void forgetCampaign(campaignId)
+    return result
   })
 
   ipcMain.handle(
@@ -864,6 +867,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
     }
   })
+
+  ipcMain.handle(
+    'calendar:event-note',
+    async (_event, campaignId: string, eventId: string, sessionId?: string): Promise<ApiResult<Note>> => {
+      if (!sessionId) {
+        const me = ensureMyHostUser()
+        if ('error' in me) return { ok: false, error: me.error }
+        return runService(() => campaignService.getCalendarEventNote(me.db, campaignId, eventId, me.userId))
+      }
+      const err = requireJoinedSession(sessionId)
+      if (err) return err
+      return sendSessionRequest<Note>('calendar.eventNote', { campaignId, eventId })
+    }
+  )
 
   ipcMain.handle(
     'calendar:get',
@@ -1182,7 +1199,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     'messages:list',
     async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<Message[]>> => {
-      if (!sessionId) {
+      // The DM's chat passes their own hosted session's id — that's still the local path, not a joined session.
+      if (!sessionId || isOwnHostedCall(sessionId)) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         const result = campaignService.listMessages(me.db, campaignId, me.userId)
@@ -1202,7 +1220,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       input: { channel: 'party' | 'whisper'; recipientUserId?: string; body: string },
       sessionId?: string
     ): Promise<ApiResult<Message>> => {
-      if (!sessionId) {
+      if (!sessionId || isOwnHostedCall(sessionId)) {
         const me = ensureMyHostUser()
         if ('error' in me) return { ok: false, error: me.error }
         try {
