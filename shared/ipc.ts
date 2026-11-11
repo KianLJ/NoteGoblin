@@ -129,13 +129,15 @@ export interface AudioLibraryMeta {
   names: Record<string, string>
 }
 
-/** How handing out a quest's reward went: each player's share, and the gold that didn't split evenly. */
-export type QuestAwardResult = { ok: true; players: number; goldEach: number; xpEach: number; goldLeftover: number } | { ok: false; error: string }
+/** How handing out a quest's reward went: each player's share (coins by currency id, and XP), and the coins that didn't split evenly. */
+export type QuestAwardResult =
+  | { ok: true; players: number; coinsEach: Record<string, number>; xpEach: number; coinsLeftover: Record<string, number> }
+  | { ok: false; error: string }
 
-/** A player's share of a finished quest's reward. */
+/** A player's share of a finished quest's reward: coins by currency id (cp…pp, or a pack's), and XP. */
 export interface QuestReward {
   questTitle: string
-  gold: number
+  coins: Record<string, number>
   xp: number
   partySize: number
 }
@@ -659,9 +661,15 @@ export interface AppApi {
     remove: (paths: string[]) => Promise<void>
     onProgress: (callback: (progress: { done: number; total: number; path: string }) => void) => () => void
   }
+  browser: {
+    /** Ctrl+scroll (or Ctrl + / - / 0) on a Browser box's page: which page (its web contents id), and which way. */
+    onZoom: (callback: (pageId: number, step: 'in' | 'out' | 'reset') => void) => () => void
+    /** A Browser box's page opening a new window (a target=_blank link, window.open): which page, and where to. */
+    onOpenTab: (callback: (pageId: number, url: string) => void) => () => void
+  }
   handouts: {
-    /** Puts a note or picture in front of every connected player. Fails (with why) unless hosting with someone connected. */
-    show: (handout: Handout) => Promise<{ ok: true; players: number } | { ok: false; error: string }>
+    /** Puts a note or picture in front of every connected player, or just the `only` ones (user ids). Fails (with why) unless hosting with someone connected. */
+    show: (handout: Handout, only?: string[]) => Promise<{ ok: true; players: number } | { ok: false; error: string }>
     /** Fires on a player's side whenever the DM shows a handout. */
     onShow: (callback: (handout: Handout) => void) => () => void
   }

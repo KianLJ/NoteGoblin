@@ -275,6 +275,9 @@ export interface AmbientLevelChangedFrame {
 export interface QuestRewardFrame {
   type: 'quest-reward'
   questTitle: string
+  /** Coins by currency id. */
+  coins?: Record<string, number>
+  /** The gp in `coins` again, for players on an older version that only read this. */
   gold: number
   xp: number
   /** How many players it was split between. */

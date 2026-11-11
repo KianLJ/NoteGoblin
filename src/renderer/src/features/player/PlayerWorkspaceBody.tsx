@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { GoblinLoader } from '../../ui/GoblinLoader'
 import { CalendarMini, PartyMini, PlayerInitiativeMini, PlayerSessionsMini } from '../canvas/toolMinis'
 import { createPortal } from 'react-dom'
 import { PlayerSidebar } from './PlayerSidebar'
@@ -27,6 +28,8 @@ import { TOOL_ICONS } from '../canvas/toolIcons'
 import { QuickSearch, QuickSearchButton, noteTarget, useQuickSearchKey } from '../canvas/QuickSearch'
 import { HandoutViewer } from './HandoutViewer'
 import { QuestRewardNotice } from './QuestRewardNotice'
+import { QuestAnnouncer } from './QuestAnnouncer'
+import { addCoins } from '@shared/quests'
 import { QuestLog } from '../campaigns/QuestLog'
 import { useCanvasEntries } from '../canvas/canvasEntries'
 import { entryItems } from '../canvas/entryItems'
@@ -359,9 +362,11 @@ export function PlayerWorkspaceBody({
       content: viewedPartyMemberCharacter ? (
         <CharacterSheetEditor key={viewedPartyMemberCharacter.id} character={viewedPartyMemberCharacter} readOnly onSave={() => {}} />
       ) : (
-        <p style={{ padding: 'var(--space-4)', fontSize: 13, color: 'var(--text-muted)' }}>
-          {viewedPartyMemberCharacter === undefined ? 'Loading…' : "Couldn't load that character — they may have disconnected or changed selection."}
-        </p>
+        viewedPartyMemberCharacter === undefined ? (
+          <GoblinLoader label="Fetching their sheet" />
+        ) : (
+          <p style={{ padding: 'var(--space-4)', fontSize: 13, color: 'var(--text-muted)' }}>Couldn’t load that character — they may have disconnected or changed selection.</p>
+        )
       )
     })
   }
@@ -432,12 +437,13 @@ export function PlayerWorkspaceBody({
         notes={(notes ?? []).map((note) => noteTarget(note, () => open({ kind: 'note', id: note.id })))}
       />
       <HandoutViewer knownTitles={knownTitles} />
+      <QuestAnnouncer sessionId={sessionId} campaignId={!isOffline ? (activeCampaign?.id ?? null) : null} onOpenQuests={() => canvasRef.current?.openTool('quests')} />
       <QuestRewardNotice
         character={lastActiveCharacter}
         onApply={(c, reward) =>
           void saveCharacter(c.id, {
             experiencePoints: (c.experiencePoints ?? 0) + reward.xp,
-            currency: { ...c.currency, gp: (c.currency?.gp ?? 0) + reward.gold }
+            ...addCoins(c, reward.coins)
           })
         }
       />

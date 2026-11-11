@@ -6,6 +6,7 @@ import ReactDOM from 'react-dom/client'
 import type { CharacterSheet } from '@shared/ipc'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { defaultCalendarConfig } from '@shared/calendar'
+import { questsForPlayer, type CampaignQuests } from '@shared/quests'
 import { setActivePacks } from '@shared/content/sheet'
 import { parsePack } from '@shared/content/validate'
 import { srdPack } from '@shared/content/srd'
@@ -367,27 +368,47 @@ const campaignPacksApi = {
 }
 // ?showcase=quests: an in-memory quest log, so the Quests box can be tried without a database.
 let questDoc = { quests: [
-  { id: 'q1', title: 'Find what sleeps in the Sunken Crypt', detail: 'Look into the chanting beneath the old chapel.', giver: 'Brother Aldric', rewardGold: 250, rewardXp: 300, rewardItems: 'A silver key', status: 'active', shared: true, noteTitle: 'The Sunken Crypt' },
+  { id: 'q1', title: 'Find what sleeps in the Sunken Crypt', detail: 'Look into the chanting beneath the old chapel.', giver: 'Brother Aldric', rewardCoins: { gp: 250, sp: 40 }, rewardXp: 300, rewardItems: 'A silver key', status: 'active', shared: true, noteTitle: 'The Sunken Crypt',
+    hints: [{ id: 'h1', text: 'The chapel bell rings at midnight, though no one pulls the rope.', shown: true }, { id: 'h2', text: 'Aldric was a member of the cult once.', shown: false }] },
   { id: 'q2', title: 'Unmask the cult', detail: '', status: 'active', shared: false },
   { id: 'q3', title: 'Deliver the letter to Saltmarsh', detail: '', status: 'done', shared: true }
 ] }
+const campaignListeners = new Set<(e: { campaignId: string }) => void>()
+const campaignsApi = new Proxy({} as Record<string | symbol, unknown>, {
+  get: (_t, key) =>
+    key === 'onChanged'
+      ? (l: (e: { campaignId: string }) => void) => {
+          campaignListeners.add(l)
+          return () => campaignListeners.delete(l)
+        }
+      : key === 'players'
+        ? async () => ({ ok: true, data: [{ userId: 'u1', displayName: 'Gelden' }, { userId: 'u2', displayName: 'Ann' }, { userId: 'u3', displayName: 'Bram' }] })
+        : (base.campaigns as Record<string | symbol, unknown>)[key]
+})
 const questsApi = {
   // A player (a session id) only gets the shared ones, as from the DM's app.
-  get: async (_c: string, sessionId?: string) => ({ ok: true, data: sessionId ? { quests: questDoc.quests.filter((q) => q.shared) } : questDoc }),
+  get: async (_c: string, sessionId?: string) => ({ ok: true, data: sessionId ? questsForPlayer(questDoc as CampaignQuests, 'u1') : questDoc }),
   save: async (_c: string, doc: typeof questDoc) => {
     questDoc = doc
     console.log('quests saved', doc.quests.length)
+    // As the DM's save broadcasts to players, so the player side on the page re-reads.
+    campaignListeners.forEach((l) => l({ campaignId: 'camp' }))
     return { ok: true, data: doc }
   },
   // As if 3 players were at the table: split, mark paid, and hand this page's own player side its share.
   award: async (_c: string, questId: string) => {
-    const q = questDoc.quests.find((x) => x.id === questId) as { title: string; rewardGold?: number; rewardXp?: number; rewarded?: boolean } | undefined
+    const q = questDoc.quests.find((x) => x.id === questId) as { title: string; rewardCoins?: Record<string, number>; rewardXp?: number; rewarded?: boolean } | undefined
     if (!q) return { ok: false, error: 'No such quest' }
-    const gold = Math.floor((q.rewardGold ?? 0) / 3)
+    const coinsEach: Record<string, number> = {}
+    const coinsLeftover: Record<string, number> = {}
+    for (const [id, n] of Object.entries(q.rewardCoins ?? {})) {
+      coinsEach[id] = Math.floor(n / 3)
+      if (n % 3) coinsLeftover[id] = n % 3
+    }
     const xp = Math.floor((q.rewardXp ?? 0) / 3)
     q.rewarded = true
-    rewardListeners.forEach((l) => l({ questTitle: q.title, gold, xp, partySize: 3 }))
-    return { ok: true, players: 3, goldEach: gold, xpEach: xp, goldLeftover: (q.rewardGold ?? 0) - gold * 3 }
+    rewardListeners.forEach((l) => l({ questTitle: q.title, coins: coinsEach, xp, partySize: 3 }))
+    return { ok: true, players: 3, coinsEach, xpEach: xp, coinsLeftover }
   },
   onReward: (l: (r: unknown) => void) => {
     rewardListeners.add(l)
@@ -398,9 +419,11 @@ const rewardListeners = new Set<(r: unknown) => void>()
 // Handouts loop straight back: "Show to players" here pops up this page's own HandoutViewer, as if over the relay.
 const handoutListeners = new Set<(h: unknown) => void>()
 const handoutsApi = {
-  show: async (h: unknown) => {
-    handoutListeners.forEach((l) => l(h))
-    return { ok: true, players: 2 }
+  // Three players at the table; this page's own viewer is Gelden (u1), so it only comes up if it's for them.
+  show: async (h: unknown, only?: string[]) => {
+    console.log('handout to', only ? only.join(',') : 'everyone')
+    if (!only || only.includes('u1')) handoutListeners.forEach((l) => l(h))
+    return { ok: true, players: only ? only.length : 3 }
   },
   onShow: (l: (h: unknown) => void) => {
     handoutListeners.add(l)
@@ -409,7 +432,7 @@ const handoutsApi = {
 }
 ;(window as unknown as { goblin: unknown }).goblin = new Proxy(
   {},
-  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : key === 'handouts' ? handoutsApi : key === 'quests' ? questsApi : base[key]) }
+  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : key === 'handouts' ? handoutsApi : key === 'quests' ? questsApi : key === 'campaigns' ? campaignsApi : base[key]) }
 )
 
 // A demo pack with a starship, for the vehicles preview's "Add a vehicle".

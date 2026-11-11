@@ -1,0 +1,122 @@
+/* The goblin loading sign (GoblinLoader.tsx). */
+.gb-goblin-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted);
+  /* A quick load never shows it. */
+  animation: gb-goblin-appear 220ms ease-out 180ms both;
+}
+
+.gb-goblin-loader--fill {
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
+}
+
+/* The GIF's frame is 640×480, with empty space above and below the drawing; over its whole loop the drawing reaches
+   right to both sides and y 55–438. The box is cut top and bottom to that, so the goblin sits in the middle with
+   nothing of the frame overlapping the words under it, and no frame of the animation is cut off. */
+.gb-goblin-loader-art {
+  position: relative;
+  display: block;
+  aspect-ratio: 640 / 383;
+  /* Top and bottom only: the scribbles may spill sideways. */
+  clip-path: inset(0 -60%);
+}
+
+.gb-goblin-loader-art img {
+  position: absolute;
+  top: -14.36%;
+  /* Centred on the goblin and its book (x 39–487 of the 640-wide frame), not the whole frame. */
+  left: 8.9%;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+.gb-goblin-loader--sm .gb-goblin-loader-art {
+  width: 72px;
+}
+
+.gb-goblin-loader--md .gb-goblin-loader-art {
+  width: 136px;
+}
+
+.gb-goblin-loader--lg .gb-goblin-loader-art {
+  width: 220px;
+}
+
+.gb-goblin-loader-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  /* Balances the spacing after the last letter, so the words centre too. */
+  text-indent: 0.1em;
+  text-transform: uppercase;
+}
+
+.gb-goblin-loader--sm .gb-goblin-loader-label {
+  font-size: 10px;
+}
+
+.gb-goblin-loader-dots span {
+  animation: gb-goblin-dot 1.2s ease-in-out infinite;
+}
+
+.gb-goblin-loader-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.gb-goblin-loader-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Over everything, while something that opens over the whole window loads. */
+.gb-goblin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg-canvas, #000) 45%, transparent);
+  animation: gb-goblin-appear 220ms ease-out 180ms both;
+}
+
+.gb-goblin-overlay .gb-goblin-loader {
+  padding: 18px 26px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+  animation: none;
+}
+
+@keyframes gb-goblin-dot {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes gb-goblin-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-goblin-loader-dots span {
+    animation: none;
+  }
+
+  .gb-goblin-loader-dots span {
+    opacity: 1;
+  }
+}

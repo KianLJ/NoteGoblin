@@ -225,6 +225,13 @@
   padding: 6px 10px;
   text-align: left;
 }
+/* A column's alignment from the table's `:--:` row. */
+.gb-markdown :is(th, td)[align='center'] {
+  text-align: center;
+}
+.gb-markdown :is(th, td)[align='right'] {
+  text-align: right;
+}
 .gb-markdown th {
   background: var(--bg-sunken);
   font-weight: 700;
@@ -691,6 +698,135 @@
   margin-top: var(--space-2);
 }
 
+/* Picking who a handout goes to (ShowToPlayersButton.tsx), under its button: the players at the table, ticked. */
+.gb-audience {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 220px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 13px;
+  animation: gb-audience-in 140ms ease-out;
+}
+
+.gb-audience-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gb-audience-all {
+  padding: 1px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.gb-audience-all:hover,
+.gb-audience-all:focus-visible {
+  background: var(--accent-subtle);
+  outline: none;
+}
+
+.gb-audience ul {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.gb-audience label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.gb-audience label:hover {
+  background: var(--bg-sunken);
+}
+
+.gb-audience input {
+  accent-color: var(--accent);
+}
+
+.gb-audience-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-audience-character {
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-audience-show {
+  padding: 7px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gb-audience-show:disabled {
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.gb-audience-show:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@keyframes gb-audience-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-audience {
+    animation: none;
+  }
+}
+
 /* The DM's "Show to players" button, for a moment after: how it went. */
 .gb-handout-status {
   max-width: 180px;
@@ -708,4 +844,242 @@
 .gb-handout-status--error {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
+}
+
+/* A note's table scrolls sideways when the note is narrower than it, instead of squeezing its cells to a letter
+   or two; cells keep a sensible width and wrap their words. */
+.gb-table-scroll {
+  position: relative;
+  max-width: 100%;
+  margin: 0 0 1em;
+  overflow-x: auto;
+}
+
+.gb-table-scroll > table {
+  margin: 0;
+}
+
+.gb-markdown th,
+.gb-markdown td {
+  min-width: 7em;
+  max-width: 22em;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.gb-markdown thead th {
+  white-space: nowrap;
+}
+
+/* Editing a table in a note (tableWidget.ts): cells light up on hover, the one you're typing in is outlined,
+   and quiet + strips along the bottom and right edge add a row or a column. */
+.gb-table-edit {
+  position: relative;
+  padding: 0 0 14px;
+  cursor: default;
+  /* Its width comes from the note, not the table — so the table scrolls, not the whole editor. */
+  contain: inline-size;
+  width: 100%;
+}
+
+.gb-table-edit .gb-table-scroll {
+  margin: 0;
+  padding-right: 18px;
+}
+
+.gb-table-edit td,
+.gb-table-edit th {
+  /* An empty cell is still a full row tall, so a new row is easy to click into. */
+  height: 2.3em;
+  cursor: text;
+  transition: background-color 100ms ease;
+}
+
+.gb-table-edit td:hover,
+.gb-table-edit th:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.gb-table-edit .gb-tcell--editing,
+.gb-table-edit .gb-tcell--editing:hover {
+  padding: 0;
+  background: var(--bg-surface-raised);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.gb-table-input {
+  display: block;
+  width: 100%;
+  min-width: 6em;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: inherit;
+  outline: none;
+}
+
+.gb-table-add {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px dashed transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+/* Bottom strip: add a row. */
+.gb-table-add--row {
+  left: 0;
+  right: 18px;
+  bottom: 0;
+  height: 12px;
+}
+
+/* Right strip: add a column. */
+.gb-table-add--col {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+}
+
+.gb-table-edit:hover .gb-table-add {
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.gb-table-add:hover,
+.gb-table-add:focus-visible {
+  border-color: var(--accent) !important;
+  background: var(--accent-subtle);
+  color: var(--accent-hover) !important;
+  outline: none;
+}
+
+/* Drag grips (tableWidget.ts): a dotted handle in a row's first cell and a column's heading, shown on hover. */
+.gb-table-edit td,
+.gb-table-edit th {
+  position: relative;
+}
+
+.gb-table-grip {
+  position: absolute;
+  z-index: 1;
+  border-radius: 3px;
+  background-image: radial-gradient(circle, var(--text-muted) 1px, transparent 1.3px);
+  background-size: 4px 4px;
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+  transition: opacity 100ms ease;
+}
+
+.gb-table-grip--row {
+  top: 50%;
+  left: 1px;
+  width: 8px;
+  height: 14px;
+  transform: translateY(-50%);
+}
+
+.gb-table-grip--col {
+  top: 1px;
+  left: 50%;
+  width: 14px;
+  height: 8px;
+  transform: translateX(-50%);
+}
+
+.gb-table-edit tr:hover .gb-table-grip--row,
+.gb-table-edit th:hover .gb-table-grip--col,
+.gb-table--dragging .gb-table-grip {
+  opacity: 0.7;
+}
+
+.gb-table-grip:hover {
+  opacity: 1 !important;
+  background-color: var(--accent-subtle);
+}
+
+.gb-table--dragging,
+.gb-table--dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.gb-tcell--drop-above {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.gb-tcell--drop-below {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.gb-tcell--drop-left {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.gb-tcell--drop-right {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+/* A roll table's die, in its first heading, and the row it landed on. */
+.gb-table-roll {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 6px 0 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.gb-table-roll svg {
+  width: 13px;
+  height: 13px;
+}
+
+.gb-table-roll:hover,
+.gb-table-roll:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.gb-table-roll-result:empty {
+  display: none;
+}
+
+.gb-trow--rolled > td {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  animation: gb-trow-rolled 700ms ease-out;
+}
+
+@keyframes gb-trow-rolled {
+  from {
+    background: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-trow--rolled > td {
+    animation: none;
+  }
 }

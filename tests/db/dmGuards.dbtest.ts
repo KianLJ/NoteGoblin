@@ -85,8 +85,8 @@ describe('campaign-level actions are the DM’s alone', () => {
   it('a quest’s giver and rewards survive a save and a re-read', () => {
     const quest = { id: 'r', title: 'Paid work', detail: '', status: 'active', shared: true, giver: 'The reeve', rewardGold: 1500, rewardXp: 450, rewardItems: 'A key' }
     data(svc.saveQuests(db, campaignId, DM, { quests: [quest] }))
-    expect(data(svc.getQuests(db, campaignId, DM)).quests[0]).toMatchObject({ giver: 'The reeve', rewardGold: 1500, rewardXp: 450, rewardItems: 'A key' })
-    expect(data(svc.getQuests(db, campaignId, PLAYER)).quests[0]).toMatchObject({ rewardGold: 1500, rewardXp: 450 })
+    expect(data(svc.getQuests(db, campaignId, DM)).quests[0]).toMatchObject({ giver: 'The reeve', rewardCoins: { gp: 1500 }, rewardXp: 450, rewardItems: 'A key' })
+    expect(data(svc.getQuests(db, campaignId, PLAYER)).quests[0]).toMatchObject({ rewardCoins: { gp: 1500 }, rewardXp: 450 })
   })
 
   it('a player can’t see a scene before the DM presents it', () => {

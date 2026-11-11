@@ -11,6 +11,11 @@ import { MonsterEditor } from '../features/bestiary/MonsterEditor'
 import { EncounterLibrary } from '../features/combat/EncounterLibrary'
 import { SessionPresenter, SessionsList, type SessionDecksApi } from '../features/campaigns/SessionTimeline'
 import { SceneCues } from '../features/campaigns/SceneCues'
+import { BrowserPanel } from '../features/browser/BrowserPanel'
+import { setBrowserAccount } from '../features/browser/browserAccount'
+import { GoblinLoader } from '../ui/GoblinLoader'
+import { CanvasZoomContext } from '../features/canvas/canvasZoom'
+import type { SessionScene } from '@shared/sessionDeck'
 import { MarkdownLiveEditor } from '../features/campaigns/MarkdownLiveEditor'
 import { renderNoteMarkdown } from '../markdown'
 import { loadSavedEncounters } from '../data/savedEncounters'
@@ -33,6 +38,7 @@ import { ShowToPlayersButton } from '../features/campaigns/ShowToPlayersButton'
 import { HostButton } from '../features/campaigns/HostButton'
 import { QuestLog } from '../features/campaigns/QuestLog'
 import { QuestRewardNotice } from '../features/player/QuestRewardNotice'
+import { QuestAnnouncer } from '../features/player/QuestAnnouncer'
 import { DmInitiativeTool } from '../features/campaigns/DmInitiativeTool'
 import { HandoutViewer } from '../features/player/HandoutViewer'
 import { stripDmAsides } from '@shared/sessionDeck'
@@ -247,7 +253,7 @@ function AudioShot(): JSX.Element {
       icon: TOOL_ICONS.sessions,
       size: { w: 880, h: 640 },
       content: <div />,
-      mini: <SessionsMini api={AUDIO_DECKS} notes={[{ id: 'n2', title: 'The Leaky Lantern' } as never]} hostedSessionId={null} />,
+      mini: <SessionsMini api={AUDIO_DECKS} notes={[{ id: 'n2', title: 'The Leaky Lantern' } as never]} />,
       miniSize: TOOL_MINI.sessions
     },
     noteBox('crypt', 'The Sunken Crypt', NOTE_HTML)
@@ -280,6 +286,12 @@ function EncountersShot(): JSX.Element {
 
 // A scene with two encounters and two songs, while it's being presented: its cues in the box, and on the bar above.
 const CUE_SCENE = { noteId: 's2', encounterIds: ['e1', 'e2'], music: [{ moodId: 'dungeonDread', trackId: null }, { moodId: 'combatBoss', trackId: null }] }
+/** The scene's cues, its switches working (on this page only). */
+function CueEditor(): JSX.Element {
+  const [scene, setScene] = useState<SessionScene>(CUE_SCENE)
+  return <SceneCues scene={scene} encounters={loadSavedEncounters()} onChange={(patch) => setScene((s) => ({ ...s, ...patch }))} />
+}
+
 function CuesShot(): JSX.Element {
   const [layout, setLayout] = useState<CanvasLayout>({ viewport: { x: 0, y: 0, zoom: 1 }, nodes: [{ id: 'note:s2', x: 320, y: 96, w: 640, h: 600, z: 1 }] })
   const api: SessionDecksApi = { ...fakeDecks, decks: [{ ...fakeDecks.decks[0], scenes: fakeDecks.decks[0].scenes.map((sc, i) => (i === 2 ? CUE_SCENE : sc)) }] }
@@ -294,7 +306,7 @@ function CuesShot(): JSX.Element {
       noClose: true,
       content: (
         <div style={{ padding: 'var(--space-4)', overflowY: 'auto' }}>
-          <SceneCues scene={CUE_SCENE} encounters={loadSavedEncounters()} onChange={() => {}} />
+          <CueEditor />
           <div className="gb-markdown">
             <h2>{SCENES[2]}</h2>
             <p>{SCENE_TEXT[2]}</p>
@@ -325,6 +337,23 @@ function HiddenShot(): JSX.Element {
     <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, padding: 24, background: 'var(--bg-surface)' }}>
       <MarkdownLiveEditor defaultValue={HIDDEN_NOTE} campaignId="camp" knownTitlesRef={titles} notesRef={notes} onChange={() => {}} onWikilinkClick={() => {}} players={SHOW_PLAYERS} />
       <div className="gb-markdown" dangerouslySetInnerHTML={{ __html: renderNoteMarkdown(HIDDEN_NOTE, new Set(), 'camp', new Map(SHOW_PLAYERS.map((p) => [p.userId, p.displayName]))) }} />
+    </div>
+  )
+}
+
+/** ?showcase=table: a note's table in the editor — wide, in a narrow box, editable in place. */
+const TABLE_NOTE = ['The party’s haul from the crypt:', '', '| Item | Value | Who has it | Notes |', '| --- | ---: | --- | --- |', '| Silver key | 25 gp | Ann | Opens the priest’s statue |', '| Potion of healing | 50 gp | Bram | 2d4 + 2 |', '| Map of the catacombs | — | Ann | Half of it is water-damaged |', '', 'Then the ogre woke up.', '', '| d6 | On the road |', '| --- | --- |', '| 1-2 | A merchant with a broken wheel |', '| 3-4 | Wolves, watching from the treeline |', '| 5 | A toll bridge, and a troll |', '| 6 | Nothing — an eerie quiet |'].join('\n')
+function TableShot(): JSX.Element {
+  const titles = { current: new Set<string>() }
+  const notes = { current: [] as Note[] }
+  return (
+    <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '360px 1fr', gap: 24, padding: 24, background: 'var(--bg-surface)' }}>
+      <div style={{ border: '1px solid var(--border-subtle)', padding: 12, overflow: 'hidden' }}>
+        <MarkdownLiveEditor defaultValue={TABLE_NOTE} campaignId="camp" knownTitlesRef={titles} notesRef={notes} onChange={(v) => console.log('note now', JSON.stringify(v))} onWikilinkClick={() => {}} />
+      </div>
+      <div style={{ border: '1px solid var(--border-subtle)', padding: 12 }}>
+        <MarkdownLiveEditor defaultValue={TABLE_NOTE} campaignId="camp" knownTitlesRef={titles} notesRef={notes} onChange={() => {}} onWikilinkClick={() => {}} />
+      </div>
     </div>
   )
 }
@@ -361,13 +390,51 @@ function BacklinksShot(): JSX.Element {
   )
 }
 
+const HANDOUT_TABLE = [
+  { userId: 'u1', displayName: 'Gelden', characterName: 'Gelden Nightforged' },
+  { userId: 'u2', displayName: 'Ann', characterName: 'Brakka' },
+  { userId: 'u3', displayName: 'Bram', characterName: null }
+]
+
+/**
+ * ?showcase=browser: the Browser box as on the canvas — ?zl= its laid-out zoom (CSS zoom), ?s= a scale on top,
+ * ?who= who's signed in (an account id); the button stands in for a canvas zoom under way. Pages only show in Electron.
+ */
+function BrowserShot(): JSX.Element {
+  const q = new URLSearchParams(location.search)
+  const zl = Number(q.get('zl') ?? 1)
+  const [zooming, setZooming] = useState(false)
+  // A new box, as pinning or unpinning gives it.
+  const [mount, setMount] = useState(0)
+  useState(() => setBrowserAccount(q.get('who')))
+  return (
+    <div style={{ height: '100vh', padding: 24, background: 'var(--bg-surface)' }}>
+      <button id="toggle-zooming" type="button" onClick={() => setZooming((z) => !z)} style={{ marginBottom: 8 }}>
+        {zooming ? 'Zooming' : 'Still'}
+      </button>
+      <button id="remount" type="button" onClick={() => setMount((m) => m + 1)} style={{ margin: '0 0 8px 8px' }}>
+        Pin / unpin
+      </button>
+      <div style={{ transform: `scale(${q.get('s') ?? 1})`, transformOrigin: '0 0' }}>
+        <div style={{ zoom: zl }}>
+          <CanvasZoomContext.Provider value={{ zoom: zl, zooming }}>
+            <div className="gb-card" style={{ width: 640, height: 480, padding: 0, overflow: 'hidden' }}>
+              <BrowserPanel key={mount} />
+            </div>
+          </CanvasZoomContext.Provider>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** ?showcase=handout: the DM's "Show to players" buttons and the player's viewer on one page (the stub loops it back). */
 function HandoutShot(): JSX.Element {
   const picture = 'data:image/svg+xml;utf8,' + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='#d9c7a1'/><path d='M40 340 L200 120 L320 260 L420 160 L560 340Z' fill='#6b4f2a'/><circle cx='470' cy='90' r='40' fill='#f3e3b5'/></svg>")
   return (
     <div style={{ height: '100vh', padding: 24, display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--bg-surface)' }}>
       <span>Note:</span>
-      <ShowToPlayersButton build={async () => ({ id: crypto.randomUUID(), title: 'A letter, sealed in wax', kind: 'note', markdown: stripDmAsides(['My dear Aldric,', '', 'The [[Sunken Crypt]] is ours by midnight.', '', '::', 'The letter is a forgery.', '::', '', '— *M*'].join('\n')) })} />
+      <ShowToPlayersButton players={HANDOUT_TABLE} build={async () => ({ id: crypto.randomUUID(), title: 'A letter, sealed in wax', kind: 'note', markdown: stripDmAsides(['My dear Aldric,', '', 'The [[Sunken Crypt]] is ours by midnight.', '', '::', 'The letter is a forgery.', '::', '', '— *M*'].join('\n')) })} />
       <span>Image:</span>
       <ShowToPlayersButton build={async () => ({ id: crypto.randomUUID(), title: 'The pass at dusk', kind: 'image', src: picture })} />
       <HandoutViewer knownTitles={new Set(['sunken crypt'])} />
@@ -378,13 +445,14 @@ function HandoutShot(): JSX.Element {
 /** ?showcase=quests: the Quests box as the DM sees it (left) and a player (right), on an in-memory log. */
 function QuestsShot(): JSX.Element {
   return (
-    <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '340px 340px', gap: 24, padding: 24, background: 'var(--bg-surface)' }}>
-      <div className="gb-card" style={{ padding: 0, height: 460 }}>
+    <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '340px 480px', gap: 24, padding: 24, background: 'var(--bg-surface)' }}>
+      <div className="gb-card" style={{ padding: 0, height: 560 }}>
         <QuestLog sessionId={null} campaignId="camp" readOnly={false} onOpenNote={(t) => console.log('quest note', t)} />
       </div>
-      <div className="gb-card" style={{ padding: 0, height: 460, position: 'relative' }}>
+      <div className="gb-card" style={{ padding: 0, height: 560, position: 'relative' }}>
         <QuestLog sessionId="s" campaignId="camp" readOnly onOpenNote={(t) => console.log('quest note', t)} />
-        <QuestRewardNotice character={{ name: 'Gelden', experiencePoints: 900, currency: { cp: 0, sp: 0, ep: 0, gp: 12, pp: 0 } } as never} onApply={(c, r) => console.log('reward applied', c.name, r.gold, r.xp)} />
+        <QuestAnnouncer sessionId="s" campaignId="camp" onOpenQuests={() => console.log('open quests')} />
+        <QuestRewardNotice character={{ name: 'Gelden', experiencePoints: 900, currency: { cp: 0, sp: 0, ep: 0, gp: 12, pp: 0 } } as never} onApply={(c, r) => console.log('reward applied', c.name, JSON.stringify(r.coins), r.xp)} />
       </div>
     </div>
   )
@@ -401,6 +469,16 @@ function InitiativeShot(): JSX.Element {
 
 export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
   if (scene === 'search') return <SearchShot />
+  if (scene === 'table') return <TableShot />
+  if (scene === 'browser') return <BrowserShot />
+  if (scene === 'loader')
+    return (
+      <div style={{ height: '100vh', display: 'flex', gap: 32, alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)' }}>
+        <GoblinLoader size="sm" fill={false} />
+        <GoblinLoader size="md" fill={false} label="Opening the calendar" />
+        <GoblinLoader size="lg" fill={false} label="Opening the Workshop" />
+      </div>
+    )
   if (scene === 'backlinks') return <BacklinksShot />
   if (scene === 'handout') return <HandoutShot />
   if (scene === 'quests') return <QuestsShot />
@@ -414,7 +492,8 @@ export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
   if (scene === 'whatsnew')
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', containerType: 'inline-size' }}>
-        <WhatsNewView entries={[{ version: '0.10.0', title: 'A table you lay out yourself', highlights: [] }]} />
+        {/* ?v= a version's post; 0.10.0's by default. */}
+        <WhatsNewView entries={[{ version: new URLSearchParams(location.search).get('v') ?? '0.10.0', title: '', highlights: [] }]} />
       </div>
     )
   if (scene === 'sessions') return <SessionsShot />

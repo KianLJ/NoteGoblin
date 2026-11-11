@@ -245,8 +245,13 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'quest-reward') {
     const f = payload as QuestRewardFrame
     const amount = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(1_000_000, Math.floor(v)) : 0)
-    if (typeof f.questTitle === 'string' && (amount(f.gold) > 0 || amount(f.xp) > 0)) {
-      clientWindow?.webContents.send('ws:quest-reward', { questTitle: f.questTitle.slice(0, 200), gold: amount(f.gold), xp: amount(f.xp), partySize: Math.max(1, amount(f.partySize)) })
+    // Coins by currency id; a DM on an older version sends only `gold`.
+    const coins: Record<string, number> = {}
+    if (typeof f.coins === 'object' && f.coins !== null) {
+      for (const [id, v] of Object.entries(f.coins).slice(0, 12)) if (/^[A-Za-z0-9_.:-]{1,64}$/.test(id) && amount(v) > 0) coins[id] = amount(v)
+    } else if (amount(f.gold) > 0) coins.gp = amount(f.gold)
+    if (typeof f.questTitle === 'string' && (Object.keys(coins).length > 0 || amount(f.xp) > 0)) {
+      clientWindow?.webContents.send('ws:quest-reward', { questTitle: f.questTitle.slice(0, 200), coins, xp: amount(f.xp), partySize: Math.max(1, amount(f.partySize)) })
     }
     return
   }

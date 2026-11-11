@@ -6,6 +6,7 @@ import { SoundBoardIcon } from '../audio/SoundBoardPanel'
 import { UserIcon } from '../player/icons'
 import type { ToolKind } from '@shared/canvasTools'
 import { TimerIcon } from './SessionTimer'
+import { BrowserIcon } from '../browser/BrowserPanel'
 
 export const TOOL_ICONS: Record<ToolKind, ReactNode> = {
   notes: <FolderIcon />,
@@ -30,5 +31,6 @@ export const TOOL_ICONS: Record<ToolKind, ReactNode> = {
   ),
   music: <MusicNoteIcon />,
   soundboard: <SoundBoardIcon />,
-  friends: <UserIcon />
+  friends: <UserIcon />,
+  browser: <BrowserIcon />
 }

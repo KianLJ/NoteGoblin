@@ -8,6 +8,10 @@
     "src/renderer/src/color.ts",
     "relay/src/lib/loginLimit.ts",
     "src/renderer/src/wikilink.ts",
+    "src/renderer/src/markdownTable.ts",
+    "src/renderer/src/features/campaigns/noteEditorMenu.ts",
+    "src/renderer/src/data/npcNames.ts",
+    "src/renderer/src/features/browser/browserTabs.ts",
     "db/**/*",
     "tests/**/*",
     "vitest.config.ts"

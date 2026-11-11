@@ -36,15 +36,26 @@ export function readScene(raw: { noteId: string } & Record<string, unknown>): Om
     : str(raw.moodId)
       ? [{ moodId: raw.moodId, trackId: str(raw.trackId) ? raw.trackId : null }]
       : []
-  return { noteId: raw.noteId, encounterIds: [...new Set(encounterIds)].slice(0, MAX_CUES), music: music.slice(0, MAX_CUES) }
+  return {
+    noteId: raw.noteId,
+    encounterIds: [...new Set(encounterIds)].slice(0, MAX_CUES),
+    music: music.slice(0, MAX_CUES),
+    // Only stored when they differ from the defaults (music plays, the fight waits for a click).
+    ...(raw.autoMusic === false ? { autoMusic: false } : {}),
+    ...(raw.autoEncounter === true ? { autoEncounter: true } : {})
+  }
 }
 
 export interface SessionScene {
   noteId: string
   /** Saved encounters (see src/renderer/src/data/savedEncounters.ts) the DM can load into the fight with one click while presenting this scene. Only ids — each roster stays in the DM's own saved-encounter store. */
   encounterIds: string[]
-  /** Music cues: the first plays when the scene comes up; any of them can be played from the presenter bar. */
+  /** Music cues: the first plays when the scene comes up (unless autoMusic is off); any of them can be played from the presenter bar. */
   music: SceneMusic[]
+  /** The first music cue plays by itself when the scene comes up. On unless set false. */
+  autoMusic?: boolean
+  /** The first encounter goes into the fight by itself when the scene first comes up in a presentation. Off unless set true. */
+  autoEncounter?: boolean
   /**
    * Shown to the table: set when the DM first presents this scene, never unset. Players only ever see revealed
    * scenes, and a session only once one of its scenes is (see campaignService.listSessionDecks/listNotes).

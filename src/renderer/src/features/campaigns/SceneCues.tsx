@@ -49,11 +49,24 @@ function summary(enc: SavedEncounter): { text: string; xp: number } {
   }
 }
 
+/** A small switch by a column's heading: the scene's first cue of that kind runs by itself as the scene comes up. */
+function AutoSwitch({ kind, on, label, onChange }: { kind: 'fight' | 'music'; on: boolean; label: string; onChange: (on: boolean) => void }): JSX.Element {
+  return (
+    <label className={`gb-cue-auto gb-cue-auto--${kind}`} title={label}>
+      <input type="checkbox" checked={on} aria-label={label} onChange={(e) => onChange(e.target.checked)} />
+      <span className="gb-toggle-track" aria-hidden="true" />
+      <span aria-hidden="true">{kind === 'fight' ? 'Auto-load' : 'Autoplay'}</span>
+    </label>
+  )
+}
+
 /**
  * A scene's cues, at the top of its note: a column of encounters it can
  * load (who's in each, how much XP) and a column of music (a mood, a track
- * or a random one, with a preview). The first music cue plays when the
- * scene comes up; every cue is a button on the presenter bar. Each column
+ * or a random one, with a preview). With its switch on, the first music
+ * cue plays when the scene comes up (on to start with), and the first
+ * encounter goes into the fight (off to start with); every cue is a button
+ * on the presenter bar. Each column
  * ends with a tile to add another.
  */
 export function SceneCues({
@@ -63,17 +76,24 @@ export function SceneCues({
 }: {
   scene: SessionScene
   encounters: SavedEncounter[]
-  onChange: (patch: Partial<Pick<SessionScene, 'encounterIds' | 'music'>>) => void
+  onChange: (patch: Partial<Pick<SessionScene, 'encounterIds' | 'music' | 'autoMusic' | 'autoEncounter'>>) => void
 }): JSX.Element {
   useMusicChanges()
   const moods = allMoods().filter((g) => tracksOf(g.id).length > 0)
   const setMusic = (i: number, cue: SceneMusic): void => onChange({ music: scene.music.map((m, j) => (j === i ? cue : m)) })
   const unpicked = encounters.filter((e) => !scene.encounterIds.includes(e.id))
+  const autoMusic = scene.autoMusic !== false
+  const autoEncounter = scene.autoEncounter === true
 
   return (
     <div className="gb-cues">
       <div className="gb-cue-col">
-        <span className="gb-cue-col-head">⚔ Encounters</span>
+        <div className="gb-cue-col-top">
+          <span className="gb-cue-col-head">⚔ Encounters</span>
+          {scene.encounterIds.length > 0 && (
+            <AutoSwitch kind="fight" on={autoEncounter} label="Load it when the scene starts" onChange={(on) => onChange({ autoEncounter: on })} />
+          )}
+        </div>
         {scene.encounterIds.map((id) => {
           const encounter = encounters.find((e) => e.id === id)
           const enc = encounter ? summary(encounter) : null
@@ -87,6 +107,7 @@ export function SceneCues({
                 {enc && (
                   <span className="gb-cue-detail">
                     {enc.text} · {enc.xp.toLocaleString()} XP
+                    {autoEncounter && id === scene.encounterIds[0] ? ' · loads when the scene comes up' : ''}
                   </span>
                 )}
               </div>
@@ -125,7 +146,10 @@ export function SceneCues({
       </div>
 
       <div className="gb-cue-col">
-        <span className="gb-cue-col-head">♪ Music</span>
+        <div className="gb-cue-col-top">
+          <span className="gb-cue-col-head">♪ Music</span>
+          {scene.music.length > 0 && <AutoSwitch kind="music" on={autoMusic} label="Play it when the scene starts" onChange={(on) => onChange({ autoMusic: on })} />}
+        </div>
         {scene.music.map((cue, i) => (
           <div key={i} className="gb-cue gb-cue--music gb-cue--set">
             <span className="gb-cue-icon" aria-hidden="true">
@@ -133,7 +157,7 @@ export function SceneCues({
             </span>
             <div className="gb-cue-body">
               <span className="gb-cue-name">{moodLabel(cue.moodId) ?? 'Music'}</span>
-              <span className="gb-cue-detail">{i === 0 ? 'Plays when the scene comes up' : 'Play it from the presenter bar'}</span>
+              <span className="gb-cue-detail">{i === 0 && autoMusic ? 'Plays when the scene comes up' : 'Play it from the presenter bar'}</span>
             </div>
             <div className="gb-cue-extra">
               <select className="gb-cue-track" value={cue.moodId} onChange={(e) => setMusic(i, { moodId: e.target.value, trackId: null })} aria-label="Mood">

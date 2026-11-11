@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.13.0',
+    title: 'A browser on the table, and quests with more to them',
+    highlights: [
+      'A Browser box: tabs, an address bar that also searches, kept pages on a start page, Ctrl+scroll to zoom a page, and as many Browser boxes as you like (Add ▸ Browser window). Each account has its own logins, ads and trackers are blocked, and only the tabs you’ve looked at most recently stay loaded',
+      'Tables in notes are edited in place: click a cell to type, Tab and Enter to move, + strips and a right-click menu to add, move, align or delete rows and columns. Narrow notes scroll a table instead of squashing it',
+      'Roll tables: a table with a d6 (or d20…) first column, or ranges like 1-2, gets a die that rolls it and lights up the row',
+      'A right-click menu in notes: cut, copy and paste, formatting, and insert an image, a link, a statblock, a table, a roll table, a dice roll, an NPC name or a divider. Pasting cells from a spreadsheet makes a table',
+      'Quests: a new quest unrolls on players’ screens when you show it, notes and hints you reveal one at a time, rewards in any coins (your packs’ too), quests for chosen players only, and finished quests fold away',
+      'Show a handout to chosen players instead of the whole table',
+      'Scenes have an Autoplay switch for their music and an Auto-load switch for their fight, and cues run for the first scene when you start presenting',
+      'The goblin reads while anything loads, from the startup screen to a web page',
+      'The canvas’s dot grid no longer jitters while a trackpad zooms, and the mood download buttons are quieter'
+    ]
+  },
+  {
     version: '0.12.0',
     title: 'Quests, handouts, and a lighter download',
     highlights: [

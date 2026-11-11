@@ -11,7 +11,17 @@
     <title>NoteGoblin</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The startup screen: the goblin reading, until the app draws over it (React replaces what's in #root). -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #1a160f; }
+      html[data-theme='light'], html[data-theme='light'] body { background: #faf6ec; }
+      .gb-boot { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; color: #8f8265; font: 700 11px/1 system-ui, sans-serif; letter-spacing: 0.12em; text-indent: 0.12em; text-transform: uppercase; animation: gb-boot-in 300ms ease-out 250ms both; }
+      /* Centred on the goblin and its book (x 39–487 of the 640-wide frame), the scribbles free to spill sideways; cut top and bottom only. */
+      .gb-boot-art { position: relative; width: 240px; aspect-ratio: 640 / 383; clip-path: inset(0 -60%); margin-bottom: 8px; }
+      .gb-boot-art img { position: absolute; top: -14.36%; left: 8.9%; width: 100%; }
+      @keyframes gb-boot-in { from { opacity: 0; } }
+    </style>
+    <div id="root"><div class="gb-boot" role="status"><span class="gb-boot-art"><img src="./src/assets/goblin-loading.gif" alt="" /></span>Opening NoteGoblin</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

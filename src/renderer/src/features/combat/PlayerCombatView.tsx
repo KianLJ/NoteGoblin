@@ -5,6 +5,7 @@
 // actions and spells, all kept on their sheet. A fellow player's numbers,
 // actions and spells can be looked at too. They can drag their own token
 // (not through walls); the DM's app checks the move and sends the map back out.
+import { GoblinLoader } from '../../ui/GoblinLoader'
 import { WoundTags } from '../campaigns/WoundTags'
 import { useEffect, useMemo, useState } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
@@ -281,7 +282,11 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter, campai
               <div style={{ position: 'absolute', left: 12, bottom: 12, maxWidth: 'calc(100% - 80px)', fontSize: 12, color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: 8, pointerEvents: 'none' }}>{hint}</div>
             </>
           ) : (
-            <p style={{ margin: 'var(--space-5)', color: 'var(--text-muted)', fontSize: 13 }}>{loading ? 'Getting the map…' : 'The DM hasn’t put a map up yet.'}</p>
+            loading ? (
+              <GoblinLoader label="Getting the map" />
+            ) : (
+              <p style={{ margin: 'var(--space-5)', color: 'var(--text-muted)', fontSize: 13 }}>The DM hasn’t put a map up yet.</p>
+            )
           )}
         </section>
 

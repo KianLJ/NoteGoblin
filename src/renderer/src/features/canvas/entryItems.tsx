@@ -11,12 +11,14 @@ import { StickyColorButton, StickyNote } from './StickyNote'
 import { ImageBox, type CanvasImage } from './ImageBox'
 import { deleteCanvasImage } from './canvasImages'
 import { inSavedLayout } from './LayoutsMenu'
+import { BrowserIcon, BrowserPanel, forgetBrowserWindow } from '../browser/BrowserPanel'
+import { GoblinLoader } from '../../ui/GoblinLoader'
 
 // The Codex's code loads the first time an entry's box shows.
 const CodexEntryView = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.CodexEntryView })))
 
 /**
- * A box for every Codex entry, statblock and sticky note on this canvas (see canvasEntries.ts). Closing one
+ * A box for every Codex entry, statblock, sticky note, image and extra Browser box on this canvas (see canvasEntries.ts). Closing one
  * forgets it. With `onEditMonster` (the DM's canvas), a statblock's title bar has an Edit button.
  */
 export function entryItems(
@@ -44,6 +46,20 @@ export function entryItems(
             if (!inSavedLayout(mode, id)) void deleteCanvasImage(entry.id)
           },
           content: <ImageBox image={entry} />
+        }
+      }
+      if (entry.kind === 'browser') {
+        return {
+          id,
+          title: 'Browser',
+          icon: <BrowserIcon />,
+          size: DYNAMIC_SIZE.browser,
+          onClose: () => {
+            dropEntry(mode, id)
+            // A saved layout with this box in it brings back its tabs too.
+            if (!inSavedLayout(mode, id)) forgetBrowserWindow(entry.id)
+          },
+          content: <BrowserPanel windowId={entry.id} />
         }
       }
       if (entry.kind === 'sticky') {
@@ -74,7 +90,7 @@ export function entryItems(
           entry.kind === 'monster' ? (
             <StatblockCard monster={entry.monster} />
           ) : (
-            <Suspense fallback={null}>
+            <Suspense fallback={<GoblinLoader />}>
               <CodexEntryView kind={entry.kind} id={entry.id} />
             </Suspense>
           )

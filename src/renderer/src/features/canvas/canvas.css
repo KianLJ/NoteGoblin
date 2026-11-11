@@ -12,9 +12,18 @@
   min-height: 0;
   overflow: hidden;
   background-color: var(--bg-canvas);
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--text-muted) 38%, transparent) 1px, transparent 1.4px);
   touch-action: none;
   user-select: none;
+}
+
+/* The dot grid (Canvas.tsx), under everything. */
+.gb-canvas-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--text-muted) 38%, transparent);
+  pointer-events: none;
 }
 
 .gb-canvas--panning,
@@ -1571,6 +1580,7 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 [data-kind='codex'], [data-kind='entry'] { --kind: #3f7a76; }
 [data-kind='friends'] { --kind: #4a6b8a; }
 [data-kind='quests'] { --kind: #a04a78; }
+[data-kind='browser'] { --kind: #4f7a9e; }
 
 .gb-canvas-node[data-kind] .gb-canvas-node-bar {
   background: color-mix(in srgb, var(--kind, transparent) 10%, var(--bg-sunken));
@@ -1907,6 +1917,33 @@ body.gb-canvas-dragging .gb-canvas-node-body {
   text-transform: uppercase;
 }
 
+/* The Finished heading folds its quests away. */
+.gb-quests-heading--toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px 2px 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.gb-quests-heading--toggle:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-quests-heading--toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.gb-quests-heading--toggle[aria-expanded='true'] .gb-quest-hints-caret {
+  transform: rotate(90deg);
+}
+
 .gb-quest-list {
   display: flex;
   flex-direction: column;
@@ -2054,6 +2091,140 @@ body.gb-canvas-dragging .gb-canvas-node-body {
   font-size: 12.5px;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+/* A quest's notes and hints (QuestLog.tsx's QuestHints): one quiet line that folds open into bullets. */
+.gb-quest-hints {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.gb-quest-hints > summary {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px 2px 2px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gb-quest-hints > summary::-webkit-details-marker {
+  display: none;
+}
+
+.gb-quest-hints > summary:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-quest-hints > summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.gb-quest-hints-caret {
+  display: inline-block;
+  margin: 0 6px 1px 0;
+  vertical-align: middle;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 120ms ease;
+}
+
+.gb-quest-hints[open] .gb-quest-hints-caret {
+  transform: rotate(90deg);
+}
+
+.gb-quest-hints-shown {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.gb-quest-hints-shown::before {
+  content: ' · ';
+}
+
+.gb-quest-hints ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0 0 0 16px;
+  list-style: none;
+}
+
+.gb-quest-hints li {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* A small rune-like diamond for the bullet. */
+.gb-quest-hints li::before {
+  content: '';
+  position: absolute;
+  top: 0.6em;
+  left: -11px;
+  width: 5px;
+  height: 5px;
+  background: var(--quest, #a04a78);
+  transform: rotate(45deg);
+}
+
+.gb-quest-hint-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.gb-quest-hint--hidden .gb-quest-hint-text {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.gb-quest-hint--hidden::before {
+  opacity: 0.4;
+}
+
+.gb-quest-hint-actions {
+  display: inline-flex;
+  flex: none;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.gb-quest-hints li:hover .gb-quest-hint-actions,
+.gb-quest-hint-actions:focus-within {
+  opacity: 1;
+}
+
+.gb-quest-hint-new {
+  width: calc(100% - 16px);
+  margin: 4px 0 0 16px;
+  padding: 4px 8px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.gb-quest-hint-new:focus {
+  border-style: solid;
+  border-color: var(--accent);
+  outline: none;
 }
 
 .gb-quest-rewards {
@@ -2240,6 +2411,101 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 .gb-reward-field span {
   font-size: 11px;
   font-weight: 700;
+}
+
+.gb-reward-field span {
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Who a quest is for: the whole party, or the players picked. */
+.gb-quest-for {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gb-quest-for-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gb-quest-for-chip:hover {
+  border-color: var(--quest);
+  color: var(--text-primary);
+}
+
+.gb-quest-for-chip[aria-pressed='true'] {
+  border-color: var(--quest);
+  background: color-mix(in srgb, var(--quest) 18%, transparent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.gb-quest-for-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.gb-quest-for-whom {
+  align-self: flex-start;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--quest) 14%, transparent);
+  color: color-mix(in srgb, var(--quest) 75%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Taking a coin out of a quest's reward. */
+.gb-reward-field-remove {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: -4px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gb-reward-field-remove:hover,
+.gb-reward-field-remove:focus-visible {
+  background: var(--bg-surface-raised);
+  color: var(--danger);
+  outline: none;
+}
+
+/* Adding another coin: the standard ones and any the campaign's packs have. */
+.gb-reward-add {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.gb-reward-add:hover,
+.gb-reward-add:focus-visible {
+  border-color: var(--quest);
+  color: var(--text-primary);
+  outline: none;
 }
 
 .gb-quest-form-toggle {
@@ -2453,6 +2719,218 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 
 @media (prefers-reduced-motion: reduce) {
   .gb-quest-reward-notice {
+    animation: none;
+  }
+}
+
+/* The DM showing the party a new quest (QuestAnnouncer.tsx): a scroll unrolls in the middle of the canvas, sealed
+   in the Quests rose, over a light dimming of the table. */
+.gb-quest-herald {
+  --quest: #a04a78;
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg-canvas, #000) 35%, transparent);
+  animation: gb-herald-dim 260ms ease-out;
+}
+
+.gb-quest-herald-scroll {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(420px, 100%);
+  padding: 34px 28px 20px;
+  border: 1px solid color-mix(in srgb, var(--quest) 45%, var(--border-subtle));
+  border-radius: 6px;
+  /* Rolled edges: a darker band top and bottom, like the ends of a scroll. */
+  background:
+    linear-gradient(to bottom, color-mix(in srgb, var(--quest) 16%, transparent), transparent 18px) top / 100% 18px no-repeat,
+    linear-gradient(to top, color-mix(in srgb, var(--quest) 16%, transparent), transparent 18px) bottom / 100% 18px no-repeat,
+    color-mix(in srgb, #c9a86a 9%, var(--bg-surface-raised));
+  box-shadow:
+    inset 0 0 0 4px color-mix(in srgb, var(--bg-surface-raised) 70%, transparent),
+    inset 0 0 0 5px color-mix(in srgb, var(--quest) 25%, transparent),
+    var(--shadow-lg);
+  color: var(--text-primary);
+  text-align: center;
+  transform-origin: top center;
+  animation: gb-herald-unroll 620ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.gb-quest-herald-seal {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--quest) 70%, #fff), var(--quest) 60%, color-mix(in srgb, var(--quest) 70%, #000));
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3), inset 0 0 0 3px color-mix(in srgb, var(--quest) 80%, #000);
+  color: #fbeef4;
+  transform: translateX(-50%);
+  animation: gb-herald-seal 520ms 380ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+
+.gb-quest-herald-eyebrow {
+  color: var(--quest);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.gb-quest-herald h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.gb-quest-herald-giver {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.gb-quest-herald p {
+  max-height: 30vh;
+  overflow-y: auto;
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.gb-quest-herald-rewards {
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.gb-quest-herald-hints {
+  align-self: stretch;
+  margin: 6px 0 0;
+  padding: 8px 12px 8px 26px;
+  border-top: 1px dashed color-mix(in srgb, var(--quest) 30%, var(--border-subtle));
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.gb-quest-herald-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.gb-quest-herald-actions button {
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gb-quest-herald-later {
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.gb-quest-herald-later:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-quest-herald-open {
+  border: 1px solid var(--quest);
+  background: var(--quest);
+  color: #fff;
+}
+
+.gb-quest-herald-open:hover {
+  background: color-mix(in srgb, var(--quest) 85%, #000);
+}
+
+.gb-quest-herald-actions button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@keyframes gb-herald-dim {
+  from {
+    background: transparent;
+  }
+}
+
+@keyframes gb-herald-unroll {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0 round 6px);
+    transform: translateY(-12px);
+  }
+  40% {
+    opacity: 1;
+  }
+  to {
+    clip-path: inset(-40px -40px -40px -40px);
+  }
+}
+
+@keyframes gb-herald-seal {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.8);
+  }
+}
+
+/* A newly shown hint on a quest the party already has: a small card at the top of the canvas. */
+.gb-quest-clue {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 260px;
+  max-width: min(420px, calc(100% - 2 * var(--space-3)));
+  padding: 10px 36px 10px 14px;
+  border: 1px solid color-mix(in srgb, #a04a78 50%, var(--border-subtle));
+  border-left: 3px solid #a04a78;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 13px;
+  transform: translateX(-50%);
+  animation: gb-quest-reward-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+
+.gb-quest-clue .gb-quest-reward-eyebrow {
+  color: #a04a78;
+}
+
+.gb-quest-clue-text {
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-quest-herald,
+  .gb-quest-herald-scroll,
+  .gb-quest-herald-seal,
+  .gb-quest-clue {
     animation: none;
   }
 }

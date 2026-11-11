@@ -1448,7 +1448,7 @@ export function getQuests(db: DatabaseType, campaignId: string, userId: string):
   } catch {
     /* unreadable: an empty log rather than a broken box */
   }
-  return { ok: true, data: campaign.dm_user_id === userId ? doc : questsForPlayer(doc) }
+  return { ok: true, data: campaign.dm_user_id === userId ? doc : questsForPlayer(doc, userId) }
 }
 
 /** Only the DM changes the quest log — the whole list each time. */

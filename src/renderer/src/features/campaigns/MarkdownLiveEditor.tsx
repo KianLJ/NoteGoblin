@@ -1,5 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
+import { noteEditorMenu, pasteSpreadsheet, toggleWrap } from './noteEditorMenu'
+import { TableWidget } from './tableWidget'
+import { parseTable } from '../../markdownTable'
+import { ContextMenu, type ContextMenuItem, type ContextMenuState } from '../../ui/ContextMenu'
 import { fenceFor, hiddenBlockLabel, hiddenBlocks, type HiddenBlock } from '@shared/sessionDeck'
 import { Compartment, EditorState, StateField, type Extension, type Range, type Text } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, WidgetType, keymap } from '@codemirror/view'
@@ -58,6 +61,8 @@ interface MarkdownLiveEditorProps {
   onOneShotPlay?: (cueId: string) => void
   /** The campaign's players, for a hidden block's "who else sees it" (right-click) and its label. */
   players?: TablePlayer[]
+  /** The note's own things to insert from the right-click menu (an image, a link to a note, a statblock). */
+  insertMenu?: ContextMenuItem[]
   /** Blocks actual document edits at the CodeMirror level (no cursor, no typing, paste rejected) — not a CSS overlay, which only stops mouse-driven interaction and leaves keyboard input (e.g. Tab-focusing in) still able to "type" locally even though nothing would ever save. Reconfigurable live via a Compartment since editorUserIds can change while a note's already open. */
   readOnly?: boolean
 }
@@ -334,7 +339,7 @@ class BlockHtmlWidget extends WidgetType {
  * of standard markdown, lezer's parser doesn't know about it — see
  * wikilink.ts) on every doc/selection change.
  */
-function buildDecorations(state: EditorState, knownTitles: Set<string>, campaignId: string): DecorationSet {
+function buildDecorations(state: EditorState, knownTitles: Set<string>, campaignId: string, onMenu: { current: (menu: ContextMenuState | null) => void }): DecorationSet {
   const doc = state.doc
   const tree = syntaxTree(state)
   const ranges: Range<Decoration>[] = []
@@ -375,6 +380,14 @@ function buildDecorations(state: EditorState, knownTitles: Set<string>, campaign
       if (node.name === 'Table') {
         const from = doc.lineAt(node.from).from
         const to = doc.lineAt(node.to).to
+        // A table you edit in place (tableWidget.ts) — never back to raw text, wherever the cursor is.
+        const text = doc.sliceString(from, to)
+        if (parseTable(text)) {
+          const html = renderNoteMarkdown(text, knownTitles, campaignId)
+          ranges.push(Decoration.replace({ widget: new TableWidget(text, html, state.facet(EditorView.editable), onMenu), block: true }).range(from, to))
+          hiddenBlockRanges.push([from, to])
+          return false
+        }
         const applied = replaceBlockWithWidget(state, doc, ranges, node.from, node.to, knownTitles, campaignId)
         if (applied) {
           hiddenBlockRanges.push([from, to])
@@ -512,6 +525,7 @@ function buildDecorations(state: EditorState, knownTitles: Set<string>, campaign
 function livePreviewExtension(
   knownTitlesRef: { current: Set<string> },
   campaignId: string,
+  onMenu: { current: (menu: ContextMenuState | null) => void },
   onWikilinkClick: (target: string) => void,
   onWikilinkContextMenu?: (target: string, x: number, y: number) => void,
   onDiceRoll?: (dice: { sides: DieSides; count: number; modifier: number }) => void,
@@ -525,10 +539,10 @@ function livePreviewExtension(
   // since the crash happened on every keystroke touching the live preview).
   const field = StateField.define<DecorationSet>({
     create(state) {
-      return buildDecorations(state, knownTitlesRef.current, campaignId)
+      return buildDecorations(state, knownTitlesRef.current, campaignId, onMenu)
     },
     update(_value, tr) {
-      return buildDecorations(tr.state, knownTitlesRef.current, campaignId)
+      return buildDecorations(tr.state, knownTitlesRef.current, campaignId, onMenu)
     },
     provide: (f) => EditorView.decorations.from(f)
   })
@@ -663,24 +677,31 @@ function setAudienceAt(view: EditorView, audience: string[]): void {
 }
 
 /**
- * Right-click: on a selection, Hide (from everyone, or picking players who may
- * still see it); inside a hidden block, tick who else sees it, or Unhide.
- * `onMenu` shows the app's own menu.
+ * Right-click anywhere in a note: the editor's own menu (noteEditorMenu.ts) — cut, copy, paste, formatting and
+ * inserts. On a selection it starts with Hide (from everyone, or picking players who may still see it); inside a
+ * hidden block, with who else sees it, and Unhide. Clicking outside the selection puts the cursor there first, so
+ * an insert lands where you clicked. `onMenu` shows the app's own menu.
  */
-function hideMenuHandler(onMenu: { current: (menu: ContextMenuState | null) => void }, playersRef: { current: TablePlayer[] }): Extension {
+function editorMenuHandler(
+  onMenu: { current: (menu: ContextMenuState | null) => void },
+  playersRef: { current: TablePlayer[] },
+  insertRef: { current: ContextMenuItem[] }
+): Extension {
   return EditorView.domEventHandlers({
     contextmenu(event, view) {
-      if (!view.state.facet(EditorView.editable)) return false
-      const block = blockAt(view)
-      const hasSelection = !view.state.selection.main.empty
-      if (!block && !hasSelection) return false
       event.preventDefault()
+      const editable = view.state.facet(EditorView.editable)
+      const at = view.posAtCoords({ x: event.clientX, y: event.clientY })
+      if (at !== null && !view.state.selection.ranges.some((r) => r.from <= at && at <= r.to && !r.empty)) {
+        view.dispatch({ selection: { anchor: at } })
+      }
+      const block = editable ? blockAt(view) : undefined
+      const hasSelection = !view.state.selection.main.empty
       const players = playersRef.current
       const noPlayers = [{ label: 'No players in this campaign yet' }]
-      onMenu.current({
-        x: event.clientX,
-        y: event.clientY,
-        items: block
+      const top: ContextMenuItem[] = !editable
+        ? []
+        : block
           ? [
               {
                 label: 'Who else can see it',
@@ -688,19 +709,21 @@ function hideMenuHandler(onMenu: { current: (menu: ContextMenuState | null) => v
                   ? players.map((p) => {
                       const on = block.audience.includes(p.userId)
                       return {
-                        label: `${on ? '✓' : '\u2003'}  ${p.displayName}`,
+                        label: `${on ? '✓' : ' '}  ${p.displayName}`,
                         onSelect: () => setAudienceAt(view, on ? block.audience.filter((id) => id !== p.userId) : [...block.audience, p.userId])
                       }
                     })
                   : noPlayers
               },
-              { label: 'Unhide — show to everyone', onSelect: () => unhideAt(view), separatorBefore: true }
+              { label: 'Unhide — show to everyone', onSelect: () => unhideAt(view) }
             ]
-          : [
-              { label: 'Hide from other players', onSelect: () => hideSelection(view) },
-              { label: 'Hide, but let one player see it', submenu: players.length ? players.map((p) => ({ label: p.displayName, onSelect: () => hideSelection(view, [p.userId]) })) : noPlayers }
-            ]
-      })
+          : hasSelection
+            ? [
+                { label: 'Hide from other players', onSelect: () => hideSelection(view) },
+                { label: 'Hide, but let one player see it', submenu: players.length ? players.map((p) => ({ label: p.displayName, onSelect: () => hideSelection(view, [p.userId]) })) : noPlayers }
+              ]
+            : []
+      onMenu.current({ x: event.clientX, y: event.clientY, items: noteEditorMenu(view, { editable, insert: insertRef.current, top }) })
       return true
     }
   })
@@ -761,6 +784,11 @@ async function insertImageFiles(view: EditorView, files: File[], pos: number): P
 const imagePasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
     if (!view.contentDOM.isContentEditable) return false
+    // Cells from a spreadsheet become a table. First: Excel puts a picture of the cells on the clipboard too.
+    if (pasteSpreadsheet(view, event.clipboardData?.getData('text/plain') ?? '')) {
+      event.preventDefault()
+      return true
+    }
     const items = event.clipboardData?.items
     if (!items) return false
     const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'))
@@ -794,7 +822,7 @@ const imageDropHandler = EditorView.domEventHandlers({
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
   function MarkdownLiveEditor(
-    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay, players, readOnly },
+    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay, players, readOnly, insertMenu },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
@@ -803,6 +831,8 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
     const [menu, setMenu] = useState<ContextMenuState | null>(null)
     const setMenuRef = useRef(setMenu)
     const playersRef = useRef<TablePlayer[]>(players ?? [])
+    const insertMenuRef = useRef<ContextMenuItem[]>(insertMenu ?? [])
+    insertMenuRef.current = insertMenu ?? []
 
     useEffect(() => {
       if (!containerRef.current) return
@@ -817,9 +847,13 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
             markdown({ extensions: [GFM] }),
             EditorView.lineWrapping,
-            livePreviewExtension(knownTitlesRef, campaignId, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay),
+            livePreviewExtension(knownTitlesRef, campaignId, setMenuRef, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay),
             hiddenBlockField(playersRef),
-            hideMenuHandler(setMenuRef, playersRef),
+            editorMenuHandler(setMenuRef, playersRef, insertMenuRef),
+            keymap.of([
+              { key: 'Mod-b', run: (view) => toggleWrap(view, '**') },
+              { key: 'Mod-i', run: (view) => toggleWrap(view, '*') }
+            ]),
             EditorView.updateListener.of((update) => {
               if (update.docChanged) onChange(update.state.doc.toString())
             }),

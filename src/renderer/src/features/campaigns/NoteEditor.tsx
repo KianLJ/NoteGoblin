@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { GoblinLoader } from '../../ui/GoblinLoader'
 import type { Note } from '@shared/ipc'
 import { renderNoteMarkdown } from '../../markdown'
 import { backlinksTo } from '../../wikilink'
@@ -126,7 +127,7 @@ export function NoteEditor({
   const sceneIndex = sceneDeck ? sceneDeck.scenes.findIndex((s) => s.noteId === note.id) : -1
   const scene = sceneIndex >= 0 ? sceneDeck!.scenes[sceneIndex] : undefined
 
-  function updateScene(patch: Partial<Pick<SessionScene, 'encounterIds' | 'music'>>): void {
+  function updateScene(patch: Partial<Pick<SessionScene, 'encounterIds' | 'music' | 'autoMusic' | 'autoEncounter'>>): void {
     if (!sceneDeck || sceneIndex < 0) return
     const next = sceneDeck.scenes.map((s, i) => (i === sceneIndex ? { ...s, ...patch } : s))
     void reorderSceneDeckScenes(sceneDeck.id, next)
@@ -475,6 +476,11 @@ export function NoteEditor({
           onOneShotPlay={playOneShot}
           players={players}
           readOnly={readOnly}
+          insertMenu={[
+            { label: 'Image…', onSelect: () => void handleInsertImage() },
+            { label: 'Link to a note…', onSelect: () => setLinkPickerOpen(true) },
+            ...(hideMonsters ? [] : [{ label: 'Statblock from the Codex…', onSelect: () => setBestiaryPickerOpen(true) }])
+          ]}
         />
       </div>
       {mode === 'preview' && (
@@ -531,7 +537,7 @@ export function NoteEditor({
 
       <ContextMenu state={linkMenu} onClose={() => setLinkMenu(null)} />
       {bestiaryPickerOpen && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<GoblinLoader overlay size="lg" label="Opening the Codex" />}>
           <Bestiary onClose={() => setBestiaryPickerOpen(false)} onPick={handleBestiaryPick} sessionId={sessionId} />
         </Suspense>
       )}

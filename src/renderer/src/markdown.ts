@@ -175,7 +175,8 @@ export function renderNoteMarkdown(source: string, knownTitles: Set<string>, cam
       ]
     })
 
-    const html = instance.parse(markHiddenBlocks(source, names), { async: false }) as string
+    // A table scrolls sideways in a narrow note instead of squeezing its cells (statblock tables have a class, so they're left as they are).
+    const html = (instance.parse(markHiddenBlocks(source, names), { async: false }) as string).replace(/<table>([\s\S]*?)<\/table>/g, '<div class="gb-table-scroll"><table>$1</table></div>')
     const sanitize = (DOMPurify as unknown as { sanitize?: typeof DOMPurify.sanitize }).sanitize
     if (typeof sanitize !== 'function') {
       // DOMPurify couldn't find a DOM to bind to in this environment — fail

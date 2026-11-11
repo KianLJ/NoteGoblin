@@ -323,8 +323,20 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('library:progress', listener)
     }
   },
+  browser: {
+    onZoom: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, pageId: number, step: 'in' | 'out' | 'reset'): void => callback(pageId, step)
+      ipcRenderer.on('browser:zoom', listener)
+      return () => ipcRenderer.removeListener('browser:zoom', listener)
+    },
+    onOpenTab: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, pageId: number, url: string): void => callback(pageId, url)
+      ipcRenderer.on('browser:open-tab', listener)
+      return () => ipcRenderer.removeListener('browser:open-tab', listener)
+    }
+  },
   handouts: {
-    show: (handout) => ipcRenderer.invoke('handouts:show', handout),
+    show: (handout, only) => ipcRenderer.invoke('handouts:show', handout, only),
     onShow: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, handout: Handout): void => callback(handout)
       ipcRenderer.on('ws:handout', listener)

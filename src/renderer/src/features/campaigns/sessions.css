@@ -486,6 +486,65 @@
   min-width: 0;
 }
 
+/* A column's heading, and its Autoplay / Auto-load switch on the right. */
+.gb-cue-col-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.gb-cue-auto {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gb-cue-auto:hover {
+  color: var(--text-primary);
+}
+
+.gb-cue-auto input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gb-cue-auto .gb-toggle-track {
+  width: 26px;
+  height: 15px;
+}
+
+.gb-cue-auto .gb-toggle-track::after {
+  width: 11px;
+  height: 11px;
+}
+
+.gb-cue-auto--fight input:checked + .gb-toggle-track {
+  background: var(--blood-500);
+}
+
+.gb-cue-auto--music input:checked + .gb-toggle-track {
+  background: var(--moss-500);
+}
+
+.gb-cue-auto input:checked + .gb-toggle-track::after {
+  background: var(--parchment-50);
+  transform: translateX(11px);
+}
+
+.gb-cue-auto input:focus-visible + .gb-toggle-track {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .gb-cue-col-head {
   font-size: 11px;
   font-weight: 700;

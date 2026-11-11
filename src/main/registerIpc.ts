@@ -94,7 +94,7 @@ import type {
 } from '@shared/ipc'
 import type { CalendarConfig } from '@shared/calendar'
 import type { CampaignVehicles } from '@shared/vehicles'
-import { splitReward, type CampaignQuests } from '@shared/quests'
+import { coinList, hasPayout, questIsFor, splitReward, type CampaignQuests } from '@shared/quests'
 import type { BattleLibrary, BattleMap, PlayerBattleMap } from '@shared/battleMap'
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
@@ -871,7 +871,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   })
 
-  // A finished quest's gold and XP, split evenly between the players connected to the campaign and sent to each —
+  // A finished quest's coins and XP, split evenly between the players connected to the campaign and sent to each —
   // once: the quest is marked paid. The amounts come from the saved quest, not from the screen.
   ipcMain.handle('quests:award', async (_event, campaignId: string, questId: string): Promise<QuestAwardResult> => {
     const me = ensureMyHostUser()
@@ -881,19 +881,27 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const quest = log.data.quests.find((q) => q.id === questId)
     if (!quest || quest.status !== 'done') return { ok: false, error: 'That quest isn’t finished.' }
     if (quest.rewarded) return { ok: false, error: 'Its rewards were already handed out.' }
-    if (!quest.rewardGold && !quest.rewardXp) return { ok: false, error: 'It has no gold or XP to hand out.' }
+    if (!hasPayout(quest)) return { ok: false, error: 'It has no coins or XP to hand out.' }
     if (!getHostedSession()) return { ok: false, error: 'Start hosting to hand them out.' }
-    const party = playersInCampaign(campaignId)
-    if (party.length === 0) return { ok: false, error: 'No players are at the table to hand them to.' }
-    const gold = splitReward(quest.rewardGold ?? 0, party.length)
+    // A quest for some of the party pays just them.
+    const party = playersInCampaign(campaignId).filter((id) => questIsFor(quest, id))
+    if (party.length === 0) return { ok: false, error: quest.forPlayers?.length ? 'None of the players it’s for are at the table.' : 'No players are at the table to hand them to.' }
+    // Each currency split on its own: what's left of one isn't changed into another.
+    const coinsEach: Record<string, number> = {}
+    const coinsLeftover: Record<string, number> = {}
+    for (const [id, total] of coinList(quest.rewardCoins)) {
+      const share = splitReward(total, party.length)
+      if (share.each) coinsEach[id] = share.each
+      if (share.leftover) coinsLeftover[id] = share.leftover
+    }
     const xp = splitReward(quest.rewardXp ?? 0, party.length)
-    sendQuestReward(party, quest.title, gold.each, xp.each)
+    sendQuestReward(party, quest.title, coinsEach, xp.each)
     const saved = campaignService.saveQuests(me.db, campaignId, me.userId, { quests: log.data.quests.map((q) => (q.id === questId ? { ...q, rewarded: true } : q)) })
     if (saved.ok) {
       mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
       broadcastCampaignChanged(campaignId)
     }
-    return { ok: true, players: party.length, goldEach: gold.each, xpEach: xp.each, goldLeftover: gold.leftover }
+    return { ok: true, players: party.length, coinsEach, xpEach: xp.each, coinsLeftover }
   })
 
   ipcMain.handle(
@@ -1826,14 +1834,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // rest of the table instead (see sessionHost.ts's 'sfxBoard.play' case). A
   // Sound Board cue is always a bundled file (see sfxLibrary.ts), so this
   // only ever carries an id — except the DM's own added sounds, whose audio goes first, the same way a custom song's does.
-  // A handout (a note's text or a picture) put in front of every connected player — DM only, while hosting.
-  ipcMain.handle('handouts:show', (_event, raw: unknown): { ok: true; players: number } | { ok: false; error: string } => {
+  // A handout (a note's text or a picture) put in front of every connected player, or the ones picked — DM only, while hosting.
+  ipcMain.handle('handouts:show', (_event, raw: unknown, rawOnly?: unknown): { ok: true; players: number } | { ok: false; error: string } => {
+    const only = Array.isArray(rawOnly) ? rawOnly.filter((id): id is string => typeof id === 'string').slice(0, 50) : undefined
     const handout = parseHandout(raw)
     if (!handout) return { ok: false, error: 'That can’t be shown to players.' }
     if (!getHostedSession()) return { ok: false, error: 'Start hosting first, so players can see it.' }
     if (JSON.stringify(handout).length > MAX_HANDOUT_CHARS) return { ok: false, error: 'That picture is too big to send (about 6 MB at most).' }
-    const players = broadcastHandout(handout)
-    return players > 0 ? { ok: true, players } : { ok: false, error: 'No players are connected yet.' }
+    const players = broadcastHandout(handout, only)
+    return players > 0 ? { ok: true, players } : { ok: false, error: only ? 'They aren’t connected any more.' : 'No players are connected yet.' }
   })
 
   ipcMain.handle('sfx-board:broadcast', async (_event, sfxId: string): Promise<void> => {

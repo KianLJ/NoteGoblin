@@ -14,6 +14,12 @@ import presenterShot from '../assets/whatsnew/0.12.0/presenter.jpg'
 import backlinksShot from '../assets/whatsnew/0.12.0/backlinks.jpg'
 import encountersTabShot from '../assets/whatsnew/0.12.0/encounters.jpg'
 import canvasShot012 from '../assets/whatsnew/0.12.0/canvas.jpg'
+import browserShot from '../assets/whatsnew/0.13.0/browser.jpg'
+import tablesShot from '../assets/whatsnew/0.13.0/tables.jpg'
+import noteMenuShot from '../assets/whatsnew/0.13.0/menu.jpg'
+import questsShot013 from '../assets/whatsnew/0.13.0/quests.jpg'
+import cuesShot013 from '../assets/whatsnew/0.13.0/cues.jpg'
+import loaderShot from '../assets/whatsnew/0.13.0/loader.jpg'
 
 export interface WhatsNewSection {
   heading: string
@@ -38,6 +44,47 @@ export interface WhatsNewPost {
 
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
+  {
+    version: '0.13.0',
+    title: 'A browser on the table, and quests with more to them',
+    intro: 'The web comes to the canvas: a Browser box with tabs, right beside your notes. Tables in notes are finally pleasant to edit (and some of them roll), notes have a proper right-click menu, and quests can pop up, drop hints, pay in any coin and go to just some of the party.',
+    sections: [
+      {
+        heading: 'A browser on the canvas',
+        body: 'The new Browser box sits on the bottom bar for the DM and players alike. It has tabs, an address bar that searches too, and a start page of the pages you keep with the star. Open more Browser boxes from the new-window button or Add ▸ Browser window. Ctrl+scroll zooms a page, and the canvas zooms it with everything else. Each account signs in to sites separately, ads and trackers are blocked, and only the few tabs you looked at last stay loaded, so it stays light.',
+        image: browserShot,
+        caption: 'Three tabs in a Browser box.'
+      },
+      {
+        heading: 'Tables you edit in place, and tables that roll',
+        body: 'A table in a note stays a table now. Click a cell and type: Tab and Shift+Tab move along, Enter goes down a row and adds one at the end. The + strips add a row or a column, and right-clicking a cell inserts, moves, aligns or deletes rows and columns, or drag a row or column by its grip. In a narrow note the table scrolls sideways instead of squashing. A table whose first column is headed d6, d20 and so on, or numbered with ranges like 1-2, gets a die: click it to roll, and the row it lands on lights up.',
+        image: tablesShot,
+        caption: 'The same note narrow (left) and wide (right), with a d6 road table rolled on a 6.'
+      },
+      {
+        heading: 'A right-click menu for notes',
+        body: 'Right-click in a note for Cut, Copy and Paste, Format (bold, italic, headings, lists, checklists, quotes) and Insert: an image, a link to a note, a statblock from the Codex, a table, a roll table, a dice roll, an NPC name or a divider. Ctrl+B and Ctrl+I work too, and pasting cells from a spreadsheet makes a table.',
+        image: noteMenuShot
+      },
+      {
+        heading: 'Quests with more to them',
+        body: 'Show the party a new quest and it unrolls on their screens. Give a quest notes and hints, each hidden until you reveal it, and players get a little notice when one appears. Rewards can be any mix of coins (copper to platinum, and any your content packs add or rename) as well as XP and items, and each coin is split between the party on its own. A quest can be for chosen players only: just they see it and share its reward. Finished quests fold away under one line.',
+        image: questsShot013,
+        caption: 'Hints on the DM’s side (left), and a new quest arriving for a player (right).'
+      },
+      {
+        heading: 'Scenes that set themselves up',
+        body: 'A scene’s music has an Autoplay switch, on to start with, and its encounters have an Auto-load switch that puts the first fight into Initiative as the scene comes up, once per presentation. Starting a presentation now runs the first scene’s cues too. Handouts can go to chosen players: with more than one player at the table, Show to players asks who.',
+        image: cuesShot013,
+        caption: 'A scene’s fights set to load and its music set to play.'
+      },
+      {
+        heading: 'And a goblin who reads while you wait',
+        body: 'Anything that takes a moment to load (the app starting, a web page, the Codex or the Workshop opening, a party member’s sheet) now shows the goblin at work instead of a blank box. The canvas’s dot grid no longer jitters while a trackpad zooms, and the download buttons on moods are quieter.',
+        image: loaderShot
+      }
+    ]
+  },
   {
     version: '0.12.0',
     title: 'Quests, handouts, and a lighter download',

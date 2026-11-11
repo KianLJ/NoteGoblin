@@ -7,6 +7,7 @@ import { resolveVaultAssetPath } from '@server/files/vaultStore'
 import { resolveCustomMusicPath } from './customMusic'
 import { resolveCustomEntitySfxPath } from './customEntitySfx'
 import { initAutoUpdater } from './updates'
+import { registerWebBrowser } from './webBrowser'
 
 // Only one instance of the app may run at a time — a DM's/player's local
 // host/identity databases aren't built for two processes writing to the same
@@ -124,7 +125,9 @@ function createWindow(): BrowserWindow {
       // The page gets no Node at all, even if something slipped past the CSP; the preload only needs contextBridge/ipcRenderer/webUtils.
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // The Browser box's pages — locked down in webBrowser.ts.
+      webviewTag: true
     }
   })
 
@@ -147,14 +150,16 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  registerWebBrowser()
   // Auto-grants the Local Font Access API so the Appearance settings' font
-  // picker can list actually-installed system fonts — this is our own
-  // trusted renderer, not arbitrary web content, so there's no one else's
-  // permission to protect here.
+  // picker can list actually-installed system fonts, and the clipboard so a
+  // note's right-click Paste works — this is our own trusted renderer, not
+  // arbitrary web content, so there's no one else's permission to protect here.
+  const GRANTED = ['local-fonts', 'clipboard-read', 'clipboard-sanitized-write']
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback((permission as string) === 'local-fonts')
+    callback(GRANTED.includes(permission as string))
   })
-  session.defaultSession.setPermissionCheckHandler((_wc, permission) => (permission as string) === 'local-fonts')
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => GRANTED.includes(permission as string))
 
   // blob: — a player plays the DM's own songs and sounds from audio received over the session (musicEngine.ts's
   // base64ToBlobUrl), and a profile picture is read from the picked file (avatar.ts). Without it both fail, but only

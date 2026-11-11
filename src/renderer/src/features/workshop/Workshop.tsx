@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { GoblinLoader } from '../../ui/GoblinLoader'
 import type { PackImportResult } from '@shared/ipc'
 import type { ContentPack } from '@shared/content/schema'
 import { blankAnswers, entryKindOf, entryToAnswers, type GuidedAnswers, type GuidedKind } from '@shared/content/guided'
@@ -249,8 +250,10 @@ export function Workshop({ authorName }: { authorName: string }): JSX.Element {
               <StartCard title="Import a file" hint="A .ngpack.json someone shared" disabled={busy} onClick={importPacks} />
             </div>
           </div>
+        ) : library.packs ? (
+          <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Pick a pack on the left, or start a new one.</div>
         ) : (
-          <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{library.packs ? 'Pick a pack on the left, or start a new one.' : 'Loading your library…'}</div>
+          <GoblinLoader label="Opening your library" />
         )}
       </section>
     </div>

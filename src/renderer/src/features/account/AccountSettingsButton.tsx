@@ -1,4 +1,5 @@
 import { setClassicLayout, useClassicLayout } from '../classic/classicLayout'
+import { GoblinLoader } from '../../ui/GoblinLoader'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { useMountAnimation } from '../../ui/useMountAnimation'
@@ -397,7 +398,7 @@ function SettingsWindow({ initialSection, onClose }: { initialSection: SettingsS
           </header>
 
           {!identity ? (
-            <p className="st-hint">Loading…</p>
+            <GoblinLoader label="Loading your account" />
           ) : current.id === 'profile' ? (
             <div className="st-group">
               <div className="st-profile">
@@ -496,7 +497,7 @@ function SettingsWindow({ initialSection, onClose }: { initialSection: SettingsS
                       Default
                     </button>
                     {systemFonts === null ? (
-                      <span className="st-hint">Loading fonts…</span>
+                      <GoblinLoader size="sm" fill={false} label="Finding your fonts" />
                     ) : systemFonts.length === 0 ? (
                       <span className="st-hint">No fonts to browse on this computer.</span>
                     ) : (
@@ -642,7 +643,7 @@ function SettingsWindow({ initialSection, onClose }: { initialSection: SettingsS
           ) : current.id === 'admin' ? (
             <div className="st-group">
               {adminAccounts === null ? (
-                <p className="st-hint">Loading…</p>
+                <GoblinLoader label="Loading accounts" />
               ) : adminAccounts.length === 0 ? (
                 <p className="st-hint">No accounts.</p>
               ) : (

@@ -406,20 +406,24 @@ export function playersInCampaign(campaignId: string): string[] {
 }
 
 /** Sends each of `userIds` their share of a quest's reward. */
-export function sendQuestReward(userIds: string[], questTitle: string, gold: number, xp: number): void {
-  const frame: QuestRewardFrame = { type: 'quest-reward', questTitle, gold, xp, partySize: userIds.length }
+export function sendQuestReward(userIds: string[], questTitle: string, coins: Record<string, number>, xp: number): void {
+  const frame: QuestRewardFrame = { type: 'quest-reward', questTitle, coins, gold: coins.gp ?? 0, xp, partySize: userIds.length }
   for (const id of userIds) sendToRelay(id, frame)
 }
 
-/** Puts a handout in front of every connected player, in relay-sized pieces (see HandoutChunkFrame). Returns how many it went to. */
-export function broadcastHandout(handout: Handout): number {
+/**
+ * Puts a handout in front of every connected player — or just those in `only` — in relay-sized pieces (see
+ * HandoutChunkFrame). Returns how many it went to.
+ */
+export function broadcastHandout(handout: Handout, only?: string[]): number {
+  const to = [...players.values()].filter((p) => !only || only.includes(p.userId))
   const json = JSON.stringify(handout)
   const total = Math.max(1, Math.ceil(json.length / IMAGE_CHUNK_CHARS))
   for (let index = 0; index < total; index++) {
     const frame: HandoutChunkFrame = { type: 'handout-chunk', handoutId: handout.id, index, total, chunk: json.slice(index * IMAGE_CHUNK_CHARS, (index + 1) * IMAGE_CHUNK_CHARS) }
-    for (const p of players.values()) sendToRelay(p.userId, frame)
+    for (const p of to) sendToRelay(p.userId, frame)
   }
-  return players.size
+  return to.length
 }
 
 /** Pushes a Sound Board one-shot cue to every connected player, table-wide — fire-and-forget, no state to track since a one-shot has nothing to "resume" for a late joiner the way music/ambient do. `excludeUserId` skips the player who triggered it via the 'sfxBoard.play' request below (see its doc comment) — they already played it locally and don't need it echoed back. */

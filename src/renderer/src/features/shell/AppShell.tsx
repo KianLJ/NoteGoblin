@@ -1,3 +1,6 @@
+import { BrowserPanel } from '../browser/BrowserPanel'
+import { GoblinLoader } from '../../ui/GoblinLoader'
+import { setBrowserAccount } from '../browser/browserAccount'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ModeToggle, type Mode } from './ModeToggle'
@@ -192,6 +195,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   // (as the DM) your local host-db user id. Only the player side needs this:
   // the DM's own authorUserId is always their campaign's dmUserId instead.
   const [myRelayUserId, setMyRelayUserId] = useState<string | null>(null)
+  // Whose logins every Browser box uses.
+  useEffect(() => setBrowserAccount(myRelayUserId), [myRelayUserId])
   useEffect(() => {
     function refresh(): void {
       window.goblin.relay.myUserId().then(setMyRelayUserId)
@@ -366,7 +371,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
   const sharedTools: ToolContents = {
     codex: (
-      <Suspense fallback={null}>
+      <Suspense fallback={<GoblinLoader label="Opening the Codex" />}>
         <Bestiary
           embedded
           hideMonsters={mode === 'player' && !!joinedSession}
@@ -379,6 +384,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       </Suspense>
     ),
     whatsnew: <WhatsNewView entries={whatsNewEntries} />,
+    browser: <BrowserPanel />,
     friends: (
       <FriendsPanel
         mode={mode}
@@ -591,7 +597,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
 
       {workshopMounted && (
         <main style={{ flex: 1, display: workshopOpen ? 'flex' : 'none', flexDirection: 'column', minHeight: 0 }}>
-          <Suspense fallback={null}>
+          <Suspense fallback={<GoblinLoader size="lg" label="Opening the Workshop" />}>
             <Workshop authorName={displayName} />
           </Suspense>
         </main>
@@ -696,7 +702,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
         />
       )}
       {bestiaryOpen && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<GoblinLoader overlay size="lg" label="Opening the Codex" />}>
           <Bestiary onClose={() => setBestiaryOpen(false)} hideMonsters={mode === 'player' && !!joinedSession} sessionId={mode === 'dm' ? hostedSessionId : playerSessionId} />
         </Suspense>
       )}

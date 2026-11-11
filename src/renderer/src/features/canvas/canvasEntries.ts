@@ -7,18 +7,25 @@ import type { CanvasImage } from './ImageBox'
 /**
  * Things put on a canvas from the Codex or the right-click menu: a monster's
  * statblock, an NPC, piece of equipment, spell or magic item, a content pack's
- * homebrew entry (id: its Codex key), a sticky note or an image.
+ * homebrew entry (id: its Codex key), a sticky note, an image or another Browser box.
  * Kept here by canvas node id, per mode — the layout only knows where each
  * box sits, and a box is open while the layout holds it.
  */
 /** The Codex's own kinds of entry that go on the canvas by id. */
 export type CodexEntryKind = 'npc' | 'equipment' | 'spell' | 'magicItem' | 'homebrew'
 
-export type CanvasEntry = { kind: 'monster'; monster: BestiaryMonster } | { kind: CodexEntryKind; id: string; name: string } | Sticky | CanvasImage
+/** Another Browser box: its tabs are kept by its id (BrowserPanel.tsx). */
+export interface BrowserWindowEntry {
+  kind: 'browser'
+  id: string
+}
+
+export type CanvasEntry = { kind: 'monster'; monster: BestiaryMonster } | { kind: CodexEntryKind; id: string; name: string } | Sticky | CanvasImage | BrowserWindowEntry
 
 export function entryNodeId(entry: CanvasEntry): string {
   if (entry.kind === 'monster') return `monster:${entry.monster.index}`
   if (entry.kind === 'image') return `image:${entry.id}`
+  if (entry.kind === 'browser') return `browser:${entry.id}`
   return entry.kind === 'sticky' ? `sticky:${entry.id}` : `entry:${entry.kind}:${entry.id}`
 }
 

@@ -1,3 +1,5 @@
+import { usePartyPresence } from '../player/PartyList'
+import { GoblinLoader } from '../../ui/GoblinLoader'
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { NoteSidebar } from './NoteSidebar'
 import { NoteEditor } from './NoteEditor'
@@ -10,7 +12,8 @@ import { useKnownPlayerSheets } from './useKnownPlayerSheets'
 import { DmInitiativeTool } from './DmInitiativeTool'
 import { TimerDockButton, TimerMini, TimerPanel } from '../canvas/SessionTimer'
 import { CalendarMini, InitiativeMini, PartyMini, SessionsMini } from '../canvas/toolMinis'
-import { SceneDeleteButton, SessionPresenter, SessionsList } from './SessionTimeline'
+import { playCue, resolveEncounterMonsters, SceneDeleteButton, SessionPresenter, SessionsList } from './SessionTimeline'
+import { loadSavedEncounters } from '../../data/savedEncounters'
 import { ShowToPlayersButton } from './ShowToPlayersButton'
 import { HostButton } from './HostButton'
 import { QuestLog } from './QuestLog'
@@ -114,6 +117,8 @@ export function CampaignWorkspace({
   // Where a monster picked from the right-click menu's Codex goes; null while the picker is shut.
   const [monsterPickAt, setMonsterPickAt] = useState<CanvasPoint | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
+  // Who's at the table while hosting: whom a handout can go to.
+  const tablePlayers = usePartyPresence(hostedSessionId ?? null, campaign?.id ?? null)
   const rootRef = useRef<HTMLDivElement>(null)
   useQuickSearchKey(rootRef, setSearchOpen)
 
@@ -130,6 +135,44 @@ export function CampaignWorkspace({
   const sequenceKey = sequence?.join(',')
   const liveDeck = decksApi.decks.find((d) => d.id === decksApi.live.deckId)
   const liveNoteId = liveDeck?.scenes[decksApi.live.sceneIndex]?.noteId
+
+  /** Puts a saved encounter's monsters into the fight. */
+  function loadEncounter(monsters: BestiaryMonster[], encounterId: string): void {
+    // A battle made for this encounter comes up on the battle map, so its enemies land where they were placed.
+    switchToEncounterBattle(encounterId)
+    setEncounter((s) => ({ ...s, combatants: [...s.combatants, ...monsters.map(monsterToCombatant)] }))
+    onOpenCombat?.()
+  }
+
+  // A scene coming up while presenting — the first one, or stepping to another from anywhere — runs its cues:
+  // its first music (unless that's switched off), and its first encounter if it's set to load (once a presentation,
+  // so stepping back and forth doesn't add the monsters twice). Not for whatever was already live as this opened.
+  const cueRun = useRef<{ key: string | null; loaded: Set<string> }>({ key: null, loaded: new Set() })
+  const liveScene = liveDeck?.scenes[decksApi.live.sceneIndex]
+  useEffect(() => {
+    const run = cueRun.current
+    if (!decksApi.live.deckId) {
+      run.key = ''
+      run.loaded.clear()
+      return
+    }
+    if (!liveDeck || !liveScene) return
+    const key = `${liveDeck.id}:${decksApi.live.sceneIndex}`
+    const first = run.key === null
+    if (run.key === key) return
+    run.key = key
+    if (first) return
+    if (liveScene.autoMusic !== false && liveScene.music[0]) playCue(liveScene.music[0], hostedSessionId ?? null)
+    const encId = liveScene.encounterIds[0]
+    if (liveScene.autoEncounter && encId && !run.loaded.has(encId)) {
+      const saved = loadSavedEncounters().find((e) => e.id === encId)
+      if (saved) {
+        run.loaded.add(encId)
+        loadEncounter(resolveEncounterMonsters(saved), encId)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decksApi.live.deckId, decksApi.live.sceneIndex, liveDeck, liveScene])
 
   // Scenes on no canvas yet (an older session's, or one added from elsewhere) come into the session's collection,
   // after the ones there. A layout effect, so they're placed here before the canvas would give them a spot of its own.
@@ -367,7 +410,7 @@ export function CampaignWorkspace({
           onUnshelve={unshelveSession}
         />
       ),
-      mini: <SessionsMini api={decksApi} notes={notes ?? []} hostedSessionId={hostedSessionId ?? null} />
+      mini: <SessionsMini api={decksApi} notes={notes ?? []} />
     }
   }
 
@@ -386,8 +429,8 @@ export function CampaignWorkspace({
         actions: (hostedSessionId || (deckHere && sceneIdsHere.has(`note:${note.id}`))) && (
           <>
             {hostedSessionId && (
-              // Its text without the DM-only (::) parts — every player sees the same thing.
-              <ShowToPlayersButton build={async () => ({ id: crypto.randomUUID(), title: note.title || 'Untitled', kind: 'note', markdown: stripDmAsides(note.bodyMarkdown) })} />
+              // Its text without the DM-only (::) parts — every player it goes to sees the same thing.
+              <ShowToPlayersButton players={tablePlayers} build={async () => ({ id: crypto.randomUUID(), title: note.title || 'Untitled', kind: 'note', markdown: stripDmAsides(note.bodyMarkdown) })} />
             )}
             {deckHere && sceneIdsHere.has(`note:${note.id}`) && <SceneDeleteButton onDelete={() => deleteScene(deckHere, note.id)} />}
           </>
@@ -431,6 +474,7 @@ export function CampaignWorkspace({
       hostedSessionId
         ? (image) => (
             <ShowToPlayersButton
+              players={tablePlayers}
               build={async () => {
                 const src = await getCanvasImage(image.id)
                 return src ? { id: crypto.randomUUID(), title: image.name, kind: 'image', src } : null
@@ -516,12 +560,7 @@ export function CampaignWorkspace({
           notes={notes ?? []}
           hostedSessionId={hostedSessionId ?? null}
           onStep={(noteId) => showScene(liveDeck, noteId)}
-          onLoadEncounter={(monsters, encounterId) => {
-            // A battle made for this encounter comes up on the battle map, so its enemies land where they were placed.
-            switchToEncounterBattle(encounterId)
-            setEncounter((s) => ({ ...s, combatants: [...s.combatants, ...monsters.map(monsterToCombatant)] }))
-            onOpenCombat?.()
-          }}
+          onLoadEncounter={loadEncounter}
         />
       )}
       <Canvas
@@ -585,7 +624,7 @@ export function CampaignWorkspace({
         />
       )}
       {monsterPickAt && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<GoblinLoader overlay size="lg" label="Opening the Codex" />}>
           <Bestiary
             onClose={() => setMonsterPickAt(null)}
             onPick={(monster) => {

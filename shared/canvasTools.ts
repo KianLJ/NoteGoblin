@@ -17,6 +17,7 @@ export type ToolKind =
   | 'music'
   | 'soundboard'
   | 'friends'
+  | 'browser'
 
 export const TOOL_META: Record<ToolKind, { title: string; w: number; h: number }> = {
   notes: { title: 'Notes', w: 272, h: 640 },
@@ -31,13 +32,14 @@ export const TOOL_META: Record<ToolKind, { title: string; w: number; h: number }
   quests: { title: 'Quests', w: 340, h: 460 },
   music: { title: 'Music', w: 384, h: 512 },
   soundboard: { title: 'Sound Board', w: 352, h: 512 },
-  friends: { title: 'Friends', w: 320, h: 432 }
+  friends: { title: 'Friends', w: 320, h: 432 },
+  browser: { title: 'Browser', w: 760, h: 640 }
 }
 
 export const TOOLS_BY_MODE: Record<CanvasMode, ToolKind[]> = {
   // The saved encounters live in the Initiative box's Encounters tab.
-  dm: ['notes', 'players', 'initiative', 'quests', 'calendar', 'sessions', 'timer', 'codex', 'music', 'soundboard', 'friends', 'whatsnew'],
-  player: ['notes', 'party', 'initiative', 'calendar', 'sessions', 'quests', 'codex', 'friends', 'whatsnew']
+  dm: ['notes', 'players', 'initiative', 'quests', 'calendar', 'sessions', 'timer', 'codex', 'music', 'soundboard', 'browser', 'friends', 'whatsnew'],
+  player: ['notes', 'party', 'initiative', 'calendar', 'sessions', 'quests', 'codex', 'browser', 'friends', 'whatsnew']
 }
 
 /**
@@ -78,6 +80,7 @@ export const MIN_CONTENT: Record<string, { w: number; h: number }> = {
   music: { w: 260, h: 260 },
   soundboard: { w: 240, h: 200 },
   friends: { w: 240, h: 200 },
+  browser: { w: 320, h: 240 },
   note: { w: 280, h: 200 },
   character: { w: 520, h: 360 },
   partySheet: { w: 520, h: 360 },
@@ -98,7 +101,8 @@ export const DYNAMIC_SIZE: Record<string, { w: number; h: number }> = {
   entry: { w: 420, h: 520 },
   sticky: { w: 224, h: 192 },
   collection: { w: 96, h: 96 },
-  image: { w: 400, h: 332 }
+  image: { w: 400, h: 332 },
+  browser: { w: 760, h: 640 }
 }
 
 export function dynamicKind(id: string): string {

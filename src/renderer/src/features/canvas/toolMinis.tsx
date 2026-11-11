@@ -193,7 +193,7 @@ export function PartyMini({ sessionId, campaignId }: { sessionId: string | null;
 }
 
 /** The DM's live session: which scene, with back and next. */
-export function SessionsMini({ api, notes, hostedSessionId }: { api: SessionDecksApi; notes: Note[]; hostedSessionId: string | null }): JSX.Element {
+export function SessionsMini({ api, notes }: { api: SessionDecksApi; notes: Note[] }): JSX.Element {
   const deck = api.decks.find((d) => d.id === api.live.deckId)
   const index = api.live.sceneIndex
   if (!deck || index < 0)
@@ -211,7 +211,7 @@ export function SessionsMini({ api, notes, hostedSessionId }: { api: SessionDeck
         type="button"
         className="mini-round"
         disabled={index <= 0}
-        onClick={() => goLive(api, deck, index - 1, hostedSessionId)}
+        onClick={() => goLive(api, deck, index - 1)}
         aria-label="Previous scene"
         title="Previous scene"
       >
@@ -221,7 +221,7 @@ export function SessionsMini({ api, notes, hostedSessionId }: { api: SessionDeck
         type="button"
         className="mini-round mini-round--big"
         disabled={index >= deck.scenes.length - 1}
-        onClick={() => goLive(api, deck, index + 1, hostedSessionId)}
+        onClick={() => goLive(api, deck, index + 1)}
         aria-label="Next scene"
         title="Next scene"
       >

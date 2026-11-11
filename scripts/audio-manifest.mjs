@@ -22,6 +22,7 @@ const files = ['music', 'ambient', 'soundboard']
   .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
 
 const next = JSON.stringify({ files }, null, 1) + '\n'
-if (!existsSync(out) || readFileSync(out, 'utf-8') !== next) writeFileSync(out, next)
+// Compared without line endings: git may check it out with CRLF, and that's no change.
+if (!existsSync(out) || readFileSync(out, 'utf-8').replace(/\r\n/g, '\n') !== next) writeFileSync(out, next)
 const mb = (files.reduce((n, f) => n + f.size, 0) / 1024 / 1024).toFixed(1)
 console.log(`audio manifest: ${files.length} files, ${mb} MB`)

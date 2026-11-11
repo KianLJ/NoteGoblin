@@ -26,13 +26,14 @@ export function playCue(cue: SceneMusic, hostedSessionId: string | null): void {
   else pickMood(cue.moodId, 2500, hostedSessionId)
 }
 
-/** Moves the live presentation to `index`: the players follow, and the scene's first music cue plays. */
-export function goLive(api: SessionDecksApi, deck: SessionDeck, index: number, hostedSessionId: string | null): void {
-  const scene = deck.scenes[index]
-  if (!scene) return
+/**
+ * Moves the live presentation to `index`: the players follow. The scene's own cues (its music, an encounter set to
+ * load) run from the DM's workspace as the live scene changes — see CampaignWorkspace.tsx.
+ */
+export function goLive(api: SessionDecksApi, deck: SessionDeck, index: number): void {
+  if (!deck.scenes[index]) return
   if (index !== api.live.sceneIndex) playSfx('sceneAdvance')
   api.setLiveSceneIndex(index)
-  if (scene.music[0]) playCue(scene.music[0], hostedSessionId)
 }
 
 /**
@@ -208,7 +209,7 @@ export function SessionPresenter({
   const encounters = (scene?.encounterIds ?? []).map((id) => saved.find((e) => e.id === id)).filter((e): e is SavedEncounter => !!e)
 
   function step(to: number): void {
-    goLive(api, deck!, to, hostedSessionId)
+    goLive(api, deck!, to)
     const next = deck!.scenes[to]
     if (next) onStep(next.noteId)
   }

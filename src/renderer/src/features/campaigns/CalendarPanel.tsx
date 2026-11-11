@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { GoblinLoader } from '../../ui/GoblinLoader'
 import { v4 as uuid } from 'uuid'
 import { useCalendar } from './useCalendar'
 import { CalendarCreatorWizard } from './CalendarCreatorWizard'
@@ -171,7 +172,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
     return <Empty text="Open a campaign to see its calendar." />
   }
   if (loading && !calendar) {
-    return <Empty text="Loading…" />
+    return <GoblinLoader label="Opening the calendar" />
   }
 
   if (!config) {

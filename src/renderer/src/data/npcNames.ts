@@ -157,6 +157,9 @@ const NAME_PROFILES: Record<string, RaceNameProfile> = {
   Tiefling: TIEFLING
 }
 
+/** The races with their own names, in the order a picker shows them. */
+export const NPC_NAME_RACES = Object.keys(NAME_PROFILES)
+
 function pick<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]
 }

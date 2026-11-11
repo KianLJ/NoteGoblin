@@ -667,49 +667,54 @@
 
 .ab-dl {
   position: absolute;
-  top: 5px;
-  right: 5px;
+  top: 4px;
+  right: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: 50%;
-  background: var(--bg-surface-raised);
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
   transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
 }
 
-/* Shown on hover, and always once downloaded, downloading, or failed — so you can see what's kept offline. */
+.ab-dl svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Quiet: the download arrow only on hover; a downloaded mood keeps a faint tick so you can tell at a glance. */
 .ab-mood-wrap:hover .ab-dl,
 .ab-dl:focus-visible,
-.ab-dl--done,
 .ab-dl--busy,
 .ab-dl--failed {
   opacity: 1;
 }
 
+.ab-dl--done {
+  opacity: 0.45;
+}
+
+.ab-mood-wrap:hover .ab-dl--done {
+  opacity: 0.8;
+}
+
 .ab-dl:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: var(--bg-sunken);
   color: var(--accent-hover);
 }
 
-.ab-dl--done {
-  border-color: color-mix(in srgb, var(--success) 50%, var(--border-subtle));
-  color: var(--success);
-}
-
 .ab-dl--done:hover {
-  border-color: var(--danger) !important;
   color: var(--danger) !important;
 }
 
 .ab-dl--failed {
-  border-color: var(--danger);
   color: var(--danger);
 }
 

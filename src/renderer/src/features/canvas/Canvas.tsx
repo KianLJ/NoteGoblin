@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getStoredFontScale } from '../../theme'
 import {
   GRID,
@@ -29,6 +29,7 @@ import {
   type Viewport
 } from '@shared/canvasLayout'
 import { CanvasNode } from './CanvasNode'
+import { CanvasZoomContext } from './canvasZoom'
 import { DYNAMIC_SIZE, MIN_CONTENT, TOOL_META, TOOLS_BY_MODE, dynamicKind, type CanvasMode, type ToolKind } from '@shared/canvasTools'
 import { ContextMenu, type ContextMenuItem, type ContextMenuState } from '../../ui/ContextMenu'
 import { LayoutsMenu } from './LayoutsMenu'
@@ -40,6 +41,8 @@ import { useCanvasMood } from './useCanvasMood'
 import { ImageIcon, StickyIcon } from '../campaigns/icons'
 import type { CanvasNav } from './useCanvasLayout'
 import { entryNodeId, putEntry } from './canvasEntries'
+import { NEW_BROWSER_WINDOW_EVENT, setFirstPage } from '../browser/browserAccount'
+import { BrowserIcon } from '../browser/BrowserPanel'
 import type { CanvasItem } from './toolItems'
 
 /** A point on the canvas, in world coordinates. */
@@ -106,6 +109,8 @@ const ZOOM_STEP = 1.2
  */
 export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, crumbExtra, title, titleExtra, onRestoreBoxes }, ref) {
   const viewportRef = useRef<HTMLDivElement>(null)
+  // The dot grid's pattern id (useId's colons aren't safe inside url(#…)).
+  const gridId = `gb-grid${useId().replace(/:/g, '')}`
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [vp, setVp] = useState<Viewport>(layout.viewport)
   const vpRef = useRef(vp)
@@ -120,6 +125,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     const t = setTimeout(() => setLaidOutZoom(vp.zoom), 160)
     return () => clearTimeout(t)
   }, [vp.zoom, laidOutZoom])
+  const zooming = vp.zoom !== laidOutZoom
+  const zoomContext = useMemo(() => ({ zoom: laidOutZoom, zooming }), [laidOutZoom, zooming])
   const [panning, setPanning] = useState(false)
   const [pendingReveal, setPendingReveal] = useState<string | null>(null)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
@@ -233,6 +240,11 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         openAt(entryNodeId(entry), DYNAMIC_SIZE.sticky, at)
       }
     }
+    const browser: ContextMenuItem = {
+      label: 'Browser window',
+      icon: <BrowserIcon />,
+      onSelect: () => openBrowserWindow(at)
+    }
     const image: ContextMenuItem = {
       label: 'Image…',
       icon: <ImageIcon />,
@@ -245,7 +257,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     }
     const { add, open = [] } = contextMenu(at)
     // Everything new goes under one Add ▸; the workspace's own new things first, then the ones every canvas has.
-    const addMenu: ContextMenuItem = { label: 'Add', icon: <PlusIcon />, submenu: [...add, sticky, image, ...(nav ? [collection] : [])] }
+    const addMenu: ContextMenuItem = { label: 'Add', icon: <PlusIcon />, submenu: [...add, sticky, image, browser, ...(nav ? [collection] : [])] }
     setMenu({ x: e.clientX, y: e.clientY, items: [addMenu, ...open.map((item, i) => (i === 0 ? { ...item, separatorBefore: true } : item))] })
   }
 
@@ -313,6 +325,28 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
   )
 
   const openTool = useCallback((kind: ToolKind, at?: CanvasPoint) => openAt(kind, TOOL_META[kind], at), [openAt])
+
+  /** Another Browser box, its own tabs: at `at`, or where a new box goes. */
+  const openBrowserWindow = useCallback(
+    (at?: CanvasPoint, url?: string) => {
+      const entry = { kind: 'browser', id: crypto.randomUUID() } as const
+      if (url) setFirstPage(entry.id, url)
+      putEntry(mode, entry)
+      openAt(entryNodeId(entry), DYNAMIC_SIZE.browser, at)
+    },
+    [mode, openAt]
+  )
+  // A Browser box on this canvas asking for another (its "new window" button).
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const onAsk = (e: Event): void => {
+      e.stopPropagation()
+      openBrowserWindow(undefined, (e as CustomEvent<{ url?: string }>).detail?.url)
+    }
+    el.addEventListener(NEW_BROWSER_WINDOW_EVENT, onAsk)
+    return () => el.removeEventListener(NEW_BROWSER_WINDOW_EVENT, onAsk)
+  }, [openBrowserWindow])
 
   const closeTool = useCallback((kind: ToolKind) => setLayout((l) => removeNode(l, kind)), [setLayout])
 
@@ -425,16 +459,23 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      style={{
-        backgroundSize: `${gridPx * 2}px ${gridPx * 2}px`,
-        backgroundPosition: `${vp.x}px ${vp.y}px`
-      }}
     >
+      {/* The dot grid. An SVG pattern, not a CSS gradient: the browser rounds a gradient's tile to whole pixels, so
+          at most zooms the dots drifted and jumped as a trackpad zoomed smoothly. Its origin is the world's own. */}
+      <svg className="gb-canvas-grid" aria-hidden="true">
+        <defs>
+          <pattern id={gridId} width={gridPx * 2} height={gridPx * 2} x={Math.round(vp.x)} y={Math.round(vp.y)} patternUnits="userSpaceOnUse">
+            <circle cx={gridPx} cy={gridPx} r={1.15} fill="currentColor" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill={`url(#${gridId})`} />
+      </svg>
       {/* The light the scene's music (or a fight) casts over the table — see useCanvasMood.ts. */}
       <div className="gb-canvas-mood" aria-hidden="true" />
       {/* Whole pixels, so nothing on the canvas sits between two. */}
       <div className="gb-canvas-world" style={{ transform: `translate(${Math.round(vp.x)}px, ${Math.round(vp.y)}px)${vp.zoom === laidOutZoom ? '' : ` scale(${vp.zoom / laidOutZoom})`}` }}>
         <div className="gb-canvas-zoom" style={{ zoom: laidOutZoom }}>
+        <CanvasZoomContext.Provider value={zoomContext}>
         {liveSequence && <SequenceArrows nodes={liveSequence.map(seqRect).filter((n) => n && !n.pinned) as Rect[]} />}
         {rendered.filter((r) => !r.node!.pinned).map(renderNode)}
         {liveSequence?.map((id, i) => {
@@ -445,6 +486,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
             </span>
           ) : null
         })}
+        </CanvasZoomContext.Provider>
         </div>
       </div>
       <div className="gb-canvas-pinned">{rendered.filter((r) => r.node!.pinned).map(renderNode)}</div>
