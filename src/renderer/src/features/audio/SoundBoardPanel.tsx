@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { LibraryDownloadAll } from './LibraryDownloadButton'
+import { folderPaths } from './libraryDownloads'
 import { SFX_LIBRARY } from '../../data/sfxLibrary'
 import { playSfxCue, rememberRecentSfx } from './sfxBoardEngine'
 import { getStoredSfxBoardBroadcastEnabled, setSfxBoardBroadcastEnabled } from './soundSettings'
@@ -134,6 +136,9 @@ export function SoundBoardPanel({ sessionId }: SoundBoardPanelProps): JSX.Elemen
         <span className="ab-switch-track" />
         Players hear the sounds
       </label>
+      <div className="ab-dl-row">
+        <LibraryDownloadAll paths={folderPaths('soundboard')} what="the built-in sounds" />
+      </div>
 
       {!q && (
         <div className="ab-chips" role="tablist" aria-label="Sound categories">

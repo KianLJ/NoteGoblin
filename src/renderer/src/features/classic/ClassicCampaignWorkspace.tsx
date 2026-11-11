@@ -2,7 +2,7 @@ import { ClassicSidebar } from './ClassicSidebar'
 import { NoteSidebar } from '../campaigns/NoteSidebar'
 import { NoteEditor } from '../campaigns/NoteEditor'
 import { RightPanel } from './RightPanel'
-import { CampaignSwitcher } from '../campaigns/CampaignSwitcher'
+import { ClassicCampaignSwitcher } from './ClassicCampaignSwitcher'
 import { CharacterSheetEditor } from '../player/CharacterSheetEditor'
 import { renderStatblockHtml } from '../../statblock'
 import { rollInlineDice } from '../dice/inlineDice'
@@ -96,7 +96,7 @@ export function ClassicCampaignWorkspace({
       <ClassicSidebar
         footer={
           <>
-            <CampaignSwitcher
+            <ClassicCampaignSwitcher
               canCreate
               current={campaign}
               onSelect={onSwitchCampaign}

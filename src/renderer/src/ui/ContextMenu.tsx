@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { getStoredFontScale } from '../theme'
 import { useMountAnimation } from './useMountAnimation'
 import { createPortal } from 'react-dom'
@@ -80,6 +80,17 @@ export function ContextMenu({
     }
   }, [state, onClose])
 
+  // Keyboard focus goes to the first item once the menu is placed, and back to where it was when the menu closes.
+  useEffect(() => {
+    if (!state || !pos) return
+    const before = document.activeElement as HTMLElement | null
+    menuItems(menuRef.current)[0]?.focus()
+    return () => {
+      if (before && document.contains(before) && menuRef.current?.contains(document.activeElement)) before.focus()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, !!pos])
+
   if (!rendered || !shown) return null
 
   return createPortal(
@@ -100,11 +111,33 @@ export function ContextMenu({
         zIndex: 100,
         boxShadow: 'var(--shadow-lg)'
       }}
+      onKeyDown={moveFocus}
     >
       <ItemList items={shown.items} onDone={onClose} />
     </div>,
     popupLayer()
   )
+}
+
+/** A panel's own items (not its open submenu's), in order. */
+function menuItems(panel: HTMLElement | null): HTMLElement[] {
+  return panel ? [...panel.querySelectorAll<HTMLElement>(':scope > [role="menuitem"]')] : []
+}
+
+/** Up/Down (wrapping), Home and End move between a panel's items; Enter and Space press them, as buttons do anyway. */
+function moveFocus(e: ReactKeyboardEvent<HTMLDivElement>): void {
+  const items = menuItems(e.currentTarget)
+  const at = items.indexOf(document.activeElement as HTMLElement)
+  const next =
+    e.key === 'ArrowDown' ? (at + 1) % items.length
+    : e.key === 'ArrowUp' ? (at <= 0 ? items.length - 1 : at - 1)
+    : e.key === 'Home' ? 0
+    : e.key === 'End' ? items.length - 1
+    : null
+  if (next === null || items.length === 0) return
+  e.preventDefault()
+  e.stopPropagation()
+  items[next].focus()
 }
 
 const itemStyle = {
@@ -124,6 +157,8 @@ const itemStyle = {
 /** A menu's items; an item with a submenu opens it beside itself (on hover or click), keeping the rest open. */
 function ItemList({ items, onDone }: { items: ContextMenuItem[]; onDone: () => void }): JSX.Element {
   const [open, setOpen] = useState<number | null>(null)
+  // Whether the open submenu was opened from the keyboard (Right arrow) — then its first item takes focus.
+  const [byKey, setByKey] = useState(false)
   const anchors = useRef<(HTMLButtonElement | null)[]>([])
   const sub = open !== null ? items[open]?.submenu : undefined
   return (
@@ -136,12 +171,29 @@ function ItemList({ items, onDone }: { items: ContextMenuItem[]; onDone: () => v
             anchors.current[i] = el
           }}
           type="button"
+          role="menuitem"
           aria-haspopup={item.submenu ? 'menu' : undefined}
           aria-expanded={item.submenu ? open === i : undefined}
           onClick={() => {
-            if (item.submenu) return setOpen(open === i ? null : i)
+            if (item.submenu) {
+              setByKey(false)
+              return setOpen(open === i ? null : i)
+            }
             item.onSelect?.()
             onDone()
+          }}
+          onKeyDown={(e) => {
+            if (item.submenu && (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault()
+              setByKey(true)
+              setOpen(i)
+            }
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.background = 'var(--bg-sunken)'
+          }}
+          onBlur={(e) => {
+            if (open !== i) e.currentTarget.style.background = 'transparent'
           }}
           style={{
             ...itemStyle,
@@ -165,15 +217,45 @@ function ItemList({ items, onDone }: { items: ContextMenuItem[]; onDone: () => v
           )}
         </button>
       ])}
-      {sub && open !== null && anchors.current[open] && <SubMenu anchor={anchors.current[open]!} items={sub} onDone={onDone} />}
+      {sub && open !== null && anchors.current[open] && (
+        <SubMenu
+          anchor={anchors.current[open]!}
+          items={sub}
+          onDone={onDone}
+          focusFirst={byKey}
+          onBack={() => {
+            const anchor = anchors.current[open]
+            setOpen(null)
+            anchor?.focus()
+          }}
+        />
+      )}
     </>
   )
 }
 
 /** A submenu: beside its item — to the right, or the left when there's no room — and kept inside the window. */
-function SubMenu({ anchor, items, onDone }: { anchor: HTMLElement; items: ContextMenuItem[]; onDone: () => void }): JSX.Element {
+function SubMenu({
+  anchor,
+  items,
+  onDone,
+  focusFirst,
+  onBack
+}: {
+  anchor: HTMLElement
+  items: ContextMenuItem[]
+  onDone: () => void
+  /** Opened with the keyboard: its first item takes focus once it's placed. */
+  focusFirst: boolean
+  /** Left arrow: closes it, back to its item in the menu it came from. */
+  onBack: () => void
+}): JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (pos && focusFirst) menuItems(ref.current)[0]?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!pos, focusFirst])
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
@@ -207,6 +289,17 @@ function SubMenu({ anchor, items, onDone }: { anchor: HTMLElement; items: Contex
         minWidth: 180,
         zIndex: 101,
         boxShadow: 'var(--shadow-lg)'
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          e.stopPropagation()
+          onBack()
+          return
+        }
+        moveFocus(e)
+        // Its own keys stay its own — the menu it sits inside (in the DOM) mustn't also act on them.
+        if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') e.stopPropagation()
       }}
     >
       <ItemList items={items} onDone={onDone} />

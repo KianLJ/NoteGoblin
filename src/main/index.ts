@@ -1,4 +1,5 @@
 import { app, shell, BrowserWindow, protocol, session } from 'electron'
+import { LIBRARY_AUDIO_SCHEME, registerLibraryAudio } from './libraryAudio'
 import { join, extname } from 'path'
 import { readFile } from 'node:fs/promises'
 import { registerIpcHandlers } from './registerIpc'
@@ -49,7 +50,8 @@ if (isDev && !hasExplicitUserDataDir) {
 protocol.registerSchemesAsPrivileged([
   { scheme: 'vault-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false } },
   { scheme: 'custom-music', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true } },
-  { scheme: 'custom-entity-sfx', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true } }
+  { scheme: 'custom-entity-sfx', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true } },
+  LIBRARY_AUDIO_SCHEME
 ])
 
 // Chromium's default mouse-wheel scrolling animates each notch over ~150-250ms
@@ -118,8 +120,9 @@ function createWindow(): BrowserWindow {
     // better-tested mechanism.
     frame: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false,
+      preload: join(__dirname, '../preload/index.cjs'),
+      // The page gets no Node at all, even if something slipped past the CSP; the preload only needs contextBridge/ipcRenderer/webUtils.
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -162,7 +165,7 @@ app.whenReady().then(() => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: vault-asset:; media-src 'self' blob: custom-music: custom-entity-sfx:;"
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: vault-asset:; media-src 'self' blob: custom-music: custom-entity-sfx: library-audio:;"
           ]
         }
       })
@@ -218,6 +221,7 @@ app.whenReady().then(() => {
   const win = createWindow()
   mainWindow = win
   registerIpcHandlers(win)
+  registerLibraryAudio(win)
 
   initAutoUpdater(isDev)
 

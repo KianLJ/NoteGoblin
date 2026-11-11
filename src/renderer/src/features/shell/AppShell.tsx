@@ -38,6 +38,7 @@ import { DYNAMIC_SIZE } from '@shared/canvasTools'
 import { ensureMusicListening, stopMusic } from '../audio/musicEngine'
 import { ensureAmbientListening } from '../audio/ambientEngine'
 import { ensureSfxBoardListening } from '../audio/sfxBoardEngine'
+import { startAudioLibrarySync } from '../audio/librarySync'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import { useApplyActivePacks, useCampaignPacks } from '../content/usePacks'
 
@@ -108,6 +109,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     ensureAmbientListening()
     ensureSfxBoardListening()
   }, [])
+  // Your own music and sounds, kept with your account so every device you sign in on has them.
+  useEffect(() => startAudioLibrarySync(), [])
 
   // --- Player side: characters (always available) + the joined session's campaigns/notes ---
   const [joinedSession, setJoinedSession] = useState<{ sessionId: string; label: string } | null>(null)

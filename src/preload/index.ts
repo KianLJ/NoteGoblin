@@ -1,8 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AppApi,
+  AudioLibraryMeta,
   CampaignChangeEvent,
   ForceRollRequest,
+  Handout,
+  QuestReward,
   InitiativeUpdate,
   MessageUpdate,
   PlayerCharacterUpdate,
@@ -129,6 +132,16 @@ const api: AppApi = {
       const listener = (_e: Electron.IpcRendererEvent, image: { imageId: string; image: string }): void => callback(image)
       ipcRenderer.on('ws:battle-map-image', listener)
       return () => ipcRenderer.removeListener('ws:battle-map-image', listener)
+    }
+  },
+  quests: {
+    get: (campaignId, sessionId) => ipcRenderer.invoke('quests:get', campaignId, sessionId),
+    save: (campaignId, quests) => ipcRenderer.invoke('quests:save', campaignId, quests),
+    award: (campaignId, questId) => ipcRenderer.invoke('quests:award', campaignId, questId),
+    onReward: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, reward: QuestReward): void => callback(reward)
+      ipcRenderer.on('ws:quest-reward', listener)
+      return () => ipcRenderer.removeListener('ws:quest-reward', listener)
     }
   },
   vehicles: {
@@ -276,7 +289,18 @@ const api: AppApi = {
     addCustomTrack: (groupId) => ipcRenderer.invoke('music:add-custom-track', groupId),
     addCustomFiles: (groupId, files) => ipcRenderer.invoke('music:add-custom-files', groupId, files.map((f) => webUtils.getPathForFile(f))),
     removeCustomTrack: (groupId, trackId) => ipcRenderer.invoke('music:remove-custom-track', groupId, trackId),
-    renameCustomTrack: (groupId, trackId, title) => ipcRenderer.invoke('music:rename-custom-track', groupId, trackId, title)
+    renameCustomTrack: (groupId, trackId, title) => ipcRenderer.invoke('music:rename-custom-track', groupId, trackId, title),
+    setLibraryMeta: (meta, initial) => ipcRenderer.invoke('music:library-meta', meta, initial),
+    onLibraryMeta: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, meta: AudioLibraryMeta): void => callback(meta)
+      ipcRenderer.on('music:library-meta', listener)
+      return () => ipcRenderer.removeListener('music:library-meta', listener)
+    },
+    onCustomChanged: (callback) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('music:custom-changed', listener)
+      return () => ipcRenderer.removeListener('music:custom-changed', listener)
+    }
   },
   ambient: {
     broadcast: (groupId, layerId, level, fadeMs) => ipcRenderer.invoke('ambient:broadcast', groupId, layerId, level, fadeMs),
@@ -287,6 +311,24 @@ const api: AppApi = {
       ): void => callback(update)
       ipcRenderer.on('ws:ambient-level-changed', listener)
       return () => ipcRenderer.removeListener('ws:ambient-level-changed', listener)
+    }
+  },
+  library: {
+    downloaded: () => ipcRenderer.invoke('library:downloaded'),
+    download: (paths) => ipcRenderer.invoke('library:download', paths),
+    remove: (paths) => ipcRenderer.invoke('library:remove', paths),
+    onProgress: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: { done: number; total: number; path: string }): void => callback(progress)
+      ipcRenderer.on('library:progress', listener)
+      return () => ipcRenderer.removeListener('library:progress', listener)
+    }
+  },
+  handouts: {
+    show: (handout) => ipcRenderer.invoke('handouts:show', handout),
+    onShow: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, handout: Handout): void => callback(handout)
+      ipcRenderer.on('ws:handout', listener)
+      return () => ipcRenderer.removeListener('ws:handout', listener)
     }
   },
   sfxBoard: {

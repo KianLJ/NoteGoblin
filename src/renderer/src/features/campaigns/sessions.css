@@ -127,24 +127,6 @@
   cursor: default;
 }
 
-.gb-presenter-action {
-  padding: 4px 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.gb-presenter-action:hover {
-  border-color: var(--accent);
-  color: var(--accent-hover);
-}
-
 .gb-session-start {
   flex: 1;
   display: flex;
@@ -537,25 +519,182 @@
   flex-wrap: wrap;
 }
 
-/* The live scene's cues on the presenter bar: encounters to load, music to play. */
+/* The presenter as a card: the controls on top, then a tray with the live scene's cues — its fights to load and
+   its music to play, each as a chip with an icon in its own colour (red for a fight, green for music). */
 .gb-presenter {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   max-width: calc(100% - 2 * var(--space-3));
-  flex-wrap: wrap;
-  justify-content: center;
-  border-radius: 24px;
+  padding: 6px;
+  border-radius: 22px;
+}
+
+.gb-presenter-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 2px 0 6px;
+}
+
+.gb-presenter-stop {
+  margin-left: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gb-presenter-stop:hover {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .gb-presenter-cues {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+  padding: 7px 8px 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.gb-presenter-cue-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
 }
 
-.gb-presenter-action--fight {
-  border-color: color-mix(in srgb, var(--blood-500) 55%, var(--border-subtle));
+.gb-presenter-cue-label {
+  margin-right: 2px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.gb-presenter-action--music {
-  border-color: color-mix(in srgb, var(--moss-500) 55%, var(--border-subtle));
+.gb-presenter-cue {
+  --cue: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 11px 0 3px;
+  border: 1px solid color-mix(in srgb, var(--cue) 40%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cue) 9%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 160ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.gb-presenter-cue:hover {
+  border-color: var(--cue);
+  background: color-mix(in srgb, var(--cue) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.gb-presenter-cue:active {
+  transform: scale(0.96);
+}
+
+.gb-presenter-cue:focus-visible,
+.gb-presenter-stop:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.gb-presenter-cue--fight {
+  --cue: var(--blood-500);
+}
+
+.gb-presenter-cue--music {
+  --cue: var(--moss-500);
+}
+
+.gb-presenter-cue-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--cue);
+  color: var(--parchment-50);
+}
+
+.gb-presenter-cue-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The scene's music that's playing now: filled in, with a little moving equaliser. */
+.gb-presenter-cue--on {
+  border-color: var(--cue);
+  background: color-mix(in srgb, var(--cue) 24%, transparent);
+}
+
+.gb-presenter-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 10px;
+}
+
+.gb-presenter-eq i {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  animation: gb-presenter-eq 900ms ease-in-out infinite;
+}
+
+.gb-presenter-eq i:nth-child(2) {
+  animation-delay: -300ms;
+}
+
+.gb-presenter-eq i:nth-child(3) {
+  animation-delay: -600ms;
+}
+
+@keyframes gb-presenter-eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.gb-presenter-eq i {
+  transform-origin: bottom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-presenter-eq i {
+    animation: none;
+    transform: scaleY(0.7);
+  }
+
+  .gb-presenter-cue {
+    transition: none;
+  }
 }

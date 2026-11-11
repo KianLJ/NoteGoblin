@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { Note } from '@shared/ipc'
 import { renderNoteMarkdown } from '../../markdown'
+import { backlinksTo } from '../../wikilink'
 import { MarkdownLiveEditor, type MarkdownLiveEditorHandle, type TablePlayer } from './MarkdownLiveEditor'
 import { EyeIcon, ImageIcon, ImportFromCodexIcon, LinkIcon, PencilIcon, TableIcon } from './icons'
 import { ContextMenu, type ContextMenuState } from '../../ui/ContextMenu'
@@ -93,6 +94,8 @@ export function NoteEditor({
   const titleFocusedRef = useRef(false)
   const linkPickerRef = useRef<HTMLDivElement>(null)
   const knownTitlesRef = useRef<Set<string>>(new Set())
+  // Notes that link here — only ever ones you can see, since `notes` is already just those.
+  const backlinks = useMemo(() => backlinksTo(notes, note), [notes, note])
   const notesRef = useRef<Note[]>(notes)
   // What we've last reconciled `note.title`/`note.bodyMarkdown` against —
   // distinct from `title`/`body` (the locally-edited value) so an external
@@ -482,6 +485,17 @@ export function NoteEditor({
           style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
           dangerouslySetInnerHTML={{ __html: renderedHtml }}
         />
+      )}
+
+      {backlinks.length > 0 && (
+        <div className="gb-backlinks" aria-label="Notes that link here">
+          <span className="gb-backlinks-label">Mentioned in</span>
+          {backlinks.map((n) => (
+            <button key={n.id} type="button" className="gb-backlink" title="Open in its own box" onClick={() => onOpenInNewTab(n.id)}>
+              {n.title || 'Untitled'}
+            </button>
+          ))}
+        </div>
       )}
 
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>

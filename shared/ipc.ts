@@ -7,6 +7,7 @@ import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
 import type { CampaignVehicles } from './vehicles'
+import type { CampaignQuests } from './quests'
 import type { BattleLibrary, BattleMap, PlayerBattleMap } from './battleMap'
 import type { ContentPack } from './content/schema'
 import type { PackIssue } from './content/validate'
@@ -120,6 +121,39 @@ export interface CharacterSheet extends CharacterSheetData {
   name: string
   createdAt: string
   updatedAt: string
+}
+
+/** The parts of your audio library the renderer keeps: your moods and Sound Board categories, and your names for built-in songs. */
+export interface AudioLibraryMeta {
+  groups: { mood: Array<{ id: string; label: string }>; sfx: Array<{ id: string; label: string }> }
+  names: Record<string, string>
+}
+
+/** How handing out a quest's reward went: each player's share, and the gold that didn't split evenly. */
+export type QuestAwardResult = { ok: true; players: number; goldEach: number; xpEach: number; goldLeftover: number } | { ok: false; error: string }
+
+/** A player's share of a finished quest's reward. */
+export interface QuestReward {
+  questTitle: string
+  gold: number
+  xp: number
+  partySize: number
+}
+
+/** Something the DM puts in front of every player at once: a note's text (DM-only `::` blocks already removed) or a picture. */
+export type Handout = { id: string; title: string } & ({ kind: 'note'; markdown: string } | { kind: 'image'; src: string })
+
+/** Pictures bigger than this (as a data URL) aren't sent — about 6 MB of image. */
+export const MAX_HANDOUT_CHARS = 8_000_000
+
+/** A handout that arrived over the relay, checked field by field — null if it's not one. Only `data:image/` pictures are let through. */
+export function parseHandout(raw: unknown): Handout | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const h = raw as Record<string, unknown>
+  if (typeof h.id !== 'string' || typeof h.title !== 'string') return null
+  if (h.kind === 'note' && typeof h.markdown === 'string') return { id: h.id, title: h.title, kind: 'note', markdown: h.markdown }
+  if (h.kind === 'image' && typeof h.src === 'string' && h.src.startsWith('data:image/')) return { id: h.id, title: h.title, kind: 'image', src: h.src }
+  return null
 }
 
 export interface PresencePlayer {
@@ -365,6 +399,15 @@ export interface AppApi {
   }
   // The vehicles a campaign tracks (see shared/vehicles.ts) — every member
   // reads them (minus ones the DM has hidden); only the DM saves, locally.
+  quests: {
+    get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignQuests>>
+    /** DM only. */
+    save: (campaignId: string, quests: CampaignQuests) => Promise<ApiResult<CampaignQuests>>
+    /** DM only, while hosting: splits a finished quest's gold and XP between the players at the table and sends each their share. */
+    award: (campaignId: string, questId: string) => Promise<QuestAwardResult>
+    /** A player's side: their share of a quest's reward arrived. */
+    onReward: (callback: (reward: QuestReward) => void) => () => void
+  }
   vehicles: {
     get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignVehicles>>
     save: (campaignId: string, vehicles: CampaignVehicles) => Promise<ApiResult<CampaignVehicles>>
@@ -572,8 +615,9 @@ export interface AppApi {
     /**
      * A DM's own local additions to a mood — a file picked off their own
      * disk, played the same way a bundled track is (crossfade, loop,
-     * broadcast). Stored in userData, not the vault/campaign, since it's a
-     * per-machine music library, not campaign content. Broadcasting one of
+     * broadcast). Stored in userData, not the vault/campaign, since it's the
+     * DM's own library, not campaign content — and, while signed in, kept with
+     * their relay account so every device has it (main/audioSync.ts). Broadcasting one of
      * these to connected players sends the actual audio too (chunked over
      * the relay — see sessionProtocol.ts's MusicTrackChunkFrame), not just
      * the id, since a player's client has no other way to resolve a file
@@ -586,6 +630,12 @@ export interface AppApi {
     addCustomFiles: (groupId: string, files: File[]) => Promise<{ id: string; title: string }[]>
     removeCustomTrack: (groupId: string, trackId: string) => Promise<void>
     renameCustomTrack: (groupId: string, trackId: string, title: string) => Promise<void>
+    /** Your moods, Sound Board categories and names for built-in songs, for syncing with your account. `initial`: your copy at start-up, not a change. */
+    setLibraryMeta: (meta: AudioLibraryMeta, initial: boolean) => Promise<void>
+    /** Your account's moods and names arrived from another device. */
+    onLibraryMeta: (callback: (meta: AudioLibraryMeta) => void) => () => void
+    /** Songs or sounds were added or removed by syncing with your account. */
+    onCustomChanged: (callback: () => void) => () => void
   }
   // Ambient layers (see ambientLibrary.ts/ambientEngine.ts) — bundled loops
   // synced the same "just an id" way music is, except keyed by both a mood
@@ -602,6 +652,19 @@ export interface AppApi {
   // plays the same bundled file from its own copy (see sfxLibrary.ts); no
   // audio ever crosses the wire, just which cue. DM-only broadcast, no relay
   // path for a player to initiate.
+  /** The built-in music, ambience and Sound Board audio: which files are downloaded here, and downloading or removing them. */
+  library: {
+    downloaded: () => Promise<string[]>
+    download: (paths: string[]) => Promise<{ ok: number; failed: string[] }>
+    remove: (paths: string[]) => Promise<void>
+    onProgress: (callback: (progress: { done: number; total: number; path: string }) => void) => () => void
+  }
+  handouts: {
+    /** Puts a note or picture in front of every connected player. Fails (with why) unless hosting with someone connected. */
+    show: (handout: Handout) => Promise<{ ok: true; players: number } | { ok: false; error: string }>
+    /** Fires on a player's side whenever the DM shows a handout. */
+    onShow: (callback: (handout: Handout) => void) => () => void
+  }
   sfxBoard: {
     /** A no-op unless actually hosting. */
     broadcast: (sfxId: string) => Promise<void>

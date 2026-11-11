@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '../../ui/Button'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { stopMusic } from '../audio/musicEngine'
 import type { CharacterSheet } from '@shared/ipc'
 import { PencilIcon, XIcon } from '../../ui/icons'
+import { UserIcon } from './icons'
 
 interface CharacterSwitcherProps {
   characters: CharacterSheet[] | null
@@ -12,21 +12,22 @@ interface CharacterSwitcherProps {
   onRequestCreate: () => void
   /** Opens the full-page character creator again on this character, filled in, to change its choices. */
   onRequestEdit: (character: CharacterSheet) => void
-  /** Deletion lives here now, not on the sheet itself — a character you're actively looking at is exactly where a stray click is most likely to land, so putting the button somewhere you only visit to switch/manage characters cuts down on that risk on its own, on top of the two-click confirm below. */
+  /** Deletion lives here, not on the sheet itself — a character you're actively looking at is exactly where a stray click is most likely to land, so it's somewhere you only visit to switch/manage characters, behind a two-click confirm. */
   onDelete: (character: CharacterSheet) => void
-  /** The joined session id, if any — Leave only makes sense (and only shows) while actually connected to someone's table. Was FriendsMenu's own concern until it moved here, alongside the character you're playing that session as. */
+  /** The joined session id, if any — Leave only makes sense (and only shows) while actually connected to someone's table. */
   sessionId: string | null
   /** Fired after sessions.leave() resolves — clears the player's joinedSession state, same as the DM-initiated disconnect path AppShell already handles. */
   onLeaveSession: () => void
 }
 
-/** Player mode's bottom-left corner control — picks/creates a character, the way CampaignSwitcher does for campaigns on the DM side. Fed from the shared player workspace state rather than fetching its own list. Creation itself opens the full-page character creator (creator/CharacterCreator) rather than instant-creating here. */
+/**
+ * Player mode's bottom-left corner: the character's portrait (sliding out its name on hover), opening a menu of
+ * characters (edit and delete on hover), a new one, and leaving the table — the player side's twin of
+ * CampaignSwitcher, sharing its look (canvas.css's gb-switcher-*). Classic layout keeps the old one (ClassicCharacterSwitcher).
+ */
 export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onRequestEdit, onDelete, sessionId, onLeaveSession }: CharacterSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
-  // Two clicks to actually delete: the first arms this row (button flips to
-  // "Confirm delete?"), the second (still targeting the same character)
-  // deletes it. Any other click — a different row's delete, selecting a
-  // character, closing the menu — disarms it instead of carrying over.
+  // Two clicks to delete: the first arms the row's delete ("Delete?"), the second deletes. Anything else disarms it.
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [leaveBusy, setLeaveBusy] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -41,174 +42,132 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
   }
 
   useEffect(() => {
+    if (!open) {
+      setConfirmingId(null)
+      return
+    }
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open])
+
+  useEffect(() => {
     function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-        setConfirmingId(null)
-      }
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  function handleDeleteClick(character: CharacterSheet): void {
-    if (confirmingId === character.id) {
-      setConfirmingId(null)
-      onDelete(character)
-    } else {
-      setConfirmingId(character.id)
-    }
-  }
+  const name = (c: CharacterSheet): string => c.name || 'Untitled'
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+    <div ref={containerRef} className="gb-switcher">
       {open && (
-        <div
-          className="gb-card"
-          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 260, zIndex: 200 }}
-        >
-          {sessionId && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 6,
-                marginBottom: 'var(--space-3)',
-                paddingBottom: 'var(--space-2)',
-                borderBottom: '1px solid var(--border-subtle)'
-              }}
-            >
-              <span style={{ fontSize: 12, color: 'var(--success)' }}>Connected</span>
-              <ConfirmButton
-                label="Leave"
-                confirmLabel="Confirm?"
-                variant="ghost"
-                danger
-                disabled={leaveBusy}
-                onConfirm={() => void leaveSession()}
-                title="Disconnect from this session"
-                style={{ fontSize: 11, padding: '2px 8px' }}
-              />
-            </div>
-          )}
+        <div className="gb-switcher-menu" role="menu">
+          <div className="gb-switcher-heading">Characters</div>
 
-          <h3
-            style={{
-              fontSize: 11,
-              margin: '0 0 var(--space-2)',
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              fontWeight: 700
-            }}
-          >
-            Characters
-          </h3>
+          {characters !== null && characters.length === 0 && <p className="gb-switcher-empty">No characters yet.</p>}
 
-          {characters === null ? null : characters.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
-              No characters yet.
-            </p>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4,
-                marginBottom: 'var(--space-3)',
-                maxHeight: 220,
-                overflowY: 'auto'
-              }}
-            >
+          {characters && characters.length > 0 && (
+            <div className="gb-switcher-list">
               {characters.map((character) => (
-                <div key={character.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div key={character.id} className={current?.id === character.id ? 'gb-switcher-row gb-switcher-row--current' : 'gb-switcher-row'}>
                   <button
                     type="button"
+                    role="menuitem"
+                    className="gb-switcher-item"
                     onClick={() => {
                       setOpen(false)
                       onSelect(character)
                     }}
-                    style={{
-                      display: 'block',
-                      flex: 1,
-                      minWidth: 0,
-                      textAlign: 'left',
-                      padding: '6px 8px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: current?.id === character.id ? 'var(--accent-subtle)' : 'transparent',
-                      color: 'var(--text-primary)',
-                      fontSize: 13,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
                   >
-                    {character.name || 'Untitled'}
+                    <Portrait character={character} />
+                    <span className="gb-switcher-item-name">{name(character)}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpen(false)
-                      setConfirmingId(null)
-                      onRequestEdit(character)
-                    }}
-                    title={`Edit ${character.name || 'this character'} in the character creator`}
-                    aria-label={`Edit ${character.name || 'this character'}`}
-                    style={{ flexShrink: 0, padding: '4px 6px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1, display: 'inline-flex' }}
-                  >
-                    <PencilIcon size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteClick(character)}
-                    title={confirmingId === character.id ? 'Click again to permanently delete' : 'Delete this character'}
-                    style={{
-                      flexShrink: 0,
-                      padding: confirmingId === character.id ? '4px 6px' : '4px 6px',
-                      borderRadius: 'var(--radius-sm)',
-                      border: `1px solid ${confirmingId === character.id ? 'var(--danger)' : 'transparent'}`,
-                      background: confirmingId === character.id ? 'var(--danger)' : 'none',
-                      color: confirmingId === character.id ? 'var(--text-on-accent)' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      fontSize: confirmingId === character.id ? 10 : 14,
-                      fontWeight: confirmingId === character.id ? 700 : 400,
-                      lineHeight: 1,
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {confirmingId === character.id ? 'Confirm?' : <XIcon size={12} />}
-                  </button>
+                  <span className="gb-switcher-row-actions" style={confirmingId === character.id ? { display: 'flex' } : undefined}>
+                    <button
+                      type="button"
+                      className="gb-switcher-icon"
+                      title="Edit in the character creator"
+                      aria-label={`Edit ${name(character)}`}
+                      onClick={() => {
+                        setOpen(false)
+                        onRequestEdit(character)
+                      }}
+                    >
+                      <PencilIcon size={12} />
+                    </button>
+                    {confirmingId === character.id ? (
+                      <button type="button" className="gb-switcher-confirm" autoFocus onBlur={() => setConfirmingId(null)} onClick={() => onDelete(character)}>
+                        Delete?
+                      </button>
+                    ) : (
+                      <button type="button" className="gb-switcher-icon gb-switcher-icon--danger" title="Delete" aria-label={`Delete ${name(character)}`} onClick={() => setConfirmingId(character.id)}>
+                        <XIcon size={12} />
+                      </button>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
           )}
 
-          <Button
-            variant="primary"
+          <button
+            type="button"
+            role="menuitem"
+            className="gb-switcher-item gb-switcher-new"
             onClick={() => {
               setOpen(false)
               onRequestCreate()
             }}
-            style={{ width: '100%' }}
           >
-            + New Character
-          </Button>
+            + New character
+          </button>
+
+          {sessionId && (
+            <div className="gb-switcher-hosting">
+              <span className="gb-switcher-hosting-label gb-switcher-hosting-label--on">At the DM’s table</span>
+              <ConfirmButton
+                label="Leave"
+                confirmLabel="Sure?"
+                variant="ghost"
+                danger
+                disabled={leaveBusy}
+                onConfirm={() => void leaveSession()}
+                title="Disconnect from this session"
+                style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999 }}
+              />
+            </div>
+          )}
         </div>
       )}
 
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="gb-btn gb-btn--secondary"
-        style={{ width: '100%', minWidth: 0, boxShadow: 'var(--shadow-md)' }}
+        className={current?.portraitDataUrl ? 'gb-switcher-trigger gb-switcher-trigger--icon gb-switcher-trigger--portrait' : 'gb-switcher-trigger gb-switcher-trigger--icon'}
+        data-hosting={sessionId ? 'on' : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={current ? `Character: ${name(current)}${sessionId ? ' (at the DM’s table)' : ''}` : 'Characters'}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {current ? current.name || 'Untitled' : '+ Add a character'}
-        </span>
+        {current?.portraitDataUrl ? <img className="gb-switcher-portrait" src={current.portraitDataUrl} alt="" /> : <UserIcon />}
+        <span className="gb-switcher-trigger-name">{current ? name(current) : '+ Add a character'}</span>
       </button>
     </div>
+  )
+}
+
+/** A row's small portrait, or its initial when it has none. */
+function Portrait({ character }: { character: CharacterSheet }): JSX.Element {
+  return character.portraitDataUrl ? (
+    <img className="gb-switcher-portrait gb-switcher-portrait--row" src={character.portraitDataUrl} alt="" />
+  ) : (
+    <span className="gb-switcher-portrait gb-switcher-portrait--row gb-switcher-initial" aria-hidden="true">
+      {(character.name || '?').trim().charAt(0).toUpperCase() || '?'}
+    </span>
   )
 }

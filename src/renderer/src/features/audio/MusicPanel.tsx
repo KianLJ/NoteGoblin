@@ -20,6 +20,8 @@ import { useAudioDrop } from './useAudioDrop'
 import { audioName, isRenamed, setAudioName, subscribeAudioNames } from './audioNames'
 import { audioGroups, createAudioGroup, deleteAudioGroup, renameAudioGroup, subscribeAudioGroups } from './audioGroups'
 import './audio.css'
+import { LibraryDownloadAll, LibraryDownloadButton } from './LibraryDownloadButton'
+import { folderPaths, pathsOf } from './libraryDownloads'
 import { useCalendar } from '../campaigns/useCalendar'
 import { weatherForDate, type RainLevel } from '@shared/calendar'
 
@@ -358,6 +360,7 @@ export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): J
       <div className="ab-section">
         <div className="ab-section-head">
           <span>Moods</span>
+          <LibraryDownloadAll paths={folderPaths('music', 'ambient')} what="all the music" />
         </div>
         <div className="ab-moods">
           {moods.map((group) => {
@@ -375,7 +378,10 @@ export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): J
                   }}
                 />
               )
+            // A built-in mood's songs and its ambience, for downloading together.
+            const moodFiles = pathsOf([...group.tracks.map((t) => t.url), ...ambientLayersFor(group.id).map((l) => l.url)])
             return (
+              <div key={group.id} className="ab-mood-wrap">
               <button
                 onContextMenu={(e) => {
                   if (!group.own) return
@@ -389,7 +395,6 @@ export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): J
                     ]
                   })
                 }}
-                key={group.id}
                 type="button"
                 data-mood={group.id}
                 className={[
@@ -410,6 +415,8 @@ export function MusicPanel({ sessionId, campaignId = null }: MusicPanelProps): J
                 <span className="ab-mood-name">{group.label}</span>
                 <span className="ab-mood-count">{isEmpty ? 'Add songs' : `${count} ${count === 1 ? 'song' : 'songs'}`}</span>
               </button>
+              {moodFiles.length > 0 && <LibraryDownloadButton paths={moodFiles} what={group.label} />}
+              </div>
             )
           })}
           <button type="button" className="ab-mood ab-mood--empty ab-mood--new" onClick={newMood} title="Make a mood of your own">

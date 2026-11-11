@@ -114,15 +114,34 @@ export class Session extends Server<Env> {
     return new Response('Not found', { status: 404 })
   }
 
+  /** The account's own name for a verified token — never the `username` the client puts in the URL, which anyone could set to someone else's name. */
+  private async accountUsername(token: string): Promise<string | null> {
+    try {
+      const directory = await getServerByName(this.env.Directory, 'global-directory')
+      const res = await directory.fetch('https://internal/me', { headers: { authorization: `Bearer ${token}` } })
+      if (!res.ok) return null
+      const body = (await res.json()) as { username?: unknown }
+      return typeof body.username === 'string' ? body.username : null
+    } catch (err) {
+      console.error('session connect: account lookup failed', err)
+      return null
+    }
+  }
+
   async onConnect(connection: Connection<ConnState>, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url)
-    const payload = await verifyToken(this.secret(), url.searchParams.get('token') ?? '')
+    const token = url.searchParams.get('token') ?? ''
+    const payload = await verifyToken(this.secret(), token)
     if (!payload) {
       connection.close(4001, 'Invalid or expired token')
       return
     }
     const role = url.searchParams.get('role') === 'dm' ? 'dm' : 'player'
-    const username = url.searchParams.get('username') ?? 'Unknown'
+    const username = await this.accountUsername(token)
+    if (!username) {
+      connection.close(4004, 'Could not look up your account — try joining again')
+      return
+    }
 
     let data = await this.getSessionData()
     if (role === 'dm') {

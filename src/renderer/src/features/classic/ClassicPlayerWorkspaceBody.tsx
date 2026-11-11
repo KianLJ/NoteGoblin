@@ -4,7 +4,7 @@ import { PlayerSidebar } from '../player/PlayerSidebar'
 import { PartySidebar } from './PartySidebar'
 import { CharacterSheetEditor } from '../player/CharacterSheetEditor'
 import { CharacterCreator } from '../player/creator/CharacterCreator'
-import { CharacterSwitcher } from '../player/CharacterSwitcher'
+import { ClassicCharacterSwitcher } from './ClassicCharacterSwitcher'
 import { ForceRollPrompt } from '../player/ForceRollPrompt'
 import { NoteEditor } from '../campaigns/NoteEditor'
 import { Modal } from '../../ui/Modal'
@@ -166,7 +166,7 @@ export function ClassicPlayerWorkspaceBody({
       <ClassicSidebar
         footer={
           <>
-            <CharacterSwitcher
+            <ClassicCharacterSwitcher
               characters={characters}
               current={lastActiveCharacter}
               onSelect={(character) => openTab({ kind: 'character', id: character.id })}

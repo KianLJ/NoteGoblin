@@ -24,11 +24,24 @@ export function isRenamed(id: string): boolean {
   return id in names
 }
 
+/** All your names at once — as synced from your account (librarySync.ts). */
+export function allAudioNames(): Record<string, string> {
+  return names
+}
+
+export function replaceAudioNames(next: Record<string, string>): void {
+  store({ ...next })
+}
+
 /** Names it; an empty name (or `null`) goes back to its own. */
 export function setAudioName(id: string, name: string | null): void {
   const next = { ...names }
   if (name?.trim()) next[id] = name.trim()
   else delete next[id]
+  store(next)
+}
+
+function store(next: Record<string, string>): void {
   names = next
   try {
     localStorage.setItem(KEY, JSON.stringify(names))

@@ -365,9 +365,51 @@ const packsApi = {
 const campaignPacksApi = {
   list: async () => ({ ok: true, data: [{ pack: samplePack('northern-lands', 'The Northern Lands', 'Kian', 'Frost giants, ice witches and the clans of the far north.'), enabledAt: '' }] })
 }
+// ?showcase=quests: an in-memory quest log, so the Quests box can be tried without a database.
+let questDoc = { quests: [
+  { id: 'q1', title: 'Find what sleeps in the Sunken Crypt', detail: 'Look into the chanting beneath the old chapel.', giver: 'Brother Aldric', rewardGold: 250, rewardXp: 300, rewardItems: 'A silver key', status: 'active', shared: true, noteTitle: 'The Sunken Crypt' },
+  { id: 'q2', title: 'Unmask the cult', detail: '', status: 'active', shared: false },
+  { id: 'q3', title: 'Deliver the letter to Saltmarsh', detail: '', status: 'done', shared: true }
+] }
+const questsApi = {
+  // A player (a session id) only gets the shared ones, as from the DM's app.
+  get: async (_c: string, sessionId?: string) => ({ ok: true, data: sessionId ? { quests: questDoc.quests.filter((q) => q.shared) } : questDoc }),
+  save: async (_c: string, doc: typeof questDoc) => {
+    questDoc = doc
+    console.log('quests saved', doc.quests.length)
+    return { ok: true, data: doc }
+  },
+  // As if 3 players were at the table: split, mark paid, and hand this page's own player side its share.
+  award: async (_c: string, questId: string) => {
+    const q = questDoc.quests.find((x) => x.id === questId) as { title: string; rewardGold?: number; rewardXp?: number; rewarded?: boolean } | undefined
+    if (!q) return { ok: false, error: 'No such quest' }
+    const gold = Math.floor((q.rewardGold ?? 0) / 3)
+    const xp = Math.floor((q.rewardXp ?? 0) / 3)
+    q.rewarded = true
+    rewardListeners.forEach((l) => l({ questTitle: q.title, gold, xp, partySize: 3 }))
+    return { ok: true, players: 3, goldEach: gold, xpEach: xp, goldLeftover: (q.rewardGold ?? 0) - gold * 3 }
+  },
+  onReward: (l: (r: unknown) => void) => {
+    rewardListeners.add(l)
+    return () => rewardListeners.delete(l)
+  }
+}
+const rewardListeners = new Set<(r: unknown) => void>()
+// Handouts loop straight back: "Show to players" here pops up this page's own HandoutViewer, as if over the relay.
+const handoutListeners = new Set<(h: unknown) => void>()
+const handoutsApi = {
+  show: async (h: unknown) => {
+    handoutListeners.forEach((l) => l(h))
+    return { ok: true, players: 2 }
+  },
+  onShow: (l: (h: unknown) => void) => {
+    handoutListeners.add(l)
+    return () => handoutListeners.delete(l)
+  }
+}
 ;(window as unknown as { goblin: unknown }).goblin = new Proxy(
   {},
-  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : base[key]) }
+  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : key === 'handouts' ? handoutsApi : key === 'quests' ? questsApi : base[key]) }
 )
 
 // A demo pack with a starship, for the vehicles preview's "Add a vehicle".

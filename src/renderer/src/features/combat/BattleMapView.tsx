@@ -7,6 +7,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Reac
 import type { VehicleArc } from '@shared/content/schema'
 import { canStand, fogBox, normalizeFacing, tokenCentre, tokenH, tokenW, turnToken, fogShapeAt, gridDistanceFt, mapBounds, moveFogShape, snapHalf, templateLabel, type BattleMap, type Bounds, type FogShape, type MapImage, type MapLight, type MapTemplate, type MapToken, type MapWall, type TemplateKind } from '@shared/battleMap'
 import type { Combatant } from '@shared/encounter'
+import { isTrackpadWheel } from '@shared/canvasLayout'
 import { blockingWalls, canReach, decodeExplored, slideMove, lightsOf, tokenSeen, visibleCells, LIGHT_PRESETS, sightBounds, visibilityPolygon, wallAt, type LightSource, type VisionSource } from '@shared/vision'
 import { doorSpan, insertDoor, isOpening, roomWalls, snapRoomCorner, snapWallPoint, wallUnder, withoutOverlaps, type SnapKind } from '@shared/walls'
 import { XIcon } from '../../ui/icons'
@@ -700,8 +701,14 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     const r = svgRef.current!.getBoundingClientRect()
     const mx = e.clientX - r.left
     const my = e.clientY - r.top
+    const trackpad = isTrackpadWheel(e.nativeEvent)
+    // Two-finger scroll on a trackpad pans; a pinch (Ctrl+wheel) zooms in step with the fingers.
+    if (trackpad && !e.ctrlKey) {
+      setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }))
+      return
+    }
     setView((v) => {
-      const zoom = Math.max(0.2, Math.min(3, v.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)))
+      const zoom = Math.max(0.2, Math.min(3, trackpad ? v.zoom * Math.exp(-e.deltaY * 0.01) : v.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)))
       // Keep the point under the cursor where it is.
       return { zoom, x: mx - ((mx - v.x) * zoom) / v.zoom, y: my - ((my - v.y) * zoom) / v.zoom }
     })

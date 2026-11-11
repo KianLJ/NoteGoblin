@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { CalendarMini, PartyMini, PlayerInitiativeMini, PlayerSessionsMini } from '../canvas/toolMinis'
 import { createPortal } from 'react-dom'
 import { PlayerSidebar } from './PlayerSidebar'
@@ -24,6 +24,10 @@ import { DYNAMIC_SIZE, HEADER_TOOLS, TOOL_META, TOOLS_BY_MODE } from '@shared/ca
 import { findNode } from '@shared/canvasLayout'
 import type { ContextMenuItem } from '../../ui/ContextMenu'
 import { TOOL_ICONS } from '../canvas/toolIcons'
+import { QuickSearch, QuickSearchButton, noteTarget, useQuickSearchKey } from '../canvas/QuickSearch'
+import { HandoutViewer } from './HandoutViewer'
+import { QuestRewardNotice } from './QuestRewardNotice'
+import { QuestLog } from '../campaigns/QuestLog'
 import { useCanvasEntries } from '../canvas/canvasEntries'
 import { entryItems } from '../canvas/entryItems'
 import { Modal } from '../../ui/Modal'
@@ -131,6 +135,11 @@ export function PlayerWorkspaceBody({
   // silent guess. Still fully optional — closing it leaves that default in
   // place, and the switcher in the canvas's corner can change it anytime after.
   const [characterPromptOpen, setCharacterPromptOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  // Titles of the notes you have, so a handout's links show as links.
+  const knownTitles = useMemo(() => new Set((notes ?? []).map((n) => n.title.toLowerCase())), [notes])
+  const rootRef = useRef<HTMLDivElement>(null)
+  useQuickSearchKey(rootRef, setSearchOpen)
   const prevSessionIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (sessionId && sessionId !== prevSessionIdRef.current && characters && characters.length > 1) {
@@ -243,6 +252,18 @@ export function PlayerWorkspaceBody({
       )
     },
     initiative: { full: <KeepAliveOutlet host={initiativeHost} />, mini: <PlayerInitiativeMini sessionId={sessionId} /> },
+    // Only the quests the DM has shown the party.
+    quests: (
+      <QuestLog
+        sessionId={sessionId}
+        campaignId={!isOffline ? (activeCampaign?.id ?? null) : null}
+        readOnly
+        onOpenNote={(title) => {
+          const found = (notes ?? []).find((n) => n.title.trim().toLowerCase() === title.toLowerCase())
+          if (found) open({ kind: 'note', id: found.id })
+        }}
+      />
+    ),
     calendar: {
       full: <CalendarPanel sessionId={sessionId} campaignId={!isOffline ? (activeCampaign?.id ?? null) : null} readOnly />,
       mini: <CalendarMini sessionId={sessionId} campaignId={!isOffline ? (activeCampaign?.id ?? null) : null} />
@@ -398,7 +419,28 @@ export function PlayerWorkspaceBody({
   }
 
   return (
-    <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
+    <div ref={rootRef} style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
+      <QuickSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        tools={[
+          ...TOOLS_BY_MODE.player
+            .filter((kind) => tools[kind] !== undefined && !HEADER_TOOLS.includes(kind))
+            .map((kind) => ({ id: kind, name: TOOL_META[kind].title, hint: 'Tool', icon: TOOL_ICONS[kind], onSelect: () => canvasRef.current?.openTool(kind) })),
+          ...(characters ?? []).map((c) => ({ id: `character:${c.id}`, name: c.name || 'Unnamed Character', hint: 'Character', icon: <UserIcon />, onSelect: () => open({ kind: 'character', id: c.id }) }))
+        ]}
+        notes={(notes ?? []).map((note) => noteTarget(note, () => open({ kind: 'note', id: note.id })))}
+      />
+      <HandoutViewer knownTitles={knownTitles} />
+      <QuestRewardNotice
+        character={lastActiveCharacter}
+        onApply={(c, reward) =>
+          void saveCharacter(c.id, {
+            experiencePoints: (c.experiencePoints ?? 0) + reward.xp,
+            currency: { ...c.currency, gp: (c.currency?.gp ?? 0) + reward.gold }
+          })
+        }
+      />
       <Modal open={characterPromptOpen && !!characters} onClose={() => setCharacterPromptOpen(false)} width={400}>
         <h2 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 18 }}>Which character?</h2>
         <p style={{ margin: '0 0 var(--space-3)', fontSize: 13, color: 'var(--text-muted)' }}>
@@ -450,6 +492,16 @@ export function PlayerWorkspaceBody({
         toolIcons={TOOL_ICONS}
         hiddenTools={HEADER_TOOLS}
         contextMenu={contextMenu}
+        // A saved layout's note and character boxes only show while their tab is open — so loading it opens them.
+        onRestoreBoxes={(ids) => {
+          for (const id of ids) {
+            const [kind, ...rest] = id.split(':')
+            const ref = { kind, id: rest.join(':') } as PlayerTabRef
+            if ((kind === 'note' && notes?.some((n) => n.id === ref.id)) || (kind === 'character' && characters?.some((c) => c.id === ref.id))) {
+              if (!tabItems.some((t) => tabId(t.ref) === id)) openTab(ref)
+            }
+          }
+        }}
         floating={<DiceButton sessionId={sessionId} />}
         corner={
           <>
@@ -463,6 +515,7 @@ export function PlayerWorkspaceBody({
               sessionId={sessionId}
               onLeaveSession={onLeaveSession}
             />
+            <QuickSearchButton onClick={() => setSearchOpen(true)} />
           </>
         }
       />

@@ -657,3 +657,128 @@
   border-radius: 999px;
   font-size: 12px;
 }
+
+/* Built-in audio downloads (LibraryDownloadButton.tsx): a small round button in a mood tile's corner, and a
+   "Download all" in a section's header. Not downloaded still plays (streamed); downloaded shows a check. */
+.ab-mood-wrap {
+  position: relative;
+  display: grid;
+}
+
+.ab-dl {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: var(--bg-surface-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+/* Shown on hover, and always once downloaded, downloading, or failed — so you can see what's kept offline. */
+.ab-mood-wrap:hover .ab-dl,
+.ab-dl:focus-visible,
+.ab-dl--done,
+.ab-dl--busy,
+.ab-dl--failed {
+  opacity: 1;
+}
+
+.ab-dl:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.ab-dl--done {
+  border-color: color-mix(in srgb, var(--success) 50%, var(--border-subtle));
+  color: var(--success);
+}
+
+.ab-dl--done:hover {
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+.ab-dl--failed {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ab-dl:disabled {
+  cursor: default;
+}
+
+.ab-dl:focus-visible,
+.ab-dl-all:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.ab-dl-spin {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ab-dl-spin 800ms linear infinite;
+}
+
+@keyframes ab-dl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ab-dl-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ab-dl-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+button.ab-dl-all:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+.ab-dl-all--busy {
+  color: var(--accent);
+  cursor: default;
+}
+
+.ab-dl-all--done {
+  border-color: transparent;
+  color: var(--success);
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-dl-spin {
+    animation-duration: 2.4s;
+  }
+}

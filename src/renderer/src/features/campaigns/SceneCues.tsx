@@ -1,17 +1,36 @@
 import type { SceneMusic, SessionScene } from '@shared/sessionDeck'
 import type { SavedEncounter } from '../../data/savedEncounters'
+import { useEffect, useReducer } from 'react'
 import { MUSIC_LIBRARY } from '../../data/musicLibrary'
-import { getCustomTracks } from '../audio/customMusicStore'
+import { ensureCustomMusicLoaded, getCustomTracks, subscribeCustomMusic, YOUR_MUSIC_GROUP } from '../audio/customMusicStore'
+import { audioGroups, subscribeAudioGroups } from '../audio/audioGroups'
+import { audioName, subscribeAudioNames } from '../audio/audioNames'
 import { pickMood, playSpecificTrack } from '../audio/musicEngine'
 import { resolveEncounterMonsters } from './SessionTimeline'
 
-/** A mood's name, for a scene card or cue tile. */
-export function moodLabel(moodId: string | null): string | null {
-  return moodId ? (MUSIC_LIBRARY.find((g) => g.id === moodId)?.label ?? null) : null
+/** Every mood a scene can cue, as the Music box lists them: the built-in ones, "Your music", then moods you made. */
+function allMoods(): Array<{ id: string; label: string }> {
+  return [...MUSIC_LIBRARY, { id: YOUR_MUSIC_GROUP, label: 'Your music' }, ...audioGroups('mood')]
 }
 
+/** A mood's name, for a scene card or cue tile. */
+export function moodLabel(moodId: string | null): string | null {
+  return moodId ? (allMoods().find((g) => g.id === moodId)?.label ?? null) : null
+}
+
+/** A mood's songs, yours included, by the names you've given them. */
 function tracksOf(moodId: string): Array<{ id: string; title: string }> {
-  return [...(MUSIC_LIBRARY.find((g) => g.id === moodId)?.tracks ?? []), ...getCustomTracks(moodId)]
+  return [...(MUSIC_LIBRARY.find((g) => g.id === moodId)?.tracks ?? []).map((t) => ({ id: t.id, title: audioName(t.id, t.title) })), ...getCustomTracks(moodId)]
+}
+
+/** Re-renders when songs are added, moods are made or renamed — and loads your added songs if the Music box hasn't yet. */
+function useMusicChanges(): void {
+  const [, bump] = useReducer((n: number) => n + 1, 0)
+  useEffect(() => {
+    void ensureCustomMusicLoaded().then(bump)
+    const offs = [subscribeCustomMusic(bump), subscribeAudioGroups(bump), subscribeAudioNames(bump)]
+    return () => offs.forEach((off) => off())
+  }, [])
 }
 
 /** A music cue's name: its track's title, or its mood's ("Tavern Respite"). */
@@ -46,7 +65,8 @@ export function SceneCues({
   encounters: SavedEncounter[]
   onChange: (patch: Partial<Pick<SessionScene, 'encounterIds' | 'music'>>) => void
 }): JSX.Element {
-  const moods = MUSIC_LIBRARY.filter((g) => g.tracks.length > 0 || getCustomTracks(g.id).length > 0)
+  useMusicChanges()
+  const moods = allMoods().filter((g) => tracksOf(g.id).length > 0)
   const setMusic = (i: number, cue: SceneMusic): void => onChange({ music: scene.music.map((m, j) => (j === i ? cue : m)) })
   const unpicked = encounters.filter((e) => !scene.encounterIds.includes(e.id))
 

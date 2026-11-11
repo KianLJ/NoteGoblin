@@ -10,6 +10,8 @@
       { "name": "Session", "class_name": "Session" }
     ]
   },
+  // Each account's own music and sounds (src/audio.ts). Create it once with `npx wrangler r2 bucket create notegoblin-audio`.
+  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "notegoblin-audio" }],
   "migrations": [
     {
       "tag": "v1",

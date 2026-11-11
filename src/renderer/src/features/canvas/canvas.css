@@ -311,17 +311,17 @@ body.gb-canvas-dragging .gb-canvas-node-body {
   pointer-events: none;
 }
 
+/* The corner: a small glass pill (the dock's look), only as wide as the name in it. */
 .gb-canvas-corner {
   justify-self: start;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  width: 264px;
-  max-width: 100%;
-  padding: var(--space-1);
-  background: var(--bg-surface-raised);
+  max-width: min(240px, 100%);
+  padding: 3px;
+  background: color-mix(in srgb, var(--bg-surface-raised) 88%, transparent);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: 999px;
   box-shadow: var(--shadow-lg);
   pointer-events: auto;
 }
@@ -330,20 +330,392 @@ body.gb-canvas-dragging .gb-canvas-node-body {
   display: none;
 }
 
-/* The switcher and settings buttons sit flush in the corner's own card: same height as the bar's buttons, no shadow of their own. */
-.gb-canvas-corner .gb-btn {
-  font-size: 13px;
-  height: 30px !important;
-  min-height: 0;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  box-shadow: none !important;
-  border-color: transparent;
-  background: transparent;
+.gb-canvas-corner .gb-switcher,
+.gb-canvas-corner > div {
+  position: relative;
+  min-width: 0;
 }
 
-.gb-canvas-corner .gb-btn:hover:not(:disabled) {
+/* The switcher itself (the character switcher's gb-btn too): flush in the pill, no border or shadow of its own. */
+.gb-canvas-corner .gb-switcher-trigger {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  width: auto !important;
+  max-width: 100%;
+  height: 30px !important;
+  min-height: 0;
+  padding: 0 10px 0 11px !important;
+  border: none !important;
+  border-radius: 999px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.gb-canvas-corner .gb-switcher-trigger:hover,
+.gb-canvas-corner .gb-switcher-trigger[aria-expanded='true'] {
+  background: var(--accent-subtle) !important;
+  color: var(--accent-hover);
+}
+
+.gb-canvas-corner .gb-switcher-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.gb-canvas-corner .gb-switcher-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A dot for whether the campaign is being hosted: green when friends can join. */
+.gb-canvas-corner .gb-switcher-trigger[data-hosting]::before {
+  content: '';
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.45;
+}
+
+.gb-canvas-corner .gb-switcher-trigger[data-hosting='on']::before {
+  background: var(--success);
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+/* The chevron: points up while closed (the menu opens upward), down while open. */
+.gb-canvas-corner .gb-switcher-trigger::after {
+  content: '';
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  margin-top: 3px;
+  border-left: 1.5px solid currentColor;
+  border-top: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.55;
+  transition: transform 160ms ease, margin 160ms ease;
+}
+
+.gb-canvas-corner .gb-switcher-trigger[aria-expanded='true']::after {
+  margin-top: -3px;
+  transform: rotate(225deg);
+}
+
+/* The campaign switcher: just its book icon, sliding out the campaign's name on hover (or while its menu is open). */
+.gb-canvas-corner .gb-switcher-trigger--icon {
+  position: relative;
+  gap: 0;
+  height: 36px !important;
+  padding: 0 10px !important;
+  color: var(--text-secondary);
+}
+
+.gb-canvas-corner .gb-switcher-trigger--icon::after {
+  content: none;
+}
+
+.gb-canvas-corner .gb-switcher-trigger--icon .gb-switcher-trigger-name {
+  max-width: 0;
+  opacity: 0;
+  transition: max-width 220ms cubic-bezier(0.2, 0.9, 0.3, 1), opacity 160ms ease, margin 220ms ease;
+}
+
+.gb-canvas-corner .gb-switcher-trigger--icon:hover .gb-switcher-trigger-name,
+.gb-canvas-corner .gb-switcher-trigger--icon:focus-visible .gb-switcher-trigger-name,
+.gb-canvas-corner .gb-switcher-trigger--icon[aria-expanded='true'] .gb-switcher-trigger-name {
+  max-width: 170px;
+  opacity: 1;
+  margin: 0 2px 0 8px;
+}
+
+/* Hosting: a green dot on the book's top corner. */
+.gb-canvas-corner .gb-switcher-trigger--icon[data-hosting]::before {
+  position: absolute;
+  top: 8px;
+  left: 22px;
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 2px var(--bg-surface-raised);
+}
+
+/* The character switcher: the character's own portrait in place of an icon. */
+.gb-canvas-corner .gb-switcher-trigger--portrait {
+  padding-left: 5px !important;
+}
+
+.gb-canvas-corner .gb-switcher-trigger--portrait[data-hosting]::before {
+  top: 4px;
+  left: 23px;
+}
+
+.gb-switcher-portrait {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border-subtle);
+}
+
+.gb-switcher-portrait--row {
+  width: 22px;
+  height: 22px;
+  margin: -2px 0 -2px -3px;
+}
+
+.gb-switcher-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.gb-switcher-confirm {
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  color: var(--parchment-50);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-canvas-corner .gb-switcher-trigger--icon .gb-switcher-trigger-name {
+    transition: none;
+  }
+}
+
+/* The menu: the right-click menu's look, opening upward from the pill. */
+.gb-canvas-corner .gb-switcher-menu {
+  position: absolute !important;
+  left: -3px !important;
+  bottom: calc(100% + 10px) !important;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 248px !important;
+  padding: var(--space-1) !important;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: gb-switcher-in 140ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  transform-origin: bottom left;
+}
+
+@keyframes gb-switcher-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+
+.gb-switcher-heading {
+  padding: 6px 10px 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gb-switcher-empty {
+  margin: 0;
+  padding: 4px 10px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.gb-switcher-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.gb-switcher-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.gb-switcher-row:hover {
   background: var(--bg-sunken);
+}
+
+/* The open campaign: a bar of accent down its left edge. */
+.gb-switcher-row--current {
+  background: var(--accent-subtle);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.gb-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gb-switcher-item:focus-visible,
+.gb-switcher-icon:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.gb-switcher-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-switcher-row--current .gb-switcher-item-name {
+  font-weight: 600;
+}
+
+.gb-switcher-item-role {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Rename and delete show on the row you point at (in place of its role), so the list stays a column of names. */
+.gb-switcher-row-actions {
+  display: none;
+  align-items: center;
+  gap: 1px;
+  padding-right: 3px;
+}
+
+.gb-switcher-row:hover .gb-switcher-row-actions,
+.gb-switcher-row:focus-within .gb-switcher-row-actions {
+  display: flex;
+}
+
+.gb-switcher-row:has(.gb-switcher-row-actions):hover .gb-switcher-item-role,
+.gb-switcher-row:has(.gb-switcher-row-actions):focus-within .gb-switcher-item-role {
+  display: none;
+}
+
+.gb-switcher-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.gb-switcher-icon:hover {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+
+.gb-switcher-icon--danger:hover {
+  color: var(--danger);
+}
+
+.gb-switcher-input {
+  margin: 1px 0;
+  font-size: 13px !important;
+  padding: 5px 9px !important;
+}
+
+.gb-switcher-new {
+  flex: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.gb-switcher-new:hover {
+  background: var(--bg-sunken);
+}
+
+.gb-switcher-hosting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+  padding: 7px 4px 3px 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.gb-switcher-hosting-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.gb-switcher-hosting-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.gb-switcher-hosting-label--on {
+  color: var(--success);
+}
+
+.gb-switcher-hosting-label--on::before {
+  opacity: 1;
+}
+
+.gb-switcher-error {
+  margin: 4px 10px 6px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-canvas-corner .gb-switcher-menu {
+    animation: none;
+  }
 }
 
 .gb-canvas-floating {
@@ -877,6 +1249,180 @@ body.gb-canvas-dragging .gb-canvas-node-body {
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
 }
 
+/* The open campaign's name, small in the top-left corner (just under the mode switcher in the title bar). */
+.gb-canvas-title {
+  position: absolute;
+  top: var(--space-2);
+  left: calc(var(--space-3) + 4px);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 60%;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  user-select: none;
+}
+
+.gb-canvas-title-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-canvas-title-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-body, inherit);
+  letter-spacing: normal;
+  pointer-events: auto;
+}
+
+/* The DM's Host button (HostButton.tsx): a small pill — quiet when not hosting, a live green dot when hosting. */
+.gb-host {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-surface-raised) 88%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm, none);
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.gb-host:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+
+.gb-host:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.gb-host:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.gb-host--live {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success) 12%, var(--bg-surface-raised));
+  color: var(--success);
+}
+
+.gb-host-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+/* A slow ring off the dot while hosting: it's live. */
+.gb-host-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--success);
+  opacity: 0;
+  animation: gb-host-pulse 2.2s ease-out infinite;
+}
+
+@keyframes gb-host-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Hosting: pointing at it offers Stop instead. */
+.gb-host-stop {
+  display: none;
+}
+
+.gb-host--live:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-surface-raised));
+  color: var(--danger);
+}
+
+.gb-host--live:not(.gb-host--armed):hover:not(:disabled) .gb-host-label {
+  display: none;
+}
+
+.gb-host--live:not(.gb-host--armed):hover:not(:disabled) .gb-host-stop {
+  display: inline;
+}
+
+.gb-host--live:hover:not(:disabled) .gb-host-dot {
+  background: var(--danger);
+}
+
+.gb-host--live:hover:not(:disabled) .gb-host-dot::after {
+  animation: none;
+}
+
+/* Waiting for the second click. */
+.gb-host--armed,
+.gb-host--armed:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.gb-host--live.gb-host--armed,
+.gb-host--live.gb-host--armed:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--parchment-50);
+}
+
+.gb-host--armed .gb-host-dot {
+  background: currentColor;
+}
+
+.gb-host-error {
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--danger);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-host-dot::after {
+    animation: none;
+  }
+}
+
+/* With the name above them, the collection crumbs sit a line lower. */
+.gb-canvas-title + .gb-canvas-crumbs {
+  top: calc(var(--space-2) + 30px);
+}
+
 /* Inside a collection: the way back out, top-left. */
 .gb-canvas-crumbs {
   position: absolute;
@@ -1024,6 +1570,7 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 [data-kind='music'], [data-kind='soundboard'] { --kind: var(--moss-500); }
 [data-kind='codex'], [data-kind='entry'] { --kind: #3f7a76; }
 [data-kind='friends'] { --kind: #4a6b8a; }
+[data-kind='quests'] { --kind: #a04a78; }
 
 .gb-canvas-node[data-kind] .gb-canvas-node-bar {
   background: color-mix(in srgb, var(--kind, transparent) 10%, var(--bg-sunken));
@@ -1169,4 +1716,743 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 
 .gb-canvas-crumbs .gb-session-crumb-action {
   margin-left: var(--space-2);
+}
+
+/* Quick search (QuickSearch.tsx, Ctrl+K): a search field over a short, grouped list of places to jump to. */
+.gb-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-2));
+}
+
+.gb-search-input {
+  font-size: 15px !important;
+  padding: 10px 12px !important;
+}
+
+.gb-search-results {
+  display: flex;
+  flex-direction: column;
+  max-height: min(380px, 55vh);
+  overflow-y: auto;
+}
+
+.gb-search-group {
+  padding: 8px 10px 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gb-search-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.gb-search-item[aria-selected='true'] {
+  background: var(--accent-subtle);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.gb-search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  color: var(--text-secondary);
+}
+
+.gb-search-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gb-search-item[aria-selected='true'] .gb-search-icon {
+  color: var(--accent-hover);
+}
+
+.gb-search-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-search-hint {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.gb-search-empty {
+  margin: 0;
+  padding: 14px 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.gb-search-keys {
+  display: flex;
+  gap: var(--space-4);
+  padding: 6px 10px 2px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.gb-search-keys kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 3px;
+  padding: 0 4px;
+  border: 1px solid var(--border-subtle);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  font: inherit;
+  font-size: 10px;
+  text-align: center;
+}
+
+
+/* The Quests box (QuestLog.tsx): a count and "+ New quest" on top, then quest cards — a round status mark, the
+   title in the display face, who gave it, and its rewards as coloured chips. Secret quests are dashed for the DM. */
+.gb-quests {
+  --quest: #a04a78;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.gb-quests-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.gb-quests-count {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gb-quests-new {
+  padding: 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--quest) 55%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--quest) 10%, transparent);
+  color: var(--quest);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.gb-quests-new:hover {
+  background: var(--quest);
+  color: var(--parchment-50);
+}
+
+.gb-quests-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: auto 0;
+  padding: var(--space-5) var(--space-3);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.gb-quests-empty svg {
+  color: color-mix(in srgb, var(--quest) 60%, var(--text-muted));
+}
+
+.gb-quests-empty p,
+.gb-quests-error {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.gb-quests-error {
+  color: var(--danger);
+}
+
+.gb-quests-heading {
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gb-quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A quest card: a thin bar of quest colour down its left edge. */
+.gb-quest {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 10px 10px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--quest);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+}
+
+.gb-quest--done {
+  border-left-color: var(--success);
+}
+
+.gb-quest--failed {
+  border-left-color: var(--danger);
+}
+
+.gb-quest--done,
+.gb-quest--failed {
+  background: transparent;
+}
+
+.gb-quest--hidden {
+  border-style: dashed;
+  border-left-style: solid;
+  border-left-color: color-mix(in srgb, var(--quest) 45%, var(--border-subtle));
+}
+
+.gb-quest--hidden .gb-quest-body {
+  opacity: 0.75;
+}
+
+.gb-quest-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  padding: 0;
+  border: 1.5px solid var(--quest);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--parchment-50);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 160ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.gb-quest-status:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--quest) 25%, transparent);
+  transform: scale(1.1);
+}
+
+.gb-quest-status:disabled {
+  cursor: default;
+}
+
+.gb-quest--done .gb-quest-status {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.gb-quest--failed .gb-quest-status {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.gb-quest-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gb-quest-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.gb-quest-title {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.gb-quest--done .gb-quest-title,
+.gb-quest--failed .gb-quest-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+}
+
+.gb-quest-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.7;
+  text-transform: uppercase;
+}
+
+.gb-quest-badge--done {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+.gb-quest-badge--failed {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.gb-quest-giver {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.gb-quest-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.gb-quest-rewards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+/* A reward: gold, XP, or anything else, each its own colour. */
+.gb-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 8px 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reward) 14%, transparent);
+  color: var(--reward);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-reward svg {
+  flex-shrink: 0;
+}
+
+.gb-reward--gold {
+  --reward: #b8860b;
+}
+
+.gb-reward--xp {
+  --reward: #5a6fb0;
+}
+
+.gb-reward--item {
+  --reward: #2f8a7e;
+}
+
+.gb-quest-note {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gb-quest-note:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.gb-quest-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.gb-quest:hover .gb-quest-actions,
+.gb-quest:focus-within .gb-quest-actions {
+  opacity: 1;
+}
+
+/* Finishing a quest with a reward: a reminder of what to hand out. */
+.gb-quest-complete {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--success) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--success) 12%, var(--bg-surface-raised));
+  color: var(--text-primary);
+  font-size: 12.5px;
+  animation: gb-quest-complete-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.gb-quest-complete strong {
+  color: var(--success);
+  font-family: var(--font-display);
+  font-size: 14px;
+}
+
+@keyframes gb-quest-complete-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+/* The form for a new (or edited) quest. */
+.gb-quest-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--quest) 45%, var(--border-subtle));
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--quest) 6%, var(--bg-surface-raised));
+  box-shadow: var(--shadow-sm, none);
+  list-style: none;
+}
+
+.gb-quest-form .gb-input {
+  width: 100%;
+  font-size: 13px;
+}
+
+.gb-quest-form textarea.gb-input {
+  resize: vertical;
+}
+
+.gb-quest-form-title {
+  width: 100%;
+  padding: 2px 0 4px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  outline: none;
+}
+
+.gb-quest-form-title:focus {
+  border-bottom-color: var(--quest);
+}
+
+.gb-quest-form-label {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gb-quest-form-rewards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* A reward field: its icon and unit inside the box, in that reward colour. */
+.gb-reward-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--reward);
+}
+
+.gb-reward-field:focus-within {
+  border-color: var(--reward);
+}
+
+.gb-reward-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.gb-reward-field span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.gb-quest-form-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.gb-quest-form-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gb-toggle-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 30px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  transition: background-color 140ms ease;
+}
+
+.gb-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 160ms cubic-bezier(0.3, 1.4, 0.5, 1), background-color 140ms ease;
+}
+
+.gb-quest-form-toggle input:checked + .gb-toggle-track {
+  background: var(--quest);
+}
+
+.gb-quest-form-toggle input:checked + .gb-toggle-track::after {
+  background: var(--parchment-50);
+  transform: translateX(13px);
+}
+
+.gb-quest-form-toggle input:focus-visible + .gb-toggle-track {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.gb-quest-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.gb-quest-form-cancel,
+.gb-quest-form-save {
+  padding: 5px 14px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gb-quest-form-cancel {
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.gb-quest-form-save {
+  border: 1px solid var(--quest);
+  background: var(--quest);
+  color: var(--parchment-50);
+}
+
+.gb-quest-form-save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.gb-quest-status:focus-visible,
+.gb-quest-note:focus-visible,
+.gb-quests-new:focus-visible,
+.gb-quest-form-cancel:focus-visible,
+.gb-quest-form-save:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-quest-complete,
+  .gb-toggle-track,
+  .gb-toggle-track::after {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* A finished quest whose reward could not be handed out: amber, not green. */
+.gb-quest-complete--pending {
+  border-color: color-mix(in srgb, #b8860b 50%, transparent);
+  background: color-mix(in srgb, #b8860b 12%, var(--bg-surface-raised));
+}
+
+.gb-quest-complete--pending strong {
+  color: #b8860b;
+}
+
+/* On a finished quest that has not paid out yet (the DM was not hosting): try again. */
+.gb-quest-handout {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 3px 10px;
+  border: 1px solid #b8860b;
+  border-radius: 999px;
+  background: color-mix(in srgb, #b8860b 14%, transparent);
+  color: #b8860b;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gb-quest-handout:hover {
+  background: #b8860b;
+  color: var(--parchment-50);
+}
+
+.gb-quest-handout:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.gb-quest-paid {
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* A player's share of a quest reward arriving (QuestRewardNotice.tsx): a gold-edged card at the top of the canvas. */
+.gb-quest-reward-notice {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 280px;
+  max-width: min(440px, calc(100% - 2 * var(--space-3)));
+  padding: 12px 36px 12px 16px;
+  border: 1px solid color-mix(in srgb, #b8860b 60%, var(--border-subtle));
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, #b8860b 10%, var(--bg-surface-raised));
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 13px;
+  transform: translateX(-50%);
+  animation: gb-quest-reward-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+
+.gb-quest-reward-notice strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+}
+
+.gb-quest-reward-eyebrow {
+  color: #b8860b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.gb-quest-reward-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gb-quest-reward-close:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+@keyframes gb-quest-reward-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-quest-reward-notice {
+    animation: none;
+  }
 }

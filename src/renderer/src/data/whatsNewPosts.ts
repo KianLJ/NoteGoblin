@@ -7,6 +7,13 @@ import cuesShot from '../assets/whatsnew/0.11.1/cues.jpg'
 import encountersShot from '../assets/whatsnew/0.11.1/encounters.jpg'
 import woundsShot from '../assets/whatsnew/0.11.1/wounds.png'
 import hiddenShot from '../assets/whatsnew/0.11.2/hidden.png'
+import questsShot from '../assets/whatsnew/0.12.0/quests.jpg'
+import handoutShot from '../assets/whatsnew/0.12.0/handout.jpg'
+import searchShot from '../assets/whatsnew/0.12.0/search.jpg'
+import presenterShot from '../assets/whatsnew/0.12.0/presenter.jpg'
+import backlinksShot from '../assets/whatsnew/0.12.0/backlinks.jpg'
+import encountersTabShot from '../assets/whatsnew/0.12.0/encounters.jpg'
+import canvasShot012 from '../assets/whatsnew/0.12.0/canvas.jpg'
 
 export interface WhatsNewSection {
   heading: string
@@ -31,6 +38,53 @@ export interface WhatsNewPost {
 
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
+  {
+    version: '0.12.0',
+    title: 'Quests, handouts, and a lighter download',
+    intro: 'A big one: a quest log that pays out, handouts you can put in front of the whole table, one box to find anything, and a download a quarter of the size, because the music now streams.',
+    sections: [
+      {
+        heading: 'A quest log that pays out',
+        body: 'The new Quests box sits on the bottom bar. Write a quest with who gave it, what needs doing and what it pays: gold, XP, and anything else. New quests stay secret until you show them to the party with the eye. Tick one off and its gold and XP are split evenly between the players at the table and added straight to their characters, once only. Players see the quests they know about, with their rewards.',
+        image: questsShot,
+        caption: 'The DM’s quest log (left), with a secret quest dashed, and what the players see (right).'
+      },
+      {
+        heading: 'Handouts',
+        body: 'While you’re hosting, every note and picture on your canvas has a Show to players button. It pops the note or picture up on every player’s screen, with any DM-only parts of a note taken out first.',
+        image: handoutShot,
+        caption: 'A note sent as a handout, as a player sees it.'
+      },
+      {
+        heading: 'Find anything with Ctrl+K',
+        body: 'Press Ctrl+K, or the magnifier in the bottom-left corner, and type. Notes come first, then tools, then creatures from the Codex. Enter opens what you picked on the canvas.',
+        image: searchShot
+      },
+      {
+        heading: 'A better presenter, and the encounters in the Initiative box',
+        body: 'The presenter at the top is now a card: the scene and its controls, then the scene’s fights and music as chips, with the song that’s playing marked. Scene numbers and arrows follow a scene while you drag it. Your own songs and moods can be cued on scenes. Saved encounters moved into the Initiative box as a tab, which made room for Quests on the bar.',
+        image: presenterShot,
+        caption: 'A scene with two fights and two songs while it’s being presented.'
+      },
+      {
+        heading: 'Notes that know who mentions them',
+        body: 'Under every note is a Mentioned in row listing the other notes that link to it, so you can get back from an NPC to every session they turned up in.',
+        image: backlinksShot
+      },
+      {
+        heading: 'A lighter app, and your music everywhere',
+        body: 'The built-in music, ambience and Sound Board sounds no longer come in the installer, so it’s about a quarter of the size. Everything still lists as before and streams when played; each mood has a download button, and there’s Download all, to keep them for playing offline. The songs and sounds you add yourself, with your moods and names, now follow your account to any computer you sign in on.',
+        image: canvasShot012,
+        caption: 'Download all for the music and the Sound Board, and the new Host button beside the campaign’s name.'
+      },
+      {
+        heading: 'And a lot more',
+        body: 'Host from the button beside your campaign’s name, and switch campaign or character from a small icon in the corner. Saved layouts now bring back every box where it was, even ones you’d closed, and the built-in layouts only move the tools. Trackpads pan with two fingers and zoom with a pinch, and menus and dialogs work from the keyboard. Players’ names can’t be faked, and sign-ins lock for a while after too many wrong passwords.',
+        image: encountersTabShot,
+        caption: 'The Initiative box’s new Encounters tab.'
+      }
+    ]
+  },
   {
     version: '0.11.3',
     title: 'Notes on the calendar, and a round of fixes',

@@ -33,6 +33,24 @@ export function wikilinkAlias(match: RegExpExecArray): string | undefined {
   return raw?.trim()
 }
 
+/** Every note title a body links to, lowercased (links resolve by title, ignoring case — see markdown.ts). */
+export function linkTargets(body: string): Set<string> {
+  const targets = new Set<string>()
+  const re = new RegExp(WIKILINK_PATTERN, 'g')
+  for (let m = re.exec(body); m; m = re.exec(body)) {
+    const target = wikilinkTarget(m).toLowerCase()
+    if (target) targets.add(target)
+  }
+  return targets
+}
+
+/** The other notes that link to `note` by its title — its backlinks, sorted by title. */
+export function backlinksTo<T extends { id: string; title: string; bodyMarkdown: string }>(notes: T[], note: { id: string; title: string }): T[] {
+  const title = note.title.trim().toLowerCase()
+  if (!title) return []
+  return notes.filter((n) => n.id !== note.id && linkTargets(n.bodyMarkdown).has(title)).sort((a, b) => a.title.localeCompare(b.title))
+}
+
 /** True if the `[[double]]` alternative matched (vs `[single]`) — tells the caller how many marker characters sit on each side. */
 export function wikilinkIsDouble(match: RegExpExecArray): boolean {
   return match[1] !== undefined

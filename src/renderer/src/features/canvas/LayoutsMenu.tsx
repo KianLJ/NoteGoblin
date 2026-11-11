@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { parsePresets, type LayoutPreset } from '@shared/canvasLayout'
+import { allNodeIds, parsePresets, type LayoutPreset } from '@shared/canvasLayout'
 import { PRESETS, isKnownId, type CanvasMode } from '@shared/canvasTools'
 
 function storageKey(mode: CanvasMode): string {
@@ -12,6 +12,11 @@ function loadCustom(mode: CanvasMode): LayoutPreset[] {
   } catch {
     return []
   }
+}
+
+/** Whether one of this mode's saved layouts has this box in it — an image it does keeps its picture when closed. */
+export function inSavedLayout(mode: CanvasMode, nodeId: string): boolean {
+  return loadCustom(mode).some((p) => (p.snapshot ? allNodeIds(p.snapshot) : p.nodes.map((n) => n.id)).includes(nodeId))
 }
 
 /**

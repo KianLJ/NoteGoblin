@@ -8,10 +8,14 @@ import { monsterToCombatant } from './InitiativeTracker'
 import { FileIcon, PawIcon } from './icons'
 import { useKnownPlayerSheets } from './useKnownPlayerSheets'
 import { DmInitiativeTool } from './DmInitiativeTool'
-import { EncounterLibrary } from '../combat/EncounterLibrary'
 import { TimerDockButton, TimerMini, TimerPanel } from '../canvas/SessionTimer'
 import { CalendarMini, InitiativeMini, PartyMini, SessionsMini } from '../canvas/toolMinis'
 import { SceneDeleteButton, SessionPresenter, SessionsList } from './SessionTimeline'
+import { ShowToPlayersButton } from './ShowToPlayersButton'
+import { HostButton } from './HostButton'
+import { QuestLog } from './QuestLog'
+import { stripDmAsides } from '@shared/sessionDeck'
+import { getCanvasImage } from '../canvas/canvasImages'
 import { useSessionDecks } from './useSessionDecks'
 import { SessionIcon } from './panelIcons'
 import { dropEntry, putEntry, useCanvasEntries } from '../canvas/canvasEntries'
@@ -44,6 +48,7 @@ import {
 import { DYNAMIC_SIZE, HEADER_TOOLS, TOOL_META, TOOLS_BY_MODE } from '@shared/canvasTools'
 import type { ContextMenuItem } from '../../ui/ContextMenu'
 import { TOOL_ICONS } from '../canvas/toolIcons'
+import { QuickSearch, QuickSearchButton, noteTarget, useQuickSearchKey } from '../canvas/QuickSearch'
 import type { NotesWorkspace } from './useNotesWorkspace'
 import type { Campaign, CharacterSheet } from '@shared/ipc'
 import type { BestiaryMonster } from '../../data/bestiary'
@@ -65,7 +70,7 @@ interface CampaignWorkspaceProps {
   onSwitchCampaign: (campaign: Campaign) => void
   /** Fired when the currently-open campaign gets deleted from the switcher — drops back to "no campaign open" instead of continuing to show one that no longer exists. */
   onCampaignDeleted: () => void
-  /** The session id once hosting is on — for live presence, and for CampaignSwitcher's own Start/Stop Hosting control. */
+  /** The session id once hosting is on — for live presence, and for HostButton's Start/Stop beside the campaign's name. */
   hostedSessionId?: string | null
   onHostedSessionChange: (sessionId: string | null) => void
   /** Every connected player's currently-selected character, kept live. Their sheets are remembered after they leave (see useKnownPlayerSheets). */
@@ -108,6 +113,9 @@ export function CampaignWorkspace({
   const [editingStatblock, setEditingStatblock] = useState<{ nodeId: string; monster: PackMonster } | null>(null)
   // Where a monster picked from the right-click menu's Codex goes; null while the picker is shut.
   const [monsterPickAt, setMonsterPickAt] = useState<CanvasPoint | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useQuickSearchKey(rootRef, setSearchOpen)
 
   /** Puts a monster's statblock on the canvas (or brings its box into view) — at `at`, or a free spot. */
   function openMonster(monster: BestiaryMonster, at?: CanvasPoint): void {
@@ -330,8 +338,19 @@ export function CampaignWorkspace({
       full: <DmInitiativeTool sessionId={hostedSessionId ?? null} campaignId={campaign?.id ?? null} combatCharacters={combatCharacters} onOpenMonster={(m) => openMonster(m)} />,
       mini: <InitiativeMini />
     },
-    encounters: <EncounterLibrary playerCharacters={playerCharacters} />,
     timer: { full: <TimerPanel />, mini: <TimerMini /> },
+    quests: (
+      <QuestLog
+        sessionId={null}
+        campaignId={campaign?.id ?? null}
+        readOnly={false}
+        noteTitles={(notes ?? []).map((n) => n.title).filter(Boolean)}
+        onOpenNote={(title) => {
+          const found = (notes ?? []).find((n) => n.title.trim().toLowerCase() === title.toLowerCase())
+          if (found) openInNewBox(found.id)
+        }}
+      />
+    ),
     calendar: {
       full: <CalendarPanel sessionId={null} campaignId={campaign?.id ?? null} readOnly={false} notes={notes ?? []} />,
       mini: <CalendarMini sessionId={null} campaignId={campaign?.id ?? null} />
@@ -363,9 +382,16 @@ export function CampaignWorkspace({
         onFocus: () => workspace.setActiveId(note.id),
         onClose: () => workspace.closeTab(note.id),
         // A scene in its session's collection: deleted from its own button, never just closed (it would only come back).
-        ...(deckHere && sceneIdsHere.has(`note:${note.id}`)
-          ? { noClose: true, actions: <SceneDeleteButton onDelete={() => deleteScene(deckHere, note.id)} /> }
-          : {}),
+        ...(deckHere && sceneIdsHere.has(`note:${note.id}`) ? { noClose: true } : {}),
+        actions: (hostedSessionId || (deckHere && sceneIdsHere.has(`note:${note.id}`))) && (
+          <>
+            {hostedSessionId && (
+              // Its text without the DM-only (::) parts — every player sees the same thing.
+              <ShowToPlayersButton build={async () => ({ id: crypto.randomUUID(), title: note.title || 'Untitled', kind: 'note', markdown: stripDmAsides(note.bodyMarkdown) })} />
+            )}
+            {deckHere && sceneIdsHere.has(`note:${note.id}`) && <SceneDeleteButton onDelete={() => deleteScene(deckHere, note.id)} />}
+          </>
+        ),
         className: note.id === liveNoteId ? 'gb-canvas-node--live' : undefined,
         content: (
           <NoteEditor
@@ -397,7 +423,22 @@ export function CampaignWorkspace({
           )
         })
       ),
-    ...entryItems('dm', layout, entries, (nodeId, monster) => setEditingStatblock({ nodeId, monster: monster as PackMonster }))
+    ...entryItems(
+      'dm',
+      layout,
+      entries,
+      (nodeId, monster) => setEditingStatblock({ nodeId, monster: monster as PackMonster }),
+      hostedSessionId
+        ? (image) => (
+            <ShowToPlayersButton
+              build={async () => {
+                const src = await getCanvasImage(image.id)
+                return src ? { id: crypto.randomUUID(), title: image.name, kind: 'image', src } : null
+              }}
+            />
+          )
+        : undefined
+    )
   ]
 
   async function newNoteAt(visibility: 'dm' | 'shared', at: CanvasPoint): Promise<void> {
@@ -437,7 +478,22 @@ export function CampaignWorkspace({
   }
 
   return (
-    <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
+    <div ref={rootRef} style={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0 }}>
+      <QuickSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        tools={TOOLS_BY_MODE.dm
+          .filter((kind) => !HEADER_TOOLS.includes(kind))
+          .map((kind) => ({ id: kind, name: TOOL_META[kind].title, hint: 'Tool', icon: TOOL_ICONS[kind], onSelect: () => canvasRef.current?.openTool(kind) }))}
+        notes={(notes ?? []).map((note) =>
+          noteTarget(note, () => {
+            const deck = note.sceneDeckId ? decksApi.decks.find((d) => d.id === note.sceneDeckId) : undefined
+            if (deck) showScene(deck, note.id)
+            else openInNewBox(note.id)
+          })
+        )}
+        onOpenMonster={(monster) => openMonster(monster)}
+      />
       {error && (
         <p
           key={error}
@@ -496,6 +552,8 @@ export function CampaignWorkspace({
         dock={<TimerDockButton onOpen={() => canvasRef.current?.openTool('timer')} onClose={() => canvasRef.current?.closeTool('timer')} />}
         floating={<DiceButton sessionId={hostedSessionId ?? null} />}
         contextMenu={contextMenu}
+        title={campaign?.name}
+        titleExtra={campaign && <HostButton hostedSessionId={hostedSessionId ?? null} onHostedSessionChange={onHostedSessionChange} />}
         corner={
           <>
             <CampaignSwitcher
@@ -504,8 +562,8 @@ export function CampaignWorkspace({
               onSelect={onSwitchCampaign}
               onCurrentDeleted={onCampaignDeleted}
               hostedSessionId={hostedSessionId ?? null}
-              onHostedSessionChange={onHostedSessionChange}
             />
+            <QuickSearchButton onClick={() => setSearchOpen(true)} />
           </>
         }
       />

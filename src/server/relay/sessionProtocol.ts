@@ -28,6 +28,7 @@ export type RequestKind =
   | 'calendar.save'
   | 'calendar.remove'
   | 'vehicles.get'
+  | 'quests.get'
   | 'battleMap.get'
   | 'battleMap.image'
   | 'battleMap.moveToken'
@@ -270,6 +271,25 @@ export interface AmbientLevelChangedFrame {
  * MusicChangedFrame, since a Sound Board cue is never a DM-local custom
  * addition the way a music track can be.
  */
+/** A player's share of a finished quest's reward (the DM's app has already split it), added to their character. */
+export interface QuestRewardFrame {
+  type: 'quest-reward'
+  questTitle: string
+  gold: number
+  xp: number
+  /** How many players it was split between. */
+  partySize: number
+}
+
+/** A handout (shared/ipc.ts's Handout) as JSON, in pieces small enough for the relay — the player puts them back together. */
+export interface HandoutChunkFrame {
+  type: 'handout-chunk'
+  handoutId: string
+  index: number
+  total: number
+  chunk: string
+}
+
 export interface SfxPlayedFrame {
   type: 'sfx-played'
   sfxId: string

@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, type ReactNode } from 'react'
 import { findNode, type CanvasLayout } from '@shared/canvasLayout'
 import { DYNAMIC_SIZE, type CanvasMode } from '@shared/canvasTools'
 import { StatblockCard } from '../campaigns/StatblockCard'
@@ -8,8 +8,9 @@ import { BestiaryIcon } from '../shell/icons'
 import { dropEntry, type CanvasEntry } from './canvasEntries'
 import type { CanvasItem } from './toolItems'
 import { StickyColorButton, StickyNote } from './StickyNote'
-import { ImageBox } from './ImageBox'
+import { ImageBox, type CanvasImage } from './ImageBox'
 import { deleteCanvasImage } from './canvasImages'
+import { inSavedLayout } from './LayoutsMenu'
 
 // The Codex's code loads the first time an entry's box shows.
 const CodexEntryView = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.CodexEntryView })))
@@ -22,7 +23,9 @@ export function entryItems(
   mode: CanvasMode,
   layout: CanvasLayout,
   entries: Record<string, CanvasEntry>,
-  onEditMonster?: (nodeId: string, monster: BestiaryMonster) => void
+  onEditMonster?: (nodeId: string, monster: BestiaryMonster) => void,
+  /** Extra buttons in an image box's title bar (the DM's "Show to players"). */
+  imageActions?: (image: CanvasImage) => ReactNode
 ): CanvasItem[] {
   return Object.entries(entries)
     .filter(([id]) => findNode(layout, id))
@@ -33,9 +36,12 @@ export function entryItems(
           title: entry.name,
           icon: <ImageIcon />,
           size: { w: 400, h: 332 },
+          actions: imageActions?.(entry),
           onClose: () => {
             dropEntry(mode, id)
-            void deleteCanvasImage(entry.id)
+            // A saved layout with this image in it can bring it back, so its picture stays.
+            // shortcut: deleting that layout later leaves the picture stored; sweep unused ones if storage ever matters.
+            if (!inSavedLayout(mode, id)) void deleteCanvasImage(entry.id)
           },
           content: <ImageBox image={entry} />
         }

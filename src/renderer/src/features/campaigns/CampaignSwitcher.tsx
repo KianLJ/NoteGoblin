@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
-import { ConfirmButton } from '../../ui/ConfirmButton'
 import { Modal } from '../../ui/Modal'
 import { useLastTruthy } from '../../ui/useLastTruthy'
+import { XIcon } from '../../ui/icons'
+import { CampaignIcon, PencilIcon } from './icons'
 import type { Campaign } from '@shared/ipc'
-import { playSfx } from '../audio/soundEffects'
 
 interface CampaignSwitcherProps {
   canCreate: boolean
@@ -12,47 +12,39 @@ interface CampaignSwitcherProps {
   onSelect: (campaign: Campaign) => void
   /** Fired after deleting whichever campaign is currently open, so the parent can drop it from view instead of continuing to show a now-nonexistent campaign. */
   onCurrentDeleted: () => void
-  /** null while not hosting — Start/Stop Hosting used to live in FriendsMenu, but hosting is really a property of whichever campaign is currently open, so it moved in here next to it. */
+  /** null while not hosting — shown as a green dot on the pill (starting and stopping is HostButton's, beside the campaign's name). */
   hostedSessionId: string | null
-  onHostedSessionChange: (sessionId: string | null) => void
 }
 
-/** Bottom-left "which campaign am I in" control — replaces the old always-visible campaign list with an Obsidian-style corner switcher. Always the DM's own table; a joined session's campaigns are driven by the DM instead (see usePlayerWorkspace's auto-join). */
-export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDeleted, hostedSessionId, onHostedSessionChange }: CampaignSwitcherProps): JSX.Element {
+/**
+ * The canvas's bottom-left "which campaign am I in" pill, and the menu it opens upward: the campaigns (rename and
+ * delete on hover) and a new one. Always the DM's own table; a joined session's campaigns are driven by
+ * the DM instead (see usePlayerWorkspace's auto-join). Classic layout keeps the old one (ClassicCampaignSwitcher).
+ */
+export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDeleted, hostedSessionId }: CampaignSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [newName, setNewName] = useState('')
+  // null: the "New campaign" row; a string: its name field, open.
+  const [newName, setNewName] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [pendingDelete, setPendingDelete] = useState<Campaign | null>(null)
   const lastPendingDelete = useLastTruthy(pendingDelete)
-  const [hostingBusy, setHostingBusy] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  async function startHosting(): Promise<void> {
-    setHostingBusy(true)
-    setError(null)
-    const result = await window.goblin.sessions.start()
-    setHostingBusy(false)
-    if (!result.ok) {
-      setError(result.error)
+  useEffect(() => {
+    if (!open) {
+      setNewName(null)
       return
     }
-    playSfx('sessionHosted')
-    onHostedSessionChange(result.sessionId)
-  }
-
-  async function stopHosting(): Promise<void> {
-    setHostingBusy(true)
-    await window.goblin.sessions.stop()
-    setHostingBusy(false)
-    onHostedSessionChange(null)
-  }
-
-  useEffect(() => {
-    if (open) refresh()
+    refresh()
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape' && !(e.target as Element).closest('input')) setOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open])
 
   useEffect(() => {
@@ -74,14 +66,15 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
   }
 
   async function createCampaign(): Promise<void> {
-    if (!newName.trim()) return
+    const name = newName?.trim()
+    if (!name) return
     setError(null)
-    const result = await window.goblin.campaigns.create(newName.trim())
+    const result = await window.goblin.campaigns.create(name)
     if (!result.ok) {
       setError(result.error)
       return
     }
-    setNewName('')
+    setNewName(null)
     setOpen(false)
     onSelect(result.data)
   }
@@ -142,165 +135,49 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+    <div ref={containerRef} className="gb-switcher">
       {open && (
-        <div
-          className="gb-card"
-          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, width: 280, zIndex: 200 }}
-        >
-          {current && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 6,
-                marginBottom: 'var(--space-3)',
-                paddingBottom: 'var(--space-2)',
-                borderBottom: '1px solid var(--border-subtle)'
-              }}
-            >
-              <span style={{ fontSize: 12, color: hostedSessionId ? 'var(--success)' : 'var(--text-muted)' }}>
-                {hostedSessionId ? 'Hosting — invite friends to join' : 'Not hosting'}
-              </span>
-              <ConfirmButton
-                label={hostedSessionId ? 'Stop Hosting' : 'Start Hosting'}
-                confirmLabel="Confirm?"
-                variant={hostedSessionId ? 'ghost' : 'primary'}
-                disabled={hostingBusy}
-                onConfirm={() => void (hostedSessionId ? stopHosting() : startHosting())}
-                style={{ fontSize: 11, padding: '2px 8px' }}
-              />
-            </div>
+        <div className="gb-switcher-menu" role="menu">
+          <div className="gb-switcher-heading">Campaigns</div>
+
+          {campaigns !== null && campaigns.length === 0 && (
+            <p className="gb-switcher-empty">{canCreate ? 'No campaigns yet.' : 'This table has no campaigns yet.'}</p>
           )}
 
-          <h3
-            style={{
-              fontSize: 11,
-              margin: '0 0 var(--space-2)',
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              fontWeight: 700
-            }}
-          >
-            Campaigns
-          </h3>
-
-          {campaigns === null ? null : campaigns.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
-              {canCreate ? 'No campaigns yet.' : 'This table has no campaigns yet.'}
-            </p>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4,
-                marginBottom: canCreate ? 'var(--space-3)' : 0,
-                maxHeight: 220,
-                overflowY: 'auto'
-              }}
-            >
+          {campaigns && campaigns.length > 0 && (
+            <div className="gb-switcher-list">
               {campaigns.map((campaign) =>
                 renamingId === campaign.id ? (
                   <input
                     key={campaign.id}
                     autoFocus
-                    className="gb-input"
+                    className="gb-input gb-switcher-input"
                     value={renameValue}
+                    aria-label="Campaign name"
                     onChange={(e) => setRenameValue(e.target.value)}
                     onBlur={() => commitRename(campaign)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') commitRename(campaign)
                       if (e.key === 'Escape') setRenamingId(null)
                     }}
-                    style={{ fontSize: 13, padding: '5px 8px' }}
                   />
                 ) : (
-                  <div
-                    key={campaign.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      borderRadius: 'var(--radius-sm)',
-                      background: current?.id === campaign.id ? 'var(--accent-subtle)' : 'transparent'
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => selectCampaign(campaign)}
-                      disabled={busyId === campaign.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 6,
-                        flex: 1,
-                        minWidth: 0,
-                        padding: '6px 8px',
-                        border: 'none',
-                        background: 'none',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        color: 'var(--text-primary)',
-                        fontSize: 13
-                      }}
-                    >
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {campaign.name}
-                      </span>
-                      <span
-                        className={`gb-badge ${campaign.myRole === 'dm' ? 'gb-badge--accent' : ''}`}
-                        style={{ fontSize: 10, flexShrink: 0 }}
-                      >
-                        {busyId === campaign.id
-                          ? '…'
-                          : campaign.myRole === 'dm'
-                            ? 'DM'
-                            : campaign.myRole === 'player'
-                              ? 'Player'
-                              : 'Join'}
+                  <div key={campaign.id} className={current?.id === campaign.id ? 'gb-switcher-row gb-switcher-row--current' : 'gb-switcher-row'}>
+                    <button type="button" role="menuitem" className="gb-switcher-item" onClick={() => selectCampaign(campaign)} disabled={busyId === campaign.id}>
+                      <span className="gb-switcher-item-name">{campaign.name}</span>
+                      <span className="gb-switcher-item-role">
+                        {busyId === campaign.id ? '…' : campaign.myRole === 'dm' ? 'DM' : campaign.myRole === 'player' ? 'Player' : 'Join'}
                       </span>
                     </button>
                     {campaign.myRole === 'dm' && (
-                      <>
-                        <button
-                          type="button"
-                          title="Rename campaign"
-                          onClick={() => startRename(campaign)}
-                          disabled={busyId === campaign.id}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--text-muted)',
-                            fontSize: 11,
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                            padding: '2px 4px'
-                          }}
-                        >
-                          Rename
+                      <span className="gb-switcher-row-actions">
+                        <button type="button" className="gb-switcher-icon" title="Rename" aria-label={`Rename ${campaign.name}`} onClick={() => startRename(campaign)} disabled={busyId === campaign.id}>
+                          <PencilIcon />
                         </button>
-                        <button
-                          type="button"
-                          title="Delete campaign"
-                          onClick={() => setPendingDelete(campaign)}
-                          disabled={busyId === campaign.id}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--danger)',
-                            fontSize: 11,
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                            padding: '2px 4px 2px 0'
-                          }}
-                        >
-                          Delete
+                        <button type="button" className="gb-switcher-icon gb-switcher-icon--danger" title="Delete" aria-label={`Delete ${campaign.name}`} onClick={() => setPendingDelete(campaign)} disabled={busyId === campaign.id}>
+                          <XIcon size={12} />
                         </button>
-                      </>
+                      </span>
                     )}
                   </div>
                 )
@@ -308,37 +185,42 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
             </div>
           )}
 
-          {canCreate && (
-            <div style={{ display: 'flex', gap: 6 }}>
+          {canCreate &&
+            (newName === null ? (
+              <button type="button" role="menuitem" className="gb-switcher-item gb-switcher-new" onClick={() => setNewName('')}>
+                + New campaign
+              </button>
+            ) : (
               <input
-                className="gb-input"
-                placeholder="New campaign"
+                autoFocus
+                className="gb-input gb-switcher-input"
+                placeholder="Name it, then press Enter"
+                aria-label="New campaign name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && createCampaign()}
-                style={{ fontSize: 13 }}
+                onBlur={() => !newName.trim() && setNewName(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void createCampaign()
+                  if (e.key === 'Escape') setNewName(null)
+                }}
               />
-              <Button variant="primary" onClick={createCampaign} disabled={!newName.trim()}>
-                Add
-              </Button>
-            </div>
-          )}
+            ))}
 
-          {error && (
-            <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 'var(--space-2)' }}>{error}</p>
-          )}
+          {error && <p className="gb-switcher-error">{error}</p>}
         </div>
       )}
 
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="gb-btn gb-btn--secondary"
-        style={{ width: '100%', minWidth: 0, boxShadow: 'var(--shadow-md)' }}
+        className="gb-switcher-trigger gb-switcher-trigger--icon"
+        data-hosting={hostedSessionId ? 'on' : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={current ? `Campaign: ${current.name}${hostedSessionId ? ' (hosting)' : ''}` : 'Campaigns'}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {current ? current.name : canCreate ? '+ Add a campaign' : 'No campaign yet'}
-        </span>
+        <CampaignIcon />
+        <span className="gb-switcher-trigger-name">{current ? current.name : canCreate ? '+ Add a campaign' : 'No campaign yet'}</span>
       </button>
 
       <Modal open={pendingDelete !== null} onClose={() => setPendingDelete(null)} width={360}>
@@ -350,11 +232,7 @@ export function CampaignSwitcher({ canCreate, current, onSelect, onCurrentDelete
           <Button variant="secondary" onClick={() => setPendingDelete(null)}>
             Cancel
           </Button>
-          <Button
-            variant="primary"
-            style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
-            onClick={confirmDeleteCampaign}
-          >
+          <Button variant="primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={confirmDeleteCampaign}>
             Delete
           </Button>
         </div>

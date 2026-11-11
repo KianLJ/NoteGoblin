@@ -1,16 +1,16 @@
 {
   "name": "notegoblin",
-  "version": "0.11.3",
+  "version": "0.12.0",
   "description": "A D&D campaign companion for DMs and players — notes, character sheets, initiative, and live party chat with friends over the internet.",
   "main": "./out/main/index.js",
   "author": "NoteGoblin",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "build:win": "electron-vite build && electron-builder --win",
-    "release:win": "electron-vite build && electron-builder --win --publish always",
+    "dev": "node scripts/audio-manifest.mjs && electron-vite dev",
+    "build": "node scripts/audio-manifest.mjs && electron-vite build",
+    "build:win": "node scripts/audio-manifest.mjs && electron-vite build && electron-builder --win",
+    "release:win": "node scripts/audio-manifest.mjs && electron-vite build && electron-builder --win --publish always",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc -p tsconfig.viewer.json",
     "postinstall": "electron-builder install-app-deps",
     "viewer:dev": "vite --config viewer/vite.config.ts",
@@ -18,7 +18,9 @@
     "relay:dev": "npm run viewer:build && cd relay && npx wrangler dev",
     "relay:deploy": "npm run viewer:build && cd relay && npx wrangler deploy",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:db": "node scripts/test-db.mjs",
+    "library:upload": "node scripts/upload-library.mjs"
   },
   "dependencies": {
     "@xhayper/discord-rpc": "^1.3.4",

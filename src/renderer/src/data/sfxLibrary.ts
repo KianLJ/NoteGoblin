@@ -9,6 +9,7 @@
  * side was dropped as redundant with Spellcasting once actually curating,
  * so this only has seven now.
  */
+import { libraryFiles } from './libraryAudio'
 import { SPELL_SFX_CATEGORY, SCHOOL_FALLBACK_SFX, SPELL_SFX_CUE_FOLDER } from './spellSfxCategories'
 import { MONSTER_SFX_CATEGORY } from './monsterSfxCategories'
 
@@ -31,7 +32,8 @@ export interface SfxCategory {
   cues: SfxCue[]
 }
 
-const files = import.meta.glob<string>('../assets/soundboard/**/*.mp3', { eager: true, query: '?url', import: 'default' })
+// Listed, not bundled — see libraryAudio.ts.
+const files = libraryFiles('soundboard')
 
 /**
  * Each cue is curated as its own subfolder of alternate takes of the same

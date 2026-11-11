@@ -14,6 +14,16 @@ export function FileIcon(): JSX.Element {
   )
 }
 
+/** A campaign: its story, an open book. */
+export function CampaignIcon(): JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M8 4c-1.5-1.2-3.5-1.5-6-1.2v9.7c2.5-.3 4.5 0 6 1.2 1.5-1.2 3.5-1.5 6-1.2V2.8C11.5 2.5 9.5 2.8 8 4Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M8 4v9.7" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
 export function LockIcon(): JSX.Element {
   return (
     <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>

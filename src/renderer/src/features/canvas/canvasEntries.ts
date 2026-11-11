@@ -59,6 +59,21 @@ export function putEntry(mode: CanvasMode, entry: CanvasEntry): void {
   set(mode, { ...get(mode), [entryNodeId(entry)]: entry })
 }
 
+/** Everything on this mode's canvases right now, by node id — what a saved layout keeps a copy of. */
+export function allEntries(mode: CanvasMode): Record<string, CanvasEntry> {
+  return get(mode)
+}
+
+/**
+ * Puts back entries a saved layout remembers (stickies, statblocks, Codex entries, images) that have since been
+ * closed. Ones still here are left alone, so a sticky edited after the layout was saved keeps its newer text.
+ */
+export function restoreEntries(mode: CanvasMode, saved: Record<string, unknown>): void {
+  const current = get(mode)
+  const missing = Object.entries(saved).filter(([id, e]) => !(id in current) && typeof e === 'object' && e !== null && typeof (e as { kind?: unknown }).kind === 'string')
+  if (missing.length) set(mode, { ...current, ...(Object.fromEntries(missing) as Record<string, CanvasEntry>) })
+}
+
 export function dropEntry(mode: CanvasMode, nodeId: string): void {
   const { [nodeId]: _gone, ...rest } = get(mode)
   set(mode, rest)

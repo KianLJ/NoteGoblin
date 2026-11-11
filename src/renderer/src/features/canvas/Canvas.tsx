@@ -4,7 +4,7 @@ import {
   GRID,
   addNode,
   snap,
-  applyPreset,
+  layoutForPreset,
   bringToFront,
   clampZoom,
   findNode,
@@ -21,6 +21,9 @@ import {
   moveIntoCollection,
   setPinned,
   zoomAt,
+  isTrackpadWheel,
+  readingOrder,
+  type CanvasNodeGeom,
   type CanvasLayout,
   type Rect,
   type Viewport
@@ -29,6 +32,7 @@ import { CanvasNode } from './CanvasNode'
 import { DYNAMIC_SIZE, MIN_CONTENT, TOOL_META, TOOLS_BY_MODE, dynamicKind, type CanvasMode, type ToolKind } from '@shared/canvasTools'
 import { ContextMenu, type ContextMenuItem, type ContextMenuState } from '../../ui/ContextMenu'
 import { LayoutsMenu } from './LayoutsMenu'
+import { allEntries, restoreEntries } from './canvasEntries'
 import { putCanvasImage } from './canvasImages'
 import { imageBoxSize } from './ImageBox'
 import { PlusIcon } from '../../ui/icons'
@@ -79,21 +83,28 @@ interface CanvasProps {
   sequence?: string[]
   /** After the breadcrumb, inside a collection (a session's Present button). */
   crumbExtra?: ReactNode
+  /** Small text in the top-left corner: the open campaign's name. */
+  title?: string
+  /** Beside the title (the DM's Host button). */
+  titleExtra?: ReactNode
+  /** A saved layout was loaded with these boxes: the workspace opens any it only shows while open (a player's notes and sheets). */
+  onRestoreBoxes?: (ids: string[]) => void
 }
 
 const ZOOM_STEP = 1.2
 
 /**
  * The workspace: an endless sheet you pan and zoom, with every tool as a box
- * on it (CanvasNode). The wheel zooms at the cursor; dragging with the right
- * button on empty space, or the middle button anywhere, pans. A wheel over a
- * box's insides scrolls the box instead — hold Ctrl to zoom from there too.
+ * on it (CanvasNode). The wheel zooms at the cursor; dragging with the left or
+ * right button on empty space, or the middle button anywhere, pans. On a
+ * trackpad, two fingers pan and a pinch zooms. A wheel over a box's insides
+ * scrolls the box instead — hold Ctrl (or pinch) to zoom from there too.
  *
  * Panning and zooming live in local state while they happen and are written
  * back to the layout once they settle, so the tools inside don't re-render
  * on every frame.
  */
-export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, crumbExtra }, ref) {
+export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, crumbExtra, title, titleExtra, onRestoreBoxes }, ref) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [vp, setVp] = useState<Viewport>(layout.viewport)
@@ -157,8 +168,15 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
       // Over a box's insides (or the bottom row's popovers, like Dice) the wheel scrolls them instead.
       if (target.closest('.gb-canvas-bottom') || (!e.ctrlKey && target.closest('[data-canvas-node-body]'))) return
       e.preventDefault()
+      const trackpad = isTrackpadWheel(e)
+      // Two-finger scroll on a trackpad pans; a pinch (which arrives as Ctrl+wheel) or a mouse wheel zooms.
+      if (trackpad && !e.ctrlKey) {
+        const scale = getStoredFontScale()
+        setVp((v) => ({ ...v, x: v.x - e.deltaX / scale, y: v.y - e.deltaY / scale }))
+        return
+      }
       const p = localPoint(e.clientX, e.clientY)
-      setVp((v) => zoomAt(v, v.zoom * Math.exp(-e.deltaY * 0.0025), p.x, p.y))
+      setVp((v) => zoomAt(v, v.zoom * Math.exp(-e.deltaY * (trackpad ? 0.01 : 0.0025)), p.x, p.y))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
@@ -169,10 +187,14 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
   const rightDragged = useRef(false)
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>): void {
-    const onBackground = !(e.target as Element).closest('[data-canvas-node]')
+    const target = e.target as Element
+    const onBackground = !target.closest('[data-canvas-node]')
+    // Left-drag (for trackpads) only from the bare sheet — not the bars and buttons floating over it.
+    const onBareSheet = target === e.currentTarget || target.matches('.gb-canvas-world, .gb-canvas-zoom, .gb-canvas-pinned, .gb-canvas-mood, .gb-canvas-empty, .gb-canvas-empty *')
     // Right-drag only from empty space, so right-click menus inside the tools still work.
-    if (!(e.button === 1 || (e.button === 2 && onBackground))) return
-    e.preventDefault()
+    if (!(e.button === 1 || (e.button === 2 && onBackground) || (e.button === 0 && onBareSheet))) return
+    // Left presses keep their default, so clicking the sheet still takes focus out of a box's text field.
+    if (e.button !== 0) e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
     pan.current = { sx: e.clientX, sy: e.clientY, start: vpRef.current, pointerId: e.pointerId }
     if (e.button === 2) rightDragged.current = false
@@ -330,6 +352,15 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     return { ...r, x: Math.min(Math.max(r.x, 64 - r.w), Math.max(0, size.w - 64)), y: Math.min(Math.max(r.y, 0), Math.max(0, size.h - 40)) }
   }
 
+  // A session's scene box being dragged right now: its numbers and arrows follow it (and re-number) as it moves.
+  const [dragged, setDragged] = useState<{ id: string; rect: Rect } | null>(null)
+  const seqRect = (id: string): CanvasNodeGeom | undefined => {
+    const n = findNode(layout, id)
+    return n && dragged?.id === id ? { ...n, ...dragged.rect } : n
+  }
+  // The same reading order the session's order is worked out by (CampaignWorkspace), over where the boxes are now.
+  const liveSequence = sequence && dragged && sequence.includes(dragged.id) ? readingOrder(sequence.map(seqRect).filter((n): n is NonNullable<typeof n> => !!n && !n.pinned)) : sequence
+
   function renderNode({ item, node }: (typeof rendered)[number]): JSX.Element {
     const isCollection = item.id.startsWith(COLLECTION_PREFIX)
     return (
@@ -359,6 +390,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
           setLayout((l) => bringToFront(l, item.id))
           item.onFocus?.()
         }}
+        onLiveRect={!node!.pinned && sequence?.includes(item.id) ? (r) => setDragged(r ? { id: item.id, rect: r } : null) : undefined}
         onRectChange={(r) => {
           // Dropped onto a collection's tile: it goes in.
           const into = node!.pinned ? null : collectionUnder(item.id, r)
@@ -403,10 +435,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
       {/* Whole pixels, so nothing on the canvas sits between two. */}
       <div className="gb-canvas-world" style={{ transform: `translate(${Math.round(vp.x)}px, ${Math.round(vp.y)}px)${vp.zoom === laidOutZoom ? '' : ` scale(${vp.zoom / laidOutZoom})`}` }}>
         <div className="gb-canvas-zoom" style={{ zoom: laidOutZoom }}>
-        {sequence && <SequenceArrows nodes={sequence.map((id) => findNode(layout, id)).filter((n) => n && !n.pinned) as Rect[]} />}
+        {liveSequence && <SequenceArrows nodes={liveSequence.map(seqRect).filter((n) => n && !n.pinned) as Rect[]} />}
         {rendered.filter((r) => !r.node!.pinned).map(renderNode)}
-        {sequence?.map((id, i) => {
-          const n = findNode(layout, id)
+        {liveSequence?.map((id, i) => {
+          const n = seqRect(id)
           return n && !n.pinned ? (
             <span key={id} className="gb-canvas-seq-badge" style={{ left: n.x - 12, top: n.y - 12, zIndex: topZ + 1 }} aria-hidden="true">
               {i + 1}
@@ -416,6 +448,17 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         </div>
       </div>
       <div className="gb-canvas-pinned">{rendered.filter((r) => r.node!.pinned).map(renderNode)}</div>
+
+      {title && (
+        <div className="gb-canvas-title">
+          <span className="gb-canvas-title-name">{title}</span>
+          {titleExtra && (
+            <span className="gb-canvas-title-extra" onPointerDown={(e) => e.stopPropagation()}>
+              {titleExtra}
+            </span>
+          )}
+        </div>
+      )}
 
       {nav && nav.path.length > 0 && (
         <nav className="gb-canvas-crumbs" aria-label="Collections" onPointerDown={(e) => e.stopPropagation()}>
@@ -485,14 +528,18 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
           <LayoutsMenu
             mode={mode}
             onApply={(preset) => {
-              const next = applyPreset(
-                preset,
-                items.map((i) => i.id).filter((id) => id.includes(':'))
-              )
+              const next = layoutForPreset(preset, layout, items.map((i) => i.id).filter((id) => id.includes(':')))
+              if (preset.snapshot) {
+                // Closed stickies, statblocks and images it had come back; boxes opened since (notes, sheets) close.
+                if (preset.entries) restoreEntries(mode, preset.entries)
+                const ids = new Set(next.nodes.map((n) => n.id))
+                for (const item of items) if (!ids.has(item.id) && /^(note|character|playerSheet|partySheet):/.test(item.id)) item.onClose?.()
+                onRestoreBoxes?.(next.nodes.map((n) => n.id))
+              }
               // The viewport goes in with the layout — the canvas picks a viewport set from outside up from there.
-              setLayout((l) => ({ ...next, collections: l.collections, viewport: fitViewport(next.nodes.filter((n) => !n.pinned), size.w, size.h - 56) }))
+              setLayout(() => ({ ...next, viewport: fitViewport(next.nodes.filter((n) => !n.pinned), size.w, size.h - 56) }))
             }}
-            onSaveCurrent={(label) => presetFromLayout(layout, 'new', label)}
+            onSaveCurrent={(label) => presetFromLayout(layout, 'new', label, allEntries(mode))}
           />
           <button type="button" className="gb-dock-tool" data-label="Fit everything in view" aria-label="Fit everything in view" onClick={fitAll} disabled={rendered.length === 0}>
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">

@@ -51,6 +51,15 @@ export function deleteAudioGroup(kind: GroupKind, id: string): void {
   write({ ...groups, [kind]: groups[kind].filter((g) => g.id !== id) })
 }
 
+/** All your moods and categories at once — as synced from your account (librarySync.ts). */
+export function allAudioGroups(): Record<GroupKind, AudioGroup[]> {
+  return groups
+}
+
+export function replaceAudioGroups(next: Record<GroupKind, AudioGroup[]>): void {
+  write({ mood: next.mood ?? [], sfx: next.sfx ?? [] })
+}
+
 export function subscribeAudioGroups(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

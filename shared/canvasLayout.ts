@@ -78,6 +78,15 @@ export function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
 }
 
+/**
+ * Whether a wheel event came from a trackpad (two-finger scroll or pinch) rather than a mouse wheel.
+ * A mouse wheel sends big vertical steps (about 100px a notch); a trackpad sends small ones, often sideways too.
+ * shortcut: a free-spinning smooth-scroll mouse reads as a trackpad (pans instead of zooming); add a setting if anyone hits it.
+ */
+export function isTrackpadWheel(e: WheelEvent): boolean {
+  return e.deltaMode === 0 && (e.deltaX !== 0 || Math.abs(e.deltaY) < 50)
+}
+
 /** Zooms to `zoom` while keeping the world point under screen point (sx, sy) where it is — zooming at the cursor. */
 export function zoomAt(vp: Viewport, zoom: number, sx: number, sy: number): Viewport {
   const next = clampZoom(zoom)
@@ -227,6 +236,32 @@ export interface LayoutPreset {
   id: string
   label: string
   nodes: PresetNode[]
+  /**
+   * A layout you saved: the whole canvas as it was — every box by its own id (notes, stickies, images,
+   * collections and what's in them), not just the tools. Loading it puts all of that back.
+   */
+  snapshot?: CanvasLayout
+  /** What the snapshot's stickies, statblocks, Codex entries and images were (canvasEntries), so closed ones can come back. */
+  entries?: Record<string, unknown>
+}
+
+/** Every box id on a layout, collections' contents included. */
+export function allNodeIds(layout: CanvasLayout): string[] {
+  return [...layout.nodes.map((n) => n.id), ...Object.values(layout.collections ?? {}).flatMap((c) => allNodeIds(c.layout))]
+}
+
+/**
+ * The canvas after loading a layout. One you saved comes back exactly as it was. A built-in one only rearranges
+ * the tools: your notes, stickies and the rest stay where they are (except the first of a kind the layout has a
+ * slot for, which takes that slot).
+ */
+export function layoutForPreset(preset: LayoutPreset, current: CanvasLayout, openDynamicIds: string[]): CanvasLayout {
+  if (preset.snapshot) return { ...preset.snapshot, viewport: current.viewport }
+  const tools = applyPreset(preset, openDynamicIds)
+  const placed = new Set(tools.nodes.map((n) => n.id))
+  const top = tools.nodes.length
+  const kept = current.nodes.filter((n) => n.id.includes(':') && !n.id.startsWith('slot:') && !placed.has(n.id)).map((n, i) => ({ ...n, z: top + i + 1 }))
+  return { ...tools, nodes: [...tools.nodes, ...kept], viewport: current.viewport, ...(current.collections ? { collections: current.collections } : {}) }
 }
 
 /**
@@ -250,7 +285,7 @@ export function applyPreset(preset: LayoutPreset, openDynamicIds: string[]): Can
  * so on as that kind's slot — later ones are left out, since what's open
  * changes from session to session.
  */
-export function presetFromLayout(layout: CanvasLayout, id: string, label: string): LayoutPreset {
+export function presetFromLayout(layout: CanvasLayout, id: string, label: string, entries?: Record<string, unknown>): LayoutPreset {
   const slotted = new Set<string>()
   const nodes: PresetNode[] = []
   for (const n of [...layout.nodes].sort((a, b) => a.z - b.z)) {
@@ -266,7 +301,15 @@ export function presetFromLayout(layout: CanvasLayout, id: string, label: string
     }
     nodes.push({ id: presetId, x: n.x, y: n.y, w: n.w, h: n.h, ...(n.pinned ? { pinned: true } : {}), ...(n.minimized ? { minimized: n.minimized } : {}) })
   }
-  return { id, label, nodes }
+  const ids = new Set(allNodeIds(layout))
+  const kept = entries ? Object.fromEntries(Object.entries(entries).filter(([nodeId]) => ids.has(nodeId))) : undefined
+  return {
+    id,
+    label,
+    nodes,
+    snapshot: { viewport: layout.viewport, nodes: layout.nodes, ...(layout.collections ? { collections: layout.collections } : {}) },
+    ...(kept && Object.keys(kept).length ? { entries: kept } : {})
+  }
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -354,7 +397,9 @@ export function parsePresets(raw: unknown, isKnownId: (id: string) => boolean): 
       const node = parseNode({ ...n, z: 0 }, isKnownId)
       return node ? [{ id: node.id, x: node.x, y: node.y, w: node.w, h: node.h, ...(node.pinned ? { pinned: true } : {}), ...(node.minimized ? { minimized: node.minimized } : {}) }] : []
     })
-    return [{ id: p.id, label: p.label, nodes }]
+    const snapshot = p.snapshot ? parseLayout(p.snapshot, isKnownId) : null
+    const entries = p.entries && typeof p.entries === 'object' && !Array.isArray(p.entries) ? p.entries : undefined
+    return [{ id: p.id, label: p.label, nodes, ...(snapshot ? { snapshot } : {}), ...(snapshot && entries ? { entries } : {}) }]
   })
 }
 

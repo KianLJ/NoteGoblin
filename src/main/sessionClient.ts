@@ -21,9 +21,11 @@ import type {
   AmbientLevelChangedFrame,
   SfxPlayedFrame,
   BattleMapFrame,
-  BattleMapImageChunkFrame
+  BattleMapImageChunkFrame,
+  HandoutChunkFrame,
+  QuestRewardFrame
 } from '@server/relay/sessionProtocol'
-import type { ApiResult } from '@shared/ipc'
+import { MAX_HANDOUT_CHARS, parseHandout, type ApiResult } from '@shared/ipc'
 
 /**
  * Player side of a joined session — opens one WS to the relay's session
@@ -45,6 +47,7 @@ const pending = new Map<string, { resolve: (response: ResponseFrame) => void; ti
 // only once the corresponding music-changed frame arrives.
 /** Battle map images being received in pieces, by image id. */
 const pendingBattleImages = new Map<string, { chunks: string[]; received: number }>()
+const pendingHandouts = new Map<string, { chunks: string[]; received: number }>()
 const pendingCustomTrackChunks = new Map<string, { title: string; mimeType: string; chunks: string[]; received: number }>()
 const assembledCustomTracks = new Map<string, { title: string; mimeType: string; dataBase64: string }>()
 
@@ -110,7 +113,12 @@ export function joinSession(
         settled = true
         resolve({
           ok: false,
-          error: code === 4003 ? "You haven't been invited to this session." : 'Could not join that session.'
+          error:
+            code === 4003
+              ? "You haven't been invited to this session."
+              : code === 4004
+                ? "Couldn't check your account. Try joining again."
+                : 'Could not join that session.'
         })
       } else if (wasActive) {
         // A drop after a successful join is not something a pending request
@@ -233,6 +241,42 @@ function handleFrame(raw: WebSocket.RawData): void {
   }
 
   // The map image arrives in pieces; once they're all in, the renderer gets it whole.
+  // A share of a finished quest's reward: checked, then handed to the renderer to add to your character.
+  if (payload.type === 'quest-reward') {
+    const f = payload as QuestRewardFrame
+    const amount = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(1_000_000, Math.floor(v)) : 0)
+    if (typeof f.questTitle === 'string' && (amount(f.gold) > 0 || amount(f.xp) > 0)) {
+      clientWindow?.webContents.send('ws:quest-reward', { questTitle: f.questTitle.slice(0, 200), gold: amount(f.gold), xp: amount(f.xp), partySize: Math.max(1, amount(f.partySize)) })
+    }
+    return
+  }
+
+  // A handout from the DM, in pieces: put back together, checked, then shown (see HandoutViewer.tsx).
+  if (payload.type === 'handout-chunk') {
+    const frame = payload as HandoutChunkFrame
+    if (typeof frame.handoutId !== 'string' || !Number.isInteger(frame.total) || frame.total < 1 || frame.total * 500_000 > MAX_HANDOUT_CHARS + 500_000) return
+    let entry = pendingHandouts.get(frame.handoutId)
+    if (!entry) {
+      entry = { chunks: new Array(frame.total), received: 0 }
+      pendingHandouts.set(frame.handoutId, entry)
+    }
+    if (Number.isInteger(frame.index) && frame.index >= 0 && frame.index < frame.total && entry.chunks[frame.index] === undefined && typeof frame.chunk === 'string') {
+      entry.chunks[frame.index] = frame.chunk
+      entry.received++
+    }
+    if (entry.received >= frame.total) {
+      pendingHandouts.delete(frame.handoutId)
+      let handout = null
+      try {
+        handout = parseHandout(JSON.parse(entry.chunks.join('')))
+      } catch {
+        /* not a handout — dropped */
+      }
+      if (handout) clientWindow?.webContents.send('ws:handout', handout)
+    }
+    return
+  }
+
   if (payload.type === 'battle-map-image-chunk') {
     const frame = payload as BattleMapImageChunkFrame
     let entry = pendingBattleImages.get(frame.imageId)

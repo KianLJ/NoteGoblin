@@ -27,6 +27,8 @@ import {
   removeNode,
   presetFromLayout,
   parsePresets,
+  layoutForPreset,
+  allNodeIds,
   setMinimized,
   MINI_SIZE,
   snap,
@@ -203,6 +205,37 @@ describe('canvas layout', () => {
     const applied = applyPreset(preset, ['note:z'])
     expect(applied.nodes.find((n) => n.id === 'note:z')).toMatchObject({ x: 300, minimized: { w: 700, h: 700 } })
     expect(parsePresets([preset, { id: 1 }, null], (id) => isKnownId('dm', id))).toEqual([preset])
+  })
+
+  it('a saved layout brings back every box where it was, collections and entries included', () => {
+    let saved = addCollection(
+      { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [{ id: 'notes', x: 40, y: 40, w: 272, h: 640, z: 1 }, { id: 'sticky:s1', x: 900, y: 120, w: 240, h: 200, z: 2 }, { id: 'note:a', x: 400, y: 0, w: 700, h: 700, z: 3 }] },
+      'c1',
+      'Act One',
+      { x: 1400, y: 0 }
+    )
+    saved = moveIntoCollection(saved, 'note:a', 'c1')
+    const preset = presetFromLayout(saved, 'mine', 'Mine', { 'sticky:s1': { kind: 'sticky', id: 's1', text: 'Remember', color: 'pink' }, 'sticky:gone': { kind: 'sticky', id: 'gone', text: 'x', color: 'yellow' } })
+    // Only entries on the saved canvas are kept with it.
+    expect(Object.keys(preset.entries ?? {})).toEqual(['sticky:s1'])
+    // Since then: everything moved and the sticky closed.
+    const now: CanvasLayout = { viewport: { x: 10, y: 10, zoom: 2 }, nodes: [{ id: 'notes', x: 0, y: 900, w: 272, h: 640, z: 1 }] }
+    const back = layoutForPreset(preset, now, [])
+    expect(back.nodes.find((n) => n.id === 'notes')).toMatchObject({ x: 40, y: 40 })
+    expect(back.nodes.find((n) => n.id === 'sticky:s1')).toMatchObject({ x: 900, y: 120 })
+    expect(allNodeIds(back)).toContain('note:a')
+    expect(back.viewport).toEqual(now.viewport)
+    // And it survives being stored and read back.
+    const [parsed] = parsePresets(JSON.parse(JSON.stringify([preset])), (id) => isKnownId('dm', id))
+    expect(allNodeIds(parsed.snapshot!)).toEqual(allNodeIds(preset.snapshot!))
+    expect(parsed.entries).toEqual(preset.entries)
+  })
+
+  it('a built-in layout moves only the tools, leaving notes and stickies where they are', () => {
+    const now: CanvasLayout = { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [{ id: 'sticky:s1', x: 5000, y: 5000, w: 240, h: 200, z: 1 }, { id: 'calendar', x: 9999, y: 9999, w: 352, h: 512, z: 2 }] }
+    const next = layoutForPreset(PRESETS.dm[0], now, ['sticky:s1'])
+    expect(next.nodes.find((n) => n.id === 'sticky:s1')).toMatchObject({ x: 5000, y: 5000 })
+    expect(next.nodes.find((n) => n.id === 'calendar')?.x).not.toBe(9999)
   })
 
   it('keeps a collection as a canvas of its own: in, out, nested, saved and broken up', () => {

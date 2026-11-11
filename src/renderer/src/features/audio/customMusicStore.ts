@@ -56,6 +56,12 @@ export async function ensureCustomMusicLoaded(): Promise<void> {
   notify()
 }
 
+/** Reads the list again — after syncing with your account added or removed songs (librarySync.ts). */
+export async function reloadCustomMusic(): Promise<void> {
+  loaded = false
+  await ensureCustomMusicLoaded()
+}
+
 /** Your own songs, kept as a mood of their own. */
 export const YOUR_MUSIC_GROUP = 'custom'
 /** Your own sound board sounds — stored with the songs, played as one-shots (see sfxBoardEngine). */

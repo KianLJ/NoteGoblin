@@ -5,10 +5,11 @@ import type { BestiaryMonster } from '../../data/bestiary'
 import { InitiativeTracker } from './InitiativeTracker'
 import { VehiclesPanel } from '../vehicles/VehiclesPanel'
 import { useVehicles } from '../vehicles/useVehicles'
+import { EncounterLibrary } from '../combat/EncounterLibrary'
 
 /**
- * The DM's Initiative box on the canvas: the same tracker, encounter builder
- * and vehicles as the Combat screen's left panel (the encounter lives in
+ * The DM's Initiative box on the canvas: the same tracker, encounter builder,
+ * saved encounters and vehicles as the Combat screen's left panel (the encounter lives in
  * encounterStore, so both show the same fight). Clicking an enemy opens its
  * statblock as a box of its own.
  */
@@ -35,6 +36,7 @@ export function DmInitiativeTool({
       onPendingVehicleConsumed={() => setPendingVehicle(null)}
       vehicles={vehicles.doc.vehicles}
       onVehicleHp={(id, hp) => void vehicles.save({ vehicles: vehicles.doc.vehicles.map((v) => (v.id === id ? { ...v, hp } : v)) })}
+      encountersView={<EncounterLibrary playerCharacters={combatCharacters} />}
       vehiclesView={
         <VehiclesPanel sessionId={null} rollSessionId={sessionId} campaignId={campaignId} readOnly={false} playerCharacters={combatCharacters} onAddToInitiative={setPendingVehicle} />
       }

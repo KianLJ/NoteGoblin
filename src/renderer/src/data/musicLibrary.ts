@@ -1,3 +1,4 @@
+import { libraryFiles } from './libraryAudio'
 /**
  * The bundled Goblin Bard music library — every mood ships as a *group* of
  * several tracks (not one loop per mood), discovered automatically from
@@ -20,7 +21,8 @@ export interface MusicGroup {
   tracks: MusicTrack[]
 }
 
-const files = import.meta.glob<string>('../assets/music/**/*.mp3', { eager: true, query: '?url', import: 'default' })
+// Listed, not bundled — see libraryAudio.ts.
+const files = libraryFiles('music')
 
 interface RawEntry {
   relPath: string

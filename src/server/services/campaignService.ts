@@ -5,6 +5,7 @@ import { FolderRepo, type FolderRow } from '../repositories/folderRepo'
 import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
 import { CalendarRepo, type CalendarRow } from '../repositories/calendarRepo'
 import { VehiclesRepo } from '../repositories/vehiclesRepo'
+import { normalizeQuests, questsForPlayer, type CampaignQuests } from '@shared/quests'
 import { campaignVehiclesSchema, vehiclesForPlayer, type CampaignVehicles } from '@shared/vehicles'
 import { normalizeBattleLibrary, type BattleLibrary } from '@shared/battleMap'
 import { CampaignPackRepo, type EnabledPack } from '../repositories/packRepo'
@@ -363,6 +364,7 @@ export function deleteCampaign(db: DatabaseType, campaignId: string, userId: str
   db.prepare('DELETE FROM messages WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM campaign_calendars WHERE campaign_id = ?').run(campaignId)
   new VehiclesRepo(db).remove(campaignId)
+  db.prepare('DELETE FROM campaign_quests WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM campaign_battlemaps WHERE campaign_id = ?').run(campaignId)
   new CampaignPackRepo(db).removeAll(campaignId)
   db.prepare('DELETE FROM session_decks WHERE campaign_id = ?').run(campaignId)
@@ -1431,6 +1433,44 @@ export function getVehicles(db: DatabaseType, campaignId: string, userId: string
     if (parsed.success) doc = parsed.data
   }
   return { ok: true, data: campaign.dm_user_id === userId ? doc : vehiclesForPlayer(doc) }
+}
+
+/** The quest log — all of it for the DM, only the shared quests for a player. */
+export function getQuests(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignQuests> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  const row = db.prepare('SELECT quests_json FROM campaign_quests WHERE campaign_id = ?').get(campaignId) as { quests_json: string } | undefined
+  let doc: CampaignQuests = { quests: [] }
+  try {
+    if (row) doc = normalizeQuests(JSON.parse(row.quests_json))
+  } catch {
+    /* unreadable: an empty log rather than a broken box */
+  }
+  return { ok: true, data: campaign.dm_user_id === userId ? doc : questsForPlayer(doc) }
+}
+
+/** Only the DM changes the quest log — the whole list each time. */
+export function saveQuests(db: DatabaseType, campaignId: string, userId: string, input: unknown): ServiceResult<CampaignQuests> {
+  const campaign = makeCampaignRepo(db).findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change the quest log.' }
+  const doc = normalizeQuests(input)
+  // A quest that has paid out stays paid, whatever older copy of the log is saved over it — so it can never pay twice.
+  const stored = db.prepare('SELECT quests_json FROM campaign_quests WHERE campaign_id = ?').get(campaignId) as { quests_json: string } | undefined
+  let paid = new Set<string>()
+  try {
+    if (stored) paid = new Set(normalizeQuests(JSON.parse(stored.quests_json)).quests.filter((q) => q.rewarded).map((q) => q.id))
+  } catch {
+    /* unreadable: nothing to carry over */
+  }
+  for (const q of doc.quests) if (paid.has(q.id)) q.rewarded = true
+  db.prepare(
+    `INSERT INTO campaign_quests (campaign_id, quests_json) VALUES (?, ?)
+     ON CONFLICT(campaign_id) DO UPDATE SET quests_json = excluded.quests_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+  ).run(campaignId, JSON.stringify(doc))
+  return { ok: true, data: doc }
 }
 
 /** The DM's battles for a campaign — each a map, its linked encounter and remembered positions (one empty battle if none is saved yet). */

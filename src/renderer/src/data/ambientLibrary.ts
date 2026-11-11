@@ -1,3 +1,4 @@
+import { libraryFiles } from './libraryAudio'
 /**
  * Real, looping ambient-SFX layers for the Goblin Bard panel's Ambient
  * section (MusicButton.tsx) — several categories (Campfire, Cave Drips,
@@ -22,7 +23,8 @@ interface AmbientCategory {
   layers: AmbientLayer[]
 }
 
-const files = import.meta.glob<string>('../assets/ambient/**/*.mp3', { eager: true, query: '?url', import: 'default' })
+// Listed, not bundled — see libraryAudio.ts.
+const files = libraryFiles('ambient')
 
 interface RawEntry {
   relPath: string

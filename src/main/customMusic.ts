@@ -3,18 +3,18 @@ import { join, extname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 /**
- * A DM's own local additions to the Goblin Bard library — a file picked off
- * their own disk, filed under whichever mood group they right-clicked (see
- * MusicButton.tsx's context menu). Stored per-machine in userData, not the
- * vault/campaign: this is personal music library config, not campaign
- * content, and never needs to sync anywhere (see shared/ipc.ts's music.*
- * doc comment for how broadcasting one of these to players degrades
- * gracefully instead of trying to ship the actual audio to them).
+ * A DM's own additions to the Goblin Bard library — a file picked off their
+ * own disk, filed under a mood (or the Sound Board). Listed per-machine in
+ * userData, not the vault/campaign: it's the DM's own library, not campaign
+ * content. While signed in it's also kept for their account on the relay, so
+ * every device they use has it (see audioSync.ts).
  */
 export interface CustomMusicTrack {
   id: string
   title: string
   path: string
+  /** Stored for the account on the relay — so if it's gone from there, it was removed on another device. */
+  synced?: boolean
 }
 
 type CustomMusicConfig = Record<string, CustomMusicTrack[]>
@@ -71,6 +71,26 @@ export function renameCustomMusicTrack(userDataDir: string, groupId: string, tra
   const config = load(userDataDir)
   config[groupId] = (config[groupId] ?? []).map((t) => (t.id === trackId ? { ...t, title } : t))
   save(userDataDir, config)
+}
+
+/** Every track with the group it's in — what audioSync.ts compares with the account's copy. */
+export function allCustomMusic(userDataDir: string): Array<CustomMusicTrack & { groupId: string }> {
+  return Object.entries(load(userDataDir)).flatMap(([groupId, tracks]) => tracks.map((t) => ({ ...t, groupId })))
+}
+
+/** Applies what syncing found: tracks to add (downloaded) or move, ones to drop, and ones now stored on the relay. */
+export function applyCustomMusicSync(
+  userDataDir: string,
+  change: { put?: Array<CustomMusicTrack & { groupId: string }>; drop?: string[]; synced?: string[] }
+): void {
+  const config = load(userDataDir)
+  const gone = new Set([...(change.drop ?? []), ...(change.put ?? []).map((t) => t.id)])
+  const next: CustomMusicConfig = {}
+  for (const [groupId, tracks] of Object.entries(config)) next[groupId] = tracks.filter((t) => !gone.has(t.id))
+  for (const { groupId, ...track } of change.put ?? []) next[groupId] = [...(next[groupId] ?? []), track]
+  const synced = new Set(change.synced ?? [])
+  for (const tracks of Object.values(next)) for (const t of tracks) if (synced.has(t.id)) t.synced = true
+  save(userDataDir, next)
 }
 
 /** Looks a track id up across every group — the custom-music:// protocol handler (main/index.ts) doesn't know which group a given request belongs to, only the id in the URL. */

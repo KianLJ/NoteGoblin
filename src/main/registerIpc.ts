@@ -22,7 +22,8 @@ import { pullCampaignIfNewer, schedulePushCampaign, discoverAndSyncCampaigns, fo
 import { queueCloudCharacter, queueCloudCharacterRemoval } from './characterCloudSync'
 import type { CloudCharacter } from '@shared/cloudCharacter'
 import * as relayClient from '@server/relay/relayClient'
-import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId, setRelaySession } from './relayState'
+import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessionId, setRelaySession, onRelaySessionStarted } from './relayState'
+import { initAudioSync, noteAudioRemoved, scheduleAudioSync, setLibraryMeta, type LibraryMeta } from './audioSync'
 import { queryOnline, connectPresence } from './relaySocket'
 import { setDiscordActivity } from './discordPresence'
 import { listCustomMusic, addCustomMusicTrack, removeCustomMusicTrack, renameCustomMusicTrack, getCustomMusicTrack, mimeTypeForPath } from './customMusic'
@@ -43,6 +44,9 @@ import {
   broadcastMusicVolume,
   broadcastAmbientLevel,
   broadcastSfxPlayed,
+  broadcastHandout,
+  playersInCampaign,
+  sendQuestReward,
   broadcastMessage,
   pushForceRoll,
   pushCharacterHp,
@@ -54,7 +58,7 @@ import {
 } from './sessionHost'
 import type { InitiativeState } from '@shared/encounter'
 import type { DiceRollLogEntry } from '@shared/dice'
-import type { ForceRollRequest } from '@shared/ipc'
+import { MAX_HANDOUT_CHARS, parseHandout, type ForceRollRequest, type QuestAwardResult } from '@shared/ipc'
 import type { SessionDeck, SessionScene, LiveSceneState } from '@shared/sessionDeck'
 import { joinSession, leaveSession, sendRequest as sendSessionRequest } from './sessionClient'
 import {
@@ -90,6 +94,7 @@ import type {
 } from '@shared/ipc'
 import type { CalendarConfig } from '@shared/calendar'
 import type { CampaignVehicles } from '@shared/vehicles'
+import { splitReward, type CampaignQuests } from '@shared/quests'
 import type { BattleLibrary, BattleMap, PlayerBattleMap } from '@shared/battleMap'
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
@@ -145,6 +150,8 @@ function startVaultWatcher(mainWindow: BrowserWindow): void {
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const userDataDir = app.getPath('userData')
+  // Your own music and sounds follow your account to every device you sign in on.
+  initAudioSync(userDataDir, mainWindow, (listener) => onRelaySessionStarted(listener))
   const localDb = getLocalDb(userDataDir)
   const identityRepo = new IdentityRepo(localDb)
   initVaultConfig(userDataDir)
@@ -199,7 +206,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       // the source of truth for a shared account, so ask it directly before
       // giving up.
       const relayLogin = await relayClient.login(trimmed, password)
-      if (!relayLogin.ok) return { ok: false, error: 'That display name and password don’t match.' }
+      // The relay's lockout message (see relay/src/lib/loginLimit.ts) is worth showing as-is; anything else stays vague.
+      if (!relayLogin.ok) return { ok: false, error: relayLogin.error.startsWith('Too many sign-in attempts') ? relayLogin.error : 'That display name and password don’t match.' }
 
       try {
         const existingRow = identityRepo.findByDisplayName(trimmed)
@@ -637,9 +645,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
         if ('error' in me) return { ok: false, error: me.error }
         return runService(() => campaignService.createCampaign(me.db, me.userId, name))
       }
-      const err = requireJoinedSession(sessionId)
-      if (err) return err
-      return sendSessionRequest<Campaign>('campaigns.create', { name })
+      // Campaigns are only ever created on your own table — the DM's side refuses this from a player.
+      return { ok: false, error: 'Only the DM can create campaigns at this table.' }
     }
   )
 
@@ -835,6 +842,59 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return sendSessionRequest<void>('notes.remove', { campaignId, noteId })
     }
   )
+
+  ipcMain.handle('quests:get', async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<CampaignQuests>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.getQuests(me.db, campaignId, me.userId)
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest<CampaignQuests>('quests.get', { campaignId })
+  })
+
+  // DM-only and always local, like the vehicles: players see the change by re-reading.
+  ipcMain.handle('quests:save', async (_event, campaignId: string, quests: unknown): Promise<ApiResult<CampaignQuests>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    try {
+      const result = campaignService.saveQuests(me.db, campaignId, me.userId, quests)
+      if (result.ok) {
+        mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+        if (getHostedSession()) broadcastCampaignChanged(campaignId)
+      }
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Something went wrong.' }
+    }
+  })
+
+  // A finished quest's gold and XP, split evenly between the players connected to the campaign and sent to each —
+  // once: the quest is marked paid. The amounts come from the saved quest, not from the screen.
+  ipcMain.handle('quests:award', async (_event, campaignId: string, questId: string): Promise<QuestAwardResult> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const log = campaignService.getQuests(me.db, campaignId, me.userId)
+    if (!log.ok) return { ok: false, error: log.error }
+    const quest = log.data.quests.find((q) => q.id === questId)
+    if (!quest || quest.status !== 'done') return { ok: false, error: 'That quest isn’t finished.' }
+    if (quest.rewarded) return { ok: false, error: 'Its rewards were already handed out.' }
+    if (!quest.rewardGold && !quest.rewardXp) return { ok: false, error: 'It has no gold or XP to hand out.' }
+    if (!getHostedSession()) return { ok: false, error: 'Start hosting to hand them out.' }
+    const party = playersInCampaign(campaignId)
+    if (party.length === 0) return { ok: false, error: 'No players are at the table to hand them to.' }
+    const gold = splitReward(quest.rewardGold ?? 0, party.length)
+    const xp = splitReward(quest.rewardXp ?? 0, party.length)
+    sendQuestReward(party, quest.title, gold.each, xp.each)
+    const saved = campaignService.saveQuests(me.db, campaignId, me.userId, { quests: log.data.quests.map((q) => (q.id === questId ? { ...q, rewarded: true } : q)) })
+    if (saved.ok) {
+      mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+      broadcastCampaignChanged(campaignId)
+    }
+    return { ok: true, players: party.length, goldEach: gold.each, xpEach: xp.each, goldLeftover: gold.leftover }
+  })
 
   ipcMain.handle(
     'vehicles:get',
@@ -1707,10 +1767,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const CUSTOM_MUSIC_EXTENSIONS = ['mp3', 'wav', 'ogg', 'm4a', 'flac']
 
   // Files dropped from the renderer are only trusted as far as being existing audio files.
-  const addAudioFiles = (groupId: string, filePaths: unknown): { id: string; title: string }[] =>
-    (Array.isArray(filePaths) ? filePaths : [])
+  const addAudioFiles = (groupId: string, filePaths: unknown): { id: string; title: string }[] => {
+    const added = (Array.isArray(filePaths) ? filePaths : [])
       .filter((p): p is string => typeof p === 'string' && CUSTOM_MUSIC_EXTENSIONS.includes(extname(p).slice(1).toLowerCase()) && existsSync(p))
       .map((p) => addCustomMusicTrack(userDataDir, groupId, p, basename(p, extname(p))))
+    if (added.length) scheduleAudioSync()
+    return added
+  }
 
   ipcMain.handle('music:add-custom-track', async (_event, groupId: string): Promise<{ id: string; title: string }[]> => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -1725,11 +1788,26 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('music:add-custom-files', (_event, groupId: string, filePaths: unknown): { id: string; title: string }[] => addAudioFiles(groupId, filePaths))
 
   ipcMain.handle('music:remove-custom-track', (_event, groupId: string, trackId: string): void => {
+    const track = getCustomMusicTrack(userDataDir, trackId)
     removeCustomMusicTrack(userDataDir, groupId, trackId)
+    noteAudioRemoved(track)
   })
 
   ipcMain.handle('music:rename-custom-track', (_event, groupId: string, trackId: string, title: unknown): void => {
-    if (typeof title === 'string' && title.trim()) renameCustomMusicTrack(userDataDir, groupId, trackId, title.trim().slice(0, 200))
+    if (typeof title === 'string' && title.trim()) {
+      renameCustomMusicTrack(userDataDir, groupId, trackId, title.trim().slice(0, 200))
+      scheduleAudioSync()
+    }
+  })
+
+  // Your moods, Sound Board categories and names for the built-in songs (kept by the renderer) — synced with the rest.
+  ipcMain.handle('music:library-meta', (_event, meta: unknown, initial: unknown): void => {
+    const m = meta as Partial<LibraryMeta> | null
+    if (!m || typeof m !== 'object' || !m.groups || typeof m.names !== 'object' || m.names === null) return
+    const groups = (list: unknown): Array<{ id: string; label: string }> =>
+      Array.isArray(list) ? list.filter((g) => g && typeof g.id === 'string' && typeof g.label === 'string').map((g) => ({ id: g.id.slice(0, 120), label: g.label.slice(0, 120) })) : []
+    const names = Object.fromEntries(Object.entries(m.names).filter(([k, v]) => typeof v === 'string' && k.length <= 200).map(([k, v]) => [k, (v as string).slice(0, 200)]))
+    setLibraryMeta({ groups: { mood: groups(m.groups.mood), sfx: groups(m.groups.sfx) }, names }, initial === true)
   })
 
   // DM-only, fire-and-forget — Ambient layers are bundled files just like
@@ -1748,6 +1826,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // rest of the table instead (see sessionHost.ts's 'sfxBoard.play' case). A
   // Sound Board cue is always a bundled file (see sfxLibrary.ts), so this
   // only ever carries an id — except the DM's own added sounds, whose audio goes first, the same way a custom song's does.
+  // A handout (a note's text or a picture) put in front of every connected player — DM only, while hosting.
+  ipcMain.handle('handouts:show', (_event, raw: unknown): { ok: true; players: number } | { ok: false; error: string } => {
+    const handout = parseHandout(raw)
+    if (!handout) return { ok: false, error: 'That can’t be shown to players.' }
+    if (!getHostedSession()) return { ok: false, error: 'Start hosting first, so players can see it.' }
+    if (JSON.stringify(handout).length > MAX_HANDOUT_CHARS) return { ok: false, error: 'That picture is too big to send (about 6 MB at most).' }
+    const players = broadcastHandout(handout)
+    return players > 0 ? { ok: true, players } : { ok: false, error: 'No players are connected yet.' }
+  })
+
   ipcMain.handle('sfx-board:broadcast', async (_event, sfxId: string): Promise<void> => {
     if (!getHostedSession()) {
       void sendSessionRequest('sfxBoard.play', { sfxId })

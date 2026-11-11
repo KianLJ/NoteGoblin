@@ -204,6 +204,14 @@ CREATE TABLE IF NOT EXISTS campaign_battlemaps (
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- The campaign's quest log (see shared/quests.ts): one JSON document per campaign, DM-written; players read only
+-- the quests marked shared. Like campaign_vehicles, campaign_id is deliberately not a foreign key.
+CREATE TABLE IF NOT EXISTS campaign_quests (
+  campaign_id TEXT PRIMARY KEY,
+  quests_json TEXT NOT NULL DEFAULT '{"quests":[]}',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS campaign_vehicles (
   campaign_id TEXT PRIMARY KEY,
   vehicles_json TEXT NOT NULL DEFAULT '{"vehicles":[]}',

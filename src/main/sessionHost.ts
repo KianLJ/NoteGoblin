@@ -26,10 +26,12 @@ import type {
   AmbientLevelChangedFrame,
   SfxPlayedFrame,
   BattleMapFrame,
-  BattleMapImageChunkFrame
+  BattleMapImageChunkFrame,
+  HandoutChunkFrame,
+  QuestRewardFrame
 } from '@server/relay/sessionProtocol'
 import { announceHostingStatus } from './relaySocket'
-import type { CharacterSheet, ForceRollRequest, Message } from '@shared/ipc'
+import type { CharacterSheet, ForceRollRequest, Handout, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
 import { canStand, hiddenCombatantIds, IMAGE_REF, imageIdOf, isFogged, mapForPlayer, tokenCentre, type BattleMap } from '@shared/battleMap'
 import { canReach, visionActive } from '@shared/vision'
@@ -398,6 +400,28 @@ export function broadcastAmbientLevel(groupId: string, layerId: string, level: n
   for (const p of players.values()) sendToRelay(p.userId, frame)
 }
 
+/** The players connected to a campaign right now — who a quest's reward is split between. */
+export function playersInCampaign(campaignId: string): string[] {
+  return [...players.values()].filter((p) => p.campaignId === campaignId).map((p) => p.userId)
+}
+
+/** Sends each of `userIds` their share of a quest's reward. */
+export function sendQuestReward(userIds: string[], questTitle: string, gold: number, xp: number): void {
+  const frame: QuestRewardFrame = { type: 'quest-reward', questTitle, gold, xp, partySize: userIds.length }
+  for (const id of userIds) sendToRelay(id, frame)
+}
+
+/** Puts a handout in front of every connected player, in relay-sized pieces (see HandoutChunkFrame). Returns how many it went to. */
+export function broadcastHandout(handout: Handout): number {
+  const json = JSON.stringify(handout)
+  const total = Math.max(1, Math.ceil(json.length / IMAGE_CHUNK_CHARS))
+  for (let index = 0; index < total; index++) {
+    const frame: HandoutChunkFrame = { type: 'handout-chunk', handoutId: handout.id, index, total, chunk: json.slice(index * IMAGE_CHUNK_CHARS, (index + 1) * IMAGE_CHUNK_CHARS) }
+    for (const p of players.values()) sendToRelay(p.userId, frame)
+  }
+  return players.size
+}
+
 /** Pushes a Sound Board one-shot cue to every connected player, table-wide — fire-and-forget, no state to track since a one-shot has nothing to "resume" for a late joiner the way music/ambient do. `excludeUserId` skips the player who triggered it via the 'sfxBoard.play' request below (see its doc comment) — they already played it locally and don't need it echoed back. */
 export function broadcastSfxPlayed(sfxId: string, excludeUserId?: string): void {
   const frame: SfxPlayedFrame = { type: 'sfx-played', sfxId }
@@ -551,8 +575,9 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       return fromService(frame.reqId, campaignService.listCampaignPlayers(db, str('campaignId'), userId))
     case 'campaigns.list':
       return fromService(frame.reqId, campaignService.listCampaigns(db, userId))
+    // Never from a player: it would make them the DM of a new campaign on this DM's computer. (No player screen sends it.)
     case 'campaigns.create':
-      return fromService(frame.reqId, campaignService.createCampaign(db, userId, str('name')))
+      return { reqId: frame.reqId, ok: false, error: 'Only the DM can create campaigns at this table.' }
     case 'campaigns.join':
       return fromService(frame.reqId, campaignService.joinCampaign(db, str('campaignId'), userId))
     case 'campaigns.getActive':
@@ -602,6 +627,9 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       return result.ok ? { reqId: frame.reqId, ok: true, data: undefined } : { reqId: frame.reqId, ok: false, error: result.error }
     }
     // Players only read vehicles — the DM changes them locally (see registerIpc.ts's vehicles:save).
+    // Players only read the quest log, and only its shared quests — the DM changes it locally (registerIpc.ts's quests:save).
+    case 'quests.get':
+      return fromService(frame.reqId, campaignService.getQuests(db, str('campaignId'), userId))
     case 'vehicles.get':
       return fromService(frame.reqId, campaignService.getVehicles(db, str('campaignId'), userId))
     // Players only ever read a campaign's packs — the DM changes them locally (see registerIpc.ts's campaignPacks:*).

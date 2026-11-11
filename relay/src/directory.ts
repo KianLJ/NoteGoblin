@@ -2,6 +2,7 @@ import { Server, getServerByName } from 'partyserver'
 import type { Env } from './env'
 import { hashPassword, verifyPassword } from './lib/hash'
 import { signToken, verifyToken } from './lib/token'
+import { LOCKED_MESSAGE, isLocked, withFailure, type LoginFailures } from './lib/loginLimit'
 
 /**
  * The account registry and friend graph for the whole relay, as a single
@@ -236,13 +237,24 @@ export class Directory extends Server<Env> {
     if (!body?.username || !body.password) return badRequest('username and password are required')
     const username = normalizeUsername(body.username)
 
+    // Counted for names with no account too, so a lockout doesn't reveal which names exist.
+    const failKey = `loginFails:${username}`
+    const now = Date.now()
+    const failures = await this.ctx.storage.get<LoginFailures>(failKey)
+    if (isLocked(failures, now)) return json({ error: LOCKED_MESSAGE }, 429)
+    const fail = async (): Promise<Response> => {
+      await this.ctx.storage.put(failKey, withFailure(failures, now))
+      return json({ error: 'Invalid username or password' }, 401)
+    }
+
     const id = await this.ctx.storage.get<string>(`username:${username}`)
-    if (!id) return json({ error: 'Invalid username or password' }, 401)
+    if (!id) return fail()
     const account = await this.ctx.storage.get<StoredAccount>(`user:${id}`)
-    if (!account) return json({ error: 'Invalid username or password' }, 401)
+    if (!account) return fail()
 
     const valid = await verifyPassword(body.password, account.passwordHash)
-    if (!valid) return json({ error: 'Invalid username or password' }, 401)
+    if (!valid) return fail()
+    if (failures) await this.ctx.storage.delete(failKey)
 
     const token = await signToken(this.secret(), id)
     return json({ userId: id, username: account.username, token })

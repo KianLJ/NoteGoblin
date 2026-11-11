@@ -56,6 +56,8 @@ interface InitiativeTrackerProps {
   onSelectVehicle?: (vehicleId: string) => void
   /** The campaign's vehicles, shown in the tab beside the tracker (a vehicle clicked in the order opens there). */
   vehiclesView?: ReactNode
+  /** The saved encounters (the DM's canvas), as a tab beside Build. */
+  encountersView?: ReactNode
   /** In the Combat screen: clicking a combatant's name picks it (on the map and in the side panel) instead of opening it elsewhere. */
   onSelectCombatant?: (id: string) => void
   /** The combatant picked in the Combat screen, marked in the order. */
@@ -184,12 +186,13 @@ export function InitiativeTracker({
   onVehicleHp,
   onSelectVehicle,
   vehiclesView,
+  encountersView,
   onSelectCombatant,
   selectedId = null
 }: InitiativeTrackerProps): JSX.Element {
   // Shared with the Combat tab (features/combat/encounterStore.ts), so both edit the same fight.
   const [state, setState] = useEncounter()
-  const [view, setView] = useState<'tracker' | 'build' | 'vehicles'>('tracker')
+  const [view, setView] = useState<'tracker' | 'build' | 'encounters' | 'vehicles'>('tracker')
   // An encounter the Encounter Library asked to edit (combat/EncounterLibrary.tsx): the builder opens with it.
   const [editRequest, setEditRequest] = useState<SavedEncounter | null>(null)
   useEffect(
@@ -547,6 +550,11 @@ export function InitiativeTracker({
         <button type="button" role="tab" aria-selected={view === 'build'} className={`it-tab${view === 'build' ? ' it-tab--on' : ''}`} onClick={() => setView('build')} title="Build an encounter">
           Build
         </button>
+        {encountersView && (
+          <button type="button" role="tab" aria-selected={view === 'encounters'} className={`it-tab${view === 'encounters' ? ' it-tab--on' : ''}`} onClick={() => setView('encounters')} title="Saved encounters">
+            Encounters
+          </button>
+        )}
         {vehiclesView && (
           <button type="button" role="tab" aria-selected={view === 'vehicles'} className={`it-tab${view === 'vehicles' ? ' it-tab--on' : ''}`} onClick={() => setView('vehicles')}>
             Vehicles
@@ -761,6 +769,8 @@ export function InitiativeTracker({
             })}
           </div>
         </div>
+      ) : view === 'encounters' ? (
+        <div className="it-body">{encountersView}</div>
       ) : view === 'vehicles' ? (
         <div className="it-body">{vehiclesView}</div>
       ) : (

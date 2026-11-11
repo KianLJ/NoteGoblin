@@ -64,6 +64,8 @@ export interface CanvasNodeProps {
   kind?: string
   onFocus: () => void
   onRectChange: (rect: Rect) => void
+  /** Told the box's rectangle on every move of a drag, then null on release — for things drawn off it live (a session's numbers and arrows). */
+  onLiveRect?: (rect: Rect | null) => void
   onClose?: () => void
   children: ReactNode
 }
@@ -117,6 +119,7 @@ export function CanvasNode({
   kind,
   onFocus,
   onRectChange,
+  onLiveRect,
   onClose,
   children
 }: CanvasNodeProps): JSX.Element {
@@ -138,7 +141,9 @@ export function CanvasNode({
   function move(e: ReactPointerEvent<HTMLElement>): void {
     const d = drag.current
     if (!d || d.pointerId !== e.pointerId) return
-    setLive(resized(d.start, d.edge, (e.clientX - d.sx) / d.scale, (e.clientY - d.sy) / d.scale))
+    const next = resized(d.start, d.edge, (e.clientX - d.sx) / d.scale, (e.clientY - d.sy) / d.scale)
+    setLive(next)
+    onLiveRect?.(next)
   }
 
   function end(e: ReactPointerEvent<HTMLElement>): void {
@@ -148,6 +153,7 @@ export function CanvasNode({
     document.body.classList.remove('gb-canvas-dragging')
     const next = resized(d.start, d.edge, (e.clientX - d.sx) / d.scale, (e.clientY - d.sy) / d.scale)
     setLive(null)
+    onLiveRect?.(null)
     if (next.x !== rect.x || next.y !== rect.y || next.w !== rect.w || next.h !== rect.h) onRectChange(next)
   }
 

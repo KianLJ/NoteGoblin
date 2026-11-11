@@ -12,13 +12,14 @@ export const TOOL_ICONS: Record<ToolKind, ReactNode> = {
   players: <PlayersIcon />,
   party: <PlayersIcon />,
   initiative: <InitiativeIcon />,
-  // Crossed swords: the saved encounters.
-  encounters: (
+  calendar: <CalendarIcon />,
+  // A scroll with a seal: the quest log.
+  quests: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2.5 2.5l8 8M13.5 2.5l-8 8M9.5 11.5l2 2M6.5 11.5l-2 2M10.5 12.5l2-2M5.5 12.5l-2-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M4 2.5h7.5a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 12.5V4a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   ),
-  calendar: <CalendarIcon />,
   sessions: <SessionIcon />,
   codex: <BestiaryIcon />,
   timer: <TimerIcon />,

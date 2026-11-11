@@ -1,6 +1,6 @@
 // Dev-only: the canvas and its newer pieces with sample content, for screenshots in the "What's new" post.
 // Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor, =encounters, =cues, =hidden). Not part of the app build.
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Canvas } from '../features/canvas/Canvas'
 import { TOOL_ICONS } from '../features/canvas/toolIcons'
 import { TimerDockButton, TimerMini, TimerPanel, setSessionTimer } from '../features/canvas/SessionTimer'
@@ -26,7 +26,16 @@ import { WhatsNewView } from '../features/shell/WhatsNew'
 import '../features/canvas/canvas.css'
 import { MusicPanel } from '../features/audio/MusicPanel'
 import { MusicMini, PartyMini, SessionsMini, SoundBoardMini } from '../features/canvas/toolMinis'
-import { TOOL_MINI } from '@shared/canvasTools'
+import { TOOL_META, TOOL_MINI } from '@shared/canvasTools'
+import { QuickSearch, noteTarget, useQuickSearchKey } from '../features/canvas/QuickSearch'
+import { NoteEditor } from '../features/campaigns/NoteEditor'
+import { ShowToPlayersButton } from '../features/campaigns/ShowToPlayersButton'
+import { HostButton } from '../features/campaigns/HostButton'
+import { QuestLog } from '../features/campaigns/QuestLog'
+import { QuestRewardNotice } from '../features/player/QuestRewardNotice'
+import { DmInitiativeTool } from '../features/campaigns/DmInitiativeTool'
+import { HandoutViewer } from '../features/player/HandoutViewer'
+import { stripDmAsides } from '@shared/sessionDeck'
 import { SoundBoardPanel } from '../features/audio/SoundBoardPanel'
 import '../styles/animations.css'
 
@@ -225,6 +234,7 @@ const AUDIO_DECKS = {
 } as unknown as SessionDecksApi
 
 function AudioShot(): JSX.Element {
+  const [hosted, setHosted] = useState<string | null>(null)
   const [layout, setLayout] = useState(AUDIO)
   const items: CanvasItem[] = [
     { id: 'music', title: 'Music', icon: TOOL_ICONS.music, size: { w: 352, h: 480 }, content: <MusicPanel sessionId={null} />, mini: <MusicMini sessionId={null} />, miniSize: TOOL_MINI.music },
@@ -244,7 +254,7 @@ function AudioShot(): JSX.Element {
   ]
   return (
     <div style={{ height: '100vh', display: 'flex' }}>
-      <Canvas mode="dm" layout={layout} setLayout={setLayout} items={items} toolIcons={TOOL_ICONS} hiddenTools={['codex', 'timer']} nav={{ ...nav, root: AUDIO }} contextMenu={() => ({ add: [] })} />
+      <Canvas mode="dm" layout={layout} setLayout={setLayout} items={items} toolIcons={TOOL_ICONS} hiddenTools={['codex', 'timer']} nav={{ ...nav, root: AUDIO }} contextMenu={() => ({ add: [] })}title="The Sunken Crypt" titleExtra={<HostButton hostedSessionId={hosted} onHostedSessionChange={(id) => setHosted(id === null ? null : (id ?? 'demo'))} />} />
     </div>
   )
 }
@@ -319,7 +329,82 @@ function HiddenShot(): JSX.Element {
   )
 }
 
+/** ?showcase=search: the Ctrl+K search over a few notes and tools (Ctrl+K toggles it, picking logs what was chosen). */
+function SearchShot(): JSX.Element {
+  const [open, setOpen] = useState(true)
+  const root = useRef<HTMLDivElement>(null)
+  useQuickSearchKey(root, setOpen)
+  const pick = (what: string) => () => console.log('search picked', what)
+  const notes = [
+    { id: 'a', title: 'The Sunken Crypt', visibility: 'shared', sceneDeckId: null },
+    { id: 'b', title: 'Brakka the ogre', visibility: 'dm', sceneDeckId: null },
+    { id: 'c', title: 'Arrival at Saltmarsh', visibility: 'shared', sceneDeckId: 'deck' },
+    { id: 'd', title: 'My secret plans', visibility: 'private', sceneDeckId: null }
+  ].map((n) => noteTarget(n, pick(n.title)))
+  const tools = (['notes', 'initiative', 'calendar', 'music'] as const).map((k) => ({ id: k, name: TOOL_META[k].title, hint: 'Tool', icon: TOOL_ICONS[k], onSelect: pick(k) }))
+  return (
+    <div ref={root} style={{ height: '100vh' }}>
+      <QuickSearch open={open} onClose={() => setOpen(false)} notes={notes} tools={tools} onOpenMonster={(m) => console.log('search picked', m.name)} />
+    </div>
+  )
+}
+
+/** ?showcase=backlinks: a note with two others linking to it — "Mentioned in" under its body (clicks log). */
+function BacklinksShot(): JSX.Element {
+  const mk = (id: string, title: string, bodyMarkdown: string): Note => ({ id, campaignId: 'camp', authorUserId: 'u', authorDisplayName: 'Kian', title, bodyMarkdown, visibility: 'shared', folderId: null, editorUserIds: [], pinned: false, sceneDeckId: null }) as unknown as Note
+  const crypt = mk('1', 'The Sunken Crypt', 'Beneath the old chapel, water has crept into the burial halls.')
+  const notes = [crypt, mk('2', 'Brakka the ogre', 'Sleeps in the ossuary of [[The Sunken Crypt]].'), mk('3', 'Session 3 recap', 'The party finally found [the sunken crypt|the crypt].'), mk('4', 'Saltmarsh', 'No links here.')]
+  return (
+    <div style={{ height: '100vh', width: 520, display: 'flex', flexDirection: 'column', padding: 24, background: 'var(--bg-surface)', position: 'relative' }}>
+      <NoteEditor note={crypt} notes={notes} sessionId={null} onSave={() => {}} onNavigateToNote={() => {}} onOpenInNewTab={(id) => console.log('backlink opened', id)} onCreateAndLinkNote={() => {}} />
+    </div>
+  )
+}
+
+/** ?showcase=handout: the DM's "Show to players" buttons and the player's viewer on one page (the stub loops it back). */
+function HandoutShot(): JSX.Element {
+  const picture = 'data:image/svg+xml;utf8,' + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='600' height='400'><rect width='600' height='400' fill='#d9c7a1'/><path d='M40 340 L200 120 L320 260 L420 160 L560 340Z' fill='#6b4f2a'/><circle cx='470' cy='90' r='40' fill='#f3e3b5'/></svg>")
+  return (
+    <div style={{ height: '100vh', padding: 24, display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--bg-surface)' }}>
+      <span>Note:</span>
+      <ShowToPlayersButton build={async () => ({ id: crypto.randomUUID(), title: 'A letter, sealed in wax', kind: 'note', markdown: stripDmAsides(['My dear Aldric,', '', 'The [[Sunken Crypt]] is ours by midnight.', '', '::', 'The letter is a forgery.', '::', '', '— *M*'].join('\n')) })} />
+      <span>Image:</span>
+      <ShowToPlayersButton build={async () => ({ id: crypto.randomUUID(), title: 'The pass at dusk', kind: 'image', src: picture })} />
+      <HandoutViewer knownTitles={new Set(['sunken crypt'])} />
+    </div>
+  )
+}
+
+/** ?showcase=quests: the Quests box as the DM sees it (left) and a player (right), on an in-memory log. */
+function QuestsShot(): JSX.Element {
+  return (
+    <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '340px 340px', gap: 24, padding: 24, background: 'var(--bg-surface)' }}>
+      <div className="gb-card" style={{ padding: 0, height: 460 }}>
+        <QuestLog sessionId={null} campaignId="camp" readOnly={false} onOpenNote={(t) => console.log('quest note', t)} />
+      </div>
+      <div className="gb-card" style={{ padding: 0, height: 460, position: 'relative' }}>
+        <QuestLog sessionId="s" campaignId="camp" readOnly onOpenNote={(t) => console.log('quest note', t)} />
+        <QuestRewardNotice character={{ name: 'Gelden', experiencePoints: 900, currency: { cp: 0, sp: 0, ep: 0, gp: 12, pp: 0 } } as never} onApply={(c, r) => console.log('reward applied', c.name, r.gold, r.xp)} />
+      </div>
+    </div>
+  )
+}
+
+/** ?showcase=initiative: the DM's Initiative box, its Encounters tab included. */
+function InitiativeShot(): JSX.Element {
+  return (
+    <div className="gb-card" style={{ width: 420, height: '90vh', margin: 24, padding: 0, display: 'flex', flexDirection: 'column' }}>
+      <DmInitiativeTool sessionId={null} campaignId="camp" combatCharacters={new Map()} onOpenMonster={() => {}} />
+    </div>
+  )
+}
+
 export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
+  if (scene === 'search') return <SearchShot />
+  if (scene === 'backlinks') return <BacklinksShot />
+  if (scene === 'handout') return <HandoutShot />
+  if (scene === 'quests') return <QuestsShot />
+  if (scene === 'initiative') return <InitiativeShot />
   if (scene === 'audio') return <AudioShot />
   if (scene === 'cues') return <CuesShot />
   if (scene === 'hidden') return <HiddenShot />

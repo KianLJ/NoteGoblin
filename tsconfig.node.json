@@ -6,6 +6,8 @@
     "src/server/**/*",
     "shared/**/*",
     "src/renderer/src/color.ts",
+    "relay/src/lib/loginLimit.ts",
+    "src/renderer/src/wikilink.ts",
     "db/**/*",
     "tests/**/*",
     "vitest.config.ts"

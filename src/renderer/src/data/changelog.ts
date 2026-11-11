@@ -7,6 +7,25 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.12.0',
+    title: 'Quests, handouts, and a lighter download',
+    highlights: [
+      'A Quests box: quests with who gave them, details and rewards (gold, XP, items), secret until you show the party, and completed ones split their gold and XP between the players at the table',
+      'Handouts: show any note or picture on every player’s screen while hosting, with DM-only parts removed',
+      'Ctrl+K (or the magnifier in the corner) finds any note, tool or creature',
+      'Notes list the other notes that link to them',
+      'The built-in music, ambience and Sound Board sounds stream instead of shipping with the app, with download buttons to keep them offline, so the installer is about a quarter of the size',
+      'Your own songs, sounds, moods and names sync to every computer you sign in on',
+      'The presenter shows a scene’s fights and music as chips, marking the song that’s playing; scene numbers and arrows follow a scene as you drag it; your own music can be cued on scenes',
+      'Saved encounters are a tab in the Initiative box, and Quests takes their place on the bar',
+      'Hosting is a button beside the campaign’s name; the campaign and character switchers are a small icon in the corner',
+      'Saved layouts bring back every box where it was, reopening closed ones; built-in layouts only move the tools',
+      'Trackpads: two fingers pan, a pinch zooms, and dragging empty canvas pans',
+      'Right-click menus and dialogs work from the keyboard',
+      'Players’ names come from their accounts, and sign-in locks for 15 minutes after 10 wrong passwords'
+    ]
+  },
+  {
     version: '0.11.3',
     title: 'Notes on the calendar, and a round of fixes',
     highlights: [

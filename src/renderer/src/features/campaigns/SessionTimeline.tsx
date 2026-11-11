@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Note } from '@shared/ipc'
 import type { SceneMusic, SessionDeck } from '@shared/sessionDeck'
 import { cueLabel } from './SceneCues'
@@ -6,7 +6,7 @@ import type { BestiaryMonster } from '../../data/bestiary'
 import { loadAllMonsters } from '../../data/packMonsters'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import { playSfx } from '../audio/soundEffects'
-import { pickMood, playSpecificTrack } from '../audio/musicEngine'
+import { getMusicState, pickMood, playSpecificTrack, subscribeMusic } from '../audio/musicEngine'
 import { Button } from '../../ui/Button'
 import { ArrowLeftIcon, ArrowRightIcon, PlusIcon, XIcon } from '../../ui/icons'
 import { PencilIcon } from './icons'
@@ -197,6 +197,8 @@ export function SessionPresenter({
   onStep: (noteId: string) => void
   onLoadEncounter: (monsters: BestiaryMonster[], encounterId: string) => void
 }): JSX.Element | null {
+  const [musicNow, setMusicNow] = useState(getMusicState)
+  useEffect(() => subscribeMusic(() => setMusicNow(getMusicState())), [])
   const deck = api.decks.find((d) => d.id === api.live.deckId)
   if (!deck) return null
   const index = Math.max(0, api.live.sceneIndex)
@@ -211,44 +213,84 @@ export function SessionPresenter({
     if (next) onStep(next.noteId)
   }
 
+  const music = scene?.music ?? []
+  // What's playing now, so the scene's music shows which of its cues is on.
+  const playingCue = (cue: SceneMusic): boolean => musicNow.playing && (cue.trackId ? musicNow.trackId === cue.trackId : musicNow.groupId === cue.moodId)
+
   return (
     <div className="gb-presenter" role="toolbar" aria-label="Presenting">
-      <span className="gb-scene-live">Live</span>
-      <button type="button" className="gb-presenter-step" disabled={index <= 0} onClick={() => step(index - 1)} aria-label="Previous scene">
-        <ArrowLeftIcon size={14} />
-      </button>
-      <button type="button" className="gb-presenter-scene" onClick={() => scene && onStep(scene.noteId)} title="Show this scene">
-        <span className="gb-presenter-count">
-          {deck.title || 'Session'} · {index + 1}/{deck.scenes.length}
-        </span>
-        <span className="gb-presenter-title">{note?.title || 'Untitled Scene'}</span>
-      </button>
-      <button type="button" className="gb-presenter-step" disabled={index >= deck.scenes.length - 1} onClick={() => step(index + 1)} aria-label="Next scene">
-        <ArrowRightIcon size={14} />
-      </button>
-      {(encounters.length > 0 || (scene?.music.length ?? 0) > 0) && (
+      <div className="gb-presenter-main">
+        <span className="gb-scene-live">Live</span>
+        <button type="button" className="gb-presenter-step" disabled={index <= 0} onClick={() => step(index - 1)} aria-label="Previous scene">
+          <ArrowLeftIcon size={14} />
+        </button>
+        <button type="button" className="gb-presenter-scene" onClick={() => scene && onStep(scene.noteId)} title="Show this scene">
+          <span className="gb-presenter-count">
+            {deck.title || 'Session'} · {index + 1}/{deck.scenes.length}
+          </span>
+          <span className="gb-presenter-title">{note?.title || 'Untitled Scene'}</span>
+        </button>
+        <button type="button" className="gb-presenter-step" disabled={index >= deck.scenes.length - 1} onClick={() => step(index + 1)} aria-label="Next scene">
+          <ArrowRightIcon size={14} />
+        </button>
+        <button type="button" className="gb-presenter-stop" onClick={api.stopPresenting} title="Stop presenting">
+          Stop
+        </button>
+      </div>
+      {(encounters.length > 0 || music.length > 0) && (
         <div className="gb-presenter-cues">
-          {encounters.map((enc) => (
-            <button key={enc.id} type="button" className="gb-presenter-action gb-presenter-action--fight" onClick={() => onLoadEncounter(resolveEncounterMonsters(enc), enc.id)} title={`Load “${enc.name}” into the fight`}>
-              ⚔ {enc.name}
-            </button>
-          ))}
-          {scene?.music.map((cue, i) => (
-            <button
-              key={i}
-              type="button"
-              className="gb-presenter-action gb-presenter-action--music"
-              onClick={() => playCue(cue, hostedSessionId)}
-              title={i === 0 ? 'Played when this scene came up — click to play it again' : 'Play this for the table'}
-            >
-              ♪ {cueLabel(cue)}
-            </button>
-          ))}
+          {encounters.length > 0 && (
+            <div className="gb-presenter-cue-group" role="group" aria-label="This scene's encounters">
+              <span className="gb-presenter-cue-label">Fight</span>
+              {encounters.map((enc) => (
+                <button key={enc.id} type="button" className="gb-presenter-cue gb-presenter-cue--fight" onClick={() => onLoadEncounter(resolveEncounterMonsters(enc), enc.id)} title={`Load “${enc.name}” into the fight`}>
+                  <span className="gb-presenter-cue-icon" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M2.5 2.5l8 8M13.5 2.5l-8 8M9.5 11.5l2 2M6.5 11.5l-2 2M10.5 12.5l2-2M5.5 12.5l-2-2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <span className="gb-presenter-cue-name">{enc.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {music.length > 0 && (
+            <div className="gb-presenter-cue-group" role="group" aria-label="This scene's music">
+              <span className="gb-presenter-cue-label">Music</span>
+              {music.map((cue, i) => {
+                const on = playingCue(cue)
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`gb-presenter-cue gb-presenter-cue--music${on ? ' gb-presenter-cue--on' : ''}`}
+                    onClick={() => playCue(cue, hostedSessionId)}
+                    aria-pressed={on}
+                    title={on ? 'Playing now — click to start it again' : i === 0 ? 'Played when this scene came up — click to play it again' : 'Play this for the table'}
+                  >
+                    <span className="gb-presenter-cue-icon" aria-hidden="true">
+                      {on ? (
+                        <span className="gb-presenter-eq">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      ) : (
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                          <path d="M6 12.5V3.5l7-1.5v9" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                          <circle cx="4.5" cy="12.5" r="1.8" fill="currentColor" />
+                          <circle cx="11.5" cy="11" r="1.8" fill="currentColor" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="gb-presenter-cue-name">{cueLabel(cue)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
-      <button type="button" className="gb-presenter-action" onClick={api.stopPresenting}>
-        Stop
-      </button>
     </div>
   )
 }

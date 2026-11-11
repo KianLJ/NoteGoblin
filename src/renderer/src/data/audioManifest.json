@@ -1,0 +1,1520 @@
+{
+ "files": [
+  {
+   "path": "ambient/Campfire/01 - Crackling Fire.mp3",
+   "size": 629489
+  },
+  {
+   "path": "ambient/Campfire/02 - Campfire Crackle.mp3",
+   "size": 2833806
+  },
+  {
+   "path": "ambient/CaveDrips/01 - Dripping Water.mp3",
+   "size": 1631337
+  },
+  {
+   "path": "ambient/CaveDrips/02 - Deep Echo.mp3",
+   "size": 2881035
+  },
+  {
+   "path": "ambient/CityStreet/01 - Market Chatter.mp3",
+   "size": 960931
+  },
+  {
+   "path": "ambient/CityStreet/02 - Street Bustle.mp3",
+   "size": 2401218
+  },
+  {
+   "path": "ambient/DesertWind/01 - Wind.mp3",
+   "size": 918659
+  },
+  {
+   "path": "ambient/DesertWind/02 - Wind Gusts.mp3",
+   "size": 1081457
+  },
+  {
+   "path": "ambient/DistantBattle/01 - Distant Battlefield.mp3",
+   "size": 1453287
+  },
+  {
+   "path": "ambient/DistantBattle/02 - Clashing Steel.mp3",
+   "size": 558436
+  },
+  {
+   "path": "ambient/ForestWind/01 - Birdsong.mp3",
+   "size": 451438
+  },
+  {
+   "path": "ambient/ForestWind/02 - Forest Wind.mp3",
+   "size": 707230
+  },
+  {
+   "path": "ambient/LightRain/01 - Heavy Rain.mp3",
+   "size": 1401042
+  },
+  {
+   "path": "ambient/LightRain/02 - Light Rain.mp3",
+   "size": 1584944
+  },
+  {
+   "path": "ambient/MountainWind/01 - Wind Howl.mp3",
+   "size": 1006178
+  },
+  {
+   "path": "ambient/MountainWind/02 - Mountain Wind.mp3",
+   "size": 841502
+  },
+  {
+   "path": "ambient/NightCrickets/01 - Crickets.mp3",
+   "size": 1161133
+  },
+  {
+   "path": "ambient/NightCrickets/02 - Night Crickets.mp3",
+   "size": 1251830
+  },
+  {
+   "path": "ambient/OceanWaves/01 - Waves Crashing.mp3",
+   "size": 1354940
+  },
+  {
+   "path": "ambient/OceanWaves/02 - Gentle Waves.mp3",
+   "size": 429441
+  },
+  {
+   "path": "ambient/TavernCrowd/01 - Tavern Chatter.mp3",
+   "size": 2881035
+  },
+  {
+   "path": "ambient/TavernCrowd/02 - Crowd Murmur.mp3",
+   "size": 2880617
+  },
+  {
+   "path": "ambient/Thunderstorm/01 - Gentle Thunder.mp3",
+   "size": 995203
+  },
+  {
+   "path": "ambient/Thunderstorm/02 - Thunderstorm.mp3",
+   "size": 1299406
+  },
+  {
+   "path": "music/Combat/Boss/01 - The Beast Awakens.mp3",
+   "size": 3706870
+  },
+  {
+   "path": "music/Combat/Boss/02 - Clash of Titans.mp3",
+   "size": 3693808
+  },
+  {
+   "path": "music/Combat/Boss/03 - Last Stand.mp3",
+   "size": 3681270
+  },
+  {
+   "path": "music/Combat/Boss/04 - Shattered Defenses.mp3",
+   "size": 3693808
+  },
+  {
+   "path": "music/Combat/Boss/05 - Into the Maelstrom.mp3",
+   "size": 3041269
+  },
+  {
+   "path": "music/Combat/Boss/06 - Bloodied but Unbowed.mp3",
+   "size": 1921139
+  },
+  {
+   "path": "music/Combat/Boss/07 - Final Reckoning.mp3",
+   "size": 1921139
+  },
+  {
+   "path": "music/Combat/Boss/08 - Fury Unleashed.mp3",
+   "size": 1921139
+  },
+  {
+   "path": "music/Combat/Skirmish/01 - Steel on Steel.mp3",
+   "size": 2178183
+  },
+  {
+   "path": "music/Combat/Skirmish/02 - Ambush.mp3",
+   "size": 3875620
+  },
+  {
+   "path": "music/Combat/Skirmish/03 - Blades Drawn.mp3",
+   "size": 3321302
+  },
+  {
+   "path": "music/Combat/Skirmish/04 - Running Battle.mp3",
+   "size": 2241400
+  },
+  {
+   "path": "music/Combat/Skirmish/05 - Quick and Dirty.mp3",
+   "size": 3647311
+  },
+  {
+   "path": "music/Combat/Skirmish/06 - Flanking Maneuver.mp3",
+   "size": 1729401
+  },
+  {
+   "path": "music/Combat/Skirmish/07 - Melee Erupts.mp3",
+   "size": 2229907
+  },
+  {
+   "path": "music/Divine&Sacred/01 - Hymn of Light.mp3",
+   "size": 2601367
+  },
+  {
+   "path": "music/Divine&Sacred/02 - Sanctified Ground.mp3",
+   "size": 6961205
+  },
+  {
+   "path": "music/Divine&Sacred/03 - Whispers of the Divine.mp3",
+   "size": 3292567
+  },
+  {
+   "path": "music/Divine&Sacred/04 - Blessing Bestowed.mp3",
+   "size": 3087245
+  },
+  {
+   "path": "music/Divine&Sacred/05 - Cathedral Silence.mp3",
+   "size": 7153466
+  },
+  {
+   "path": "music/Divine&Sacred/06 - Radiant Vow.mp3",
+   "size": 2529214
+  },
+  {
+   "path": "music/Dungeon&Dread/01 - Descent into Darkness.mp3",
+   "size": 4681236
+  },
+  {
+   "path": "music/Dungeon&Dread/02 - Echoes in the Dark.mp3",
+   "size": 3281597
+  },
+  {
+   "path": "music/Dungeon&Dread/03 - Something Stirs.mp3",
+   "size": 2625400
+  },
+  {
+   "path": "music/Dungeon&Dread/04 - Crumbling Halls.mp3",
+   "size": 3841138
+  },
+  {
+   "path": "music/Dungeon&Dread/05 - The Weight of Stone.mp3",
+   "size": 2469710
+  },
+  {
+   "path": "music/Epilogue&Credits/01 - Closing the Chapter.mp3",
+   "size": 3794118
+  },
+  {
+   "path": "music/Epilogue&Credits/02 - Fading Light.mp3",
+   "size": 11161172
+  },
+  {
+   "path": "music/Epilogue&Credits/03 - A Tale Well Told.mp3",
+   "size": 3361531
+  },
+  {
+   "path": "music/Epilogue&Credits/04 - Journey's End.mp3",
+   "size": 3562673
+  },
+  {
+   "path": "music/Epilogue&Credits/05 - Roll Credits.mp3",
+   "size": 2641596
+  },
+  {
+   "path": "music/Exploration&Travel/Desert/01 - Dunes of Silence.mp3",
+   "size": 3553270
+  },
+  {
+   "path": "music/Exploration&Travel/Desert/02 - Mirage on the Horizon.mp3",
+   "size": 3337499
+  },
+  {
+   "path": "music/Exploration&Travel/Desert/03 - Sun-Scorched Trail.mp3",
+   "size": 3409597
+  },
+  {
+   "path": "music/Exploration&Travel/Desert/04 - Shifting Sands.mp3",
+   "size": 3553270
+  },
+  {
+   "path": "music/Exploration&Travel/Desert/05 - Oasis in Sight.mp3",
+   "size": 3577303
+  },
+  {
+   "path": "music/Exploration&Travel/Desert/06 - The Long Crossing.mp3",
+   "size": 3649401
+  },
+  {
+   "path": "music/Exploration&Travel/Forest/01 - Beneath the Canopy.mp3",
+   "size": 4657205
+  },
+  {
+   "path": "music/Exploration&Travel/Forest/02 - Whispering Woods.mp3",
+   "size": 3704257
+  },
+  {
+   "path": "music/Exploration&Travel/Forest/03 - Sunlit Glade.mp3",
+   "size": 3649401
+  },
+  {
+   "path": "music/Exploration&Travel/Forest/04 - Deeper Into the Green.mp3",
+   "size": 3661416
+  },
+  {
+   "path": "music/Exploration&Travel/Forest/05 - Rustling Leaves.mp3",
+   "size": 3671865
+  },
+  {
+   "path": "music/Exploration&Travel/Forest/06 - Old Growth.mp3",
+   "size": 2281628
+  },
+  {
+   "path": "music/Exploration&Travel/Mountains/01 - Peaks Above the Clouds.mp3",
+   "size": 4092960
+  },
+  {
+   "path": "music/Exploration&Travel/Mountains/02 - The Long Ascent.mp3",
+   "size": 7513433
+  },
+  {
+   "path": "music/Exploration&Travel/Mountains/03 - Windswept Ridge.mp3",
+   "size": 3772698
+  },
+  {
+   "path": "music/Exploration&Travel/Mountains/04 - Stone and Sky.mp3",
+   "size": 2438363
+  },
+  {
+   "path": "music/Exploration&Travel/Mountains/05 - Summit's Edge.mp3",
+   "size": 2585854
+  },
+  {
+   "path": "music/Exploration&Travel/Night/01 - Under Starlight.mp3",
+   "size": 1261285
+  },
+  {
+   "path": "music/Exploration&Travel/Night/02 - Nocturne on the Road.mp3",
+   "size": 2770641
+  },
+  {
+   "path": "music/Exploration&Travel/Night/03 - The Quiet Watch.mp3",
+   "size": 2561138
+  },
+  {
+   "path": "music/Exploration&Travel/Wild/01 - Uncharted Territory.mp3",
+   "size": 3649401
+  },
+  {
+   "path": "music/Exploration&Travel/Wild/02 - Into the Wilds.mp3",
+   "size": 3289433
+  },
+  {
+   "path": "music/Exploration&Travel/Wild/03 - Untamed Frontier.mp3",
+   "size": 6793499
+  },
+  {
+   "path": "music/Exploration&Travel/Wild/04 - Wild Places.mp3",
+   "size": 3601334
+  },
+  {
+   "path": "music/Exploration&Travel/Wild/05 - Feral Ground.mp3",
+   "size": 3841139
+  },
+  {
+   "path": "music/Exploration&Travel/Wild/06 - Beyond the Map.mp3",
+   "size": 2881400
+  },
+  {
+   "path": "music/Exploration&Travel/Wild/07 - The Untrodden Path.mp3",
+   "size": 2622814
+  },
+  {
+   "path": "music/Mystery&Investigation/01 - A Curious Clue.mp3",
+   "size": 3681270
+  },
+  {
+   "path": "music/Mystery&Investigation/02 - Threads of Suspicion.mp3",
+   "size": 3577303
+  },
+  {
+   "path": "music/Mystery&Investigation/03 - Something Doesn't Add Up.mp3",
+   "size": 3841138
+  },
+  {
+   "path": "music/Mystery&Investigation/04 - The Plot Thickens.mp3",
+   "size": 3961302
+  },
+  {
+   "path": "music/Mystery&Investigation/05 - Following the Trail.mp3",
+   "size": 3721498
+  },
+  {
+   "path": "music/Mystery&Investigation/06 - Uncovering the Truth.mp3",
+   "size": 2143179
+  },
+  {
+   "path": "music/Romance&Calm/01 - A Quiet Moment.mp3",
+   "size": 5425205
+  },
+  {
+   "path": "music/Romance&Calm/02 - Fireside Warmth.mp3",
+   "size": 6505629
+  },
+  {
+   "path": "music/Romance&Calm/03 - Gentle Affection.mp3",
+   "size": 4945597
+  },
+  {
+   "path": "music/Romance&Calm/04 - Stolen Glances.mp3",
+   "size": 1054918
+  },
+  {
+   "path": "music/Romance&Calm/05 - Peace at Last.mp3",
+   "size": 2881400
+  },
+  {
+   "path": "music/Sorrow&Loss/01 - A Heavy Heart.mp3",
+   "size": 3564241
+  },
+  {
+   "path": "music/Sorrow&Loss/02 - Grief's Quiet Toll.mp3",
+   "size": 3289433
+  },
+  {
+   "path": "music/Sorrow&Loss/03 - What Was Lost.mp3",
+   "size": 2908045
+  },
+  {
+   "path": "music/Sorrow&Loss/04 - Tears Unshed.mp3",
+   "size": 3728290
+  },
+  {
+   "path": "music/Sorrow&Loss/05 - In Memoriam.mp3",
+   "size": 2851620
+  },
+  {
+   "path": "music/Tavern&Respite/01 - The Merry Hearth.mp3",
+   "size": 5809205
+  },
+  {
+   "path": "music/Tavern&Respite/02 - Ale and Laughter.mp3",
+   "size": 3811359
+  },
+  {
+   "path": "music/Tavern&Respite/03 - A Well-Earned Rest.mp3",
+   "size": 3361530
+  },
+  {
+   "path": "music/Tavern&Respite/04 - Tales by the Fire.mp3",
+   "size": 3541253
+  },
+  {
+   "path": "music/Tavern&Respite/05 - Rowdy Night In.mp3",
+   "size": 1062232
+  },
+  {
+   "path": "music/Town&Market/01 - Market Day Bustle.mp3",
+   "size": 3801432
+  },
+  {
+   "path": "music/Town&Market/02 - The Busy Square.mp3",
+   "size": 2641596
+  },
+  {
+   "path": "music/Victory&Triumph/01 - Triumphant Return.mp3",
+   "size": 2433138
+  },
+  {
+   "path": "music/Victory&Triumph/02 - Heroes' Anthem.mp3",
+   "size": 2604502
+  },
+  {
+   "path": "soundboard/ClassFeatures/Barbarian Rage/01.mp3",
+   "size": 72829
+  },
+  {
+   "path": "soundboard/ClassFeatures/Barbarian Rage/02.mp3",
+   "size": 79517
+  },
+  {
+   "path": "soundboard/ClassFeatures/Barbarian Rage/03.mp3",
+   "size": 78263
+  },
+  {
+   "path": "soundboard/ClassFeatures/Bardic Inspiration/01.mp3",
+   "size": 12225
+  },
+  {
+   "path": "soundboard/ClassFeatures/Bardic Inspiration/02.mp3",
+   "size": 81127
+  },
+  {
+   "path": "soundboard/ClassFeatures/Cleric Burst/01.mp3",
+   "size": 121251
+  },
+  {
+   "path": "soundboard/ClassFeatures/Cleric Burst/02.mp3",
+   "size": 114981
+  },
+  {
+   "path": "soundboard/ClassFeatures/Cleric Burst/03.mp3",
+   "size": 114145
+  },
+  {
+   "path": "soundboard/ClassFeatures/Monk Ki Strike/01.mp3",
+   "size": 44408
+  },
+  {
+   "path": "soundboard/ClassFeatures/Monk Ki Strike/02.mp3",
+   "size": 68650
+  },
+  {
+   "path": "soundboard/ClassFeatures/Monk Ki Strike/03.mp3",
+   "size": 69904
+  },
+  {
+   "path": "soundboard/ClassFeatures/Monk Ki Strike/04.mp3",
+   "size": 62380
+  },
+  {
+   "path": "soundboard/ClassFeatures/Paladin Smite/01.mp3",
+   "size": 65306
+  },
+  {
+   "path": "soundboard/ClassFeatures/Paladin Smite/02.mp3",
+   "size": 58665
+  },
+  {
+   "path": "soundboard/ClassFeatures/Paladin Smite/03.mp3",
+   "size": 15151
+  },
+  {
+   "path": "soundboard/ClassFeatures/Paladin Smite/04.mp3",
+   "size": 43928
+  },
+  {
+   "path": "soundboard/ClassFeatures/Ranger Hunter's Mark Ping/01.mp3",
+   "size": 123341
+  },
+  {
+   "path": "soundboard/ClassFeatures/Ranger Hunter's Mark Ping/02.mp3",
+   "size": 76111
+  },
+  {
+   "path": "soundboard/ClassFeatures/Ranger Hunter's Mark Ping/03.mp3",
+   "size": 96173
+  },
+  {
+   "path": "soundboard/ClassFeatures/Rogue Sneak Attack/01.mp3",
+   "size": 39288
+  },
+  {
+   "path": "soundboard/ClassFeatures/Rogue Sneak Attack/02.mp3",
+   "size": 28104
+  },
+  {
+   "path": "soundboard/ClassFeatures/Sorcerer Metamagic Surge/01.mp3",
+   "size": 82381
+  },
+  {
+   "path": "soundboard/ClassFeatures/Sorcerer Metamagic Surge/02.mp3",
+   "size": 76947
+  },
+  {
+   "path": "soundboard/ClassFeatures/Warlock Eldritch Blast/01.mp3",
+   "size": 64888
+  },
+  {
+   "path": "soundboard/ClassFeatures/Warlock Eldritch Blast/02.mp3",
+   "size": 65352
+  },
+  {
+   "path": "soundboard/ClassFeatures/Warlock Eldritch Blast/03.mp3",
+   "size": 64888
+  },
+  {
+   "path": "soundboard/ClassFeatures/Wizard Arcane Recovery/01.mp3",
+   "size": 48634
+  },
+  {
+   "path": "soundboard/ClassFeatures/Wizard Arcane Recovery/02.mp3",
+   "size": 64516
+  },
+  {
+   "path": "soundboard/ClassFeatures/Wizard Arcane Recovery/03.mp3",
+   "size": 64052
+  },
+  {
+   "path": "soundboard/CombatFlow/Death Save Fail/01.mp3",
+   "size": 135696
+  },
+  {
+   "path": "soundboard/CombatFlow/Death Save Success/01.mp3",
+   "size": 60229
+  },
+  {
+   "path": "soundboard/CombatFlow/Death Save Tick/01.mp3",
+   "size": 162035
+  },
+  {
+   "path": "soundboard/CombatFlow/End Combat/01.mp3",
+   "size": 153016
+  },
+  {
+   "path": "soundboard/CombatFlow/Initiative Start/01.mp3",
+   "size": 101607
+  },
+  {
+   "path": "soundboard/CombatFlow/Initiative Start/02.mp3",
+   "size": 137133
+  },
+  {
+   "path": "soundboard/CombatFlow/Turn Change/01.mp3",
+   "size": 33061
+  },
+  {
+   "path": "soundboard/Creatures/Aberration Shriek/01.mp3",
+   "size": 33897
+  },
+  {
+   "path": "soundboard/Creatures/Aberration Shriek/02.mp3",
+   "size": 37659
+  },
+  {
+   "path": "soundboard/Creatures/Aberration Shriek/03.mp3",
+   "size": 45182
+  },
+  {
+   "path": "soundboard/Creatures/Aberration Shriek/04.mp3",
+   "size": 20941
+  },
+  {
+   "path": "soundboard/Creatures/Aberration Shriek/05.mp3",
+   "size": 29362
+  },
+  {
+   "path": "soundboard/Creatures/Beast Growl/01.mp3",
+   "size": 42674
+  },
+  {
+   "path": "soundboard/Creatures/Beast Growl/02.mp3",
+   "size": 48526
+  },
+  {
+   "path": "soundboard/Creatures/Beast Growl/03.mp3",
+   "size": 28464
+  },
+  {
+   "path": "soundboard/Creatures/Beast Growl/04.mp3",
+   "size": 113000
+  },
+  {
+   "path": "soundboard/Creatures/Beast Growl/05.mp3",
+   "size": 92830
+  },
+  {
+   "path": "soundboard/Creatures/Celestial Chime/01.mp3",
+   "size": 62318
+  },
+  {
+   "path": "soundboard/Creatures/Celestial Chime/02.mp3",
+   "size": 79037
+  },
+  {
+   "path": "soundboard/Creatures/Celestial Chime/03.mp3",
+   "size": 56049
+  },
+  {
+   "path": "soundboard/Creatures/Construct Grind/01.mp3",
+   "size": 44826
+  },
+  {
+   "path": "soundboard/Creatures/Construct Grind/02.mp3",
+   "size": 51514
+  },
+  {
+   "path": "soundboard/Creatures/Construct Grind/03.mp3",
+   "size": 49780
+  },
+  {
+   "path": "soundboard/Creatures/Construct Grind/04.mp3",
+   "size": 43572
+  },
+  {
+   "path": "soundboard/Creatures/Construct Grind/05.mp3",
+   "size": 69068
+  },
+  {
+   "path": "soundboard/Creatures/Critical Hit/01.mp3",
+   "size": 131088
+  },
+  {
+   "path": "soundboard/Creatures/Dragon Roar/01.mp3",
+   "size": 136715
+  },
+  {
+   "path": "soundboard/Creatures/Dragon Roar/02.mp3",
+   "size": 66498
+  },
+  {
+   "path": "soundboard/Creatures/Elemental Roar/01.mp3",
+   "size": 67536
+  },
+  {
+   "path": "soundboard/Creatures/Elemental Roar/02.mp3",
+   "size": 72720
+  },
+  {
+   "path": "soundboard/Creatures/Elemental Roar/03.mp3",
+   "size": 73824
+  },
+  {
+   "path": "soundboard/Creatures/Fey Whisper/01.mp3",
+   "size": 52080
+  },
+  {
+   "path": "soundboard/Creatures/Fey Whisper/02.mp3",
+   "size": 54240
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/01.mp3",
+   "size": 56993
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/02.mp3",
+   "size": 44408
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/03.mp3",
+   "size": 43092
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/04.mp3",
+   "size": 38077
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/05.mp3",
+   "size": 79037
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/06.mp3",
+   "size": 105786
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/07.mp3",
+   "size": 56947
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/08.mp3",
+   "size": 52767
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/09.mp3",
+   "size": 77427
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/10.mp3",
+   "size": 28046
+  },
+  {
+   "path": "soundboard/Creatures/Fiend Snarl/11.mp3",
+   "size": 99935
+  },
+  {
+   "path": "soundboard/Creatures/Ghost Wail/01.mp3",
+   "size": 91220
+  },
+  {
+   "path": "soundboard/Creatures/Ghost Wail/02.mp3",
+   "size": 112954
+  },
+  {
+   "path": "soundboard/Creatures/Giant Bellow/01.mp3",
+   "size": 48526
+  },
+  {
+   "path": "soundboard/Creatures/Giant Bellow/02.mp3",
+   "size": 30972
+  },
+  {
+   "path": "soundboard/Creatures/Giant Bellow/03.mp3",
+   "size": 23866
+  },
+  {
+   "path": "soundboard/Creatures/Giant Bellow/04.mp3",
+   "size": 36405
+  },
+  {
+   "path": "soundboard/Creatures/Goblin Battle Cry/01.mp3",
+   "size": 29826
+  },
+  {
+   "path": "soundboard/Creatures/Goblin Battle Cry/02.mp3",
+   "size": 27690
+  },
+  {
+   "path": "soundboard/Creatures/Goblin Battle Cry/03.mp3",
+   "size": 31080
+  },
+  {
+   "path": "soundboard/Creatures/Humanoid Shout/01.mp3",
+   "size": 17241
+  },
+  {
+   "path": "soundboard/Creatures/Humanoid Shout/02.mp3",
+   "size": 5538
+  },
+  {
+   "path": "soundboard/Creatures/Humanoid Shout/03.mp3",
+   "size": 21466
+  },
+  {
+   "path": "soundboard/Creatures/Humanoid Shout/04.mp3",
+   "size": 18077
+  },
+  {
+   "path": "soundboard/Creatures/Humanoid Shout/05.mp3",
+   "size": 21838
+  },
+  {
+   "path": "soundboard/Creatures/Humanoid Shout/06.mp3",
+   "size": 19749
+  },
+  {
+   "path": "soundboard/Creatures/Humanoid Shout/07.mp3",
+   "size": 31080
+  },
+  {
+   "path": "soundboard/Creatures/Miss Whiff/01.mp3",
+   "size": 13479
+  },
+  {
+   "path": "soundboard/Creatures/Miss Whiff/02.mp3",
+   "size": 33479
+  },
+  {
+   "path": "soundboard/Creatures/Miss Whiff/03.mp3",
+   "size": 9238
+  },
+  {
+   "path": "soundboard/Creatures/Miss Whiff/04.mp3",
+   "size": 33123
+  },
+  {
+   "path": "soundboard/Creatures/Miss Whiff/05.mp3",
+   "size": 37349
+  },
+  {
+   "path": "soundboard/Creatures/Miss Whiff/06.mp3",
+   "size": 36405
+  },
+  {
+   "path": "soundboard/Creatures/Miss Whiff/07.mp3",
+   "size": 33587
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/01.mp3",
+   "size": 43990
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/02.mp3",
+   "size": 47752
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/03.mp3",
+   "size": 28464
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/04.mp3",
+   "size": 48944
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/05.mp3",
+   "size": 51870
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/06.mp3",
+   "size": 43092
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/07.mp3",
+   "size": 43092
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/08.mp3",
+   "size": 64826
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/09.mp3",
+   "size": 139703
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/10.mp3",
+   "size": 45290
+  },
+  {
+   "path": "soundboard/Creatures/Monstrosity Roar/11.mp3",
+   "size": 49780
+  },
+  {
+   "path": "soundboard/Creatures/Ogre Grunt/01.mp3",
+   "size": 23866
+  },
+  {
+   "path": "soundboard/Creatures/Ogre Grunt/02.mp3",
+   "size": 36405
+  },
+  {
+   "path": "soundboard/Creatures/Ogre Grunt/03.mp3",
+   "size": 13835
+  },
+  {
+   "path": "soundboard/Creatures/Ooze Squelch/01.mp3",
+   "size": 8820
+  },
+  {
+   "path": "soundboard/Creatures/Ooze Squelch/02.mp3",
+   "size": 62318
+  },
+  {
+   "path": "soundboard/Creatures/Ooze Squelch/03.mp3",
+   "size": 54857
+  },
+  {
+   "path": "soundboard/Creatures/Ooze Squelch/04.mp3",
+   "size": 31807
+  },
+  {
+   "path": "soundboard/Creatures/Ooze Squelch/05.mp3",
+   "size": 12643
+  },
+  {
+   "path": "soundboard/Creatures/Ooze Squelch/06.mp3",
+   "size": 46916
+  },
+  {
+   "path": "soundboard/Creatures/Plant Rustle/01.mp3",
+   "size": 21776
+  },
+  {
+   "path": "soundboard/Creatures/Plant Rustle/02.mp3",
+   "size": 29300
+  },
+  {
+   "path": "soundboard/Creatures/Plant Rustle/03.mp3",
+   "size": 31452
+  },
+  {
+   "path": "soundboard/Creatures/Skeleton Rattle/01.mp3",
+   "size": 13835
+  },
+  {
+   "path": "soundboard/Creatures/Skeleton Rattle/02.mp3",
+   "size": 10910
+  },
+  {
+   "path": "soundboard/Creatures/Skeleton Rattle/03.mp3",
+   "size": 15987
+  },
+  {
+   "path": "soundboard/Creatures/Spider Hiss/01.mp3",
+   "size": 21420
+  },
+  {
+   "path": "soundboard/Creatures/Spider Hiss/02.mp3",
+   "size": 18541
+  },
+  {
+   "path": "soundboard/Creatures/Spider Hiss/03.mp3",
+   "size": 31807
+  },
+  {
+   "path": "soundboard/Creatures/Swarm Buzz/01.mp3",
+   "size": 59037
+  },
+  {
+   "path": "soundboard/Creatures/Swarm Buzz/02.mp3",
+   "size": 32287
+  },
+  {
+   "path": "soundboard/Creatures/Swarm Buzz/03.mp3",
+   "size": 35631
+  },
+  {
+   "path": "soundboard/Creatures/Undead Groan/01.mp3",
+   "size": 56947
+  },
+  {
+   "path": "soundboard/Creatures/Undead Groan/02.mp3",
+   "size": 37303
+  },
+  {
+   "path": "soundboard/Creatures/Undead Groan/03.mp3",
+   "size": 54439
+  },
+  {
+   "path": "soundboard/Creatures/Wolf Snarl/01.mp3",
+   "size": 28046
+  },
+  {
+   "path": "soundboard/Creatures/Wolf Snarl/02.mp3",
+   "size": 30972
+  },
+  {
+   "path": "soundboard/Elemental/Acid Sizzle/01.mp3",
+   "size": 61483
+  },
+  {
+   "path": "soundboard/Elemental/Acid Sizzle/02.mp3",
+   "size": 62380
+  },
+  {
+   "path": "soundboard/Elemental/Acid Sizzle/03.mp3",
+   "size": 36885
+  },
+  {
+   "path": "soundboard/Elemental/Fire Burst/01.mp3",
+   "size": 28944
+  },
+  {
+   "path": "soundboard/Elemental/Fire Burst/02.mp3",
+   "size": 28108
+  },
+  {
+   "path": "soundboard/Elemental/Fire Burst/03.mp3",
+   "size": 26018
+  },
+  {
+   "path": "soundboard/Elemental/Force Pulse/01.mp3",
+   "size": 48170
+  },
+  {
+   "path": "soundboard/Elemental/Force Pulse/02.mp3",
+   "size": 48170
+  },
+  {
+   "path": "soundboard/Elemental/Force Pulse/03.mp3",
+   "size": 45290
+  },
+  {
+   "path": "soundboard/Elemental/Ice Shatter/01.mp3",
+   "size": 14671
+  },
+  {
+   "path": "soundboard/Elemental/Ice Shatter/02.mp3",
+   "size": 12999
+  },
+  {
+   "path": "soundboard/Elemental/Ice Shatter/03.mp3",
+   "size": 15507
+  },
+  {
+   "path": "soundboard/Elemental/Lightning Zap/01.mp3",
+   "size": 35569
+  },
+  {
+   "path": "soundboard/Elemental/Lightning Zap/02.mp3",
+   "size": 77427
+  },
+  {
+   "path": "soundboard/Elemental/Lightning Zap/03.mp3",
+   "size": 25956
+  },
+  {
+   "path": "soundboard/Elemental/Necrotic Drain/01.mp3",
+   "size": 32287
+  },
+  {
+   "path": "soundboard/Elemental/Poison Hiss/01.mp3",
+   "size": 30972
+  },
+  {
+   "path": "soundboard/Elemental/Poison Hiss/02.mp3",
+   "size": 25538
+  },
+  {
+   "path": "soundboard/Elemental/Psychic/01.mp3",
+   "size": 46498
+  },
+  {
+   "path": "soundboard/Elemental/Psychic/02.mp3",
+   "size": 85306
+  },
+  {
+   "path": "soundboard/Elemental/Radiant Burst/01.mp3",
+   "size": 46018
+  },
+  {
+   "path": "soundboard/Elemental/Radiant Burst/02.mp3",
+   "size": 48108
+  },
+  {
+   "path": "soundboard/Elemental/Thunder Clap/01.mp3",
+   "size": 27628
+  },
+  {
+   "path": "soundboard/Elemental/Thunder Clap/02.mp3",
+   "size": 27628
+  },
+  {
+   "path": "soundboard/Elemental/Thunder Clap/03.mp3",
+   "size": 26792
+  },
+  {
+   "path": "soundboard/Movement/Climb Scrape/01.mp3",
+   "size": 26018
+  },
+  {
+   "path": "soundboard/Movement/Climb Scrape/02.mp3",
+   "size": 21838
+  },
+  {
+   "path": "soundboard/Movement/Climb Scrape/03.mp3",
+   "size": 29408
+  },
+  {
+   "path": "soundboard/Movement/Fall Thud/01.mp3",
+   "size": 21420
+  },
+  {
+   "path": "soundboard/Movement/Fall Thud/02.mp3",
+   "size": 13835
+  },
+  {
+   "path": "soundboard/Movement/Fall Thud/03.mp3",
+   "size": 23138
+  },
+  {
+   "path": "soundboard/Movement/Heavy Footstep (Armor)/01.mp3",
+   "size": 23138
+  },
+  {
+   "path": "soundboard/Movement/Heavy Footstep (Armor)/02.mp3",
+   "size": 52859
+  },
+  {
+   "path": "soundboard/Movement/Light Footstep/01.mp3",
+   "size": 18077
+  },
+  {
+   "path": "soundboard/Movement/Light Footstep/02.mp3",
+   "size": 16405
+  },
+  {
+   "path": "soundboard/Movement/Light Footstep/03.mp3",
+   "size": 17241
+  },
+  {
+   "path": "soundboard/Movement/Light Footstep/04.mp3",
+   "size": 5538
+  },
+  {
+   "path": "soundboard/Movement/Stealth Footstep/01.mp3",
+   "size": 18077
+  },
+  {
+   "path": "soundboard/Movement/Stealth Footstep/02.mp3",
+   "size": 17659
+  },
+  {
+   "path": "soundboard/Movement/Stealth Footstep/03.mp3",
+   "size": 17659
+  },
+  {
+   "path": "soundboard/Movement/Stealth Footstep/04.mp3",
+   "size": 18913
+  },
+  {
+   "path": "soundboard/Movement/Swim Splash/01.mp3",
+   "size": 57721
+  },
+  {
+   "path": "soundboard/Movement/Swim Splash/02.mp3",
+   "size": 93665
+  },
+  {
+   "path": "soundboard/Movement/Swim Splash/03.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Cantrip Fizzle/01.mp3",
+   "size": 71994
+  },
+  {
+   "path": "soundboard/Spellcasting/Cantrip Fizzle/02.mp3",
+   "size": 65770
+  },
+  {
+   "path": "soundboard/Spellcasting/Cantrip Fizzle/03.mp3",
+   "size": 108712
+  },
+  {
+   "path": "soundboard/Spellcasting/Cast Charge-Up/01.mp3",
+   "size": 102025
+  },
+  {
+   "path": "soundboard/Spellcasting/Cast Charge-Up/02.mp3",
+   "size": 82381
+  },
+  {
+   "path": "soundboard/Spellcasting/Cast Charge-Up/03.mp3",
+   "size": 108712
+  },
+  {
+   "path": "soundboard/Spellcasting/Concentration Break/01.mp3",
+   "size": 42736
+  },
+  {
+   "path": "soundboard/Spellcasting/Concentration Break/02.mp3",
+   "size": 46962
+  },
+  {
+   "path": "soundboard/Spellcasting/Counterspell/01.mp3",
+   "size": 115872
+  },
+  {
+   "path": "soundboard/Spellcasting/Divination Whisper/01.mp3",
+   "size": 73247
+  },
+  {
+   "path": "soundboard/Spellcasting/Divination Whisper/02.mp3",
+   "size": 55693
+  },
+  {
+   "path": "soundboard/Spellcasting/Divination Whisper/03.mp3",
+   "size": 61483
+  },
+  {
+   "path": "soundboard/Spellcasting/Divination Whisper/04.mp3",
+   "size": 60229
+  },
+  {
+   "path": "soundboard/Spellcasting/Divination Whisper/05.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Divination Whisper/06.mp3",
+   "size": 159703
+  },
+  {
+   "path": "soundboard/Spellcasting/Divination Whisper/07.mp3",
+   "size": 143821
+  },
+  {
+   "path": "soundboard/Spellcasting/Enchantment Charm/01.mp3",
+   "size": 35569
+  },
+  {
+   "path": "soundboard/Spellcasting/Enchantment Charm/02.mp3",
+   "size": 67752
+  },
+  {
+   "path": "soundboard/Spellcasting/Enchantment Charm/03.mp3",
+   "size": 104950
+  },
+  {
+   "path": "soundboard/Spellcasting/Enchantment Charm/04.mp3",
+   "size": 126684
+  },
+  {
+   "path": "soundboard/Spellcasting/Enchantment Charm/05.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Enchantment Charm/06.mp3",
+   "size": 127102
+  },
+  {
+   "path": "soundboard/Spellcasting/Healing Chime/01.mp3",
+   "size": 48634
+  },
+  {
+   "path": "soundboard/Spellcasting/Healing Chime/02.mp3",
+   "size": 41946
+  },
+  {
+   "path": "soundboard/Spellcasting/Healing Chime/03.mp3",
+   "size": 65244
+  },
+  {
+   "path": "soundboard/Spellcasting/Healing Chime/04.mp3",
+   "size": 44764
+  },
+  {
+   "path": "soundboard/Spellcasting/Illusion Shimmer/01.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Illusion Shimmer/02.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Illusion Shimmer/03.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Necromancy Whisper/01.mp3",
+   "size": 54439
+  },
+  {
+   "path": "soundboard/Spellcasting/Necromancy Whisper/02.mp3",
+   "size": 104532
+  },
+  {
+   "path": "soundboard/Spellcasting/Necromancy Whisper/03.mp3",
+   "size": 85306
+  },
+  {
+   "path": "soundboard/Spellcasting/Necromancy Whisper/04.mp3",
+   "size": 60291
+  },
+  {
+   "path": "soundboard/Spellcasting/Shield Ward Hit/01.mp3",
+   "size": 46498
+  },
+  {
+   "path": "soundboard/Spellcasting/Shield Ward Hit/02.mp3",
+   "size": 44872
+  },
+  {
+   "path": "soundboard/Spellcasting/Summon Portal/01.mp3",
+   "size": 62736
+  },
+  {
+   "path": "soundboard/Spellcasting/Summon Portal/02.mp3",
+   "size": 51870
+  },
+  {
+   "path": "soundboard/Spellcasting/Summon Portal/03.mp3",
+   "size": 26792
+  },
+  {
+   "path": "soundboard/Spellcasting/Teleport Pop/01.mp3",
+   "size": 24346
+  },
+  {
+   "path": "soundboard/Spellcasting/Teleport Pop/02.mp3",
+   "size": 27272
+  },
+  {
+   "path": "soundboard/Spellcasting/Teleport Pop/03.mp3",
+   "size": 17597
+  },
+  {
+   "path": "soundboard/Spellcasting/Transmutation Warp/01.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Transmutation Warp/02.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Transmutation Warp/03.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Transmutation Warp/04.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Transmutation Warp/05.mp3",
+   "size": 160957
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/01.mp3",
+   "size": 37659
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/02.mp3",
+   "size": 30616
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/03.mp3",
+   "size": 61963
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/04.mp3",
+   "size": 48170
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/05.mp3",
+   "size": 25600
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/06.mp3",
+   "size": 39857
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/07.mp3",
+   "size": 24346
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/08.mp3",
+   "size": 24810
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/09.mp3",
+   "size": 17241
+  },
+  {
+   "path": "soundboard/Spellcasting/Utility Chime/10.mp3",
+   "size": 24764
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Arrow Impact/01.mp3",
+   "size": 11389
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Arrow Impact/02.mp3",
+   "size": 7210
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Arrow Impact/03.mp3",
+   "size": 10554
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Axe Chop/01.mp3",
+   "size": 12225
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Axe Chop/02.mp3",
+   "size": 12643
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Axe Chop/03.mp3",
+   "size": 11389
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Bow Release/01.mp3",
+   "size": 30198
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Bow Release/02.mp3",
+   "size": 27272
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Bow Release/03.mp3",
+   "size": 28154
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Crossbow Release/01.mp3",
+   "size": 41529
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Crossbow Release/02.mp3",
+   "size": 41529
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Crossbow Release/03.mp3",
+   "size": 42782
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Dagger Stab/01.mp3",
+   "size": 8882
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Dagger Stab/02.mp3",
+   "size": 9656
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Dagger Stab/03.mp3",
+   "size": 9718
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Mace Blunt Impact/01.mp3",
+   "size": 16451
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Mace Blunt Impact/02.mp3",
+   "size": 19377
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Mace Blunt Impact/03.mp3",
+   "size": 17705
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Shield Bash/01.mp3",
+   "size": 9300
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Shield Bash/02.mp3",
+   "size": 8046
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Shield Bash/03.mp3",
+   "size": 9238
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Clang Parry/01.mp3",
+   "size": 8464
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Clang Parry/02.mp3",
+   "size": 9718
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Clang Parry/03.mp3",
+   "size": 7628
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Clang Parry/04.mp3",
+   "size": 8464
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Clang Parry/05.mp3",
+   "size": 8046
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Slash/01.mp3",
+   "size": 12225
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Slash/02.mp3",
+   "size": 13061
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Slash/03.mp3",
+   "size": 10136
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Sword Slash/04.mp3",
+   "size": 14315
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Unarmed Punch/01.mp3",
+   "size": 8402
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Unarmed Punch/02.mp3",
+   "size": 7566
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Unarmed Punch/03.mp3",
+   "size": 8046
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Warhammer Impact/01.mp3",
+   "size": 14671
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Warhammer Impact/02.mp3",
+   "size": 17241
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Warhammer Impact/03.mp3",
+   "size": 15569
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Whip Crack/01.mp3",
+   "size": 7566
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Whip Crack/02.mp3",
+   "size": 9656
+  },
+  {
+   "path": "soundboard/WeaponImpacts/Whip Crack/03.mp3",
+   "size": 7566
+  }
+ ]
+}

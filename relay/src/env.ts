@@ -8,6 +8,8 @@ export interface Env {
   Session: DurableObjectNamespace<Session>
   /** Set via `wrangler secret put RELAY_SECRET` in production; falls back to an insecure dev-only value under `wrangler dev`. */
   RELAY_SECRET?: string
+  /** The R2 bucket for each account's own music and sounds (audio.ts) — unset until `notegoblin-audio` is created and bound in wrangler.jsonc. */
+  AUDIO?: R2Bucket
   /** Set via `wrangler secret put ADMIN_USERNAME` — the one relay username allowed to call the /admin/* account-management endpoints, unset under `wrangler dev`. */
   ADMIN_USERNAME?: string
 }

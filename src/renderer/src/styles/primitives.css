@@ -602,3 +602,110 @@
   text-transform: uppercase;
   color: var(--accent-hover);
 }
+
+/* A note's backlinks (NoteEditor.tsx): the other notes that link to it, as a row of small chips under the body. */
+.gb-backlinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.gb-backlinks-label {
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gb-backlink {
+  max-width: 200px;
+  overflow: hidden;
+  padding: 2px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gb-backlink:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+
+.gb-backlink:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* A handout from the DM (HandoutViewer.tsx): a note or picture over the player's canvas. */
+.gb-handout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.gb-handout-eyebrow {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.gb-handout-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.gb-handout-image {
+  display: block;
+  max-width: 100%;
+  max-height: 65vh;
+  margin: var(--space-2) auto 0;
+  border-radius: var(--radius-md, 8px);
+  object-fit: contain;
+}
+
+.gb-handout-note {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.gb-handout-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+/* The DM's "Show to players" button, for a moment after: how it went. */
+.gb-handout-status {
+  max-width: 180px;
+  overflow: hidden;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-handout-status--error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}

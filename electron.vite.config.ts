@@ -18,6 +18,12 @@ export default defineConfig({
       alias: {
         '@shared': resolve('shared')
       }
+    },
+    // CommonJS: a sandboxed preload (see src/main/index.ts) can't be an ES module.
+    build: {
+      rollupOptions: {
+        output: { format: 'cjs', entryFileNames: '[name].cjs' }
+      }
     }
   },
   renderer: {
