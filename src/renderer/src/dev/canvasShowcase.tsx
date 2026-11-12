@@ -12,8 +12,12 @@ import { EncounterLibrary } from '../features/combat/EncounterLibrary'
 import { SessionPresenter, SessionsList, type SessionDecksApi } from '../features/campaigns/SessionTimeline'
 import { SceneCues } from '../features/campaigns/SceneCues'
 import { BrowserPanel } from '../features/browser/BrowserPanel'
+import { ReputationTracker } from '../features/campaigns/ReputationTracker'
+import { WorldMap } from '../features/campaigns/WorldMap'
 import { setBrowserAccount } from '../features/browser/browserAccount'
 import { GoblinLoader } from '../ui/GoblinLoader'
+import { UndoToast } from '../ui/UndoToast'
+import { ShortcutSheet } from '../ui/ShortcutSheet'
 import { CanvasZoomContext } from '../features/canvas/canvasZoom'
 import type { SessionScene } from '@shared/sessionDeck'
 import { MarkdownLiveEditor } from '../features/campaigns/MarkdownLiveEditor'
@@ -197,6 +201,8 @@ function SessionsShot(): JSX.Element {
     })),
     { id: 'sessions', title: 'Sessions', icon: TOOL_ICONS.sessions, size: { w: 400, h: 320 }, content: <SessionsList api={fakeDecks} onOpen={() => {}} onNew={() => {}} onDelete={() => {}} onRename={() => {}} shelved={() => false} onUnshelve={() => {}} /> }
   ]
+  // ?manual: the scenes in an order set by hand, each number a picker.
+  const [order, setOrder] = useState<string[] | null>(() => (new URLSearchParams(location.search).has('manual') ? sceneIds : null))
   const sessionNav: CanvasNav = { ...nav, path: ['deck'], names: [{ id: 'deck', name: 'Session 12: Below the Chapel', sessionDeckId: 'deck' }] }
   return (
     <div style={{ height: '100vh', display: 'flex' }}>
@@ -208,7 +214,15 @@ function SessionsShot(): JSX.Element {
         toolIcons={TOOL_ICONS}
         hiddenTools={['codex', 'timer']}
         nav={sessionNav}
-        sequence={readingOrder(layout.nodes.filter((n) => sceneIds.includes(n.id)))}
+        sequence={order ?? readingOrder(layout.nodes.filter((n) => sceneIds.includes(n.id)))}
+        onSequenceMove={
+          order
+            ? (id, to) => {
+                const rest = order.filter((x) => x !== id)
+                setOrder([...rest.slice(0, to), id, ...rest.slice(to)])
+              }
+            : undefined
+        }
         crumbExtra={
           <button type="button" className="gb-btn gb-btn--secondary gb-session-crumb-action" style={{ fontSize: 12 }}>
             Stop presenting
@@ -373,7 +387,15 @@ function SearchShot(): JSX.Element {
   const tools = (['notes', 'initiative', 'calendar', 'music'] as const).map((k) => ({ id: k, name: TOOL_META[k].title, hint: 'Tool', icon: TOOL_ICONS[k], onSelect: pick(k) }))
   return (
     <div ref={root} style={{ height: '100vh' }}>
-      <QuickSearch open={open} onClose={() => setOpen(false)} notes={notes} tools={tools} onOpenMonster={(m) => console.log('search picked', m.name)} />
+      <QuickSearch
+        open={open}
+        onClose={() => setOpen(false)}
+        notes={notes}
+        tools={tools}
+        onOpenMonster={(m) => console.log('search picked', m.name)}
+        quests={{ campaignId: 'camp', sessionId: null, onOpen: pick('quests') }}
+        onOpenPage={(url) => console.log('open page', url)}
+      />
     </div>
   )
 }
@@ -467,10 +489,45 @@ function InitiativeShot(): JSX.Element {
   )
 }
 
+/** Every scene, with the app's Undo pop-up over it (AppShell has it in the app). */
 export function CanvasShowcase({ scene }: { scene: string }): JSX.Element {
+  return (
+    <>
+      <ShowcaseScene scene={scene} />
+      <UndoToast />
+      <ShortcutSheet />
+    </>
+  )
+}
+
+function ShowcaseScene({ scene }: { scene: string }): JSX.Element {
   if (scene === 'search') return <SearchShot />
   if (scene === 'table') return <TableShot />
   if (scene === 'browser') return <BrowserShot />
+  if (scene === 'worldmap')
+    // The DM's world map (left) and a player's (right), on an in-memory map.
+    return (
+      <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: 16, background: 'var(--bg-surface)' }}>
+        <div className="gb-card" style={{ padding: 0, height: 'calc(100vh - 32px)', overflow: 'hidden' }}>
+          <WorldMap sessionId={null} campaignId="camp" readOnly={false} onOpenNote={(t) => console.log('map note', t)} onOpenTool={(t) => console.log('map tool', t)} />
+        </div>
+        <div className="gb-card" style={{ padding: 0, height: 'calc(100vh - 32px)', overflow: 'hidden' }}>
+          <WorldMap sessionId="s" campaignId="camp" readOnly onOpenTool={(t) => console.log('map tool', t)} />
+        </div>
+      </div>
+    )
+  if (scene === 'reputation')
+    // The DM's tracker (left) and a player's (right), on an in-memory tracker.
+    return (
+      <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: '400px 400px', gap: 24, padding: 24, background: 'var(--bg-surface)' }}>
+        <div className="gb-card" style={{ padding: 0, height: 600 }}>
+          <ReputationTracker sessionId={null} campaignId="camp" readOnly={false} onOpenNote={(t) => console.log('rep note', t)} />
+        </div>
+        <div className="gb-card" style={{ padding: 0, height: 600 }}>
+          <ReputationTracker sessionId="s" campaignId="camp" readOnly />
+        </div>
+      </div>
+    )
   if (scene === 'loader')
     return (
       <div style={{ height: '100vh', display: 'flex', gap: 32, alignItems: 'center', justifyContent: 'center', background: 'var(--bg-surface)' }}>

@@ -1,4 +1,6 @@
 import { WidgetType, type EditorView } from '@codemirror/view'
+import { undo } from '@codemirror/commands'
+import { offerUndo } from '../../ui/undo'
 import type { ContextMenuItem, ContextMenuState } from '../../ui/ContextMenu'
 import { DICE_ICON_SVG } from '../../ui/iconMarkup'
 import {
@@ -185,7 +187,15 @@ export class TableWidget extends WidgetType {
         { label: 'Align column', separatorBefore: !moves.length, submenu: [align('Default', null), align('Left', 'left'), align('Centre', 'center'), align('Right', 'right')] },
         ...(row >= 0 ? [{ label: 'Delete row', danger: true, separatorBefore: true, onSelect: () => apply(deleteRow(model, row)) }] : []),
         ...(model.header.length > 1 ? [{ label: 'Delete column', danger: true, separatorBefore: row < 0, onSelect: () => apply(deleteColumn(model, col)) }] : []),
-        { label: 'Delete table', danger: true, separatorBefore: true, onSelect: () => apply(null) }
+        {
+          label: 'Delete table',
+          danger: true,
+          separatorBefore: true,
+          onSelect: () => {
+            apply(null)
+            offerUndo('Deleted a table', () => undo(view))
+          }
+        }
       ]
       this.onMenu.current({ x: e.clientX, y: e.clientY, items })
     })

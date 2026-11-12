@@ -1,4 +1,6 @@
 import { usePartyPresence } from '../player/PartyList'
+import { WorldMap } from './WorldMap'
+import { ReputationTracker } from './ReputationTracker'
 import { GoblinLoader } from '../../ui/GoblinLoader'
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { NoteSidebar } from './NoteSidebar'
@@ -131,7 +133,13 @@ export function CampaignWorkspace({
   const sessionHere = nav.names[nav.names.length - 1]?.sessionDeckId
   const deckHere = sessionHere ? decksApi.decks.find((d) => d.id === sessionHere) : undefined
   const sceneIdsHere = new Set(deckHere?.scenes.map((s) => `note:${s.noteId}`))
-  const sequence = deckHere ? readingOrder(layout.nodes.filter((n) => sceneIdsHere.has(n.id))) : undefined
+  // Ordered by hand: the session's own order (of the scenes with a box here); otherwise the order the boxes read in.
+  const manualHere = !!deckHere && !!nav.names[nav.names.length - 1]?.manualOrder
+  const sequence = !deckHere
+    ? undefined
+    : manualHere
+      ? deckHere.scenes.map((s) => `note:${s.noteId}`).filter((id) => layout.nodes.some((n) => n.id === id && !n.pinned))
+      : readingOrder(layout.nodes.filter((n) => sceneIdsHere.has(n.id)))
   const sequenceKey = sequence?.join(',')
   const liveDeck = decksApi.decks.find((d) => d.id === decksApi.live.deckId)
   const liveNoteId = liveDeck?.scenes[decksApi.live.sceneIndex]?.noteId
@@ -186,10 +194,11 @@ export function CampaignWorkspace({
 
   // Moving a scene's box changes the session's order to match; while presenting, the live scene stays the live one.
   const sentOrder = useRef('')
-  useEffect(() => {
-    if (!deckHere || !sequenceKey) return
-    const order = sequenceKey.split(',').map((id) => id.slice('note:'.length))
-    const next = [...order.map((id) => deckHere.scenes.find((s) => s.noteId === id)!), ...deckHere.scenes.filter((s) => !order.includes(s.noteId))]
+  /** Puts the session's scenes in this order (of box ids); scenes without a box keep their places after them. */
+  function orderScenes(ids: string[]): void {
+    if (!deckHere) return
+    const order = ids.map((id) => id.slice('note:'.length))
+    const next = [...order.map((id) => deckHere.scenes.find((s) => s.noteId === id)!).filter(Boolean), ...deckHere.scenes.filter((s) => !order.includes(s.noteId))]
     const key = next.map((s) => s.noteId).join(',')
     if (key === deckHere.scenes.map((s) => s.noteId).join(',') || key === sentOrder.current) return
     sentOrder.current = key
@@ -198,8 +207,24 @@ export function CampaignWorkspace({
       const at = next.findIndex((s) => s.noteId === liveNoteId)
       if (at !== decksApi.live.sceneIndex) decksApi.setLiveSceneIndex(at)
     }
+  }
+  useEffect(() => {
+    if (!deckHere || !sequenceKey || manualHere) return
+    orderScenes(sequenceKey.split(','))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckHere, sequenceKey])
+  }, [deckHere, sequenceKey, manualHere])
+  /** Ordering by hand on or off, kept on the session's collection. */
+  function setManualOrder(on: boolean): void {
+    const at = nav.path
+    const cid = at[at.length - 1]
+    nav.update(at.slice(0, -1), (parent) => {
+      const c = parent.collections?.[cid]
+      if (!c) return parent
+      const rest = { ...c }
+      delete rest.manualOrder
+      return { ...parent, collections: { ...parent.collections, [cid]: on ? { ...rest, manualOrder: true } : rest } }
+    })
+  }
 
   /** Goes into a session's collection — making it first, with a box per scene, if it has none yet. `enter: false` only makes it. */
   function openSession(deck: SessionDeck, at?: CanvasPoint, enter = true): void {
@@ -382,6 +407,31 @@ export function CampaignWorkspace({
       mini: <InitiativeMini />
     },
     timer: { full: <TimerPanel />, mini: <TimerMini /> },
+    worldmap: (
+      <WorldMap
+        sessionId={null}
+        campaignId={campaign?.id ?? null}
+        readOnly={false}
+        noteTitles={(notes ?? []).map((n) => n.title).filter(Boolean)}
+        onOpenNote={(title) => {
+          const found = (notes ?? []).find((n) => n.title.trim().toLowerCase() === title.toLowerCase())
+          if (found) openInNewBox(found.id)
+        }}
+        onOpenTool={(tool) => canvasRef.current?.openTool(tool)}
+      />
+    ),
+    reputation: (
+      <ReputationTracker
+        sessionId={null}
+        campaignId={campaign?.id ?? null}
+        readOnly={false}
+        noteTitles={(notes ?? []).map((n) => n.title).filter(Boolean)}
+        onOpenNote={(title) => {
+          const found = (notes ?? []).find((n) => n.title.trim().toLowerCase() === title.toLowerCase())
+          if (found) openInNewBox(found.id)
+        }}
+      />
+    ),
     quests: (
       <QuestLog
         sessionId={null}
@@ -526,6 +576,8 @@ export function CampaignWorkspace({
       <QuickSearch
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
+        quests={{ campaignId: campaign?.id ?? null, sessionId: null, onOpen: () => canvasRef.current?.openTool('quests'), onOpenTool: (tool) => canvasRef.current?.openTool(tool) }}
+        onOpenPage={(url) => canvasRef.current?.openBrowser(url)}
         tools={TOOLS_BY_MODE.dm
           .filter((kind) => !HEADER_TOOLS.includes(kind))
           .map((kind) => ({ id: kind, name: TOOL_META[kind].title, hint: 'Tool', icon: TOOL_ICONS[kind], onSelect: () => canvasRef.current?.openTool(kind) }))}
@@ -568,9 +620,28 @@ export function CampaignWorkspace({
         key={nav.path.join('/')}
         nav={canvasNav}
         sequence={sequence}
+        onSequenceMove={
+          manualHere && sequence
+            ? (id, to) => {
+                const rest = sequence.filter((x) => x !== id)
+                orderScenes([...rest.slice(0, to), id, ...rest.slice(to)])
+              }
+            : undefined
+        }
         crumbExtra={
-          deckHere &&
-          (liveDeck?.id === deckHere.id ? (
+          deckHere && (
+          <>
+          <Button
+            variant="secondary"
+            className="gb-session-crumb-action"
+            style={{ fontSize: 12 }}
+            aria-pressed={manualHere}
+            onClick={() => setManualOrder(!manualHere)}
+            title={manualHere ? 'Scenes are in the order you set: click a scene’s number to move it. Click to order them by where their boxes are instead.' : 'Scenes are in the order their boxes read, left to right and top to bottom. Click to set the order by hand instead.'}
+          >
+            {manualHere ? 'Order: set by hand' : 'Order: by layout'}
+          </Button>
+          {liveDeck?.id === deckHere.id ? (
             <Button variant="secondary" className="gb-session-crumb-action" style={{ fontSize: 12 }} onClick={decksApi.stopPresenting}>
               Stop presenting
             </Button>
@@ -578,7 +649,9 @@ export function CampaignWorkspace({
             <Button variant="primary" className="gb-session-crumb-action" style={{ fontSize: 12 }} disabled={deckHere.scenes.length === 0} onClick={() => decksApi.present(deckHere.id)}>
               ▶ Present
             </Button>
-          ))
+          )}
+          </>
+          )
         }
         ref={canvasRef}
         mode="dm"

@@ -134,6 +134,25 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('ws:battle-map-image', listener)
     }
   },
+  worldMap: {
+    get: (campaignId, sessionId) => ipcRenderer.invoke('worldMap:get', campaignId, sessionId),
+    save: (campaignId, doc) => ipcRenderer.invoke('worldMap:save', campaignId, doc),
+    setImage: (campaignId, mapId, image, forPlayers) => ipcRenderer.invoke('worldMap:set-image', campaignId, mapId, image, forPlayers),
+    image: (campaignId, mapId, sessionId) => ipcRenderer.invoke('worldMap:image', campaignId, mapId, sessionId),
+    onImage: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { campaignId: string; mapId: string; imageId: string; image: string }): void => callback(payload)
+      ipcRenderer.on('ws:world-map-image', listener)
+      return () => ipcRenderer.removeListener('ws:world-map-image', listener)
+    }
+  },
+  reputation: {
+    get: (campaignId, sessionId) => ipcRenderer.invoke('reputation:get', campaignId, sessionId),
+    save: (campaignId, doc) => ipcRenderer.invoke('reputation:save', campaignId, doc)
+  },
+  stash: {
+    get: (campaignId, sessionId) => ipcRenderer.invoke('stash:get', campaignId, sessionId),
+    change: (campaignId, change, sessionId) => ipcRenderer.invoke('stash:change', campaignId, change, sessionId)
+  },
   quests: {
     get: (campaignId, sessionId) => ipcRenderer.invoke('quests:get', campaignId, sessionId),
     save: (campaignId, quests) => ipcRenderer.invoke('quests:save', campaignId, quests),
@@ -404,7 +423,7 @@ const api: AppApi = {
     }
   },
   files: {
-    pickImage: () => ipcRenderer.invoke('files:pick-image'),
+    pickImage: (opts) => ipcRenderer.invoke('files:pick-image', opts),
     getVaultPath: () => ipcRenderer.invoke('files:get-vault-path'),
     chooseVaultFolder: () => ipcRenderer.invoke('files:choose-vault-folder')
   },

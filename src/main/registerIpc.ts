@@ -94,7 +94,10 @@ import type {
 } from '@shared/ipc'
 import type { CalendarConfig } from '@shared/calendar'
 import type { CampaignVehicles } from '@shared/vehicles'
-import { coinList, hasPayout, questIsFor, splitReward, type CampaignQuests } from '@shared/quests'
+import { coinList, hasItemsToStash, hasPayout, questIsFor, splitReward, type CampaignQuests, type Quest } from '@shared/quests'
+import type { CampaignStash } from '@shared/stash'
+import type { CampaignReputation } from '@shared/reputation'
+import type { CampaignMaps } from '@shared/worldMap'
 import type { BattleLibrary, BattleMap, PlayerBattleMap } from '@shared/battleMap'
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
@@ -855,6 +858,104 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return sendSessionRequest<CampaignQuests>('quests.get', { campaignId })
   })
 
+  // The maps: DM-written and kept locally; a player reads the shown ones, and asks for a picture (it arrives in pieces).
+  ipcMain.handle('worldMap:get', async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<CampaignMaps>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.getMaps(me.db, campaignId, me.userId)
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest<CampaignMaps>('worldMap.get', { campaignId })
+  })
+  const mapsChanged = (campaignId: string): void => {
+    mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+    if (getHostedSession()) broadcastCampaignChanged(campaignId)
+  }
+  ipcMain.handle('worldMap:save', async (_event, campaignId: string, doc: unknown): Promise<ApiResult<CampaignMaps>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = campaignService.saveMaps(me.db, campaignId, me.userId, doc)
+    if (result.ok) mapsChanged(campaignId)
+    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+  })
+  // A map's picture — or, `forPlayers`, the copy with its fog burned in that players get.
+  ipcMain.handle('worldMap:set-image', async (_event, campaignId: string, mapId: unknown, image: unknown, forPlayers?: boolean): Promise<ApiResult<string | null>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = campaignService.setMapImage(me.db, campaignId, me.userId, mapId, image, forPlayers === true)
+    if (result.ok) mapsChanged(campaignId)
+    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+  })
+  // The DM's own picture straight away; a player's arrives later as ws:world-map-image.
+  ipcMain.handle('worldMap:image', async (_event, campaignId: string, mapId: string, sessionId?: string): Promise<ApiResult<string | null>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.getMapImage(me.db, campaignId, me.userId, mapId)
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    const asked = await sendSessionRequest<{ imageId: string | null }>('worldMap.image', { campaignId, mapId })
+    return asked.ok ? { ok: true, data: null } : asked
+  })
+
+  // The reputation tracker: DM-written and always local, like the quest log; a player reads their part over the session.
+  ipcMain.handle('reputation:get', async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<CampaignReputation>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.getReputation(me.db, campaignId, me.userId)
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest<CampaignReputation>('reputation.get', { campaignId })
+  })
+
+  ipcMain.handle('reputation:save', async (_event, campaignId: string, doc: unknown): Promise<ApiResult<CampaignReputation>> => {
+    const me = ensureMyHostUser()
+    if ('error' in me) return { ok: false, error: me.error }
+    const result = campaignService.saveReputation(me.db, campaignId, me.userId, doc)
+    if (result.ok) {
+      mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+      if (getHostedSession()) broadcastCampaignChanged(campaignId)
+    }
+    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+  })
+
+  // The party stash: the DM's own computer holds it; a player's read and changes go to it over the session.
+  ipcMain.handle('stash:get', async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<CampaignStash>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.getStash(me.db, campaignId, me.userId)
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest<CampaignStash>('stash.get', { campaignId })
+  })
+
+  ipcMain.handle('stash:change', async (_event, campaignId: string, change: unknown, sessionId?: string): Promise<ApiResult<CampaignStash>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.changeStash(me.db, campaignId, me.userId, change)
+      if (result.ok) {
+        mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+        if (getHostedSession()) broadcastCampaignChanged(campaignId)
+      }
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest<CampaignStash>('stash.change', { campaignId, change })
+  })
+
   // DM-only and always local, like the vehicles: players see the change by re-reading.
   ipcMain.handle('quests:save', async (_event, campaignId: string, quests: unknown): Promise<ApiResult<CampaignQuests>> => {
     const me = ensureMyHostUser()
@@ -873,6 +974,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   // A finished quest's coins and XP, split evenly between the players connected to the campaign and sent to each —
   // once: the quest is marked paid. The amounts come from the saved quest, not from the screen.
+  // A finished quest pays out, once each: its items (from the Codex, or written in) into the party stash — no one
+  // needs to be at the table for that — and its coins and XP split evenly between the players connected to the
+  // campaign and sent to each. The amounts come from the saved quest, not from the screen.
   ipcMain.handle('quests:award', async (_event, campaignId: string, questId: string): Promise<QuestAwardResult> => {
     const me = ensureMyHostUser()
     if ('error' in me) return { ok: false, error: me.error }
@@ -880,12 +984,41 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (!log.ok) return { ok: false, error: log.error }
     const quest = log.data.quests.find((q) => q.id === questId)
     if (!quest || quest.status !== 'done') return { ok: false, error: 'That quest isn’t finished.' }
-    if (quest.rewarded) return { ok: false, error: 'Its rewards were already handed out.' }
-    if (!hasPayout(quest)) return { ok: false, error: 'It has no coins or XP to hand out.' }
-    if (!getHostedSession()) return { ok: false, error: 'Start hosting to hand them out.' }
+    const payCoins = !quest.rewarded && hasPayout(quest)
+    if (!payCoins && !hasItemsToStash(quest)) return { ok: false, error: quest.rewarded ? 'Its rewards were already handed out.' : 'It has nothing to hand out.' }
+
+    const changed: Partial<Quest> = {}
+    const stashed: string[] = []
+    if (hasItemsToStash(quest)) {
+      const from = `From “${quest.title}”`
+      for (const entry of quest.rewardEntries ?? []) {
+        const added = campaignService.changeStash(me.db, campaignId, me.userId, { op: 'add', name: entry.name, note: from, codex: { kind: entry.kind, id: entry.id } })
+        if (added.ok) stashed.push(entry.name)
+      }
+      if (quest.rewardItems) {
+        const added = campaignService.changeStash(me.db, campaignId, me.userId, { op: 'add', name: quest.rewardItems, note: from })
+        if (added.ok) stashed.push(quest.rewardItems)
+      }
+      changed.itemsStashed = true
+    }
+    const finish = (): void => {
+      const saved = campaignService.saveQuests(me.db, campaignId, me.userId, { quests: log.data.quests.map((q) => (q.id === questId ? { ...q, ...changed } : q)) })
+      if (saved.ok) {
+        mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
+        if (getHostedSession()) broadcastCampaignChanged(campaignId)
+      }
+    }
+    if (!payCoins) {
+      finish()
+      return { ok: true, players: 0, coinsEach: {}, xpEach: 0, coinsLeftover: {}, stashed }
+    }
     // A quest for some of the party pays just them.
-    const party = playersInCampaign(campaignId).filter((id) => questIsFor(quest, id))
-    if (party.length === 0) return { ok: false, error: quest.forPlayers?.length ? 'None of the players it’s for are at the table.' : 'No players are at the table to hand them to.' }
+    const party = getHostedSession() ? playersInCampaign(campaignId).filter((id) => questIsFor(quest, id)) : []
+    if (party.length === 0) {
+      finish()
+      const error = !getHostedSession() ? 'Start hosting to hand them out.' : quest.forPlayers?.length ? 'None of the players it’s for are at the table.' : 'No players are at the table to hand them to.'
+      return { ok: false, error, stashed }
+    }
     // Each currency split on its own: what's left of one isn't changed into another.
     const coinsEach: Record<string, number> = {}
     const coinsLeftover: Record<string, number> = {}
@@ -896,12 +1029,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
     const xp = splitReward(quest.rewardXp ?? 0, party.length)
     sendQuestReward(party, quest.title, coinsEach, xp.each)
-    const saved = campaignService.saveQuests(me.db, campaignId, me.userId, { quests: log.data.quests.map((q) => (q.id === questId ? { ...q, rewarded: true } : q)) })
-    if (saved.ok) {
-      mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
-      broadcastCampaignChanged(campaignId)
-    }
-    return { ok: true, players: party.length, coinsEach, xpEach: xp.each, coinsLeftover }
+    changed.rewarded = true
+    finish()
+    return { ok: true, players: party.length, coinsEach, xpEach: xp.each, coinsLeftover, stashed }
   })
 
   ipcMain.handle(
@@ -2098,11 +2228,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     svg: 'image/svg+xml'
   }
 
+  const MAX_MAP_IMAGE_BYTES = 64 * 1024 * 1024
   ipcMain.handle(
     'files:pick-image',
-    async (): Promise<ApiResult<{ dataUrl: string; fileName: string }>> => {
+    async (_event, opts?: { big?: boolean }): Promise<ApiResult<{ dataUrl: string; fileName: string }>> => {
+      // A map's picture may be far bigger than an image in a note: the World Map shrinks it to a sensible size itself.
+      const maxBytes = opts?.big ? MAX_MAP_IMAGE_BYTES : MAX_IMAGE_BYTES
       const result = await dialog.showOpenDialog(mainWindow, {
-        title: 'Insert image',
+        title: opts?.big ? 'Choose a map picture' : 'Insert image',
         properties: ['openFile'],
         filters: [{ name: 'Images', extensions: Object.keys(IMAGE_MIME_BY_EXT) }]
       })
@@ -2118,8 +2251,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (!mime) return { ok: false, error: 'Unsupported image type.' }
       try {
         const buffer = await readFile(filePath)
-        if (buffer.byteLength > MAX_IMAGE_BYTES) {
-          return { ok: false, error: 'That image is too large (max 8 MB) — try a smaller file.' }
+        if (buffer.byteLength > maxBytes) {
+          return { ok: false, error: `That image is too large (max ${Math.round(maxBytes / 1024 / 1024)} MB) — try a smaller file.` }
         }
         const dataUrl = `data:${mime};base64,${buffer.toString('base64')}`
         return { ok: true, data: { dataUrl, fileName: basename(filePath) } }

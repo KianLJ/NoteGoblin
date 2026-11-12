@@ -6,6 +6,11 @@ import { MessageRepo, type MessageRow } from '../repositories/messageRepo'
 import { CalendarRepo, type CalendarRow } from '../repositories/calendarRepo'
 import { VehiclesRepo } from '../repositories/vehiclesRepo'
 import { normalizeQuests, questsForPlayer, type CampaignQuests } from '@shared/quests'
+import { applyStashChange, normalizeStash, type CampaignStash } from '@shared/stash'
+import { normalizeReputation, reputationForPlayer, type CampaignReputation } from '@shared/reputation'
+import { mapsForPlayer, normalizeMaps, type CampaignMaps, type WorldMapDoc } from '@shared/worldMap'
+import { imageIdOf } from '@shared/battleMap'
+import { randomUUID } from 'node:crypto'
 import { campaignVehiclesSchema, vehiclesForPlayer, type CampaignVehicles } from '@shared/vehicles'
 import { normalizeBattleLibrary, type BattleLibrary } from '@shared/battleMap'
 import { CampaignPackRepo, type EnabledPack } from '../repositories/packRepo'
@@ -365,6 +370,10 @@ export function deleteCampaign(db: DatabaseType, campaignId: string, userId: str
   db.prepare('DELETE FROM campaign_calendars WHERE campaign_id = ?').run(campaignId)
   new VehiclesRepo(db).remove(campaignId)
   db.prepare('DELETE FROM campaign_quests WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM campaign_stash WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM campaign_reputation WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM campaign_maps WHERE campaign_id = ?').run(campaignId)
+  db.prepare('DELETE FROM campaign_map_images WHERE campaign_id = ?').run(campaignId)
   db.prepare('DELETE FROM campaign_battlemaps WHERE campaign_id = ?').run(campaignId)
   new CampaignPackRepo(db).removeAll(campaignId)
   db.prepare('DELETE FROM session_decks WHERE campaign_id = ?').run(campaignId)
@@ -1435,6 +1444,167 @@ export function getVehicles(db: DatabaseType, campaignId: string, userId: string
   return { ok: true, data: campaign.dm_user_id === userId ? doc : vehiclesForPlayer(doc) }
 }
 
+function readStash(db: DatabaseType, campaignId: string): CampaignStash {
+  const row = db.prepare('SELECT stash_json FROM campaign_stash WHERE campaign_id = ?').get(campaignId) as { stash_json: string } | undefined
+  try {
+    return row ? normalizeStash(JSON.parse(row.stash_json)) : normalizeStash(null)
+  } catch {
+    return normalizeStash(null)
+  }
+}
+
+/** Pictures over this are refused: they'd take minutes to reach players. */
+export const MAX_WORLD_MAP_IMAGE = 16 * 1024 * 1024
+const PICTURE = /^data:image\/(png|jpe?g|webp|gif);base64,/
+
+function readMaps(db: DatabaseType, campaignId: string): CampaignMaps {
+  const row = db.prepare('SELECT maps_json FROM campaign_maps WHERE campaign_id = ?').get(campaignId) as { maps_json: string } | undefined
+  try {
+    return row ? normalizeMaps(JSON.parse(row.maps_json)) : { maps: [] }
+  } catch {
+    return { maps: [] }
+  }
+}
+
+function mapPictures(db: DatabaseType, campaignId: string): Map<string, { image: string | null; player_image: string | null }> {
+  const rows = db.prepare('SELECT map_id, image, player_image FROM campaign_map_images WHERE campaign_id = ?').all(campaignId) as Array<{ map_id: string; image: string | null; player_image: string | null }>
+  return new Map(rows.map((r) => [r.map_id, r]))
+}
+
+/** The picture a viewer gets of a map: the DM the real one; a player, under fog, only the copy with the fog burned in. */
+function pictureFor(map: WorldMapDoc, row: { image: string | null; player_image: string | null } | undefined, isDm: boolean): string | null {
+  if (!row) return null
+  if (isDm || !map.fog) return row.image
+  return row.player_image
+}
+
+function requireMember(db: DatabaseType, campaignId: string, userId: string): { campaign: CampaignRow } | { error: ServiceResult<never> } {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { error: { ok: false, status: 404, error: 'Campaign not found.' } }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { error: { ok: false, status: 403, error: 'Join this campaign first.' } }
+  return { campaign }
+}
+
+function requireMapsDm(db: DatabaseType, campaignId: string, userId: string): ServiceResult<never> | null {
+  const campaign = makeCampaignRepo(db).findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change the maps.' }
+  return null
+}
+
+/** The maps without their pictures — all of them for the DM; the shown ones, with their shown pins, for a player. */
+export function getMaps(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignMaps> {
+  const member = requireMember(db, campaignId, userId)
+  if ('error' in member) return member.error
+  const isDm = member.campaign.dm_user_id === userId
+  const doc = readMaps(db, campaignId)
+  const pictures = mapPictures(db, campaignId)
+  // Each map's fingerprint is of the picture this viewer gets, so they fetch it again only when that changes.
+  const maps = doc.maps.map((m) => {
+    const picture = pictureFor(m, pictures.get(m.id), isDm)
+    return { ...m, imageId: picture ? imageIdOf(picture) : null }
+  })
+  return { ok: true, data: isDm ? { maps } : mapsForPlayer({ maps }) }
+}
+
+/** A map's picture as this viewer may see it (a player: only a shown map, and under fog only the fogged copy). */
+export function getMapImage(db: DatabaseType, campaignId: string, userId: string, mapId: string): ServiceResult<string | null> {
+  const member = requireMember(db, campaignId, userId)
+  if ('error' in member) return member.error
+  const isDm = member.campaign.dm_user_id === userId
+  const map = readMaps(db, campaignId).maps.find((m) => m.id === mapId)
+  if (!map || (!isDm && !map.shared)) return { ok: false, status: 404, error: 'There’s no such map.' }
+  return { ok: true, data: pictureFor(map, mapPictures(db, campaignId).get(mapId), isDm) }
+}
+
+/** Only the DM changes the maps — all of them each time (the pictures apart). A map taken out takes its picture. */
+export function saveMaps(db: DatabaseType, campaignId: string, userId: string, input: unknown): ServiceResult<CampaignMaps> {
+  const denied = requireMapsDm(db, campaignId, userId)
+  if (denied) return denied
+  const doc = normalizeMaps(input)
+  db.prepare(
+    `INSERT INTO campaign_maps (campaign_id, maps_json) VALUES (?, ?)
+     ON CONFLICT(campaign_id) DO UPDATE SET maps_json = excluded.maps_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+  ).run(campaignId, JSON.stringify(doc))
+  const keep = new Set(doc.maps.map((m) => m.id))
+  for (const id of mapPictures(db, campaignId).keys()) if (!keep.has(id)) db.prepare('DELETE FROM campaign_map_images WHERE campaign_id = ? AND map_id = ?').run(campaignId, id)
+  return getMaps(db, campaignId, userId)
+}
+
+/**
+ * Only the DM sets a map's picture (`image`, or null to take it away) — or, with `forPlayers`, the copy players get
+ * under fog. A new picture drops the old fogged copy (it's of the old one). Answers with the picture's fingerprint.
+ */
+export function setMapImage(db: DatabaseType, campaignId: string, userId: string, mapId: unknown, image: unknown, forPlayers = false): ServiceResult<string | null> {
+  const denied = requireMapsDm(db, campaignId, userId)
+  if (denied) return denied
+  if (typeof mapId !== 'string' || !mapId || mapId.length > 64) return { ok: false, status: 400, error: 'Which map?' }
+  if (image !== null && (typeof image !== 'string' || !PICTURE.test(image))) return { ok: false, status: 400, error: 'That isn’t a picture.' }
+  if (typeof image === 'string' && image.length > MAX_WORLD_MAP_IMAGE) return { ok: false, status: 413, error: 'That picture is too big (about 12 MB at most).' }
+  db.prepare(
+    forPlayers
+      ? `INSERT INTO campaign_map_images (campaign_id, map_id, player_image) VALUES (?, ?, ?)
+         ON CONFLICT(campaign_id, map_id) DO UPDATE SET player_image = excluded.player_image`
+      : `INSERT INTO campaign_map_images (campaign_id, map_id, image, player_image) VALUES (?, ?, ?, NULL)
+         ON CONFLICT(campaign_id, map_id) DO UPDATE SET image = excluded.image, player_image = NULL`
+  ).run(campaignId, mapId, image)
+  return { ok: true, data: typeof image === 'string' ? imageIdOf(image) : null }
+}
+
+/** The reputation tracker — all of it for the DM, only the shown entries (without the DM's notes) for a player. */
+export function getReputation(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignReputation> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  const row = db.prepare('SELECT reputation_json FROM campaign_reputation WHERE campaign_id = ?').get(campaignId) as { reputation_json: string } | undefined
+  let doc: CampaignReputation = { entries: [] }
+  try {
+    if (row) doc = normalizeReputation(JSON.parse(row.reputation_json))
+  } catch {
+    /* unreadable: an empty tracker rather than a broken box */
+  }
+  return { ok: true, data: campaign.dm_user_id === userId ? doc : reputationForPlayer(doc) }
+}
+
+/** Only the DM changes the reputation tracker — the whole of it each time. */
+export function saveReputation(db: DatabaseType, campaignId: string, userId: string, input: unknown): ServiceResult<CampaignReputation> {
+  const campaign = makeCampaignRepo(db).findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can change reputations.' }
+  const doc = normalizeReputation(input)
+  db.prepare(
+    `INSERT INTO campaign_reputation (campaign_id, reputation_json) VALUES (?, ?)
+     ON CONFLICT(campaign_id) DO UPDATE SET reputation_json = excluded.reputation_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+  ).run(campaignId, JSON.stringify(doc))
+  return { ok: true, data: doc }
+}
+
+/** The party stash — the same for everyone in the campaign. */
+export function getStash(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignStash> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  return { ok: true, data: readStash(db, campaignId) }
+}
+
+/** One change to the party stash, by anyone in the campaign (shared/stash.ts's applyStashChange says what's allowed). */
+export function changeStash(db: DatabaseType, campaignId: string, userId: string, change: unknown): ServiceResult<CampaignStash> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  const result = applyStashChange(readStash(db, campaignId), change, userId, campaign.dm_user_id === userId, randomUUID)
+  if (!result.ok) return { ok: false, status: 400, error: result.error }
+  db.prepare(
+    `INSERT INTO campaign_stash (campaign_id, stash_json) VALUES (?, ?)
+     ON CONFLICT(campaign_id) DO UPDATE SET stash_json = excluded.stash_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+  ).run(campaignId, JSON.stringify(result.stash))
+  return { ok: true, data: result.stash }
+}
+
 /** The quest log — all of it for the DM, only the shared quests for a player. */
 export function getQuests(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignQuests> {
   const campaignRepo = makeCampaignRepo(db)
@@ -1460,12 +1630,19 @@ export function saveQuests(db: DatabaseType, campaignId: string, userId: string,
   // A quest that has paid out stays paid, whatever older copy of the log is saved over it — so it can never pay twice.
   const stored = db.prepare('SELECT quests_json FROM campaign_quests WHERE campaign_id = ?').get(campaignId) as { quests_json: string } | undefined
   let paid = new Set<string>()
+  let stashed = new Set<string>()
   try {
-    if (stored) paid = new Set(normalizeQuests(JSON.parse(stored.quests_json)).quests.filter((q) => q.rewarded).map((q) => q.id))
+    if (stored) {
+      const before = normalizeQuests(JSON.parse(stored.quests_json)).quests
+      paid = new Set(before.filter((q) => q.rewarded).map((q) => q.id))
+      stashed = new Set(before.filter((q) => q.itemsStashed).map((q) => q.id))
+    }
   } catch {
     /* unreadable: nothing to carry over */
   }
   for (const q of doc.quests) if (paid.has(q.id)) q.rewarded = true
+  // Likewise, items once put in the stash stay put there: never twice.
+  for (const q of doc.quests) if (stashed.has(q.id)) q.itemsStashed = true
   db.prepare(
     `INSERT INTO campaign_quests (campaign_id, quests_json) VALUES (?, ?)
      ON CONFLICT(campaign_id) DO UPDATE SET quests_json = excluded.quests_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`

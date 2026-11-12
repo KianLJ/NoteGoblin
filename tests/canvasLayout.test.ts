@@ -273,6 +273,9 @@ describe('canvas layout', () => {
     expect(readingOrder([box('c', 0, 400), box('b', 340, 40), box('a', 0, 0), box('d', 340, 420)])).toEqual(['a', 'b', 'c', 'd'])
     // Drag "a" past "b" and the order follows.
     expect(readingOrder([box('a', 700, 0), box('b', 340, 40), box('c', 0, 400)])).toEqual(['b', 'a', 'c'])
+    // A short note beside a big one that sits a little lower: still one row.
+    const sized = (id: string, x: number, y: number, h: number) => ({ id, x, y, w: 300, h, z: 1 })
+    expect(readingOrder([sized('a', 0, 0, 100), sized('b', 340, 70, 400), sized('c', 700, 10, 200), sized('d', 0, 600, 200)])).toEqual(['a', 'b', 'c', 'd'])
     expect(sceneSpot(5, { w: 300, h: 200 })).toMatchObject({ y: sceneSpot(0, { w: 300, h: 200 }).y + 264 })
   })
 
@@ -284,6 +287,10 @@ describe('canvas layout', () => {
       ['s1/s2', 'deck2']
     ])
     expect(sessionCollections(parseLayout(JSON.parse(JSON.stringify(root)), () => true)!).length).toBe(2)
+    // Ordered by hand: kept when saved, and shown along the path.
+    const manual = { ...root, collections: { ...root.collections, s1: { ...root.collections!.s1, manualOrder: true } } }
+    const back = parseLayout(JSON.parse(JSON.stringify(manual)), () => true)!
+    expect(pathNames(back, ['s1'])[0].manualOrder).toBe(true)
   })
 
   it('drops a deleted session collection whole, tile and all', () => {

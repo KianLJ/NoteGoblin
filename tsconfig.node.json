@@ -12,6 +12,7 @@
     "src/renderer/src/features/campaigns/noteEditorMenu.ts",
     "src/renderer/src/data/npcNames.ts",
     "src/renderer/src/features/browser/browserTabs.ts",
+    "src/renderer/src/ui/undo.ts",
     "db/**/*",
     "tests/**/*",
     "vitest.config.ts"

@@ -21,7 +21,7 @@ import type {
   AmbientLevelChangedFrame,
   SfxPlayedFrame,
   BattleMapFrame,
-  BattleMapImageChunkFrame,
+  BattleMapImageChunkFrame, WorldMapImageChunkFrame,
   HandoutChunkFrame,
   QuestRewardFrame
 } from '@server/relay/sessionProtocol'
@@ -46,6 +46,7 @@ const pending = new Map<string, { resolve: (response: ResponseFrame) => void; ti
 // names it — reassembled here, keyed by trackId, and handed to the renderer
 // only once the corresponding music-changed frame arrives.
 /** Battle map images being received in pieces, by image id. */
+const pendingWorldMapImages = new Map<string, { chunks: string[]; received: number }>()
 const pendingBattleImages = new Map<string, { chunks: string[]; received: number }>()
 const pendingHandouts = new Map<string, { chunks: string[]; received: number }>()
 const pendingCustomTrackChunks = new Map<string, { title: string; mimeType: string; chunks: string[]; received: number }>()
@@ -278,6 +279,28 @@ function handleFrame(raw: WebSocket.RawData): void {
         /* not a handout — dropped */
       }
       if (handout) clientWindow?.webContents.send('ws:handout', handout)
+    }
+    return
+  }
+
+  // The world map's picture, in pieces; once they're all in, the renderer gets it whole.
+  if (payload.type === 'world-map-image-chunk') {
+    const frame = payload as WorldMapImageChunkFrame
+    if (typeof frame.imageId === 'string' && typeof frame.chunk === 'string' && Number.isInteger(frame.total) && frame.total > 0 && frame.total < 200) {
+      let entry = pendingWorldMapImages.get(frame.imageId)
+      if (!entry) {
+        entry = { chunks: new Array(frame.total), received: 0 }
+        pendingWorldMapImages.set(frame.imageId, entry)
+      }
+      if (frame.index >= 0 && frame.index < frame.total && entry.chunks[frame.index] === undefined) {
+        entry.chunks[frame.index] = frame.chunk
+        entry.received++
+      }
+      if (entry.received >= frame.total) {
+        pendingWorldMapImages.delete(frame.imageId)
+        const image = entry.chunks.join('')
+        if (image.startsWith('data:image/')) clientWindow?.webContents.send('ws:world-map-image', { campaignId: frame.campaignId, mapId: frame.mapId, imageId: frame.imageId, image })
+      }
     }
     return
   }

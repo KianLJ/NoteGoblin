@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.14.0',
+    title: 'Maps of your world, and who thinks what of the party',
+    highlights: [
+      'A World Map box: as many maps as you like, each with its own picture (up to 64 MB). Pin places, notes, quests and people in any colour, walk the party along a trail, and reveal the map through fog of war. Players only ever get the parts you’ve revealed',
+      'Give a map a scale in any unit, from feet to trillions of miles, or set it by measuring between two places you know. Trails, the new Measure tool and a scale bar all read in that unit, and you can zoom right down to the picture’s pixels',
+      'Pins can orbit other pins as the calendar moves on: planets round a sun, moons round a planet, drawn as spheres of any size, with real diameters and distances, and locked to their orbit if you like',
+      'A Reputation tracker for NPCs, factions, guilds, temples and kingdoms: standing from −10 to +10, its history, secret notes, who belongs to what, and only what you choose to show the party',
+      'A Party stash with a shared purse: loot from the Codex or written in, taken out and put back by players, and quest rewards (Codex items too) land in it when a quest is finished',
+      'Personal quest notes for each player, a Move time button on the calendar (an hour to years, or a journey at a travel pace), and Ctrl+K finds quests, hints, people, maps and pins',
+      'Deleting something offers Undo for a few seconds (Ctrl+Z too), the map has its own undo and redo, and ? shows every keyboard shortcut',
+      'A session’s scenes can be put in order by hand, and the order they read in no longer slips when boxes differ in size',
+      'On the combat map, imported maps keep their exact shape so they line up with the grid, and doors simply open instead of swinging out'
+    ]
+  },
+  {
     version: '0.13.0',
     title: 'A browser on the table, and quests with more to them',
     highlights: [

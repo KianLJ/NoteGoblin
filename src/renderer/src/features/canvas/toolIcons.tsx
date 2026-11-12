@@ -32,5 +32,19 @@ export const TOOL_ICONS: Record<ToolKind, ReactNode> = {
   music: <MusicNoteIcon />,
   soundboard: <SoundBoardIcon />,
   friends: <UserIcon />,
-  browser: <BrowserIcon />
+  browser: <BrowserIcon />,
+  // A folded map.
+  worldmap: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M1.5 3.5 5.5 2l5 1.5 4-1.5v10.5l-4 1.5-5-1.5-4 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M5.5 2v10.5M10.5 3.5V14" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  ),
+  // Two hands meeting: where the party stands with someone.
+  reputation: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 3.2 5.3 1.9a1.6 1.6 0 0 0-1.6.1L1.5 3.6v5.2l4.7 4.4a1.2 1.2 0 0 0 1.7-1.7l.4.4a1.2 1.2 0 0 0 1.7-1.7l.3.3a1.2 1.2 0 0 0 1.7-1.7L14.5 8.6V3.6l-2.2-1.6a1.6 1.6 0 0 0-1.6-.1Z" stroke="currentColor" strokeWidth="1.15" strokeLinejoin="round" />
+      <path d="M8 3.2 6.2 5a1.1 1.1 0 0 0 1.6 1.6L9.4 5l2.6 2.6" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }

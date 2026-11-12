@@ -135,5 +135,71 @@ describe('someone who never joined', () => {
     denied(svc.createNote(db, campaignId, OUTSIDER, { title: 'Hi', bodyMarkdown: '', visibility: 'shared' }))
     denied(svc.listMessages(db, campaignId, OUTSIDER))
     denied(svc.getCalendar(db, campaignId, OUTSIDER))
+    denied(svc.getStash(db, campaignId, OUTSIDER))
+    denied(svc.changeStash(db, campaignId, OUTSIDER, { op: 'add', name: 'A gift' }))
+  })
+})
+
+describe('the reputation tracker', () => {
+  it('only the DM changes it, and a player sees only the shown entries, without the DM’s notes', () => {
+    denied(svc.saveReputation(db, campaignId, PLAYER, { entries: [] }))
+    data(
+      svc.saveReputation(db, campaignId, DM, {
+        entries: [
+          { id: 'a', name: 'The Ember Guard', kind: 'faction', standing: 3, shared: true, secret: 'Corrupt' },
+          { id: 'b', name: 'The Night Court', kind: 'faction', standing: -5, shared: false }
+        ]
+      })
+    )
+    const seen = data(svc.getReputation(db, campaignId, PLAYER)).entries
+    expect(seen.map((e) => e.name)).toEqual(['The Ember Guard'])
+    expect(seen[0]).not.toHaveProperty('secret')
+    expect(data(svc.getReputation(db, campaignId, DM)).entries).toHaveLength(2)
+    denied(svc.getReputation(db, campaignId, OUTSIDER))
+  })
+})
+
+describe('the maps', () => {
+  it('only the DM changes them; a player sees only shown maps and pins, and under fog only the fogged copy', () => {
+    denied(svc.saveMaps(db, campaignId, PLAYER, { maps: [] }))
+    denied(svc.setMapImage(db, campaignId, PLAYER, 'w', 'data:image/png;base64,AAAA'))
+    expect(svc.setMapImage(db, campaignId, DM, 'w', 'javascript:alert(1)').ok).toBe(false)
+    data(
+      svc.saveMaps(db, campaignId, DM, {
+        maps: [
+          { id: 'w', name: 'The World', shared: true, fog: true, pins: [{ id: 'a', x: 0.5, y: 0.5, label: 'Cinderhold', shared: true }, { id: 'b', x: 0.2, y: 0.2, label: 'The lair' }] },
+          { id: 's', name: 'Secret dungeon', shared: false }
+        ]
+      })
+    )
+    data(svc.setMapImage(db, campaignId, DM, 'w', 'data:image/png;base64,REAL'))
+    const seen = data(svc.getMaps(db, campaignId, PLAYER)).maps
+    expect(seen.map((m) => m.name)).toEqual(['The World'])
+    expect(seen[0].pins.map((p) => p.label)).toEqual(['Cinderhold'])
+    // Under fog, nothing until the DM's app has made the fogged copy — never the real picture.
+    expect(seen[0].imageId).toBeNull()
+    expect(data(svc.getMapImage(db, campaignId, PLAYER, 'w'))).toBeNull()
+    data(svc.setMapImage(db, campaignId, DM, 'w', 'data:image/jpeg;base64,FOGGED', true))
+    expect(data(svc.getMapImage(db, campaignId, PLAYER, 'w'))).toBe('data:image/jpeg;base64,FOGGED')
+    expect(data(svc.getMapImage(db, campaignId, DM, 'w'))).toBe('data:image/png;base64,REAL')
+    denied(svc.getMapImage(db, campaignId, PLAYER, 's'))
+    denied(svc.getMaps(db, campaignId, OUTSIDER))
+    // Taking a map away takes its picture.
+    data(svc.saveMaps(db, campaignId, DM, { maps: [{ id: 's', name: 'Secret dungeon' }] }))
+    expect(data(svc.getMapImage(db, campaignId, DM, 's'))).toBeNull()
+  })
+})
+
+describe('the party stash', () => {
+  it('anyone at the table adds and takes things, and the stash is kept', () => {
+    const stash = data(svc.changeStash(db, campaignId, PLAYER, { op: 'add', name: 'Bag of holding' }))
+    const bag = stash.items.find((i) => i.name === 'Bag of holding')!
+    data(svc.changeStash(db, campaignId, PLAYER, { op: 'take', id: bag.id }))
+    data(svc.changeStash(db, campaignId, DM, { op: 'coins', coin: 'gp', delta: 25 }))
+    const seen = data(svc.getStash(db, campaignId, PLAYER))
+    expect(seen.items.find((i) => i.id === bag.id)?.heldBy).toBe(PLAYER)
+    expect(seen.coins.gp).toBe(25)
+    const nope = svc.changeStash(db, campaignId, PLAYER, { op: 'coins', coin: 'gp', delta: -100 })
+    expect(nope.ok).toBe(false)
   })
 })

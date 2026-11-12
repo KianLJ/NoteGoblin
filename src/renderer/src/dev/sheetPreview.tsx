@@ -7,6 +7,9 @@ import type { CharacterSheet } from '@shared/ipc'
 import { emptyCharacterSheet, type CharacterSheetData } from '@shared/dnd5e'
 import { defaultCalendarConfig } from '@shared/calendar'
 import { questsForPlayer, type CampaignQuests } from '@shared/quests'
+import { applyStashChange, type CampaignStash } from '@shared/stash'
+import { normalizeReputation, reputationForPlayer, type CampaignReputation } from '@shared/reputation'
+import { mapsForPlayer, normalizeMaps, type CampaignMaps } from '@shared/worldMap'
 import { setActivePacks } from '@shared/content/sheet'
 import { parsePack } from '@shared/content/validate'
 import { srdPack } from '@shared/content/srd'
@@ -244,6 +247,7 @@ const calendarApi = {
   get: async () => ({ ok: true, data: sampleCalendar }),
   save: async (_id: string, config: typeof sampleCalendar.config) => {
     sampleCalendar.config = config
+    campaignListeners.forEach((l) => l({ campaignId: 'camp' }))
     return { ok: true, data: { ...sampleCalendar } }
   },
   remove: async () => ({ ok: true, data: null })
@@ -374,6 +378,81 @@ let questDoc = { quests: [
   { id: 'q3', title: 'Deliver the letter to Saltmarsh', detail: '', status: 'done', shared: true }
 ] }
 const campaignListeners = new Set<(e: { campaignId: string }) => void>()
+// ?showcase=worldmap: an in-memory world map with a drawn picture; a player gets the shown pins.
+const WORLD_PICTURE = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#3d6f8c"/><path d="M180 120 Q420 60 640 150 T1040 200 Q1110 420 960 620 Q700 760 420 690 Q190 620 150 420 Z" fill="#c9b27a" stroke="#6b5a35" stroke-width="6"/><path d="M300 300 Q420 260 520 330 Q600 420 520 500 Q420 560 330 480 Z" fill="#6f8f4a"/><path d="M760 260 l40 -70 l40 70 l40 -60 l40 60" fill="none" stroke="#5a4a32" stroke-width="10" stroke-linejoin="round"/><circle cx="880" cy="520" r="44" fill="#7fa9c4"/></svg>`)
+let mapsDoc: CampaignMaps = normalizeMaps({
+  maps: [
+    {
+      id: 'world',
+      name: 'The Ashen Coast',
+      shared: true,
+      imageId: 'preview-world',
+      aspect: 1.5,
+      pins: [
+        { id: 'p1', x: 0.36, y: 0.47, label: 'Cinderhold', kind: 'rep', ref: 'k', color: '#c0533a', shared: true },
+        { id: 'p2', x: 0.7, y: 0.28, label: 'The Sunken Crypt', kind: 'quest', ref: 'q1', color: '#8a5bb0', shared: true },
+        { id: 'p3', x: 0.73, y: 0.65, label: 'The cult’s lair', kind: 'place', color: '#5a5a5a', shared: false }
+      ],
+      party: { x: 0.52, y: 0.42 },
+      trail: [{ x: 0.3, y: 0.55 }, { x: 0.38, y: 0.5 }, { x: 0.46, y: 0.44 }, { x: 0.52, y: 0.42 }],
+      fog: true,
+      revealed: [{ x: 0.34, y: 0.52, r: 0.12 }, { x: 0.46, y: 0.45, r: 0.1 }, { x: 0.56, y: 0.4, r: 0.09 }]
+    },
+    { id: 'city', name: 'Cinderhold', shared: false }
+  ]
+})
+// The players' copy, under fog: what the DM's side last made (none until it does).
+let playerPicture: string | null = null
+const worldMapApi = {
+  get: async (_c: string, sessionId?: string) => {
+    const maps = mapsDoc.maps.map((m) => ({ ...m, imageId: m.id === 'world' ? (sessionId && m.fog ? (playerPicture ? `fog-${playerPicture.length}` : null) : 'preview-world') : null }))
+    return { ok: true, data: sessionId ? mapsForPlayer({ maps }) : { maps } }
+  },
+  save: async (_c: string, doc: unknown) => {
+    mapsDoc = normalizeMaps(doc)
+    campaignListeners.forEach((l) => l({ campaignId: 'camp' }))
+    return { ok: true, data: mapsDoc }
+  },
+  setImage: async (_c: string, _mapId: string, image: string | null, forPlayers?: boolean) => {
+    if (forPlayers) {
+      playerPicture = image
+      campaignListeners.forEach((l) => l({ campaignId: 'camp' }))
+    }
+    return { ok: true, data: 'preview-world' }
+  },
+  image: async (_c: string, mapId: string, sessionId?: string) => ({ ok: true, data: mapId !== 'world' ? null : sessionId && mapsDoc.maps[0].fog ? playerPicture : WORLD_PICTURE }),
+  onImage: () => () => {}
+}
+// ?showcase=reputation: an in-memory tracker; a player (a session id) gets what reputationForPlayer lets through.
+let repDoc: CampaignReputation = normalizeReputation({
+  entries: [
+    { id: 'k', name: 'The Kingdom of Ash', kind: 'kingdom', standing: 2, shared: true, description: 'The crown that rules the coast, from the city of Cinderhold.' },
+    { id: 'g', name: 'The Ember Guard', kind: 'faction', standing: 5, shared: true, partOf: 'k', description: 'The crown’s soldiers.', secret: 'Their captain is a doppelganger.', history: [{ id: 'h1', at: '2026-11-02T20:00:00Z', delta: 3, reason: 'Returned the regiment’s banner', known: true }, { id: 'h2', at: '2026-11-09T20:00:00Z', delta: 2, reason: 'Covered for the captain', known: false }] },
+    { id: 'm', name: 'Captain Vessa Thorn', kind: 'npc', standing: 7, shared: true, partOf: 'g' },
+    { id: 'n', name: 'The Night Court', kind: 'faction', standing: -6, shared: true, description: 'Thieves who run the docks after dark.' },
+    { id: 's', name: 'Brother Aldric', kind: 'npc', standing: -2, shared: false, secret: 'A cultist.' }
+  ]
+})
+const reputationApi = {
+  get: async (_c: string, sessionId?: string) => ({ ok: true, data: sessionId ? reputationForPlayer(repDoc) : repDoc }),
+  save: async (_c: string, doc: unknown) => {
+    repDoc = normalizeReputation(doc)
+    campaignListeners.forEach((l) => l({ campaignId: 'camp' }))
+    return { ok: true, data: repDoc }
+  }
+}
+// The party stash, in memory, through the real rules: a session id is this page's player (Gelden, u1), none the DM.
+let stashDoc: CampaignStash = { items: [{ id: 's1', name: 'Potion of healing', qty: 3 }, { id: 's2', name: 'Silver key', qty: 1, note: 'From “Find what sleeps in the Sunken Crypt”', heldBy: 'u2' }], coins: { gp: 120, sp: 35 } }
+const stashApi = {
+  get: async () => ({ ok: true, data: stashDoc }),
+  change: async (_c: string, change: unknown, sessionId?: string) => {
+    const r = applyStashChange(stashDoc, change, sessionId ? 'u1' : 'dm', !sessionId, () => crypto.randomUUID())
+    if (!r.ok) return { ok: false, error: r.error }
+    stashDoc = r.stash
+    campaignListeners.forEach((l) => l({ campaignId: 'camp' }))
+    return { ok: true, data: stashDoc }
+  }
+}
 const campaignsApi = new Proxy({} as Record<string | symbol, unknown>, {
   get: (_t, key) =>
     key === 'onChanged'
@@ -408,7 +487,10 @@ const questsApi = {
     const xp = Math.floor((q.rewardXp ?? 0) / 3)
     q.rewarded = true
     rewardListeners.forEach((l) => l({ questTitle: q.title, coins: coinsEach, xp, partySize: 3 }))
-    return { ok: true, players: 3, coinsEach, xpEach: xp, coinsLeftover }
+    // Its Codex items into the party stash, as the app does.
+    const entries = (q as { rewardEntries?: Array<{ kind: string; id: string; name: string }> }).rewardEntries ?? []
+    for (const e of entries) await stashApi.change('camp', { op: 'add', name: e.name, note: `From “${q.title}”`, codex: { kind: e.kind, id: e.id } })
+    return { ok: true, players: 3, coinsEach, xpEach: xp, coinsLeftover, stashed: entries.map((e) => e.name) }
   },
   onReward: (l: (r: unknown) => void) => {
     rewardListeners.add(l)
@@ -432,7 +514,7 @@ const handoutsApi = {
 }
 ;(window as unknown as { goblin: unknown }).goblin = new Proxy(
   {},
-  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : key === 'handouts' ? handoutsApi : key === 'quests' ? questsApi : key === 'campaigns' ? campaignsApi : base[key]) }
+  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : key === 'handouts' ? handoutsApi : key === 'quests' ? questsApi : key === 'stash' ? stashApi : key === 'reputation' ? reputationApi : key === 'worldMap' ? worldMapApi : key === 'campaigns' ? campaignsApi : base[key]) }
 )
 
 // A demo pack with a starship, for the vehicles preview's "Add a vehicle".

@@ -13,6 +13,10 @@ import {
   activeSeasonForDate,
   addDays,
   advanceTime,
+  moveTime,
+  travelTime,
+  TRAVEL_PACES,
+  type TimeUnit,
   parseTimeOfDay,
   partOfDay,
   cloudinessLabel,
@@ -353,6 +357,7 @@ export function CalendarPanel({ sessionId, campaignId, readOnly, notes = [] }: C
             <ArrowRightIcon size={13} />
           </button>
         )}
+        {!readOnly && <MoveTime config={config} onMove={(patch) => void setTime(patch)} />}
         {config.locations.length > 0 &&
           (readOnly ? (
             config.selectedLocationId && <span className="cal-place">{config.locations.find((l) => l.id === config.selectedLocationId)?.name}</span>
@@ -637,6 +642,143 @@ const TIME_PRESETS: [string, string][] = [
   ['Evening', '21:00'],
   ['Midnight', '00:00']
 ]
+
+const UNITS: Array<[TimeUnit, string]> = [
+  ['hours', 'hours'],
+  ['days', 'days'],
+  ['weeks', 'weeks'],
+  ['months', 'months'],
+  ['years', 'years']
+]
+
+/**
+ * Moving the campaign's time on (the DM's): skip ahead by any number of hours, days, weeks, months or years — or
+ * travel: a distance at a pace becomes days on the road and hours of the last day, with each day's weather where the
+ * party is, and Set off moves the calendar there.
+ */
+function MoveTime({ config, onMove }: { config: CalendarConfig; onMove: (patch: Pick<CalendarConfig, 'currentDate' | 'timeOfDay'>) => void }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'skip' | 'travel'>('skip')
+  const [amount, setAmount] = useState('1')
+  const [unit, setUnit] = useState<TimeUnit>('days')
+  const [miles, setMiles] = useState('24')
+  const [pace, setPace] = useState<(typeof TRAVEL_PACES)[number]['id']>('normal')
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const n = Math.max(0, Number(amount) || 0)
+  const chosen = TRAVEL_PACES.find((p) => p.id === pace) ?? TRAVEL_PACES[1]
+  const trip = travelTime(Math.max(0, Number(miles) || 0), chosen.mph, chosen.hoursPerDay)
+  // The days the party is on the road (today first), for their weather.
+  const roadDays = Array.from({ length: Math.min(14, trip.days + (trip.hours > 0 ? 1 : 0)) }, (_, i) => addDays(config, config.currentDate, i))
+  const tripLabel = [trip.days ? `${trip.days} ${trip.days === 1 ? 'day' : 'days'}` : '', trip.hours ? `${trip.hours} ${trip.hours === 1 ? 'hour' : 'hours'}` : ''].filter(Boolean).join(' and ') || 'No time at all'
+
+  function setOff(): void {
+    // Whole days on, then the last day's hours of travel from now.
+    const afterDays = moveTime(config, trip.days, 'days')
+    onMove(trip.hours ? advanceTime({ ...config, ...afterDays }, trip.hours) : afterDays)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="cal-time-wrap">
+      <button type="button" className={`cal-move${open ? ' cal-time--open' : ''}`} onClick={() => setOpen((o) => !o)} aria-expanded={open} title="Skip ahead, or travel">
+        <HourglassGlyph />
+        Move time
+      </button>
+      {open && (
+        <div className="cal-time-pop cal-move-pop" role="dialog" aria-label="Move time">
+          <div className="cal-move-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={mode === 'skip'} onClick={() => setMode('skip')}>
+              Skip ahead
+            </button>
+            <button type="button" role="tab" aria-selected={mode === 'travel'} onClick={() => setMode('travel')}>
+              Travel
+            </button>
+          </div>
+          {mode === 'skip' ? (
+            <>
+              <div className="cal-move-row">
+                <input className="gb-input cal-move-n" inputMode="numeric" value={amount} aria-label="How many" onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, '').slice(0, 4))} />
+                <select className="gb-input" value={unit} aria-label="Of what" onChange={(e) => setUnit(e.target.value as TimeUnit)}>
+                  {UNITS.map(([u, label]) => (
+                    <option key={u} value={u}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="cal-move-row">
+                <button type="button" className="cal-small-btn" disabled={!n} onClick={() => onMove(moveTime(config, -n, unit))}>
+                  ← Back
+                </button>
+                <button type="button" className="cal-move-go" disabled={!n} onClick={() => (onMove(moveTime(config, n, unit)), setOpen(false))}>
+                  On {n || ''} {unit}
+                </button>
+              </div>
+              <span className="cal-move-to">To {formatCalendarDate(config, moveTime(config, n, unit).currentDate)}</span>
+            </>
+          ) : (
+            <>
+              <div className="cal-move-row">
+                <input className="gb-input cal-move-n" inputMode="decimal" value={miles} aria-label="Miles" onChange={(e) => setMiles(e.target.value.replace(/[^\d.]/g, '').slice(0, 6))} />
+                <span className="cal-move-unit">miles</span>
+              </div>
+              <select className="gb-input" value={pace} aria-label="Pace" onChange={(e) => setPace(e.target.value as typeof pace)}>
+                {TRAVEL_PACES.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} · {p.mph * p.hoursPerDay} mi a day{p.hoursPerDay === 24 ? ' (day and night)' : ''}
+                  </option>
+                ))}
+              </select>
+              <span className="cal-move-to">
+                <strong>{tripLabel}</strong> on the road
+              </span>
+              {roadDays.length > 0 && (
+                <ul className="cal-move-days" aria-label="The weather on the road">
+                  {roadDays.map((d, i) => {
+                    const w = weatherForDate(config, d, config.selectedLocationId)
+                    return (
+                      <li key={i}>
+                        <span>{i === 0 ? 'Today' : `Day ${i + 1}`}</span>
+                        <span>{w ? `${w.temperature}°${config.temperatureUnit} · ${RAIN_LABELS[w.rain]} · ${w.windMph} mph` : 'No weather set up'}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              <button type="button" className="cal-move-go" disabled={!trip.travelHours} onClick={setOff}>
+                Set off
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HourglassGlyph(): JSX.Element {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M4 2h8M4 14h8M5 2c0 3 6 3.5 6 6s-6 3-6 6M11 2c0 3-6 3.5-6 6s6 3 6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 const TIME_STEPS: [string, number, string][] = [
   ['−1 hr', -1, 'Back an hour'],

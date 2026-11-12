@@ -1074,3 +1074,144 @@
   font-family: var(--font-display);
   font-size: 20px;
 }
+
+/* Move time (CalendarPanel.tsx's MoveTime): skip ahead, or travel. */
+.cal-move {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cal-move:hover,
+.cal-move.cal-time--open {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.cal-move:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.cal-move-pop {
+  /* Opens leftwards: Move time sits at the right of the controls. */
+  right: 0;
+  left: auto;
+  width: min(300px, 86vw);
+}
+
+.cal-move-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+
+.cal-move-tabs button {
+  padding: 5px 0;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cal-move-tabs button[aria-selected='true'] {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgb(0 0 0 / 0.2));
+}
+
+.cal-move-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cal-move-row > * {
+  flex: 1;
+}
+
+.cal-move .gb-input,
+.cal-move-pop .cal-move-n {
+  flex: none;
+  width: 72px;
+  text-align: center;
+}
+
+.cal-move-unit {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.cal-move-go {
+  padding: 7px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cal-move-go:disabled {
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.cal-move-go:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.cal-move-to {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.cal-move-days {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 150px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  font-size: 12px;
+}
+
+.cal-move-days li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+
+.cal-move-days li span:first-child {
+  flex: none;
+  color: var(--text-muted);
+  font-weight: 600;
+}

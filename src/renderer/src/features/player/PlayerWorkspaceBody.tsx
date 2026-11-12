@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { WorldMap } from '../campaigns/WorldMap'
+import { ReputationTracker } from '../campaigns/ReputationTracker'
 import { GoblinLoader } from '../../ui/GoblinLoader'
 import { CalendarMini, PartyMini, PlayerInitiativeMini, PlayerSessionsMini } from '../canvas/toolMinis'
 import { createPortal } from 'react-dom'
@@ -29,7 +31,7 @@ import { QuickSearch, QuickSearchButton, noteTarget, useQuickSearchKey } from '.
 import { HandoutViewer } from './HandoutViewer'
 import { QuestRewardNotice } from './QuestRewardNotice'
 import { QuestAnnouncer } from './QuestAnnouncer'
-import { addCoins } from '@shared/quests'
+import { addCoins, takeCoins } from '@shared/quests'
 import { QuestLog } from '../campaigns/QuestLog'
 import { useCanvasEntries } from '../canvas/canvasEntries'
 import { entryItems } from '../canvas/entryItems'
@@ -255,6 +257,31 @@ export function PlayerWorkspaceBody({
       )
     },
     initiative: { full: <KeepAliveOutlet host={initiativeHost} />, mini: <PlayerInitiativeMini sessionId={sessionId} /> },
+    // The DM's world map, through the fog, with the pins they've shown.
+    worldmap: (
+      <WorldMap
+        sessionId={sessionId}
+        campaignId={!isOffline ? (activeCampaign?.id ?? null) : null}
+        readOnly
+        onOpenNote={(title) => {
+          const found = (notes ?? []).find((n) => n.title.trim().toLowerCase() === title.toLowerCase())
+          if (found) open({ kind: 'note', id: found.id })
+        }}
+        onOpenTool={(tool) => canvasRef.current?.openTool(tool)}
+      />
+    ),
+    // Only the people and powers the DM has shown the party, without the DM's notes.
+    reputation: (
+      <ReputationTracker
+        sessionId={sessionId}
+        campaignId={!isOffline ? (activeCampaign?.id ?? null) : null}
+        readOnly
+        onOpenNote={(title) => {
+          const found = (notes ?? []).find((n) => n.title.trim().toLowerCase() === title.toLowerCase())
+          if (found) open({ kind: 'note', id: found.id })
+        }}
+      />
+    ),
     // Only the quests the DM has shown the party.
     quests: (
       <QuestLog
@@ -265,6 +292,20 @@ export function PlayerWorkspaceBody({
           const found = (notes ?? []).find((n) => n.title.trim().toLowerCase() === title.toLowerCase())
           if (found) open({ kind: 'note', id: found.id })
         }}
+        // Coins out of the stash go to the character you're playing, and coins put in come out of their purse.
+        purse={
+          lastActiveCharacter
+            ? {
+                name: lastActiveCharacter.name || 'your character',
+                give: (coin, n) => void saveCharacter(lastActiveCharacter.id, addCoins(lastActiveCharacter, { [coin]: n })),
+                take: (coin, n) => {
+                  const left = takeCoins(lastActiveCharacter, coin, n)
+                  if (left) void saveCharacter(lastActiveCharacter.id, left)
+                  return !!left
+                }
+              }
+            : undefined
+        }
       />
     ),
     calendar: {
@@ -428,6 +469,8 @@ export function PlayerWorkspaceBody({
       <QuickSearch
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
+        quests={{ campaignId: !isOffline ? (activeCampaign?.id ?? null) : null, sessionId, onOpen: () => canvasRef.current?.openTool('quests'), onOpenTool: (tool) => canvasRef.current?.openTool(tool) }}
+        onOpenPage={(url) => canvasRef.current?.openBrowser(url)}
         tools={[
           ...TOOLS_BY_MODE.player
             .filter((kind) => tools[kind] !== undefined && !HEADER_TOOLS.includes(kind))

@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ArrowRightIcon, XIcon } from '../../ui/icons'
 import { activate, awakeTabs, closeTab, openTab, readTabs, updateTab, type BrowserTab, type TabSet } from './browserTabs'
 import { requestBrowserWindow, takeFirstPage, useBrowserAccount } from './browserAccount'
 import { GoblinLoader } from '../../ui/GoblinLoader'
+import { offerUndo } from '../../ui/undo'
 import './browser.css'
 
 /**
@@ -114,6 +115,11 @@ interface PageHandle {
  * (pinning or unpinning it gives the page a new place in the window, which a web page can only take by loading again).
  */
 const lastSpot = new Map<string, { url: string; x: number; y: number }>()
+
+/** The pages an account keeps on its start page (for the search). */
+export function keptPagesFor(accountId: string | null): Bookmark[] {
+  return readJson(`${BOOKMARKS}:${accountId ?? 'guest'}`, STARTER_BOOKMARKS)
+}
 
 /**
  * A Browser box for whoever's signed in: each account its own logins, tabs and zoom. The dock's Browser has no
@@ -235,9 +241,20 @@ function AccountBrowser({ partition, account, windowId }: { partition: string; a
   }
 
   function close(id: string): void {
+    const at = set.tabs.findIndex((t) => t.id === id)
+    const closed = set.tabs[at]
+    const wasOnly = set.tabs.length === 1
     handles.current.delete(id)
-    lastSpot.delete(`${partition}:${id}`)
     setSet((s) => closeTab(s, id))
+    if (!closed?.url) return
+    // Back on the page it was on (its history doesn't come with it).
+    offerUndo(`Closed ${closed.title || hostOf(closed.url)}`, () =>
+      setSet((s) =>
+        wasOnly
+          ? updateTab(s, s.tabs[0].id, { url: closed.url, title: closed.title })
+          : activate({ ...s, tabs: [...s.tabs.slice(0, at), closed, ...s.tabs.slice(at)] }, closed.id)
+      )
+    )
   }
 
   const showing = !!tab.url
@@ -392,7 +409,15 @@ function AccountBrowser({ partition, account, windowId }: { partition: string; a
                         <span className="gb-browser-kept-host">{hostOf(b.url)}</span>
                       </span>
                     </button>
-                    <button type="button" className="gb-browser-kept-remove" onClick={() => saveBookmarks(bookmarks.filter((x) => x.url !== b.url))} aria-label={`Forget ${b.title}`} title="Forget it">
+                    <button type="button" className="gb-browser-kept-remove" onClick={() => {
+                        const at = bookmarks.indexOf(b)
+                        saveBookmarks(bookmarks.filter((x) => x.url !== b.url))
+                        offerUndo(`Forgot ${b.title || hostOf(b.url)}`, () => setBookmarks((now) => {
+                          const next = [...now.slice(0, at), b, ...now.slice(at)]
+                          writeJson(BOOKMARKS_KEY, next)
+                          return next
+                        }))
+                      }} aria-label={`Forget ${b.title}`} title="Forget it">
                       ×
                     </button>
                   </li>

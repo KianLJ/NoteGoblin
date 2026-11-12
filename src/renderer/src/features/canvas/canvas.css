@@ -1581,6 +1581,8 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 [data-kind='friends'] { --kind: #4a6b8a; }
 [data-kind='quests'] { --kind: #a04a78; }
 [data-kind='browser'] { --kind: #4f7a9e; }
+[data-kind='reputation'] { --kind: #6f7a2e; }
+[data-kind='worldmap'] { --kind: #3f7aa8; }
 
 .gb-canvas-node[data-kind] .gb-canvas-node-bar {
   background: color-mix(in srgb, var(--kind, transparent) 10%, var(--bg-sunken));
@@ -1719,6 +1721,27 @@ body.gb-canvas-dragging .gb-canvas-node-body {
   pointer-events: none;
 }
 
+/* A session ordered by hand: each number is a picker for the scene's place. */
+.gb-canvas-seq-badge--pick {
+  appearance: none;
+  border: 0;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.gb-canvas-seq-badge--pick:hover,
+.gb-canvas-seq-badge--pick:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+.gb-canvas-seq-badge--pick option {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+
 /* The scene being presented right now. */
 .gb-canvas-node--live {
   box-shadow: 0 0 0 2px var(--accent), 0 0 24px color-mix(in srgb, var(--accent) 45%, transparent);
@@ -1838,12 +1861,231 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 
 /* The Quests box (QuestLog.tsx): a count and "+ New quest" on top, then quest cards — a round status mark, the
    title in the display face, who gave it, and its rewards as coloured chips. Secret quests are dashed for the DM. */
-.gb-quests {
+/* The Quests box: its two tabs, Quests and Party stash, then the open one. */
+.gb-quests-box {
   --quest: #a04a78;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
   height: 100%;
+  min-height: 0;
+}
+
+.gb-quests-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gb-quests-tab {
+  padding: 5px 12px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gb-quests-tab:hover {
+  color: var(--text-primary);
+}
+
+.gb-quests-tab[aria-selected='true'] {
+  border-bottom-color: var(--quest);
+  color: var(--text-primary);
+}
+
+.gb-quests-tab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* The party stash (PartyStash.tsx). */
+.gb-stash {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.gb-stash-empty,
+.gb-stash-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.gb-stash-purse .gb-quest-rewards {
+  margin: 4px 0 8px;
+}
+
+.gb-stash-coins,
+.gb-stash-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.gb-stash-add {
+  margin-top: 6px;
+}
+
+.gb-stash .gb-stash-add .gb-input:first-child {
+  flex: 1 1 140px;
+  width: auto;
+  min-width: 0;
+}
+
+/* Two classes: .gb-input makes inputs full width. */
+.gb-stash .gb-stash-add-qty {
+  flex: none;
+  width: 58px;
+  text-align: center;
+}
+
+.gb-stash .gb-stash-coin {
+  flex: none;
+  width: auto;
+}
+
+.gb-stash-codex {
+  margin-top: 6px;
+}
+
+.gb-stash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gb-stash-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid color-mix(in srgb, var(--quest) 55%, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+}
+
+.gb-stash-item--held {
+  border-left-color: var(--border-subtle);
+  background: transparent;
+}
+
+.gb-stash-item-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gb-stash-item-name {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.gb-stash-item-note {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.gb-stash-holder {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--quest) 14%, transparent);
+  color: color-mix(in srgb, var(--quest) 75%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.gb-stash-qty {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-stash-qty span {
+  min-width: 20px;
+  text-align: center;
+}
+
+.gb-stash-qty button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gb-stash-qty button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.gb-stash-qty button:hover:not(:disabled) {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-stash-act {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gb-stash-act:hover:not(:disabled) {
+  border-color: var(--quest);
+  color: var(--text-primary);
+}
+
+.gb-stash-act:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.gb-stash-act:focus-visible,
+.gb-stash-qty button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.gb-quests {
+  --quest: #a04a78;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
   min-height: 0;
   padding: var(--space-3);
   overflow-y: auto;
@@ -2207,6 +2449,27 @@ body.gb-canvas-dragging .gb-canvas-node-body {
 .gb-quest-hints li:hover .gb-quest-hint-actions,
 .gb-quest-hint-actions:focus-within {
   opacity: 1;
+}
+
+/* A player's own notes on a quest (QuestLog.tsx's MyQuestNotes). */
+.gb-quest-mynotes-text {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 4px 0 0 16px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.gb-quest-mynotes-text:focus {
+  border-color: var(--quest);
+  outline: none;
 }
 
 .gb-quest-hint-new {

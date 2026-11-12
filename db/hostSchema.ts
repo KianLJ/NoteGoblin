@@ -212,6 +212,43 @@ CREATE TABLE IF NOT EXISTS campaign_quests (
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- The party stash (see shared/stash.ts): one JSON document per campaign that anyone at the table changes, one
+-- change at a time. Like campaign_quests, campaign_id is deliberately not a foreign key.
+CREATE TABLE IF NOT EXISTS campaign_stash (
+  campaign_id TEXT PRIMARY KEY,
+  stash_json TEXT NOT NULL DEFAULT '{"items":[],"coins":{}}',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- The reputation tracker (see shared/reputation.ts): one JSON document per campaign, DM-written; players read only the
+-- shown entries, without the DM's notes.
+CREATE TABLE IF NOT EXISTS campaign_reputation (
+  campaign_id TEXT PRIMARY KEY,
+  reputation_json TEXT NOT NULL DEFAULT '{"entries":[]}',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- The campaign's maps (see shared/worldMap.ts): their pins, party, trail and fog as one JSON document, DM-written;
+-- players read the maps and pins shown to them.
+CREATE TABLE IF NOT EXISTS campaign_maps (
+  campaign_id TEXT PRIMARY KEY,
+  maps_json TEXT NOT NULL DEFAULT '{"maps":[]}',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Each map's picture (a data URL), apart as it's big and only fetched when it changes, with the copy players get
+-- while the map is under fog: the fog burned in by the DM's app, so nothing under it ever leaves the DM's computer.
+CREATE TABLE IF NOT EXISTS campaign_map_images (
+  campaign_id TEXT NOT NULL,
+  map_id TEXT NOT NULL,
+  image TEXT,
+  player_image TEXT,
+  PRIMARY KEY (campaign_id, map_id)
+);
+
+-- A single world map per campaign, from before there could be several; never released, so nothing to keep.
+DROP TABLE IF EXISTS campaign_worldmap;
+
 CREATE TABLE IF NOT EXISTS campaign_vehicles (
   campaign_id TEXT PRIMARY KEY,
   vehicles_json TEXT NOT NULL DEFAULT '{"vehicles":[]}',

@@ -11,6 +11,7 @@ import { StickyColorButton, StickyNote } from './StickyNote'
 import { ImageBox, type CanvasImage } from './ImageBox'
 import { deleteCanvasImage } from './canvasImages'
 import { inSavedLayout } from './LayoutsMenu'
+import { whenFinal } from '../../ui/undo'
 import { BrowserIcon, BrowserPanel, forgetBrowserWindow } from '../browser/BrowserPanel'
 import { GoblinLoader } from '../../ui/GoblinLoader'
 
@@ -43,7 +44,8 @@ export function entryItems(
             dropEntry(mode, id)
             // A saved layout with this image in it can bring it back, so its picture stays.
             // shortcut: deleting that layout later leaves the picture stored; sweep unused ones if storage ever matters.
-            if (!inSavedLayout(mode, id)) void deleteCanvasImage(entry.id)
+            // Not until it can't be undone (the canvas offers that).
+            if (!inSavedLayout(mode, id)) whenFinal(() => void deleteCanvasImage(entry.id))
           },
           content: <ImageBox image={entry} />
         }
@@ -57,7 +59,7 @@ export function entryItems(
           onClose: () => {
             dropEntry(mode, id)
             // A saved layout with this box in it brings back its tabs too.
-            if (!inSavedLayout(mode, id)) forgetBrowserWindow(entry.id)
+            if (!inSavedLayout(mode, id)) whenFinal(() => forgetBrowserWindow(entry.id))
           },
           content: <BrowserPanel windowId={entry.id} />
         }

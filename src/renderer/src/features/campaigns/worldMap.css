@@ -1,0 +1,654 @@
+/* The World Map box (WorldMap.tsx): a tool strip, then the map, centred, panned and zoomed by its own hand. */
+.gb-wmap {
+  --quest: #3f7aa8;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.gb-wmap-pad {
+  padding: var(--space-3);
+}
+
+.gb-wmap-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: var(--space-4);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.gb-wmap-empty p {
+  max-width: 320px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.gb-wmap-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gb-wmap-tool {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gb-wmap-tool:hover:not(:disabled) {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-wmap-tool[aria-pressed='true'] {
+  border-color: var(--quest);
+  background: color-mix(in srgb, var(--quest) 18%, transparent);
+  color: var(--text-primary);
+}
+
+.gb-wmap-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.gb-wmap-tool:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.gb-wmap-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border-subtle);
+}
+
+.gb-wmap-grow {
+  flex: 1;
+}
+
+.gb-wmap-fog {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gb-wmap-fog input {
+  accent-color: var(--quest);
+}
+
+.gb-wmap-size {
+  width: 90px;
+  accent-color: var(--quest);
+}
+
+.gb-wmap-frame {
+  position: relative;
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-sunken) 80%, #000);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.gb-wmap-frame--pin,
+.gb-wmap-frame--party,
+.gb-wmap-frame--cover {
+  cursor: crosshair;
+}
+
+.gb-wmap-frame--reveal {
+  cursor: cell;
+}
+
+.gb-wmap-frame:active.gb-wmap-frame--look {
+  cursor: grabbing;
+}
+
+.gb-wmap-stage {
+  position: relative;
+  transform-origin: center center;
+}
+
+.gb-wmap-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.gb-wmap-svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* The fog: dark, with a faint weave so it reads as cloud, not a blank. */
+.gb-wmap-fogfill {
+  fill: #151210;
+}
+
+.gb-wmap-trail {
+  fill: none;
+  stroke: #d39a2b;
+  stroke-dasharray: 6 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6));
+}
+
+.gb-wmap-party {
+  position: absolute;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.5));
+  pointer-events: none;
+}
+
+.gb-wmap-pin {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  transform-origin: bottom center;
+  cursor: pointer;
+}
+
+.gb-wmap-pin-mark {
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.5));
+  transition: transform 120ms ease;
+}
+
+.gb-wmap-pin:hover .gb-wmap-pin-mark,
+.gb-wmap-pin--on .gb-wmap-pin-mark {
+  transform: translateY(-2px) scale(1.12);
+}
+
+.gb-wmap-pin--secret .gb-wmap-pin-mark {
+  opacity: 0.55;
+}
+
+.gb-wmap-pin:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The pin's name, under its point, on a strip so it reads over any map. */
+.gb-wmap-pin-label {
+  position: absolute;
+  top: 100%;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(20 16 12 / 0.78);
+  color: #f3eadb;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.gb-wmap-card {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(280px, calc(100% - 20px));
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  cursor: default;
+}
+
+.gb-wmap-card strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.gb-wmap-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.gb-wmap-form {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  width: min(280px, calc(100% - 20px));
+  box-shadow: var(--shadow-lg);
+  cursor: default;
+}
+
+.gb-wmap-colors {
+  display: flex;
+  gap: 6px;
+}
+
+.gb-wmap-color {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.gb-wmap-color[aria-checked='true'] {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-surface-raised) inset;
+}
+
+.gb-wmap-color:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.gb-wmap-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-md, 0 2px 6px rgb(0 0 0 / 0.3));
+}
+
+.gb-wmap-zoom button {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.gb-wmap-zoom button + button {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.gb-wmap-zoom button:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+/* Which map, and the DM's controls for it. */
+.gb-wmap-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.gb-wmap .gb-wmap-name {
+  flex: 0 1 220px;
+  width: auto;
+  min-width: 120px;
+  font-family: var(--font-display);
+  font-size: 14px;
+}
+
+/* An on/off switch: the app's toggle track, the words beside it. */
+.gb-wmap-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gb-wmap-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gb-wmap-switch input:checked + .gb-toggle-track {
+  background: var(--quest);
+}
+
+.gb-wmap-switch input:checked + .gb-toggle-track::after {
+  background: var(--parchment-50);
+  transform: translateX(13px);
+}
+
+.gb-wmap-switch input:focus-visible + .gb-toggle-track {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.gb-wmap-tool--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gb-wmap-brush {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.gb-wmap-brush input {
+  width: 80px;
+  accent-color: var(--quest);
+}
+
+/* What the tool does, always in view. */
+.gb-wmap-hint {
+  margin: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--quest) 8%, var(--bg-surface));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.gb-wmap-frame--move {
+  cursor: grab;
+}
+
+.gb-wmap-frame--walk {
+  cursor: crosshair;
+}
+
+.gb-wmap-frame--hide {
+  cursor: cell;
+}
+
+.gb-wmap-party--movable {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.gb-wmap-pin--dragging {
+  cursor: grabbing;
+  opacity: 0.85;
+}
+
+.gb-wmap-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.gb-wmap-card-head strong {
+  flex: 1;
+}
+
+.gb-wmap-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The map's scale (WorldMap.tsx's ScaleControl). */
+.gb-wmap-scale {
+  position: relative;
+}
+
+.gb-wmap-scale-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 250px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+}
+
+.gb-wmap-scale-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* Distances on the map: the last leg, and the line being aimed while walking. */
+.gb-wmap-dist {
+  position: absolute;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgb(20 16 12 / 0.82);
+  color: #f3d79a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.gb-wmap-dist--aim {
+  background: #d39a2b;
+  color: #20170c;
+}
+
+.gb-wmap-aim {
+  stroke: #d39a2b;
+  stroke-dasharray: 3 4;
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+
+.gb-wmap-travelled {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-md, 0 2px 6px rgb(0 0 0 / 0.3));
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.gb-wmap-travelled strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Orbits (a pin going round another as the calendar moves on). */
+.gb-wmap-orbit {
+  fill: none;
+  stroke: rgb(243 215 154 / 0.45);
+  stroke-dasharray: 2 5;
+}
+
+.gb-wmap-orbit-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* A pin drawn as a sphere: a planet, a moon, a sun. Lit from the top left. */
+.gb-wmap-body {
+  position: absolute;
+  box-sizing: border-box;
+  /* Always round: its height follows its width, whatever else would stretch it. */
+  aspect-ratio: 1;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, color-mix(in srgb, white 45%, var(--pin)) 0%, var(--pin) 42%, color-mix(in srgb, black 62%, var(--pin)) 100%);
+  box-shadow: 0 0 0 var(--edge, 1px) rgb(0 0 0 / 0.35);
+  transform-origin: top left;
+  cursor: pointer;
+}
+
+.gb-wmap-body.gb-wmap-pin--on {
+  box-shadow: 0 0 0 var(--ring, 2px) #f3d79a;
+}
+
+.gb-wmap-body.gb-wmap-pin--secret {
+  opacity: 0.7;
+}
+
+.gb-wmap-body-label {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.gb-wmap-size {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.gb-wmap-size > span:first-child {
+  white-space: nowrap;
+}
+
+.gb-wmap-size .gb-stash-hint {
+  grid-column: 1 / -1;
+}
+
+/* Any colour for a pin: a rainbow until one is picked. */
+.gb-wmap-color--custom {
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: conic-gradient(#e0533a, #e0b13a, #5fae4b, #3a8fe0, #9b5fd0, #e0533a);
+  cursor: pointer;
+}
+
+.gb-wmap-color--custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.gb-wmap-color--custom.gb-wmap-color--on {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-surface-raised) inset;
+}
+
+.gb-wmap-color--custom:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The Measure tool's route. */
+.gb-wmap-ruler {
+  fill: none;
+}
+
+.gb-wmap-ruler-dot {
+  fill: #d39a2b;
+  stroke: #20170c;
+  stroke-width: 0.8;
+}
+
+/* "This route is N units": the Measure tool setting the map's scale. */
+.gb-wmap-fromroute {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.gb-wmap-fromroute .gb-input {
+  width: 92px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+/* A ruler for the map at this zoom. */
+.gb-wmap-scalebar {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-md, 0 2px 6px rgb(0 0 0 / 0.3));
+  color: var(--text-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.gb-wmap-scalebar-line {
+  height: 6px;
+  border: 2px solid currentColor;
+  border-top: none;
+}

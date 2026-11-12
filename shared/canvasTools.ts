@@ -18,6 +18,8 @@ export type ToolKind =
   | 'soundboard'
   | 'friends'
   | 'browser'
+  | 'reputation'
+  | 'worldmap'
 
 export const TOOL_META: Record<ToolKind, { title: string; w: number; h: number }> = {
   notes: { title: 'Notes', w: 272, h: 640 },
@@ -33,13 +35,15 @@ export const TOOL_META: Record<ToolKind, { title: string; w: number; h: number }
   music: { title: 'Music', w: 384, h: 512 },
   soundboard: { title: 'Sound Board', w: 352, h: 512 },
   friends: { title: 'Friends', w: 320, h: 432 },
-  browser: { title: 'Browser', w: 760, h: 640 }
+  browser: { title: 'Browser', w: 760, h: 640 },
+  reputation: { title: 'Reputation', w: 400, h: 560 },
+  worldmap: { title: 'World Map', w: 880, h: 620 }
 }
 
 export const TOOLS_BY_MODE: Record<CanvasMode, ToolKind[]> = {
   // The saved encounters live in the Initiative box's Encounters tab.
-  dm: ['notes', 'players', 'initiative', 'quests', 'calendar', 'sessions', 'timer', 'codex', 'music', 'soundboard', 'browser', 'friends', 'whatsnew'],
-  player: ['notes', 'party', 'initiative', 'calendar', 'sessions', 'quests', 'codex', 'browser', 'friends', 'whatsnew']
+  dm: ['notes', 'players', 'initiative', 'quests', 'reputation', 'worldmap', 'calendar', 'sessions', 'timer', 'codex', 'music', 'soundboard', 'browser', 'friends', 'whatsnew'],
+  player: ['notes', 'party', 'initiative', 'calendar', 'sessions', 'quests', 'reputation', 'worldmap', 'codex', 'browser', 'friends', 'whatsnew']
 }
 
 /**
@@ -81,6 +85,8 @@ export const MIN_CONTENT: Record<string, { w: number; h: number }> = {
   soundboard: { w: 240, h: 200 },
   friends: { w: 240, h: 200 },
   browser: { w: 320, h: 240 },
+  reputation: { w: 260, h: 220 },
+  worldmap: { w: 320, h: 240 },
   note: { w: 280, h: 200 },
   character: { w: 520, h: 360 },
   partySheet: { w: 520, h: 360 },

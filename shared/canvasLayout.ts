@@ -66,6 +66,8 @@ export interface Collection {
    * Closing its tile shelves it — the collection stays, tile-less, until it's opened again from the Sessions box.
    */
   sessionDeckId?: string
+  /** A session's scenes in the order set by hand (the session's own order), not by where their boxes are. */
+  manualOrder?: boolean
 }
 
 export const EMPTY_LAYOUT: CanvasLayout = { viewport: { x: 0, y: 0, zoom: 1 }, nodes: [] }
@@ -375,7 +377,8 @@ export function parseLayout(raw: unknown, isKnownId: (id: string) => boolean): C
         collections[cid] = {
           name: typeof c!.name === 'string' ? c!.name : 'Collection',
           layout: inner,
-          ...(typeof c!.sessionDeckId === 'string' ? { sessionDeckId: c!.sessionDeckId } : {})
+          ...(typeof c!.sessionDeckId === 'string' ? { sessionDeckId: c!.sessionDeckId } : {}),
+          ...(c!.manualOrder === true ? { manualOrder: true } : {})
         }
       }
     }
@@ -441,13 +444,13 @@ export function placedIds(root: CanvasLayout): Set<string> {
 }
 
 /** The names along a path, for a breadcrumb. */
-export function pathNames(root: CanvasLayout, path: string[]): { id: string; name: string; sessionDeckId?: string }[] {
-  const names: { id: string; name: string; sessionDeckId?: string }[] = []
+export function pathNames(root: CanvasLayout, path: string[]): { id: string; name: string; sessionDeckId?: string; manualOrder?: boolean }[] {
+  const names: { id: string; name: string; sessionDeckId?: string; manualOrder?: boolean }[] = []
   let layout = root
   for (const cid of path) {
     const c = layout.collections?.[cid]
     if (!c) break
-    names.push({ id: cid, name: c.name, ...(c.sessionDeckId ? { sessionDeckId: c.sessionDeckId } : {}) })
+    names.push({ id: cid, name: c.name, ...(c.sessionDeckId ? { sessionDeckId: c.sessionDeckId } : {}), ...(c.manualOrder ? { manualOrder: true } : {}) })
     layout = c.layout
   }
   return names
@@ -529,15 +532,16 @@ export function dissolveCollection(layout: CanvasLayout, cid: string): CanvasLay
 
 /**
  * The order boxes read in: top to bottom by row, left to right within a row.
- * A box joins the row above when its top sits within the upper half of that
- * row's shortest box — so boxes laid out roughly side by side read as a row,
- * even when they're not perfectly lined up.
+ * A box joins the row above when its top is less than half the height of the
+ * tallest box (that row's, or its own) below the row's top — so boxes laid out
+ * roughly side by side read as a row, even when they're not lined up and not
+ * the same size (one short note in a row doesn't push a big one onto the next).
  */
 export function readingOrder(nodes: CanvasNodeGeom[]): string[] {
   const rows: CanvasNodeGeom[][] = []
   for (const n of [...nodes].sort((a, b) => a.y - b.y || a.x - b.x)) {
     const row = rows[rows.length - 1]
-    if (row && n.y < Math.min(...row.map((r) => r.y)) + Math.min(...row.map((r) => r.h)) / 2) row.push(n)
+    if (row && n.y - row[0].y < Math.max(n.h, ...row.map((r) => r.h)) / 2) row.push(n)
     else rows.push([n])
   }
   return rows.flatMap((row) => row.sort((a, b) => a.x - b.x).map((n) => n.id))

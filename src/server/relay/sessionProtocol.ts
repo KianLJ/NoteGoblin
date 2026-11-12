@@ -29,6 +29,11 @@ export type RequestKind =
   | 'calendar.remove'
   | 'vehicles.get'
   | 'quests.get'
+  | 'stash.get'
+  | 'reputation.get'
+  | 'worldMap.get'
+  | 'worldMap.image'
+  | 'stash.change'
   | 'battleMap.get'
   | 'battleMap.image'
   | 'battleMap.moveToken'
@@ -219,6 +224,17 @@ export interface BattleMapDragFrame {
   combatantId: string
   x: number | null
   y: number | null
+}
+
+/** A map's picture, in pieces under the relay's message cap — sent to a player who asks ('worldMap.image'). */
+export interface WorldMapImageChunkFrame {
+  type: 'world-map-image-chunk'
+  campaignId: string
+  mapId: string
+  imageId: string
+  index: number
+  total: number
+  chunk: string
 }
 
 /** The map image, in pieces under the relay's 1 MiB message cap — sent when it changes, or when a player asks ('battleMap.image'). */

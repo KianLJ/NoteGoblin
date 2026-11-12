@@ -27,6 +27,7 @@ import type {
   SfxPlayedFrame,
   BattleMapFrame,
   BattleMapImageChunkFrame,
+  WorldMapImageChunkFrame,
   HandoutChunkFrame,
   QuestRewardFrame
 } from '@server/relay/sessionProtocol'
@@ -634,6 +635,36 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
     // Players only read the quest log, and only its shared quests — the DM changes it locally (registerIpc.ts's quests:save).
     case 'quests.get':
       return fromService(frame.reqId, campaignService.getQuests(db, str('campaignId'), userId))
+    // Players only read the reputation tracker, and only what the DM has shown; the DM changes it locally.
+    case 'reputation.get':
+      return fromService(frame.reqId, campaignService.getReputation(db, str('campaignId'), userId))
+    // Players only read the world map (its shown pins); its picture comes in pieces, to just this player.
+    case 'worldMap.get':
+      return fromService(frame.reqId, campaignService.getMaps(db, str('campaignId'), userId))
+    case 'worldMap.image': {
+      const campaignId = str('campaignId')
+      const mapId = str('mapId')
+      const result = campaignService.getMapImage(db, campaignId, userId, mapId)
+      if (!result.ok) return fromService(frame.reqId, result)
+      const image = result.data
+      if (!image) return { reqId: frame.reqId, ok: true, data: { imageId: null } }
+      const imageId = imageIdOf(image)
+      const total = Math.max(1, Math.ceil(image.length / IMAGE_CHUNK_CHARS))
+      for (let index = 0; index < total; index++) {
+        const chunkFrame: WorldMapImageChunkFrame = { type: 'world-map-image-chunk', campaignId, mapId, imageId, index, total, chunk: image.slice(index * IMAGE_CHUNK_CHARS, (index + 1) * IMAGE_CHUNK_CHARS) }
+        sendToRelay(userId, chunkFrame)
+      }
+      return { reqId: frame.reqId, ok: true, data: { imageId } }
+    }
+    // Anyone at the table changes the party stash, one change at a time.
+    case 'stash.get':
+      return fromService(frame.reqId, campaignService.getStash(db, str('campaignId'), userId))
+    case 'stash.change': {
+      const campaignId = str('campaignId')
+      const result = campaignService.changeStash(db, campaignId, userId, input('change'))
+      if (result.ok) broadcastCampaignChanged(campaignId)
+      return fromService(frame.reqId, result)
+    }
     case 'vehicles.get':
       return fromService(frame.reqId, campaignService.getVehicles(db, str('campaignId'), userId))
     // Players only ever read a campaign's packs — the DM changes them locally (see registerIpc.ts's campaignPacks:*).

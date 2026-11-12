@@ -1,0 +1,103 @@
+/* "Deleted X · Undo" (UndoToast.tsx): a small dark pill above the canvas's bottom bar, with a line running out. */
+.gb-undo {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(520px, calc(100vw - 32px));
+  overflow: hidden;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface-raised);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 13px;
+  transform: translateX(-50%);
+  animation: gb-undo-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.gb-undo-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-undo-btn {
+  flex: none;
+  margin-left: 8px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gb-undo-btn:hover {
+  background: var(--accent-hover);
+}
+
+.gb-undo-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gb-undo-close:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.gb-undo-btn:focus-visible,
+.gb-undo-close:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* How long is left to undo. */
+.gb-undo-timer {
+  position: absolute;
+  right: 14px;
+  bottom: 0;
+  left: 14px;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.5;
+  transform-origin: left;
+  animation: gb-undo-time 7s linear forwards;
+}
+
+@keyframes gb-undo-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+@keyframes gb-undo-time {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-undo,
+  .gb-undo-timer {
+    animation: none;
+  }
+}

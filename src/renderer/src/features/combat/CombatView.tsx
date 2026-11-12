@@ -113,7 +113,8 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
         const img = new Image()
         img.onload = () => {
           const w = 20
-          const h = Math.max(1, Math.round((w * img.height) / img.width))
+          // Exactly the picture's shape: rounding it to whole squares stretched it off a map drawn to a grid.
+          const h = (w * img.height) / img.width
           const added: MapImage = { id: crypto.randomUUID(), src, x: Math.round(centre.x - w / 2) + n, y: Math.round(centre.y - h / 2) + n, w, h, naturalW: img.width, naturalH: img.height }
           setMap((m) => ({ ...m, images: [...m.images, added] }))
           setSelectedImage(added.id)

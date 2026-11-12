@@ -8,6 +8,9 @@ import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
 import type { CampaignVehicles } from './vehicles'
 import type { CampaignQuests } from './quests'
+import type { CampaignStash, StashChange } from './stash'
+import type { CampaignReputation } from './reputation'
+import type { CampaignMaps } from './worldMap'
 import type { BattleLibrary, BattleMap, PlayerBattleMap } from './battleMap'
 import type { ContentPack } from './content/schema'
 import type { PackIssue } from './content/validate'
@@ -131,8 +134,9 @@ export interface AudioLibraryMeta {
 
 /** How handing out a quest's reward went: each player's share (coins by currency id, and XP), and the coins that didn't split evenly. */
 export type QuestAwardResult =
-  | { ok: true; players: number; coinsEach: Record<string, number>; xpEach: number; coinsLeftover: Record<string, number> }
-  | { ok: false; error: string }
+  | { ok: true; players: number; coinsEach: Record<string, number>; xpEach: number; coinsLeftover: Record<string, number>; stashed: string[] }
+  /** `stashed`: items that did go into the party stash, though the coins and XP couldn't be handed out. */
+  | { ok: false; error: string; stashed?: string[] }
 
 /** A player's share of a finished quest's reward: coins by currency id (cp…pp, or a pack's), and XP. */
 export interface QuestReward {
@@ -401,6 +405,28 @@ export interface AppApi {
   }
   // The vehicles a campaign tracks (see shared/vehicles.ts) — every member
   // reads them (minus ones the DM has hidden); only the DM saves, locally.
+  /** The campaign's maps (shared/worldMap.ts): the DM saves them (and their pictures); a player gets the shown ones. */
+  worldMap: {
+    get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignMaps>>
+    /** DM only: every map's pins, party, trail and fog. */
+    save: (campaignId: string, doc: CampaignMaps) => Promise<ApiResult<CampaignMaps>>
+    /** DM only: a map's picture (a data URL, or null to take it away), or with `forPlayers` the fogged copy players get. Answers with its fingerprint. */
+    setImage: (campaignId: string, mapId: string, image: string | null, forPlayers?: boolean) => Promise<ApiResult<string | null>>
+    /** A map's picture: the DM's comes back straight away; a player's arrives through onImage (this answers null). */
+    image: (campaignId: string, mapId: string, sessionId?: string) => Promise<ApiResult<string | null>>
+    onImage: (callback: (payload: { campaignId: string; mapId: string; imageId: string; image: string }) => void) => () => void
+  }
+  /** The reputation tracker (shared/reputation.ts): the DM saves it whole; a player gets the entries shown to them. */
+  reputation: {
+    get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignReputation>>
+    /** DM only. */
+    save: (campaignId: string, doc: CampaignReputation) => Promise<ApiResult<CampaignReputation>>
+  }
+  /** The party stash: anyone in the campaign reads it and changes it, one change at a time (shared/stash.ts). */
+  stash: {
+    get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignStash>>
+    change: (campaignId: string, change: StashChange, sessionId?: string) => Promise<ApiResult<CampaignStash>>
+  }
   quests: {
     get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignQuests>>
     /** DM only. */
@@ -756,7 +782,8 @@ export interface AppApi {
   }
   files: {
     /** Opens a native file picker and reads the chosen image back as a data: URI — see registerIpc.ts for why images are embedded rather than stored separately. */
-    pickImage: () => Promise<ApiResult<{ dataUrl: string; fileName: string }>>
+    /** `big`: a map's picture, allowed up to 64 MB (the World Map shrinks it); otherwise up to 8 MB. */
+    pickImage: (opts?: { big?: boolean }) => Promise<ApiResult<{ dataUrl: string; fileName: string }>>
     /** The folder your campaigns/notes are stored in as real files, if you've opted in — null means everything's still in the internal SQLite database. */
     getVaultPath: () => Promise<string | null>
     /** Opens a native folder picker, then copies every existing SQLite campaign into the chosen folder as files (safe to re-run; nothing already-migrated is duplicated, nothing in SQLite is deleted). From then on, campaigns/notes/folders read and write through the files instead. */

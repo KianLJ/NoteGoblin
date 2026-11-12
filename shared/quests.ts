@@ -3,6 +3,8 @@
  * campaign (campaign_quests), written by the DM and read by players — who only ever get the ones marked shared.
  */
 
+import { readCodexRef, type CodexRef } from './codexRef'
+
 export type QuestStatus = 'active' | 'done' | 'failed'
 
 /** A note or hint on a quest: a reminder, a clue. The DM writes them, and shows each to the party when they need it. */
@@ -34,6 +36,10 @@ export interface Quest {
   rewardCoins?: Record<string, number>
   rewardXp?: number
   rewardItems?: string
+  /** Items from the Codex it pays: weapons, armour, gear, magic items. They go into the party stash when it's done. */
+  rewardEntries?: CodexRef[]
+  /** Its Codex items have gone into the party stash (once). */
+  itemsStashed?: boolean
   /** The coins and XP have been handed out (once, when it was first completed with the party connected). */
   rewarded?: boolean
   /** Notes and hints, in order. A player only gets the shown ones. */
@@ -93,6 +99,9 @@ export function normalizeQuests(raw: unknown): CampaignQuests {
     if (xp) quest.rewardXp = xp
     if (typeof r.rewardItems === 'string' && r.rewardItems.trim()) quest.rewardItems = r.rewardItems.trim().slice(0, MAX_TITLE)
     if (r.rewarded === true) quest.rewarded = true
+    const entries = Array.isArray(r.rewardEntries) ? r.rewardEntries.map(readCodexRef).filter((e): e is CodexRef => !!e).slice(0, 20) : []
+    if (entries.length) quest.rewardEntries = entries
+    if (r.itemsStashed === true) quest.itemsStashed = true
     if (Array.isArray(r.forPlayers)) {
       const ids = [...new Set(r.forPlayers.filter((id): id is string => typeof id === 'string' && !!id && id.length <= 128))].slice(0, 50)
       if (ids.length) quest.forPlayers = ids
@@ -157,14 +166,41 @@ export function addCoins(
   return packCurrency ? { currency, packCurrency } : { currency }
 }
 
+/** A character's purse with `n` of `coin` taken out — or null if they haven't got that many. */
+export function takeCoins(
+  c: { currency?: Partial<Record<(typeof STANDARD_COINS)[number], number>>; packCurrency?: Record<string, number> },
+  coin: string,
+  n: number
+): { currency: Record<(typeof STANDARD_COINS)[number], number>; packCurrency?: Record<string, number> } | null {
+  const currency = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, ...c.currency }
+  const standard = (STANDARD_COINS as readonly string[]).includes(coin)
+  const have = standard ? currency[coin as (typeof STANDARD_COINS)[number]] : (c.packCurrency?.[coin] ?? 0)
+  if (n <= 0 || have < n) return null
+  if (standard) {
+    currency[coin as (typeof STANDARD_COINS)[number]] = have - n
+    return c.packCurrency ? { currency, packCurrency: c.packCurrency } : { currency }
+  }
+  return { currency, packCurrency: { ...c.packCurrency, [coin]: have - n } }
+}
+
 /** The quest pays out something that's handed out automatically: coins or XP. */
 export function hasPayout(q: Quest): boolean {
   return coinList(q.rewardCoins).length > 0 || !!q.rewardXp
 }
 
+/** The quest pays items (from the Codex, or written in) that haven't gone into the party stash yet. */
+export function hasItemsToStash(q: Quest): boolean {
+  return !q.itemsStashed && ((q.rewardEntries?.length ?? 0) > 0 || !!q.rewardItems)
+}
+
 /** A quest's rewards as short labels — "250 gp", "30 sp", "300 XP", then the rest. */
 export function rewardLabels(q: Quest, currencies: CoinName[] = []): string[] {
-  return [...coinList(q.rewardCoins).map(([id, n]) => `${n.toLocaleString()} ${coinLabel(id, currencies)}`), q.rewardXp ? `${q.rewardXp.toLocaleString()} XP` : '', q.rewardItems ?? ''].filter(Boolean)
+  return [
+    ...coinList(q.rewardCoins).map(([id, n]) => `${n.toLocaleString()} ${coinLabel(id, currencies)}`),
+    q.rewardXp ? `${q.rewardXp.toLocaleString()} XP` : '',
+    ...(q.rewardEntries ?? []).map((e) => e.name),
+    q.rewardItems ?? ''
+  ].filter(Boolean)
 }
 
 /** A reward split evenly between `people`: what each gets (rounded down), and what's left over. */

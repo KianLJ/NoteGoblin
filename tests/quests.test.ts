@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addCoins, coinLabel, questIsFor, coinsPhrase, hasPayout, normalizeQuests, questsForPlayer, rewardLabels, splitReward } from '../shared/quests'
+import { addCoins, takeCoins, hasItemsToStash, coinLabel, questIsFor, coinsPhrase, hasPayout, normalizeQuests, questsForPlayer, rewardLabels, splitReward } from '../shared/quests'
 
 describe('quest log', () => {
   it('keeps real quests, fills in defaults, and drops anything else', () => {
@@ -98,5 +98,23 @@ describe('quest log', () => {
     expect(questsForPlayer(doc, 'ann').quests.map((q) => q.title)).toEqual(['Everyone', 'Ann and Bram'])
     expect(questsForPlayer(doc, 'cass').quests.map((q) => q.title)).toEqual(['Everyone', 'Just Cass'])
     expect(questIsFor(doc.quests[2], 'ann')).toBe(false)
+  })
+
+  it('takes coins out of a purse, but no more than are in it', () => {
+    const purse = { currency: { cp: 0, sp: 0, ep: 0, gp: 10, pp: 0 }, packCurrency: { credits: 5 } }
+    expect(takeCoins(purse, 'gp', 4)?.currency.gp).toBe(6)
+    expect(takeCoins(purse, 'credits', 5)?.packCurrency).toEqual({ credits: 0 })
+    expect(takeCoins(purse, 'gp', 11)).toBeNull()
+    expect(takeCoins(purse, 'sp', 0)).toBeNull()
+  })
+
+  it('pays items from the Codex, once, and lists them with the rest', () => {
+    const [q] = normalizeQuests({
+      quests: [{ id: 'a', title: 'T', rewardCoins: { gp: 5 }, rewardEntries: [{ kind: 'equipment', id: 'longsword', name: 'Longsword' }, { kind: 'magicItem', id: 'x', name: '' }, { kind: 'spell', id: 'f', name: 'Fireball' }] }]
+    }).quests
+    expect(q.rewardEntries).toEqual([{ kind: 'equipment', id: 'longsword', name: 'Longsword' }])
+    expect(rewardLabels(q)).toEqual(['5 gp', 'Longsword'])
+    expect(hasItemsToStash(q)).toBe(true)
+    expect(hasItemsToStash({ ...q, itemsStashed: true })).toBe(false)
   })
 })

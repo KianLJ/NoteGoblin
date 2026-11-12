@@ -1,4 +1,6 @@
 import { BrowserPanel } from '../browser/BrowserPanel'
+import { UndoToast } from '../../ui/UndoToast'
+import { ShortcutSheet } from '../../ui/ShortcutSheet'
 import { GoblinLoader } from '../../ui/GoblinLoader'
 import { setBrowserAccount } from '../browser/browserAccount'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
@@ -688,6 +690,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       </main>
 
       <NotificationToasts notifications={notifications} onJoined={handleJoinedSession} />
+      <UndoToast />
+      <ShortcutSheet />
       <RollAnimationOverlay />
       {packsOpen && (
         <ContentPacksModal

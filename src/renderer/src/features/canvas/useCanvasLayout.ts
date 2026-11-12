@@ -25,7 +25,7 @@ export interface CanvasNav {
   /** The collection ids from the top canvas down to the one showing; empty on the top canvas. */
   path: string[]
   /** Their names (and, for a session's collection, its session), for the breadcrumb. */
-  names: { id: string; name: string; sessionDeckId?: string }[]
+  names: { id: string; name: string; sessionDeckId?: string; manualOrder?: boolean }[]
   /** The top canvas, with every collection inside it. */
   root: CanvasLayout
   /** Goes straight to the canvas at `path` (from the top). */

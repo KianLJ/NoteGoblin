@@ -20,6 +20,10 @@ import noteMenuShot from '../assets/whatsnew/0.13.0/menu.jpg'
 import questsShot013 from '../assets/whatsnew/0.13.0/quests.jpg'
 import cuesShot013 from '../assets/whatsnew/0.13.0/cues.jpg'
 import loaderShot from '../assets/whatsnew/0.13.0/loader.jpg'
+import worldMapShot from '../assets/whatsnew/0.14.0/worldmap.jpg'
+import reputationShot from '../assets/whatsnew/0.14.0/reputation.jpg'
+import stashShot from '../assets/whatsnew/0.14.0/stash.jpg'
+import orderShot from '../assets/whatsnew/0.14.0/order.jpg'
 
 export interface WhatsNewSection {
   heading: string
@@ -44,6 +48,45 @@ export interface WhatsNewPost {
 
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
+  {
+    version: '0.14.0',
+    title: 'Maps of your world, and who thinks what of the party',
+    intro: 'Your world gets a map: pins, the party’s road, fog to reveal as they explore, and planets that circle their suns as the calendar turns. Alongside it, a tracker for who likes the party (and who doesn’t), a stash for everything they carry between them, and a lot of small things that make the table quicker to run.',
+    sections: [
+      {
+        heading: 'A map of your world',
+        body: 'Open the World Map box and make a map of anything: the world, a region, a city, a star system. Give it a picture (even a very large one: it’s shrunk to a sensible size as it’s loaded), then add pins for places, notes, quests or people, in any colour. Drag them about, click one to open what it’s for, and right-click the map for more. The party has a flag: walk it with Walk party and it leaves a trail, or drag it to set them down somewhere without one. Turn on fog of war and brush away what they’ve explored; players only ever receive the revealed parts of the picture. Make as many maps as you like and show each to the party when you’re ready. Scroll zooms the map (not the canvas), the middle mouse button drags it with any tool, and Ctrl+Z undoes your last change.',
+        image: worldMapShot,
+        caption: 'A star system to scale: a planet’s orbit, a measured line and the scale bar (DM, left; a player, right).'
+      },
+      {
+        heading: 'Scale, measuring, and worlds that turn',
+        body: 'Tell a map how far it reaches in any unit you like, from feet to leagues to trillions of miles. Or, simpler still, use the Measure tool: drag between two places you know the distance between, type it in, and the map’s scale is set from it. From then on the party’s trail, the Measure tool and a scale bar at the bottom all read in that unit, and you can zoom in until you see the picture’s own pixels. A pin can also go round another pin, once every so many hours, days, weeks or years of your calendar. When you move time on, every orbit moves with it, moons following their planets. Draw them as spheres of any size, type in a planet’s real diameter and its distance from its sun, and lock it to its orbit so dragging it only moves it round.'
+      },
+      {
+        heading: 'Who thinks what of the party',
+        body: 'The Reputation box keeps track of how NPCs, factions, guilds, temples and kingdoms feel about the party, from −10 (sworn enemies) to +10 (exalted). You decide every change, and each one goes into a history with a note of why. People can belong to factions, and factions to kingdoms. Keep secret notes, and keep anyone hidden from the players until you show them.',
+        image: reputationShot,
+        caption: 'Your side, with a secret contact (left), and what the party sees (right).'
+      },
+      {
+        heading: 'A party stash, and quests that pay into it',
+        body: 'The Quests box has a Party stash tab: a shared purse and everything the party carries between them. Add loot by name or straight from the Codex, and players take things out (and put them back) themselves, so you can see who has what. Quest rewards can now be Codex items and weapons too, and when a quest is finished its items go into the stash and its coins are shared out. Each player also gets their own private notes on every quest.',
+        image: stashShot,
+        caption: 'The stash and purse (left), and a quest with a player’s own notes (right).'
+      },
+      {
+        heading: 'Scenes in the order you want',
+        body: 'A session’s scenes read left to right and top to bottom, and that no longer slips when one box is bigger than the rest. If you’d rather choose the order yourself, switch a session to Order: set by hand, then click any scene’s number to move it.',
+        image: orderShot,
+        caption: 'Click a scene’s number to move it.'
+      },
+      {
+        heading: 'And the smaller things',
+        body: 'Calendar: a Move time button skips ahead an hour, a day or years, or works out a journey at a travel pace. Ctrl+K now finds quests and their hints, people and factions, and maps and their pins. Deleting something offers Undo for a few seconds, and Ctrl+Z works too. Press ? to see every keyboard shortcut. On the combat map, imported maps keep their exact shape so a map drawn on a grid lines up (set its pixels per square to match), and doors simply open instead of swinging out across the floor.'
+      }
+    ]
+  },
   {
     version: '0.13.0',
     title: 'A browser on the table, and quests with more to them',

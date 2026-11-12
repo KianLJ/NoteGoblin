@@ -1333,8 +1333,8 @@ function WallLayer({ walls }: { walls: MapWall[] }): JSX.Element | null {
 
 /**
  * A door: a wooden leaf between two dark jambs where it meets the wall —
- * closed, it fills the gap; open, the leaf swings out from its hinge and the
- * doorway shows as a faint line. The picked one (or a wall picked with Pick)
+ * closed, it fills the gap; open, the gap is empty but for a faint line across
+ * the doorway (no leaf swung out over the floor). The picked one (or a wall picked with Pick)
  * shows its ends to drag; a door can be clicked open or shut.
  */
 function WallSvg({ w, selected, editing, doorClick }: { w: MapWall; selected: boolean; editing: boolean; doorClick: boolean }): JSX.Element {
@@ -1344,8 +1344,6 @@ function WallSvg({ w, selected, editing, doorClick }: { w: MapWall; selected: bo
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
   const ux = (b.x - a.x) / len
   const uy = (b.y - a.y) / len
-  // The open leaf swings a little short of square from the hinge end.
-  const swing = { x: a.x - uy * len * 0.9 + ux * len * 0.15, y: a.y + ux * len * 0.9 + uy * len * 0.15 }
   const jamb = (p: { x: number; y: number }): JSX.Element => (
     <rect x={p.x - 5} y={p.y - 5} width={10} height={10} rx={2} fill="#3a2a1a" stroke="rgba(0,0,0,0.8)" strokeWidth={1.5} transform={`rotate(${(Math.atan2(uy, ux) * 180) / Math.PI} ${p.x} ${p.y})`} />
   )
@@ -1381,8 +1379,6 @@ function WallSvg({ w, selected, editing, doorClick }: { w: MapWall; selected: bo
       ) : w.open ? (
         <>
           <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={selected ? 'var(--accent-hover)' : '#b9823f'} strokeOpacity={0.6} strokeWidth={2} strokeDasharray="5 5" />
-          <line x1={a.x} y1={a.y} x2={swing.x} y2={swing.y} stroke="rgba(0,0,0,0.75)" strokeWidth={8} strokeLinecap="round" />
-          <line x1={a.x} y1={a.y} x2={swing.x} y2={swing.y} stroke={selected ? 'var(--accent-hover)' : '#a8733a'} strokeWidth={4} strokeLinecap="round" />
           {jamb(a)}
           {jamb(b)}
         </>

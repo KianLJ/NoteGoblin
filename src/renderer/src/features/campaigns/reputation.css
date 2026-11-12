@@ -1,0 +1,349 @@
+/* The Reputation box (ReputationTracker.tsx). Borrows the Quests box's form and chip styles, in its own olive. */
+.gb-reps {
+  --quest: #6f7a2e;
+  --rep-good: #4f8a4a;
+  --rep-bad: #b04a3c;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.gb-rep-pad {
+  padding: var(--space-3);
+}
+
+.gb-rep-top {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.gb-rep-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.gb-rep-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gb-rep-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Members sit under who they answer to, a little in, along a thread. */
+.gb-rep-list .gb-rep-list {
+  margin: 6px 0 0 12px;
+  padding-left: 10px;
+  border-left: 1px dashed var(--border-subtle);
+}
+
+.gb-rep {
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface-raised);
+}
+
+.gb-rep--secret {
+  border-style: dashed;
+  background: transparent;
+}
+
+.gb-rep-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.gb-rep-name {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gb-rep-name:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.gb-rep-kind {
+  color: var(--quest);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gb-rep-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.gb-rep-actions {
+  display: inline-flex;
+  flex: none;
+}
+
+.gb-rep-standing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.gb-rep-step {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gb-rep-step:hover:not(:disabled) {
+  border-color: var(--quest);
+  color: var(--text-primary);
+}
+
+.gb-rep-step:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.gb-rep-step:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* The meter: a groove with a tick in the middle, filled out from it, red to the left and green to the right. */
+.gb-rep-meter {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  overflow: hidden;
+}
+
+.gb-rep-meter-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: width 200ms ease;
+}
+
+.gb-rep-meter-fill--good {
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(to right, color-mix(in srgb, var(--rep-good) 55%, transparent), var(--rep-good));
+}
+
+.gb-rep-meter-fill--bad {
+  border-radius: 999px 0 0 999px;
+  background: linear-gradient(to left, color-mix(in srgb, var(--rep-bad) 55%, transparent), var(--rep-bad));
+}
+
+.gb-rep-meter-mid {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: var(--text-muted);
+  opacity: 0.6;
+}
+
+.gb-rep-tier {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: baseline;
+  min-width: 84px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gb-rep[data-tier='hated'] .gb-rep-tier,
+.gb-rep[data-tier='hostile'] .gb-rep-tier,
+.gb-rep[data-tier='unfriendly'] .gb-rep-tier {
+  color: var(--rep-bad);
+}
+
+.gb-rep[data-tier='friendly'] .gb-rep-tier,
+.gb-rep[data-tier='honored'] .gb-rep-tier,
+.gb-rep[data-tier='exalted'] .gb-rep-tier {
+  color: var(--rep-good);
+}
+
+.gb-rep-num {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.gb-rep-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.gb-rep-partof {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.gb-rep-desc,
+.gb-rep-secret {
+  margin: 0;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.gb-rep-desc {
+  color: var(--text-secondary);
+}
+
+/* The DM's own notes: marked as theirs. */
+.gb-rep-secret {
+  padding: 6px 8px;
+  border-left: 2px solid var(--quest);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+}
+
+.gb-rep-secret::before {
+  content: 'Only you: ';
+  color: var(--quest);
+  font-weight: 700;
+}
+
+.gb-rep-history {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gb-rep-history li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gb-rep-delta {
+  flex: none;
+  min-width: 26px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+}
+
+.gb-rep-delta--up {
+  color: var(--rep-good);
+}
+
+.gb-rep-delta--down {
+  color: var(--rep-bad);
+}
+
+.gb-rep-reason {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.gb-rep-reason-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.gb-rep-reason-input:hover,
+.gb-rep-reason-input:focus {
+  border-color: var(--border-subtle);
+  background: var(--bg-sunken);
+  outline: none;
+}
+
+.gb-rep-change--kept .gb-rep-reason-input {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.gb-rep-when {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.gb-rep-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.gb-rep-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.gb-rep-start input {
+  flex: 1;
+  accent-color: var(--quest);
+}
+
+.gb-rep-start span {
+  flex: none;
+  min-width: 92px;
+  font-weight: 600;
+}

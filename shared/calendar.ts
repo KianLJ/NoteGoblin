@@ -273,6 +273,56 @@ export function addDays(config: CalendarConfig, date: CalendarDate, delta: numbe
   return normalizeDate(config, { ...date, day: date.day + delta })
 }
 
+/** `delta` months on (or back), the day kept within the month it lands in (the 31st into a 30-day month is its 30th). */
+export function addMonths(config: CalendarConfig, date: CalendarDate, delta: number): CalendarDate {
+  const count = config.months.length
+  const total = date.year * count + date.monthIndex + Math.trunc(delta)
+  const year = Math.floor(total / count)
+  const monthIndex = total - year * count
+  return { year, monthIndex, day: Math.min(date.day, monthLength(config, year, monthIndex)) }
+}
+
+export type TimeUnit = 'hours' | 'days' | 'weeks' | 'months' | 'years'
+
+/** The date and time `amount` of `unit` from now (negative goes back): hours roll over midnight; the rest keep the time of day. */
+export function moveTime(config: CalendarConfig, amount: number, unit: TimeUnit): Pick<CalendarConfig, 'currentDate' | 'timeOfDay'> {
+  const { currentDate, timeOfDay } = config
+  switch (unit) {
+    case 'hours':
+      return advanceTime(config, amount)
+    case 'days':
+      return { currentDate: addDays(config, currentDate, Math.trunc(amount)), timeOfDay }
+    case 'weeks':
+      return { currentDate: addDays(config, currentDate, Math.trunc(amount) * Math.max(1, config.weekdays.length)), timeOfDay }
+    case 'months':
+      return { currentDate: addMonths(config, currentDate, amount), timeOfDay }
+    case 'years':
+      return { currentDate: addMonths(config, currentDate, Math.trunc(amount) * config.months.length), timeOfDay }
+  }
+}
+
+/** Ways to travel, as the rules have them: miles an hour, and hours on the move in a day. */
+export const TRAVEL_PACES = [
+  // On foot or mounted alike.
+  { id: 'fast', label: 'Fast pace', mph: 4, hoursPerDay: 8 },
+  { id: 'normal', label: 'Normal pace', mph: 3, hoursPerDay: 8 },
+  { id: 'slow', label: 'Slow pace', mph: 2, hoursPerDay: 8 },
+  // Day and night.
+  { id: 'ship', label: 'Sailing ship', mph: 2, hoursPerDay: 24 },
+  { id: 'rowboat', label: 'Rowboat', mph: 1.5, hoursPerDay: 8 }
+] as const
+
+/**
+ * How long a journey of `miles` takes: whole days on the road (each `hoursPerDay` of travel, the rest of the day
+ * spent resting), then the hours of the last, part day — and so how far to move the calendar.
+ */
+export function travelTime(miles: number, mph: number, hoursPerDay: number): { days: number; hours: number; travelHours: number } {
+  const travelHours = mph > 0 ? Math.max(0, miles) / mph : 0
+  const days = Math.floor(travelHours / hoursPerDay + 1e-9)
+  const hours = Math.round((travelHours - days * hoursPerDay) * 10) / 10
+  return { days, hours, travelHours }
+}
+
 /** The era that starts last — the "present day" era a new calendar or an era-less date defaults to. Null when there are no eras. */
 export function latestEra(config: CalendarConfig): CalendarEra | null {
   let best: CalendarEra | null = null

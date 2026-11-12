@@ -41,7 +41,10 @@ import { useCanvasMood } from './useCanvasMood'
 import { ImageIcon, StickyIcon } from '../campaigns/icons'
 import type { CanvasNav } from './useCanvasLayout'
 import { entryNodeId, putEntry } from './canvasEntries'
+import { offerUndo } from '../../ui/undo'
 import { NEW_BROWSER_WINDOW_EVENT, setFirstPage } from '../browser/browserAccount'
+import { OPEN_CODEX_ENTRY_EVENT } from '../campaigns/CodexItemPicker'
+import type { CodexRef } from '@shared/codexRef'
 import { BrowserIcon } from '../browser/BrowserPanel'
 import type { CanvasItem } from './toolItems'
 
@@ -59,6 +62,8 @@ export interface CanvasHandle {
   closeTool: (kind: ToolKind) => void
   /** Gives `id` a place at `at` before its item exists (a note being created), or reveals it when it already has one. */
   openAt: (id: string, size: { w: number; h: number }, at?: CanvasPoint) => void
+  /** Another Browser box, opening `url` if given. */
+  openBrowser: (url?: string) => void
 }
 
 interface CanvasProps {
@@ -84,6 +89,11 @@ interface CanvasProps {
   nav?: CanvasNav
   /** Box ids in order (a session's scenes): numbered, with an arrow from each to the next. */
   sequence?: string[]
+  /**
+   * The sequence is set by hand: moving boxes doesn't change it, and each number is a picker for where that box goes
+   * in the order (`to`, from 0).
+   */
+  onSequenceMove?: (id: string, to: number) => void
   /** After the breadcrumb, inside a collection (a session's Present button). */
   crumbExtra?: ReactNode
   /** Small text in the top-left corner: the open campaign's name. */
@@ -107,7 +117,7 @@ const ZOOM_STEP = 1.2
  * back to the layout once they settle, so the tools inside don't re-render
  * on every frame.
  */
-export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, crumbExtra, title, titleExtra, onRestoreBoxes }, ref) {
+export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, onSequenceMove, crumbExtra, title, titleExtra, onRestoreBoxes }, ref) {
   const viewportRef = useRef<HTMLDivElement>(null)
   // The dot grid's pattern id (useId's colons aren't safe inside url(#…)).
   const gridId = `gb-grid${useId().replace(/:/g, '')}`
@@ -344,13 +354,27 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
       e.stopPropagation()
       openBrowserWindow(undefined, (e as CustomEvent<{ url?: string }>).detail?.url)
     }
+    // A quest reward or stash item asking for its Codex entry: in a box of its own, like one from the Codex.
+    const onEntry = (e: Event): void => {
+      e.stopPropagation()
+      const ref = (e as CustomEvent<CodexRef>).detail
+      if (!ref) return
+      const entry = { kind: ref.kind, id: ref.id, name: ref.name } as const
+      putEntry(mode, entry)
+      openAt(entryNodeId(entry), DYNAMIC_SIZE.entry)
+    }
     el.addEventListener(NEW_BROWSER_WINDOW_EVENT, onAsk)
-    return () => el.removeEventListener(NEW_BROWSER_WINDOW_EVENT, onAsk)
-  }, [openBrowserWindow])
+    el.addEventListener(OPEN_CODEX_ENTRY_EVENT, onEntry)
+    return () => {
+      el.removeEventListener(NEW_BROWSER_WINDOW_EVENT, onAsk)
+      el.removeEventListener(OPEN_CODEX_ENTRY_EVENT, onEntry)
+    }
+  }, [openBrowserWindow, mode, openAt])
 
   const closeTool = useCallback((kind: ToolKind) => setLayout((l) => removeNode(l, kind)), [setLayout])
 
-  useImperativeHandle(ref, () => ({ reveal, openTool, closeTool, openAt }), [reveal, openTool, closeTool, openAt])
+  const openBrowser = useCallback((url?: string) => openBrowserWindow(undefined, url), [openBrowserWindow])
+  useImperativeHandle(ref, () => ({ reveal, openTool, closeTool, openAt, openBrowser }), [reveal, openTool, closeTool, openAt, openBrowser])
 
   function zoomBy(factor: number): void {
     setVp((v) => zoomAt(v, v.zoom * factor, size.w / 2, size.h / 2))
@@ -393,7 +417,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     return n && dragged?.id === id ? { ...n, ...dragged.rect } : n
   }
   // The same reading order the session's order is worked out by (CampaignWorkspace), over where the boxes are now.
-  const liveSequence = sequence && dragged && sequence.includes(dragged.id) ? readingOrder(sequence.map(seqRect).filter((n): n is NonNullable<typeof n> => !!n && !n.pinned)) : sequence
+  const liveSequence = sequence && !onSequenceMove && dragged && sequence.includes(dragged.id) ? readingOrder(sequence.map(seqRect).filter((n): n is NonNullable<typeof n> => !!n && !n.pinned)) : sequence
 
   function renderNode({ item, node }: (typeof rendered)[number]): JSX.Element {
     const isCollection = item.id.startsWith(COLLECTION_PREFIX)
@@ -437,7 +461,20 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
           const cid = item.id.slice(COLLECTION_PREFIX.length)
           if (isCollection && layout.collections?.[cid]?.sessionDeckId) setLayout((l) => removeNode(l, item.id))
           else if (isCollection) setLayout((l) => dissolveCollection(l, cid))
-          else setLayout((l) => removeNode(l, item.id))
+          else {
+            // A thing put on the canvas (a sticky, a picture, a statblock, a Browser box) is gone once closed — so it
+            // can be brought back, where it was. Tools and notes only close; they're still there to reopen.
+            const entry = allEntries(mode)[item.id]
+            const at = node!.pinned ? null : { x: node!.x, y: node!.y, w: node!.w, h: node!.h }
+            if (entry && at) {
+              const title = typeof item.title === 'string' && item.title ? item.title : 'the box'
+              offerUndo(`Closed ${title}`, () => {
+                putEntry(mode, entry)
+                setLayout((l) => addNode(l, item.id, { w: at.w, h: at.h }, size.w, size.h, at))
+              })
+            }
+            setLayout((l) => removeNode(l, item.id))
+          }
           item.onClose?.()
         }}
       >
@@ -480,11 +517,31 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         {rendered.filter((r) => !r.node!.pinned).map(renderNode)}
         {liveSequence?.map((id, i) => {
           const n = seqRect(id)
-          return n && !n.pinned ? (
-            <span key={id} className="gb-canvas-seq-badge" style={{ left: n.x - 12, top: n.y - 12, zIndex: topZ + 1 }} aria-hidden="true">
+          if (!n || n.pinned) return null
+          const style = { left: n.x - 12, top: n.y - 12, zIndex: topZ + 1 }
+          // Set by hand: the number picks where this scene goes.
+          return onSequenceMove ? (
+            <select
+              key={id}
+              className="gb-canvas-seq-badge gb-canvas-seq-badge--pick"
+              style={style}
+              value={i}
+              aria-label={`Scene ${i + 1}: move to`}
+              title="Move this scene to another place in the order"
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => onSequenceMove(id, Number(e.target.value))}
+            >
+              {liveSequence.map((_, k) => (
+                <option key={k} value={k}>
+                  {k + 1}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span key={id} className="gb-canvas-seq-badge" style={style} aria-hidden="true">
               {i + 1}
             </span>
-          ) : null
+          )
         })}
         </CanvasZoomContext.Provider>
         </div>
