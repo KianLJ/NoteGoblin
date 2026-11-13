@@ -42,8 +42,36 @@ export function readScene(raw: { noteId: string } & Record<string, unknown>): Om
     music: music.slice(0, MAX_CUES),
     // Only stored when they differ from the defaults (music plays, the fight waits for a click).
     ...(raw.autoMusic === false ? { autoMusic: false } : {}),
-    ...(raw.autoEncounter === true ? { autoEncounter: true } : {})
+    ...(raw.autoEncounter === true ? { autoEncounter: true } : {}),
+    ...(raw.visibility === 'shown' || raw.visibility === 'hidden' ? { visibility: raw.visibility } : {}),
+    ...(raw.hiddenNotice === false ? { hiddenNotice: false } : {}),
+    ...(typeof raw.hiddenLabel === 'string' && raw.hiddenLabel.trim() ? { hiddenLabel: raw.hiddenLabel.trim().slice(0, 80) } : {})
   }
+}
+
+/** What a player sees on a hidden part of a scene that's shown only to them, unless the DM words it differently. */
+export const DEFAULT_HIDDEN_LABEL = 'Hidden - Only Shown to You'
+
+/**
+ * Whether a player can see a scene in the Sessions box: the DM's choice if they made one, otherwise only once
+ * it's been presented while that player was at the table — joining later doesn't show what they missed.
+ */
+export function sceneVisibleTo(scene: Pick<SessionScene, 'visibility' | 'revealed' | 'seenBy'>, userId: string): boolean {
+  if (scene.visibility) return scene.visibility === 'shown'
+  return !!scene.revealed && !!scene.seenBy?.includes(userId)
+}
+
+/**
+ * A note's text with the opening and closing lines of the hidden blocks a
+ * reader can see taken out, so those parts read as ordinary text — for a
+ * scene whose DM doesn't want players told a part is just for them. Run it
+ * after stripDmAsides (which has already removed the blocks they can't see).
+ */
+export function unmarkHiddenBlocks(bodyMarkdown: string): string {
+  return bodyMarkdown
+    .split('\n')
+    .filter((line) => !isHiddenFence(line))
+    .join('\n')
 }
 
 export interface SessionScene {
@@ -57,10 +85,18 @@ export interface SessionScene {
   /** The first encounter goes into the fight by itself when the scene first comes up in a presentation. Off unless set true. */
   autoEncounter?: boolean
   /**
-   * Shown to the table: set when the DM first presents this scene, never unset. Players only ever see revealed
-   * scenes, and a session only once one of its scenes is (see campaignService.listSessionDecks/listNotes).
+   * Presented at least once: set when the DM first presents this scene, never unset. Who it's shown to after
+   * that is `seenBy` (see sceneVisibleTo, campaignService.listSessionDecks/listNotes).
    */
   revealed?: boolean
+  /** The players who were at the table while it was presented — the ones it shows for in their Sessions box. Kept by the host, not editable. */
+  seenBy?: string[]
+  /** The DM's own say: always shown to every player, or never. Unset, it follows `seenBy`. */
+  visibility?: 'shown' | 'hidden'
+  /** Players see their hidden parts as a labelled box (on unless set false); off, those parts read as ordinary text. */
+  hiddenNotice?: boolean
+  /** That label, if the DM changed it from DEFAULT_HIDDEN_LABEL. */
+  hiddenLabel?: string
 }
 
 
@@ -188,7 +224,13 @@ export function mergeHiddenBlocks(stored: string, edited: string, viewerId?: str
 }
 
 /** What a hidden block says about who sees it, besides its writer and the DM. */
-export function hiddenBlockLabel(audience: string[], nameOf: (userId: string) => string | undefined): string {
+export function hiddenBlockLabel(audience: string[], nameOf: (userId: string) => string | undefined, viewer?: { userId: string; label?: string }): string {
+  // A player reading a part that's there for them.
+  if (viewer && audience.includes(viewer.userId)) {
+    const others = audience.filter((id) => id !== viewer.userId)
+    if (others.length === 0) return viewer.label || DEFAULT_HIDDEN_LABEL
+    return `Hidden - Shown to You and ${others.map((id) => nameOf(id) ?? 'a player').join(', ')}`
+  }
   if (audience.length === 0) return 'Hidden from other players'
   return `Hidden · also shown to ${audience.map((id) => nameOf(id) ?? 'a player').join(', ')}`
 }

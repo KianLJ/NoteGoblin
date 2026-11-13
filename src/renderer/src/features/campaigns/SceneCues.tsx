@@ -1,6 +1,6 @@
-import type { SceneMusic, SessionScene } from '@shared/sessionDeck'
+import { DEFAULT_HIDDEN_LABEL, type SceneMusic, type SessionScene } from '@shared/sessionDeck'
 import type { SavedEncounter } from '../../data/savedEncounters'
-import { useEffect, useReducer } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import { MUSIC_LIBRARY } from '../../data/musicLibrary'
 import { ensureCustomMusicLoaded, getCustomTracks, subscribeCustomMusic, YOUR_MUSIC_GROUP } from '../audio/customMusicStore'
 import { audioGroups, subscribeAudioGroups } from '../audio/audioGroups'
@@ -72,11 +72,14 @@ function AutoSwitch({ kind, on, label, onChange }: { kind: 'fight' | 'music'; on
 export function SceneCues({
   scene,
   encounters,
+  players = [],
   onChange
 }: {
   scene: SessionScene
   encounters: SavedEncounter[]
-  onChange: (patch: Partial<Pick<SessionScene, 'encounterIds' | 'music' | 'autoMusic' | 'autoEncounter'>>) => void
+  /** The campaign's players, to say who's seen the scene. */
+  players?: Array<{ userId: string; displayName: string }>
+  onChange: (patch: Partial<Pick<SessionScene, 'encounterIds' | 'music' | 'autoMusic' | 'autoEncounter' | 'visibility' | 'hiddenNotice' | 'hiddenLabel'>>) => void
 }): JSX.Element {
   useMusicChanges()
   const moods = allMoods().filter((g) => tracksOf(g.id).length > 0)
@@ -209,6 +212,53 @@ export function SceneCues({
           </select>
         </label>
       </div>
+
+      <ScenePlayers scene={scene} players={players} onChange={onChange} />
+    </div>
+  )
+}
+
+const VISIBILITY: Array<{ value: SessionScene['visibility']; label: string; hint: string }> = [
+  { value: undefined, label: 'Once they’ve seen it', hint: 'A player finds this scene in their Sessions box once it’s been presented while they were at the table.' },
+  { value: 'shown', label: 'Always', hint: 'Every player can read this scene now, presented or not.' },
+  { value: 'hidden', label: 'Never', hint: 'No player can read this scene, even if they’ve seen it.' }
+]
+
+/** Who can read the scene in their Sessions box, and how its hidden parts look to the players they're for. */
+function ScenePlayers({ scene, players, onChange }: { scene: SessionScene; players: Array<{ userId: string; displayName: string }>; onChange: (patch: Partial<Pick<SessionScene, 'visibility' | 'hiddenNotice' | 'hiddenLabel'>>) => void }): JSX.Element {
+  const seen = (scene.seenBy ?? []).map((id) => players.find((p) => p.userId === id)?.displayName ?? 'a player')
+  const notice = scene.hiddenNotice !== false
+  const [label, setLabel] = useState(scene.hiddenLabel ?? '')
+  useEffect(() => setLabel(scene.hiddenLabel ?? ''), [scene.hiddenLabel])
+  return (
+    <div className="gb-cue-col gb-cue-players">
+      <div className="gb-cue-col-top">
+        <span className="gb-cue-col-head">Players can read it</span>
+      </div>
+      <div className="gb-cue-seg" role="radiogroup" aria-label="Who can read this scene">
+        {VISIBILITY.map((v) => (
+          <button key={v.label} type="button" role="radio" aria-checked={scene.visibility === v.value} className={scene.visibility === v.value ? 'on' : ''} title={v.hint} onClick={() => onChange({ visibility: v.value })}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+      <small className="gb-cue-note">{seen.length ? `Seen by ${seen.join(', ')}` : scene.revealed ? 'Presented, but nobody was at the table' : 'Not presented yet'}</small>
+      <label className="gb-cue-check" title="When a hidden part is shown only to some players, they see it in a labelled box. Turn this off and it reads as ordinary text to them.">
+        <input type="checkbox" checked={notice} onChange={(e) => onChange({ hiddenNotice: e.target.checked ? undefined : false })} />
+        Tell players when text is only for them
+      </label>
+      {notice && (
+        <input
+          className="gb-input gb-cue-label"
+          value={label}
+          placeholder={DEFAULT_HIDDEN_LABEL}
+          maxLength={80}
+          aria-label="What players see on text only for them"
+          onChange={(e) => setLabel(e.target.value)}
+          onBlur={() => label.trim() !== (scene.hiddenLabel ?? '') && onChange({ hiddenLabel: label.trim() || undefined })}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        />
+      )}
     </div>
   )
 }

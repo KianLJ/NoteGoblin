@@ -9,7 +9,7 @@ import { PartyList, usePartyPresence } from './PartyList'
 import { PlayerInitiativeView } from './PlayerInitiativeView'
 import { CharacterSheetEditor } from './CharacterSheetEditor'
 import { CharacterCreator } from './creator/CharacterCreator'
-import { CharacterSwitcher } from './CharacterSwitcher'
+import { CharacterSwitcher, LeaveTableButton } from './CharacterSwitcher'
 import { ForceRollPrompt } from './ForceRollPrompt'
 import { UserIcon } from './icons'
 import { NoteEditor } from '../campaigns/NoteEditor'
@@ -552,6 +552,8 @@ export function PlayerWorkspaceBody({
           }
         }}
         floating={<DiceButton sessionId={sessionId} />}
+        title={sessionId && !isOffline ? activeCampaign?.name : undefined}
+        titleExtra={sessionId && <LeaveTableButton onLeft={onLeaveSession} />}
         corner={
           <>
             <CharacterSwitcher
@@ -562,7 +564,6 @@ export function PlayerWorkspaceBody({
               onRequestEdit={(character) => setCreator({ editing: character })}
               onDelete={(character) => deleteCharacter(character.id)}
               sessionId={sessionId}
-              onLeaveSession={onLeaveSession}
             />
             <QuickSearchButton onClick={() => setSearchOpen(true)} />
           </>

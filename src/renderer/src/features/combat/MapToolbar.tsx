@@ -3,9 +3,15 @@
 // along the top, and undo, redo, snapping and map settings in the top-right.
 import type { ReactNode } from 'react'
 import type { TemplateKind } from '@shared/battleMap'
-import type { FogDraw, FogTool, MapTool, WallDraw } from './BattleMapView'
+import type { MapTool, WallDraw } from './BattleMapView'
+import { LIGHT_PRESETS } from '@shared/vision'
 
-export type RailTool = 'move' | 'ruler' | 'shapes' | 'fog' | 'walls' | 'light' | 'images'
+export type LightPreset = (typeof LIGHT_PRESETS)[number]
+
+/** The Props tool: put props on the map and move them, or draw (and pick) the invisible blockers that go round them. */
+export type PropMode = 'place' | 'blocker' | 'pickBlocker'
+
+export type RailTool = 'move' | 'ruler' | 'shapes' | 'walls' | 'light' | 'images' | 'props'
 
 export const isShape = (t: MapTool): t is TemplateKind => t === 'cone' || t === 'sphere' || t === 'line' || t === 'cube'
 export const railOf = (t: MapTool): RailTool => (isShape(t) ? 'shapes' : t)
@@ -14,10 +20,10 @@ export const RAIL: Array<{ tool: RailTool; label: string; key: string; hint: str
   { tool: 'move', label: 'Move', key: 'V', hint: 'Drag a token to move it (walls stop it; hold Alt to drag through), or drag the map to pan. Click a door to open or close it.' },
   { tool: 'ruler', label: 'Measure', key: 'R', hint: 'Drag between squares to measure. Diagonals count as one square.' },
   { tool: 'shapes', label: 'Spell areas', key: 'S', hint: 'Pick a shape above, then drag from where it starts: the distance sets its size.', dmOnly: true },
-  { tool: 'fog', label: 'Fog', key: 'F', hint: 'Draw fog to hide parts of the map from players; Cut clears it.', dmOnly: true },
   { tool: 'walls', label: 'Walls & doors', key: 'W', hint: 'Draw rooms and walls, then set doors into them. Walls and closed doors stop tokens and sight.', dmOnly: true },
-  { tool: 'light', label: 'Lights', key: 'L', hint: 'Click to place a light; click one to change how far it reaches. The map’s lighting is in Map settings.', dmOnly: true },
-  { tool: 'images', label: 'Map images', key: 'I', hint: 'Add map images, then drag them into place and size them to line up with the grid.', dmOnly: true }
+  { tool: 'light', label: 'Lights', key: 'L', hint: 'Pick a kind of light along the top, then click the map to place one; click a light to change how far it reaches. The map’s lighting is in Map settings.', dmOnly: true },
+  { tool: 'images', label: 'Map images', key: 'I', hint: 'Add map images, then drag them into place and size them to line up with the grid.', dmOnly: true },
+  { tool: 'props', label: 'Props', key: 'P', hint: 'Your campaign’s props: click one in the library to put it on the map, then drag it into place and size it from its corner. Blocker draws invisible walls round them that stop tokens.', dmOnly: true }
 ]
 
 const SHAPES: Array<{ kind: TemplateKind; label: string; hint: string }> = [
@@ -27,21 +33,18 @@ const SHAPES: Array<{ kind: TemplateKind; label: string; hint: string }> = [
   { kind: 'cube', label: 'Cube', hint: 'Drag from one corner: the distance sets its side.' }
 ]
 
-const FOG_DRAWS: Array<{ draw: FogDraw; label: string; hint: string }> = [
-  { draw: 'rect', label: 'Square', hint: 'Drag from one corner to the other.' },
-  { draw: 'circle', label: 'Circle', hint: 'Drag from the centre outwards.' },
-  { draw: 'points', label: 'Points', hint: 'Click point by point; click the first point, double-click or press Enter to finish. Escape cancels.' },
-  { draw: 'brush', label: 'Brush', hint: 'Paint freely.' },
-  { draw: 'line', label: 'Line', hint: 'Drag a straight line.' },
-  { draw: 'move', label: 'Pick', hint: 'Click fog (or a cut) to pick it, then drag it. Delete removes it; its options can lock it.' }
-]
-
 const WALL_DRAWS: Array<{ draw: WallDraw; label: string; hint: string }> = [
   { draw: 'room', label: 'Room', hint: 'Drag from one corner of a room to the other: four walls, joined. Corners snap to other walls and to the grid.' },
   { draw: 'wall', label: 'Wall', hint: 'Click corner to corner; click the first corner again to close the shape. Corners snap to other walls’ ends, onto walls, and to the grid.' },
   { draw: 'door', label: 'Door', hint: 'Click a wall to set a one-square door into it, or drag along a wall for a wider one — that stretch of wall is cut out. Click a door with Move to open it.' },
   { draw: 'window', label: 'Window', hint: 'Click a wall to set a window into it, or drag along it for a wider one. Windows are glass: sight and light pass; closed, they stop tokens.' },
-  { draw: 'select', label: 'Pick', hint: 'Click a wall, door or window to pick it: change it, drag its ends, or Delete it.' }
+  { draw: 'select', label: 'Pick', hint: 'Click a wall, door or window to pick it: change it, drag its ends, or Delete it. Drag a box round several (or Ctrl-click) to pick them all.' }
+]
+
+const PROP_MODES: Array<{ mode: PropMode; label: string; hint: string }> = [
+  { mode: 'place', label: 'Move props', hint: 'Click a prop on the map to pick it: drag it to move it, drag its corner to size it. Delete removes it.' },
+  { mode: 'blocker', label: 'Blocker', hint: 'Invisible walls that only stop tokens, round props, furniture or a pit. Sight and light pass, and players never see them. Click corner to corner; click the first corner again to close the shape.' },
+  { mode: 'pickBlocker', label: 'Pick blocker', hint: 'Click a blocker to pick it: drag its ends, or Delete it. Drag a box round several (or Ctrl-click) to pick them all.' }
 ]
 
 /** The tools, down the left of the map. */
@@ -65,20 +68,26 @@ export function ToolRail({ tool, onTool, playerOnly = false }: { tool: MapTool; 
 export function ToolOptions({
   tool,
   onShape,
-  fogTool,
-  onFogTool,
   wallDraw,
   onWallDraw,
   onAddImages,
+  onOpenProps,
+  propMode,
+  onPropMode,
+  newLight,
+  onNewLight,
   onHint
 }: {
   tool: MapTool
   onShape: (k: TemplateKind) => void
-  fogTool: FogTool
-  onFogTool: (f: FogTool) => void
   wallDraw: WallDraw
   onWallDraw: (w: WallDraw) => void
   onAddImages: (files: File[]) => void
+  onOpenProps: () => void
+  propMode: PropMode
+  onPropMode: (m: PropMode) => void
+  newLight: LightPreset
+  onNewLight: (p: LightPreset) => void
   onHint: (h: string) => void
 }): JSX.Element | null {
   const rail = railOf(tool)
@@ -98,33 +107,6 @@ export function ToolOptions({
         {sh.label}
       </Chip>
     ))
-  else if (rail === 'fog')
-    body = (
-      <>
-        <Segmented options={[['add', 'Add'], ['cut', 'Cut']]} value={fogTool.op} onChange={(op) => onFogTool({ ...fogTool, op: op as FogTool['op'] })} />
-        <Divider />
-        {FOG_DRAWS.map((d) => (
-          <Chip
-            key={d.draw}
-            on={fogTool.draw === d.draw}
-            title={d.hint}
-            onClick={() => {
-              onFogTool({ ...fogTool, draw: d.draw })
-              onHint(d.hint)
-            }}
-          >
-            {d.label}
-          </Chip>
-        ))}
-        {(fogTool.draw === 'brush' || fogTool.draw === 'line') && (
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)', paddingLeft: 4 }} title="How wide, in squares">
-            Width
-            <input type="range" min={0.25} max={6} step={0.25} value={fogTool.width} onChange={(e) => onFogTool({ ...fogTool, width: Number(e.target.value) })} style={{ width: 80 }} />
-            <span style={{ minWidth: 26 }}>{fogTool.width}</span>
-          </label>
-        )}
-      </>
-    )
   else if (rail === 'walls')
     body = WALL_DRAWS.map((d) => (
       <Chip
@@ -156,9 +138,45 @@ export function ToolOptions({
         />
       </label>
     )
+  else if (rail === 'light')
+    body = LIGHT_PRESETS.map((pr) => (
+      <Chip
+        key={pr.name}
+        on={newLight.name === pr.name}
+        title={`${pr.bright} ft bright, ${pr.dim} ft dim — click the map to place one`}
+        onClick={() => {
+          onNewLight(pr)
+          onHint(`Click the map to place a ${pr.name.toLowerCase()} (${pr.bright} ft bright, ${pr.dim} ft dim). Click a light to change or move it.`)
+        }}
+      >
+        {pr.name}
+      </Chip>
+    ))
+  else if (rail === 'props')
+    body = (
+      <>
+        <Chip on={false} title="Open the prop library" onClick={onOpenProps}>
+          Library
+        </Chip>
+        <Divider />
+        {PROP_MODES.map((m) => (
+          <Chip
+            key={m.mode}
+            on={propMode === m.mode}
+            title={m.hint}
+            onClick={() => {
+              onPropMode(m.mode)
+              onHint(m.hint)
+            }}
+          >
+            {m.label}
+          </Chip>
+        ))}
+      </>
+    )
   if (!body) return null
   return (
-    <div style={{ position: 'absolute', top: 12, left: 64, right: 190, zIndex: 5, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
       <div style={{ pointerEvents: 'auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, padding: 4, borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', maxWidth: '100%' }}>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', padding: '0 8px', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{label}</span>
         {body}
@@ -170,7 +188,7 @@ export function ToolOptions({
 /** Undo, redo, snapping and map settings, in the top-right of the map. */
 export function MapControls({ canUndo, canRedo, onUndo, onRedo, snap, onSnap, settingsOpen, onSettings }: { canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void; snap: boolean; onSnap: () => void; settingsOpen: boolean; onSettings: () => void }): JSX.Element {
   return (
-    <div style={{ position: 'absolute', right: 12, top: 12, zIndex: 5, display: 'flex', gap: 2, padding: 4, borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)' }}>
+    <div style={{ flexShrink: 0, pointerEvents: 'auto', marginLeft: 'auto', display: 'flex', gap: 2, padding: 4, borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)' }}>
       <button type="button" onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo" style={{ ...railButton(false), opacity: canUndo ? 1 : 0.35 }}>
         <Svg>
           <path d="M6 4L3 7l3 3" />
@@ -199,17 +217,18 @@ export function MapControls({ canUndo, canRedo, onUndo, onRedo, snap, onSnap, se
         </Svg>
         {snap ? 'Snap on' : 'Snap off'}
       </button>
-      <button type="button" onClick={onSettings} title="Map settings: lighting, sight, fog" aria-label="Map settings" aria-pressed={settingsOpen} style={railButton(settingsOpen)}>
+      <button type="button" onClick={onSettings} title="Map settings: lighting and sight" aria-label="Map settings" aria-pressed={settingsOpen} style={railButton(settingsOpen)}>
+        {/* A cog. */}
         <Svg>
-          <circle cx="8" cy="8" r="2.2" />
-          <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+          <path d="M6.9 1.5h2.2l.4 1.8 1.2.5 1.6-1 1.5 1.5-1 1.6.5 1.2 1.8.4v2.2l-1.8.4-.5 1.2 1 1.6-1.5 1.5-1.6-1-1.2.5-.4 1.8H6.9l-.4-1.8-1.2-.5-1.6 1-1.5-1.5 1-1.6-.5-1.2-1.8-.4V6.9l1.8-.4.5-1.2-1-1.6 1.5-1.5 1.6 1 1.2-.5z" />
+          <circle cx="8" cy="8" r="2.1" />
         </Svg>
       </button>
     </div>
   )
 }
 
-/** Picks a tool from its key (V, R, S, F, W, L, I) — not while typing. */
+/** Picks a tool from its key (V, R, S, F, W, L, I, P) — not while typing. */
 export function railKey(e: KeyboardEvent, playerOnly = false): RailTool | null {
   const el = e.target as HTMLElement
   if (e.ctrlKey || e.metaKey || e.altKey || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable) return null
@@ -247,12 +266,6 @@ export function ToolIcon({ tool }: { tool: RailTool }): JSX.Element {
           <circle cx="11.5" cy="5" r="2.5" />
         </Svg>
       )
-    case 'fog':
-      return (
-        <Svg>
-          <path d="M4.5 12.5h7.2a2.8 2.8 0 0 0 .3-5.6A3.8 3.8 0 0 0 4.7 6a3.3 3.3 0 0 0-.2 6.5z" />
-        </Svg>
-      )
     case 'walls':
       return (
         <Svg>
@@ -261,10 +274,19 @@ export function ToolIcon({ tool }: { tool: RailTool }): JSX.Element {
         </Svg>
       )
     case 'light':
+      // A light bulb.
       return (
         <Svg>
-          <circle cx="8" cy="8" r="2.8" />
-          <path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" />
+          <path d="M5.8 10.6C4.6 9.8 3.8 8.5 3.8 7a4.2 4.2 0 0 1 8.4 0c0 1.5-.8 2.8-2 3.6v1.4H5.8z" />
+          <path d="M6.2 14h3.6M7 8.2l1 1 1-1M8 9.2V12" />
+        </Svg>
+      )
+    case 'props':
+      // A barrel: the sort of thing you decorate a map with.
+      return (
+        <Svg>
+          <path d="M4.8 2h6.4c.9 1.6 1.3 3.6 1.3 6s-.4 4.4-1.3 6H4.8C3.9 12.4 3.5 10.4 3.5 8s.4-4.4 1.3-6z" />
+          <path d="M3.8 5.2h8.4M3.8 10.8h8.4" />
         </Svg>
       )
     case 'images':
@@ -283,18 +305,6 @@ function Chip({ on, title, onClick, children }: { on: boolean; title?: string; o
     <button type="button" onClick={onClick} title={title} aria-pressed={on} style={chip(on)}>
       {children}
     </button>
-  )
-}
-
-function Segmented({ options, value, onChange }: { options: Array<[string, string]>; value: string; onChange: (v: string) => void }): JSX.Element {
-  return (
-    <div style={{ display: 'inline-flex', padding: 2, borderRadius: 8, background: 'var(--bg-sunken)' }}>
-      {options.map(([v, label]) => (
-        <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={value === v} style={{ ...chip(value === v), padding: '3px 10px' }}>
-          {label}
-        </button>
-      ))}
-    </div>
   )
 }
 

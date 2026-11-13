@@ -7,6 +7,7 @@ import { rollInlineDice } from '../dice/inlineDice'
 import { playSfx } from '../audio/soundEffects'
 import { ArrowLeftIcon } from '../../ui/icons'
 import './sessions.css'
+import { useMyUserId } from '../account/avatar'
 
 interface PlayerSessionsProps {
   campaignId: string | null
@@ -132,7 +133,8 @@ export function PlayerSessions({ campaignId, sessionId, notes, offlineDecks, onO
 /** A scene's words, read-only, in the box. Its links open their notes in boxes of their own. */
 function SceneText({ note, notes, onOpenNote, sessionId }: { note: Note | undefined; notes: Note[]; onOpenNote: (id: string) => void; sessionId: string | null }): JSX.Element {
   const knownTitles = useMemo(() => new Set(notes.map((n) => (n.title || 'Untitled').toLowerCase())), [notes])
-  const html = useMemo(() => (note ? renderNoteMarkdown(note.bodyMarkdown, knownTitles, note.campaignId) : ''), [note, knownTitles])
+  const myId = useMyUserId()
+  const html = useMemo(() => (note ? renderNoteMarkdown(note.bodyMarkdown, knownTitles, note.campaignId, undefined, myId ? { userId: myId, label: note.hiddenLabel } : undefined) : ''), [note, knownTitles, myId])
   if (!note) return <div className="gb-session-start">Waiting for the scene…</div>
 
   function onClick(e: MouseEvent<HTMLDivElement>): void {

@@ -25,6 +25,12 @@ export function getDiceLog(): DiceRollLogEntry[] {
   return log
 }
 
+/** Empties this screen's roll history (only yours; nobody else's tray changes). */
+export function clearDiceLog(): void {
+  log = []
+  notify()
+}
+
 export function subscribeDiceLog(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

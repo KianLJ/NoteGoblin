@@ -3,6 +3,9 @@ import { ABILITIES, SKILLS, type Ability, type SkillName } from '@shared/dnd5e'
 import type { ForceRollRequest } from '@shared/ipc'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
+import { XIcon } from '../../ui/icons'
+import { DiceIcon } from '../player/characterSheetTabs/icons'
+import './forceRoll.css'
 
 type Mode = 'ability-check' | 'saving-throw' | 'skill-check' | 'flat'
 
@@ -13,6 +16,21 @@ interface ForceRollDialogProps {
   onClose: () => void
   onSend: (request: ForceRollRequest) => void
 }
+
+const MODES: Array<{ mode: Mode; label: string }> = [
+  { mode: 'ability-check', label: 'Check' },
+  { mode: 'saving-throw', label: 'Save' },
+  { mode: 'skill-check', label: 'Skill' },
+  { mode: 'flat', label: 'Plain d20' }
+]
+
+const DCS: Array<{ dc: number | null; label: string }> = [
+  { dc: null, label: 'No DC' },
+  { dc: 10, label: 'Easy 10' },
+  { dc: 15, label: 'Medium 15' },
+  { dc: 20, label: 'Hard 20' },
+  { dc: 25, label: 'Very hard 25' }
+]
 
 function labelFor(mode: Mode, ability?: Ability, skill?: SkillName): string {
   if (mode === 'flat') return 'd20 Roll'
@@ -26,83 +44,99 @@ export function ForceRollDialog({ open, playerName, fromDisplayName, onClose, on
   const [mode, setMode] = useState<Mode>('ability-check')
   const [ability, setAbility] = useState<Ability>('str')
   const [skill, setSkill] = useState<SkillName>(SKILLS[0].id)
-  const [dc, setDc] = useState('')
+  const [dc, setDc] = useState<number | null>(null)
+  const label = labelFor(mode, ability, skill)
 
   function send(): void {
-    const parsedDc = dc.trim() === '' ? null : Number(dc)
-    const request: ForceRollRequest = {
+    onSend({
       id: crypto.randomUUID(),
       mode,
       ability: mode === 'ability-check' || mode === 'saving-throw' ? ability : undefined,
       skill: mode === 'skill-check' ? skill : undefined,
-      dc: Number.isFinite(parsedDc) ? Math.max(0, parsedDc as number) : null,
-      label: labelFor(mode, ability, skill),
+      dc,
+      label,
       fromDisplayName
-    }
-    onSend(request)
+    })
     onClose()
   }
 
   return (
-    <Modal open={open} onClose={onClose} width={380}>
-      <h3 style={{ marginTop: 0 }}>Force a roll — {playerName}</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-          Roll type
-          <select className="gb-input" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-            <option value="ability-check">Ability Check</option>
-            <option value="saving-throw">Saving Throw</option>
-            <option value="skill-check">Skill Check</option>
-            <option value="flat">Flat d20 (no modifier)</option>
-          </select>
-        </label>
+    <Modal open={open} onClose={onClose} width={440}>
+      <div className="fr">
+        <header className="fr-head">
+          <span className="fr-icon" aria-hidden="true">
+            <DiceIcon size={16} />
+          </span>
+          <div>
+            <strong>Ask {playerName} to roll</strong>
+            <small>It comes up on their screen, using their character’s bonuses.</small>
+          </div>
+          <button type="button" className="fr-close" onClick={onClose} aria-label="Close">
+            <XIcon size={12} />
+          </button>
+        </header>
+
+        <div className="fr-seg" role="radiogroup" aria-label="Kind of roll">
+          {MODES.map((m) => (
+            <button key={m.mode} type="button" role="radio" aria-checked={mode === m.mode} className={mode === m.mode ? 'on' : ''} onClick={() => setMode(m.mode)}>
+              {m.label}
+            </button>
+          ))}
+        </div>
 
         {(mode === 'ability-check' || mode === 'saving-throw') && (
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-            Ability
-            <select className="gb-input" value={ability} onChange={(e) => setAbility(e.target.value as Ability)}>
-              {ABILITIES.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="fr-grid fr-grid--abilities" role="radiogroup" aria-label="Ability">
+            {ABILITIES.map((a) => (
+              <button key={a.id} type="button" role="radio" aria-checked={ability === a.id} className={ability === a.id ? 'on' : ''} onClick={() => setAbility(a.id)} title={a.label}>
+                <b>{a.id.toUpperCase()}</b>
+                <span>{a.label}</span>
+              </button>
+            ))}
+          </div>
         )}
 
         {mode === 'skill-check' && (
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-            Skill
-            <select className="gb-input" value={skill} onChange={(e) => setSkill(e.target.value as SkillName)}>
-              {SKILLS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.id}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="fr-grid fr-grid--skills" role="radiogroup" aria-label="Skill">
+            {SKILLS.map((s) => (
+              <button key={s.id} type="button" role="radio" aria-checked={skill === s.id} className={skill === s.id ? 'on' : ''} onClick={() => setSkill(s.id)}>
+                {s.id}
+              </button>
+            ))}
+          </div>
         )}
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-          DC (optional)
-          <input
-            type="number"
-            min={0}
-            className="gb-input"
-            value={dc}
-            onChange={(e) => setDc(e.target.value)}
-            placeholder="e.g. 15"
-          />
-        </label>
+        <div className="fr-dc">
+          <span className="fr-label">Difficulty</span>
+          <div className="fr-chips">
+            {DCS.map((d) => (
+              <button key={d.label} type="button" className={dc === d.dc ? 'on' : ''} onClick={() => setDc(d.dc)}>
+                {d.label}
+              </button>
+            ))}
+            <input
+              type="number"
+              min={0}
+              className="gb-input fr-dc-input"
+              value={dc ?? ''}
+              onChange={(e) => setDc(e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0))}
+              placeholder="DC"
+              aria-label="DC"
+            />
+          </div>
+        </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+        <footer className="fr-foot">
+          <span className="fr-summary">
+            {label}
+            {dc !== null && ` · DC ${dc}`}
+          </span>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" onClick={send}>
-            Send
+            Ask for the roll
           </Button>
-        </div>
+        </footer>
       </div>
     </Modal>
   )

@@ -37,12 +37,12 @@ export function MessagesButton({ campaignId, sessionId, myUserId }: MessagesButt
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="gb-btn gb-btn--secondary"
+        className={open ? 'gb-topbtn on' : 'gb-topbtn'}
         title="Messages"
-        style={{ position: 'relative', padding: 'var(--space-2)', display: 'flex' }}
+        aria-label={unread > 0 ? `Messages, ${unread} unread` : 'Messages'}
       >
         <ChatIcon />
-        {unread > 0 && <span className="ms-count">{unread > 9 ? '9+' : unread}</span>}
+        {unread > 0 && <span className="gb-topbtn-count">{unread > 9 ? '9+' : unread}</span>}
       </button>
       {!open && toast && <MessageToast key={toast.id} toast={toast} />}
 

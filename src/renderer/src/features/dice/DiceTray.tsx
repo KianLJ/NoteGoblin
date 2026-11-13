@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { DIE_SIDES, formatBreakdown, formatFormula, type DiceGroup, type DiceRollLogEntry, type DieSides } from '@shared/dice'
 import { Button } from '../../ui/Button'
-import { ensureDiceLogListening, getDiceLog, performRoll, subscribeDiceLog } from './diceLogStore'
+import { clearDiceLog, ensureDiceLogListening, getDiceLog, performRoll, subscribeDiceLog } from './diceLogStore'
 import { XIcon } from '../../ui/icons'
 
 interface DiceTrayProps {
@@ -145,6 +145,11 @@ export function DiceTray({ sessionId }: DiceTrayProps): JSX.Element {
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {log.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-2)' }}>No rolls yet.</p>}
+        {log.length > 0 && (
+          <button type="button" onClick={clearDiceLog} title="Clear the roll history on your screen (other people's trays keep theirs)" style={{ alignSelf: 'flex-end', border: 'none', background: 'none', padding: '0 2px', fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer' }}>
+            Clear history
+          </button>
+        )}
         {log.map((entry) => (
           <RollLogRow key={entry.id} entry={entry} isMine={entry.rollerId === myId} />
         ))}

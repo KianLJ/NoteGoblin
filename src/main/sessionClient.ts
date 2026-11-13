@@ -126,7 +126,7 @@ export function joinSession(
         // will surface — push it so the renderer can leave the session view
         // instead of sitting on a campaign it's no longer actually connected to.
         window.webContents.send('session:disconnected', {
-          reason: code === 4002 ? 'dm-left' : 'connection-lost'
+          reason: code === 4002 ? 'dm-left' : code === 4005 ? 'kicked' : 'connection-lost'
         })
       }
     })

@@ -4,8 +4,8 @@ import type { Handout, PresencePlayer } from '@shared/ipc'
 
 /**
  * A box's "Show to players" button (DM, while hosting): sends what `build` makes as a handout, which comes up on
- * connected players' screens (HandoutViewer.tsx). With more than one player at the table it first asks who: everyone
- * is ticked, untick anyone it isn't for. Says how it went on the button itself for a moment.
+ * connected players' screens (HandoutViewer.tsx). It first asks who, with a tick for each player at the table (all
+ * ticked to start); untick anyone it isn't for. Says how it went on the button itself for a moment.
  */
 export function ShowToPlayersButton({ build, players = [] }: { build: () => Promise<Handout | null>; players?: PresencePlayer[] }): JSX.Element {
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
@@ -40,10 +40,11 @@ export function ShowToPlayersButton({ build, players = [] }: { build: () => Prom
         className="gb-canvas-node-close"
         title="Show to players"
         aria-label="Show to players"
-        aria-haspopup={players.length > 1 ? 'dialog' : undefined}
-        aria-expanded={players.length > 1 ? !!picking : undefined}
+        aria-haspopup={players.length > 0 ? 'dialog' : undefined}
+        aria-expanded={players.length > 0 ? !!picking : undefined}
         onClick={() => {
-          if (players.length <= 1) return void show()
+          // Nobody at the table: trying anyway says why it can't be shown.
+          if (players.length === 0) return void show()
           if (picking) return setPicking(null)
           const r = button.current!.getBoundingClientRect()
           setPicking({ x: r.right, y: r.bottom + 6 })

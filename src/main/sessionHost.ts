@@ -190,6 +190,24 @@ export async function inviteToSession(
   }
 }
 
+/** Takes a player off the table: the relay drops them from the invite list and closes their connection. */
+export async function kickFromSession(relayToken: string, userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!currentSessionId) return { ok: false, error: 'Not hosting.' }
+  try {
+    const res = await fetch(`${RELAY_URL}${relaySessionPath(currentSessionId)}/kick`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${relayToken}` },
+      body: JSON.stringify({ userId })
+    })
+    // An older relay (before kick existed) answers 404: say so rather than pretending it worked.
+    if (res.status === 404) return { ok: false, error: 'The relay needs updating before players can be removed.' }
+    if (!res.ok) return { ok: false, error: 'Could not remove that player.' }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Relay unavailable.' }
+  }
+}
+
 /** The renderer's own view of "who's connected to campaign X" for the DM's own table — no network round-trip needed, since sessionHost already tracks this in-process. */
 export function subscribeDmPresence(campaignId: string | null, window: BrowserWindow): void {
   dmWindow = window
@@ -696,6 +714,8 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
         const previous = player.campaignId
         const nextCampaignId = str('campaignId') || null
         player.campaignId = nextCampaignId
+        // Arriving while a scene is up: they've seen it now, so it shows in their Sessions box.
+        if (nextCampaignId && liveScene?.campaignId === nextCampaignId && campaignService.markSceneSeen(db, nextCampaignId, liveScene.deckId, liveScene.sceneIndex, [userId])) broadcastCampaignChanged(nextCampaignId)
         if (previous) broadcastPresence(previous)
         if (nextCampaignId) broadcastPresence(nextCampaignId)
       }

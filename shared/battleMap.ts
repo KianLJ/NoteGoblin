@@ -37,6 +37,8 @@ export interface MapWall {
   open?: boolean
   /** Locked in place: can't be moved or deleted until unlocked (a door still opens). */
   locked?: boolean
+  /** An invisible blocker (a statue, a table, a pit's edge): stops tokens only — sight and light pass, and players never see it. */
+  blocker?: boolean
 }
 
 /** A light placed on the map (a brazier, a glowing crystal), in feet: bright light, then dim light beyond it. */
@@ -582,7 +584,8 @@ export function normalizeBattleMap(input: unknown): BattleMap {
     feetPerCell: int(m.feetPerCell, base.feetPerCell, 1, 1000),
     images,
     tokens: m.tokens && typeof m.tokens === 'object' ? (m.tokens as BattleMap['tokens']) : {},
-    fog: Array.isArray(m.fog) ? m.fog.filter((f) => f && typeof f === 'object' && 'kind' in f) : [],
+    // The fog tool is gone (walls and lighting hide things now), so fog from older maps is dropped rather than left hiding things nothing can clear.
+    fog: [],
     templates: Array.isArray(m.templates) ? m.templates.filter((t) => t && typeof t === 'object' && 'kind' in t) : [],
     placements: m.placements && typeof m.placements === 'object' ? (m.placements as BattleMap['placements']) : {},
     partyStarts: Array.isArray(m.partyStarts) ? m.partyStarts.filter((p) => p && typeof p.x === 'number' && typeof p.y === 'number') : [],

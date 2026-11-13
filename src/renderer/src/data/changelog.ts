@@ -7,6 +7,21 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.15.0',
+    title: 'Props, blockers, and a table that remembers who saw what',
+    highlights: [
+      'A Props tool on the battle map with each campaign’s own prop library: folders, search, renaming, drag props between folders, and they’re plain picture files in the campaign folder',
+      'Blockers: invisible walls that stop tokens but not sight or light, drawn from the Props tool round furniture, statues or a pit. Players never see them',
+      'The fog tool is gone: walls and lighting do its job now, and fog from older maps is cleared',
+      'Pick the kind of light (candle, torch, lantern, daylight) along the top before placing it, and a light’s rings only show when it’s picked. New icons for lights, props and map settings',
+      'Drag a box to select things: props in the library, notes and folders in the notes list, and walls or blockers on the map',
+      'Players only find a scene in their Sessions box once it’s been presented while they were at the table. The DM can show or hide any scene by hand',
+      'Text shown to just one player can be labelled “Hidden - Only Shown to You”, worded your own way, or not marked at all, scene by scene',
+      'Show to players always asks who to show it to, and the player list’s right-click menu can open a sheet, force a roll or remove a player from the table',
+      'A redesigned force roll window, a regrouped top bar with Friends as an icon, the campaign’s name and Leave at the top left for players, and a Clear history button in the dice tray'
+    ]
+  },
+  {
     version: '0.14.0',
     title: 'Maps of your world, and who thinks what of the party',
     highlights: [

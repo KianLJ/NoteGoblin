@@ -24,6 +24,9 @@ import worldMapShot from '../assets/whatsnew/0.14.0/worldmap.jpg'
 import reputationShot from '../assets/whatsnew/0.14.0/reputation.jpg'
 import stashShot from '../assets/whatsnew/0.14.0/stash.jpg'
 import orderShot from '../assets/whatsnew/0.14.0/order.jpg'
+import propsShot from '../assets/whatsnew/0.15.0/props.png'
+import lightsShot from '../assets/whatsnew/0.15.0/lights.png'
+import scenesShot from '../assets/whatsnew/0.15.0/scenes.png'
 
 export interface WhatsNewSection {
   heading: string
@@ -48,6 +51,39 @@ export interface WhatsNewPost {
 
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
+  {
+    version: '0.15.0',
+    title: 'Props, blockers, and a table that remembers who saw what',
+    intro: 'The battle map gets a proper way to dress a scene, and the table keeps better track of who has seen what. Here’s what’s new.',
+    sections: [
+      {
+        heading: 'A prop library for every campaign',
+        body: 'The new Props tool (P) opens your campaign’s prop library: barrels, tables, trees, whatever you collect. Sort them into folders, search them, double-click a name to rename it, and drag props onto a folder to move them, or drag a box round several to move or delete them together. Click a prop to put it on the map, then drag it into place and size it from its corner. Props are plain picture files in the campaign’s folder, so they travel with it.',
+        image: propsShot,
+        caption: 'The prop library, docked at the side of the map, with its folders down the left.'
+      },
+      {
+        heading: 'Blockers, and goodbye to fog',
+        body: 'Blockers are invisible walls that stop tokens but let sight and light through: draw one round a table, a statue or the edge of a pit, from the Props tool. Players never see them. Walls and lighting now do everything fog did, so the fog tool is gone, and fog left on older maps is cleared.'
+      },
+      {
+        heading: 'Lights you pick first',
+        body: 'Choose a candle, torch, lantern or daylight along the top, then click the map to place it. A light only shows how far it reaches when you pick it, so a room full of torches stays readable. Lights, props and map settings have clearer icons too.',
+        image: lightsShot,
+        caption: 'Pick the kind of light along the top; a picked light shows its bright and dim rings.'
+      },
+      {
+        heading: 'Scenes players have actually seen',
+        body: 'A player only finds a scene in their Sessions box once it has been presented while they were at the table, so someone joining later doesn’t get the whole story up front. Each scene says who has seen it, and you can set it to Always or Never by hand. Text you’ve hidden for just one player can say “Hidden - Only Shown to You”, say it your own way, or not be marked at all.',
+        image: scenesShot,
+        caption: 'Who can read a scene, and how a player’s private text is marked, at the top of the scene.'
+      },
+      {
+        heading: 'And around the table',
+        body: 'Drag a box to select notes and folders in the notes list, and walls or blockers on the map. Show to players always asks who it’s for. Right-click a player to open their sheet, ask for a roll or remove them from the table, and the force roll window has been redesigned. Players see the campaign’s name with a Leave button at the top left, the top bar is regrouped with Friends as an icon, and the dice tray has a Clear history button.'
+      }
+    ]
+  },
   {
     version: '0.14.0',
     title: 'Maps of your world, and who thinks what of the party',

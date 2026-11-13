@@ -16,6 +16,7 @@ import { useSessionDecks } from './useSessionDecks'
 import { loadSavedEncounters, type SavedEncounter } from '../../data/savedEncounters'
 import { SceneCues } from './SceneCues'
 import type { SessionScene } from '@shared/sessionDeck'
+import { useMyUserId } from '../account/avatar'
 
 // The Codex's code loads the first time the picker opens.
 const Bestiary = lazy(() => import('../bestiary/Bestiary').then((m) => ({ default: m.Bestiary })))
@@ -127,7 +128,7 @@ export function NoteEditor({
   const sceneIndex = sceneDeck ? sceneDeck.scenes.findIndex((s) => s.noteId === note.id) : -1
   const scene = sceneIndex >= 0 ? sceneDeck!.scenes[sceneIndex] : undefined
 
-  function updateScene(patch: Partial<Pick<SessionScene, 'encounterIds' | 'music' | 'autoMusic' | 'autoEncounter'>>): void {
+  function updateScene(patch: Partial<Pick<SessionScene, 'encounterIds' | 'music' | 'autoMusic' | 'autoEncounter' | 'visibility' | 'hiddenNotice' | 'hiddenLabel'>>): void {
     if (!sceneDeck || sceneIndex < 0) return
     const next = sceneDeck.scenes.map((s, i) => (i === sceneIndex ? { ...s, ...patch } : s))
     void reorderSceneDeckScenes(sceneDeck.id, next)
@@ -316,7 +317,9 @@ export function NoteEditor({
     }
   }, [note.campaignId, sessionId])
   const playerNames = useMemo(() => new Map(players.map((p) => [p.userId, p.displayName])), [players])
-  const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles, note.campaignId, playerNames), [body, knownTitles, note.campaignId, playerNames])
+  const myId = useMyUserId()
+  const viewer = useMemo(() => (myId ? { userId: myId, label: note.hiddenLabel } : undefined), [myId, note.hiddenLabel])
+  const renderedHtml = useMemo(() => renderNoteMarkdown(body, knownTitles, note.campaignId, playerNames, viewer), [body, knownTitles, note.campaignId, playerNames, viewer])
   const linkableNotes = useMemo(
     () =>
       notes
@@ -377,7 +380,7 @@ export function NoteEditor({
         </div>
       </div>
 
-      {scene && !readOnly && <SceneCues scene={scene} encounters={savedEncounters} onChange={updateScene} />}
+      {scene && !readOnly && <SceneCues scene={scene} encounters={savedEncounters} players={players} onChange={updateScene} />}
 
       <div
         style={{
@@ -475,6 +478,7 @@ export function NoteEditor({
           onDiceRoll={rollFromDice}
           onOneShotPlay={playOneShot}
           players={players}
+          viewer={viewer}
           readOnly={readOnly}
           insertMenu={[
             { label: 'Image…', onSelect: () => void handleInsertImage() },

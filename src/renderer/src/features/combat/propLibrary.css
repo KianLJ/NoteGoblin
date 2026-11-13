@@ -1,0 +1,256 @@
+/* The prop library: a narrow panel docked on the right of the battle map (out of the way of its middle), folders down its left, props in a grid. */
+.pl {
+  position: absolute;
+  z-index: 6;
+  top: 60px;
+  right: 12px;
+  width: min(340px, calc(100% - 90px));
+  height: min(440px, calc(100% - 110px));
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.pl-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pl-head strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+.pl-search {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.pl-add,
+.pl-new-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pl-add {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+.pl-add:hover,
+.pl-new-folder:hover {
+  background: var(--accent-subtle);
+}
+.pl-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.pl-close:hover {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+.pl-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.pl-folders {
+  width: 108px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  overflow-y: auto;
+}
+.pl-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.pl-folder:hover {
+  background: var(--bg-surface);
+}
+.pl-folder--on {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+}
+.pl-folder--drop {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+.pl-folder-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-folder small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.pl-new-folder {
+  margin-top: 6px;
+  justify-content: center;
+}
+.pl-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pl-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.pl-small {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.pl-error {
+  margin: 0 10px 6px;
+  font-size: 12px;
+  color: var(--danger);
+}
+.pl-empty {
+  margin: auto;
+  max-width: 280px;
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.pl-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  align-content: start;
+  gap: 6px;
+  padding: 4px 8px 8px;
+}
+.pl-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.pl-pic {
+  aspect-ratio: 1;
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  /* A checkerboard, so a prop's transparent parts read as transparent. */
+  background: repeating-conic-gradient(var(--bg-sunken) 0 25%, var(--bg-surface-raised) 0 50%) 0 0 / 14px 14px;
+  cursor: pointer;
+}
+.pl-pic:hover {
+  border-color: var(--accent);
+}
+.pl-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.pl-name {
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.pl-in {
+  margin-top: -3px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-rename {
+  padding: 2px 5px;
+  font-size: 12px;
+}
+.pl-delete {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font-size: 10px;
+  opacity: 0;
+  background: var(--bg-surface);
+}
+.pl-tile:hover .pl-delete,
+.pl-delete:focus-visible,
+.pl-delete:not(:has(svg)) {
+  opacity: 1;
+}
+
+.pl-tile--picked .pl-pic {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+.pl-picked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 6px;
+  padding: 3px 4px 3px 8px;
+  border-radius: 6px;
+  background: var(--accent-subtle);
+  font-size: 12px;
+}
+.pl-picked-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+}

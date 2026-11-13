@@ -216,7 +216,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
       window.goblin.sessions.leave()
       stopMusic()
       setJoinedSession(null)
-      setDisconnectMessage(reason === 'dm-left' ? 'The DM disconnected.' : 'Lost connection to the DM.')
+      setDisconnectMessage(reason === 'dm-left' ? 'The DM disconnected.' : reason === 'kicked' ? 'The DM removed you from the table.' : 'Lost connection to the DM.')
       setTimeout(() => setDisconnectMessage(null), 6000)
     })
   }, [])
@@ -487,11 +487,12 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           className="gb-no-drag"
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexShrink: 0 }}
         >
+          <div className="gb-topbar-group">
           <button
             type="button"
-            className="gb-btn gb-btn--secondary"
+            className="gb-topbtn"
             title="Codex — right-click to close it"
-            style={{ padding: 'var(--space-2)', display: 'flex' }}
+            aria-label="Codex"
             onClick={() => {
               if (classic) return setBestiaryOpen(true)
               setWorkshopOpen(false)
@@ -505,7 +506,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
           >
             <BestiaryIcon />
           </button>
-          <button type="button" className="gb-btn gb-btn--secondary" title="Content Packs" style={{ padding: 'var(--space-2)', display: 'flex' }} onClick={() => setPacksOpen(true)}>
+          <button type="button" className="gb-topbtn" title="Content Packs" aria-label="Content Packs" onClick={() => setPacksOpen(true)}>
             <PacksIcon />
           </button>
           {classic && mode === 'dm' && (
@@ -513,7 +514,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               <HeaderPopover
                 width={360}
                 trigger={(toggle) => (
-                  <button type="button" className="gb-btn gb-btn--secondary" title="Goblin Bard" style={{ padding: 'var(--space-2)', display: 'flex' }} onClick={toggle}>
+                  <button type="button" className="gb-topbtn" title="Goblin Bard" aria-label="Goblin Bard" onClick={toggle}>
                     {TOOL_ICONS.music}
                   </button>
                 )}
@@ -523,7 +524,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               <HeaderPopover
                 width={340}
                 trigger={(toggle) => (
-                  <button type="button" className="gb-btn gb-btn--secondary" title="Sound Board" style={{ padding: 'var(--space-2)', display: 'flex' }} onClick={toggle}>
+                  <button type="button" className="gb-topbtn" title="Sound Board" aria-label="Sound Board" onClick={toggle}>
                     {TOOL_ICONS.soundboard}
                   </button>
                 )}
@@ -532,6 +533,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               </HeaderPopover>
             </>
           )}
+          </div>
           {import.meta.env.DEV && hostedSessionId && !joinedSession && (
             <button
               type="button"
@@ -550,6 +552,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               Join as player (dev)
             </button>
           )}
+          <div className="gb-topbar-group">
           <MessagesButton
             campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
             sessionId={mode === 'dm' ? hostedSessionId : playerSessionId}
@@ -568,6 +571,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               }}
             />
           )}
+          </div>
           <VersionBadge
             variant="inline"
             onWhatsNew={(entries) => {

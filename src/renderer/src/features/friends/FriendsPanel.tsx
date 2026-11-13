@@ -230,21 +230,21 @@ export function FriendsButton({ onOpen }: { onOpen: () => void }): JSX.Element {
   const { status, friends, incomingRequests } = useFriends()
   const onlineCount = friends.filter((f) => f.online).length
   return (
-    <button type="button" onClick={onOpen} className="gb-btn gb-btn--secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          background: status === 'connected' ? 'var(--success)' : 'var(--text-muted)'
-        }}
-      />
-      Friends{onlineCount > 0 ? ` (${onlineCount})` : ''}
-      {incomingRequests.length > 0 && (
-        <span className="gb-badge gb-badge--accent" style={{ fontSize: 10 }}>
-          {incomingRequests.length}
-        </span>
-      )}
+    <button
+      type="button"
+      onClick={onOpen}
+      className="gb-topbtn gb-topbtn--wide"
+      title={`Friends${onlineCount > 0 ? `: ${onlineCount} online` : ''}${status === 'connected' ? '' : ' (offline)'}`}
+      aria-label={`Friends, ${onlineCount} online${incomingRequests.length ? `, ${incomingRequests.length} requests` : ''}`}
+    >
+      <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+        <circle cx="6" cy="5.5" r="2.5" />
+        <path d="M1.5 13.5c.5-2.5 2.3-3.8 4.5-3.8s4 1.3 4.5 3.8" />
+        <path d="M10.5 3.3a2.4 2.4 0 0 1 0 4.4M12.3 9.9c1.2.6 2 1.8 2.2 3.6" />
+      </svg>
+      {onlineCount > 0 && <span className="gb-topbtn-num">{onlineCount}</span>}
+      <i className={status === 'connected' ? 'gb-topbtn-dot gb-topbtn-dot--on' : 'gb-topbtn-dot'} aria-hidden="true" />
+      {incomingRequests.length > 0 && <span className="gb-topbtn-count">{incomingRequests.length}</span>}
     </button>
   )
 }

@@ -56,6 +56,24 @@ export class Session extends Server<Env> {
     const url = new URL(req.url)
     const action = url.pathname.split('/').filter(Boolean).pop()
 
+    // The DM takes a player off the table: off the invite list, and their connection closed (4005).
+    if (req.method === 'POST' && action === 'kick') {
+      const authHeader = req.headers.get('authorization')
+      if (!authHeader?.startsWith('Bearer ')) return new Response('Unauthorized', { status: 401 })
+      const payload = await verifyToken(this.secret(), authHeader.slice('Bearer '.length))
+      if (!payload) return new Response('Unauthorized', { status: 401 })
+      const body = (await req.json().catch(() => null)) as { userId?: string } | null
+      if (!body?.userId) return new Response('userId is required', { status: 400 })
+      const data = await this.getSessionData()
+      if (!data || data.dmUserId !== payload.userId) return new Response('Only the session owner can remove players', { status: 403 })
+      data.allowedPlayerIds = data.allowedPlayerIds.filter((id) => id !== body.userId)
+      await this.ctx.storage.put('session', data)
+      for (const conn of this.getConnections<ConnState>(`user:${body.userId}`)) {
+        if (conn.state?.role === 'player') conn.close(4005, 'Removed from the table by the DM')
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } })
+    }
+
     if (req.method === 'POST' && action === 'invite') {
       const authHeader = req.headers.get('authorization')
       if (!authHeader?.startsWith('Bearer ')) return new Response('Unauthorized', { status: 401 })

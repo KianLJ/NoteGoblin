@@ -757,3 +757,46 @@
     transition: none;
   }
 }
+
+/* A scene's "Players can read it": who can open it, and how their hidden parts look to them. */
+.gb-cue-players {
+  gap: 6px;
+}
+.gb-cue-seg {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+.gb-cue-seg button {
+  flex: 1;
+  border: none;
+  border-radius: 999px;
+  padding: 3px 6px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gb-cue-seg button.on {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.gb-cue-note {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.gb-cue-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.gb-cue-label {
+  padding: 3px 8px;
+  font-size: 12px;
+}

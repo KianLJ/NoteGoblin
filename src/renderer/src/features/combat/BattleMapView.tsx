@@ -5,17 +5,16 @@
 // with Move, can be dragged, resized from its handle, or sized exactly.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { VehicleArc } from '@shared/content/schema'
-import { canStand, fogBox, normalizeFacing, tokenCentre, tokenH, tokenW, turnToken, fogShapeAt, gridDistanceFt, mapBounds, moveFogShape, snapHalf, templateLabel, type BattleMap, type Bounds, type FogShape, type MapImage, type MapLight, type MapTemplate, type MapToken, type MapWall, type TemplateKind } from '@shared/battleMap'
+import { canStand, normalizeFacing, tokenCentre, tokenH, tokenW, turnToken, gridDistanceFt, mapBounds, snapHalf, templateLabel, type BattleMap, type Bounds, type MapImage, type MapLight, type MapTemplate, type MapToken, type MapWall, type TemplateKind } from '@shared/battleMap'
 import type { Combatant } from '@shared/encounter'
 import { isTrackpadWheel } from '@shared/canvasLayout'
-import { blockingWalls, canReach, decodeExplored, slideMove, lightsOf, tokenSeen, visibleCells, LIGHT_PRESETS, sightBounds, visibilityPolygon, wallAt, type LightSource, type VisionSource } from '@shared/vision'
+import { blockingWalls, canReach, decodeExplored, slideMove, lightsOf, tokenSeen, visibleCells, LIGHT_PRESETS, sightBounds, visibilityPolygon, segTouchesBox, wallAt, type LightSource, type VisionSource } from '@shared/vision'
 import { doorSpan, insertDoor, isOpening, roomWalls, snapRoomCorner, snapWallPoint, wallUnder, withoutOverlaps, type SnapKind } from '@shared/walls'
 import { XIcon } from '../../ui/icons'
 
-export type MapTool = 'move' | 'ruler' | TemplateKind | 'fog' | 'walls' | 'light' | 'images'
-export type FogDraw = 'move' | 'brush' | 'line' | 'points' | 'rect' | 'circle'
+export type MapTool = 'move' | 'ruler' | TemplateKind | 'walls' | 'light' | 'images' | 'props'
 /** Walls tool: draw walls corner by corner, drag out a door, or pick one to change. */
-export type WallDraw = 'wall' | 'room' | 'door' | 'window' | 'select'
+export type WallDraw = 'wall' | 'room' | 'door' | 'window' | 'blocker' | 'select' | 'selectBlocker'
 
 /** What a player sees from (or the DM previewing them): beyond it is dark, and squares seen before are dimmed. */
 export interface Sight {
@@ -23,14 +22,6 @@ export interface Sight {
   explored: string | null
   lights: LightSource[]
 }
-export interface FogTool {
-  /** Paint fog, or cut it away. */
-  op: 'add' | 'cut'
-  draw: FogDraw
-  /** Brush and line width, in squares. */
-  width: number
-}
-
 const CELL = 50
 export const TEMPLATE_DEFAULT: Record<TemplateKind, number> = { cone: 15, sphere: 20, line: 30, cube: 10 }
 
@@ -42,8 +33,9 @@ interface Props {
   selectedId: string | null
   onSelect: (id: string | null) => void
   tool: MapTool
-  fogTool: FogTool
-  /** Snap shapes and fog to square corners and centres (and sizes to whole squares). */
+  /** What a click with the Lights tool places (picked along the top bar). */
+  newLight?: { name: string; bright: number; dim: number }
+  /** Snap shapes to square corners and centres (and sizes to whole squares). */
   snap: boolean
   onHint: (text: string) => void
   /**
@@ -80,15 +72,14 @@ type Drag =
   /** Placing a new shape, or resizing a placed one from its handle (`existing`). */
   | { kind: 'shape'; t: MapTemplate; existing: boolean; moved: boolean }
   | { kind: 'shapeMove'; t: MapTemplate; grab: Pt; at: Pt }
-  /** Drawing fog: a brush stroke's points, or a line, square or circle from where the drag started. */
-  | { kind: 'fog'; shape: FogShape }
-  | { kind: 'fogMove'; id: string; grab: Pt; at: Pt }
   | { kind: 'start'; index: number; at: Pt }
   /** Dragging out a new door, or a wall's end to a new spot. */
   /** A door: set into a wall (`wallId`, from where the drag started to where it is, along it), or standing free. */
   | { kind: 'door'; a: Pt; b: Pt; wallId: string | null; window: boolean }
   /** A room: four walls between two corners. */
   | { kind: 'room'; a: Pt; b: Pt }
+  /** A box dragged out with Pick: every wall it touches is picked. */
+  | { kind: 'marquee'; a: Pt; b: Pt; additive: boolean }
   | { kind: 'wallEnd'; id: string; end: 'a' | 'b'; at: Pt }
   | { kind: 'light'; id: string; grab: Pt; at: Pt }
   | { kind: 'imageMove'; id: string; grab: Pt; at: Pt }
@@ -105,18 +96,6 @@ function sizeFromDrag(kind: TemplateKind, origin: Pt, to: Pt, feetPerCell: numbe
   return snap ? Math.max(1, Math.round(squares)) * feetPerCell : Math.max(1, Math.round(squares * feetPerCell))
 }
 
-/** A fog shape from where a drag started to where it is now. */
-function fogFromDrag(shape: FogShape, from: Pt, to: Pt): FogShape {
-  switch (shape.kind) {
-    case 'rect':
-      return { ...shape, x: Math.min(from.x, to.x), y: Math.min(from.y, to.y), w: Math.abs(to.x - from.x), h: Math.abs(to.y - from.y) }
-    case 'circle':
-      return { ...shape, r: Math.hypot(to.x - from.x, to.y - from.y) }
-    default:
-      return shape
-  }
-}
-
 /** Where a shape's resize handle sits: the far end of a cone or line, the edge of a sphere, the far corner of a cube. */
 function handlePoint(t: MapTemplate, feetPerCell: number): Pt {
   const L = t.sizeFt / feetPerCell
@@ -129,21 +108,19 @@ function handlePoint(t: MapTemplate, feetPerCell: number): Pt {
   return { x: t.origin.x + Math.cos(ang) * L, y: t.origin.y + Math.sin(ang) * L }
 }
 
-export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, fogTool, snap, onHint, viewer, wallDraw = 'wall', sight, centreRef, selectedImage = null, onSelectImage, remoteDrags = NO_DRAGS, onLiveDrag, aim = null, tokenPopup }: Props): JSX.Element {
+export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, snap, onHint, viewer, wallDraw = 'wall', sight, centreRef, selectedImage = null, onSelectImage, remoteDrags = NO_DRAGS, onLiveDrag, aim = null, tokenPopup, newLight = LIGHT_PRESETS[1] }: Props): JSX.Element {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState({ x: 40, y: 70, zoom: 1 })
   const [size, setSize] = useState({ w: 800, h: 600 })
   const imagePicked = map.images.find((i) => i.id === selectedImage) ?? null
+  // Props are map images too: the Props tool picks, drags and sizes them like the Map images tool.
+  const imageTool = tool === 'images' || tool === 'props'
   if (centreRef) centreRef.current = () => ({ x: (size.w / 2 - view.x) / (CELL * view.zoom), y: (size.h / 2 - view.y) / (CELL * view.zoom) })
   const [drag, setDrag] = useState<Drag | null>(null)
   const [selectedShape, setSelectedShape] = useState<string | null>(null)
-  const [selectedFog, setSelectedFog] = useState<string | null>(null)
-  const fogPicked = map.fog.find((f) => f.id === selectedFog) ?? null
   const solidWalls = useMemo(() => blockingWalls(map, 'move'), [map.walls])
-  // Fog drawn point by point: the points so far, and where the pointer is (for the line to it).
-  const [points, setPoints] = useState<Pt[] | null>(null)
+  // Where the pointer is while drawing a wall (for the line to it).
   const [hover, setHover] = useState<Pt | null>(null)
-  const fogStart = useRef<Pt>({ x: 0, y: 0 })
   const at = (p: Pt): Pt => (snap ? snapHalf(p) : p)
   // Wall corners snap to another wall's end, onto a wall, or (snapping) the grid's corners, centres and edge middles — within a few pixels however far it's zoomed.
   const snapR = 14 / (CELL * view.zoom)
@@ -153,18 +130,24 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
   // A wall being drawn corner by corner: the corners so far.
   const [wallChain, setWallChain] = useState<Pt[] | null>(null)
   const [selectedWall, setSelectedWall] = useState<string | null>(null)
+  // More than one wall picked (Ctrl-click, or a box dragged round them): they're deleted together.
+  const [pickedWalls, setPickedWalls] = useState<string[]>([])
+  const picking = wallDraw === 'select' || wallDraw === 'selectBlocker'
+  // Picking blockers (from the Props tool) only picks blockers.
+  const pickable = wallDraw === 'selectBlocker' ? map.walls.filter((w) => w.blocker) : map.walls
   const [selectedLight, setSelectedLight] = useState<string | null>(null)
   const wallPicked = map.walls.find((w) => w.id === selectedWall) ?? null
   const lightPicked = map.lights.find((l) => l.id === selectedLight) ?? null
 
-  // Switching tools (or fog shapes) drops a half-drawn point shape or wall, and whatever was picked.
+  // Switching tools drops a half-drawn wall, and whatever was picked.
   useEffect(() => {
-    setPoints(null)
     setWallChain(null)
-    if (tool !== 'fog' || fogTool.draw !== 'move') setSelectedFog(null)
-    if (tool !== 'walls' || wallDraw !== 'select') setSelectedWall(null)
+    if (tool !== 'walls' || !picking) {
+      setSelectedWall(null)
+      setPickedWalls([])
+    }
     if (tool !== 'light') setSelectedLight(null)
-  }, [tool, fogTool.draw, fogTool.op, wallDraw])
+  }, [tool, wallDraw])
 
   // Enter or Escape stops drawing a wall.
   useEffect(() => {
@@ -180,25 +163,6 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallChain])
 
-  function closePoints(list: Pt[] | null): void {
-    if (list && list.length >= 3) {
-      onChange({ ...map, fog: [...map.fog, { id: crypto.randomUUID(), op: fogTool.op, kind: 'poly', points: list }] })
-      onHint(fogTool.op === 'add' ? 'Fog drawn. Ctrl+Z undoes.' : 'Fog cut away. Ctrl+Z undoes.')
-    }
-    setPoints(null)
-  }
-
-  // Enter finishes a point-by-point shape; Escape abandons it.
-  useEffect(() => {
-    if (!points) return
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Enter') closePoints(points)
-      else if (e.key === 'Escape') setPoints(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, map])
   const fitted = useRef(false)
   const shape = map.templates.find((t) => t.id === selectedShape) ?? null
 
@@ -234,15 +198,19 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     if (selectedShape && !shape) setSelectedShape(null)
   }, [selectedShape, shape])
 
-  // Delete or Backspace removes the selected shape, picked fog, wall, light or image — unless it's locked.
+  // Delete or Backspace removes the selected shape, wall, light or image — unless it's locked.
   useEffect(() => {
-    if (!shape && !fogPicked && !wallPicked && !lightPicked && !imagePicked) return
+    if (!shape && !wallPicked && !lightPicked && !imagePicked && pickedWalls.length === 0) return
     const onKey = (e: KeyboardEvent): void => {
       const el = e.target as HTMLElement
       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
-      if (shape && !shape.locked) removeShape(shape.id)
-      else if (fogPicked && !fogPicked.locked) removeFog(fogPicked.id)
+      if (pickedWalls.length > 0) {
+        const gone = new Set(pickedWalls.filter((id) => !map.walls.find((w) => w.id === id)?.locked))
+        onChange({ ...map, walls: map.walls.filter((w) => !gone.has(w.id)) })
+        setPickedWalls(pickedWalls.filter((id) => !gone.has(id)))
+        onHint(gone.size < pickedWalls.length ? 'Removed them, except the locked ones.' : `Removed ${gone.size}.`)
+      } else if (shape && !shape.locked) removeShape(shape.id)
       else if (wallPicked && !wallPicked.locked) removeWall(wallPicked.id)
       else if (lightPicked && !lightPicked.locked) removeLight(lightPicked.id)
       else if (imagePicked && !imagePicked.locked) removeImage(imagePicked.id)
@@ -251,7 +219,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shape, fogPicked, wallPicked, lightPicked, imagePicked, map])
+  }, [shape, wallPicked, lightPicked, imagePicked, pickedWalls, map])
 
   const updateImage = (i: MapImage): void => onChange({ ...map, images: map.images.map((x) => (x.id === i.id ? i : x)) })
   const removeImage = (id: string): void => {
@@ -275,11 +243,6 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     setSelectedShape(null)
   }
   const updateShape = (t: MapTemplate): void => onChange({ ...map, templates: map.templates.map((x) => (x.id === t.id ? t : x)) })
-  const updateFog = (f: FogShape): void => onChange({ ...map, fog: map.fog.map((x) => (x.id === f.id ? f : x)) })
-  const removeFog = (id: string): void => {
-    onChange({ ...map, fog: map.fog.filter((f) => f.id !== id) })
-    setSelectedFog(null)
-  }
 
   const zoomBy = (factor: number): void => {
     fitted.current = true
@@ -376,16 +339,35 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
         else if (w) onHint('This wall is locked. Unlock it to move it.')
         return
       }
-      if (wallDraw === 'select') {
-        const w = wallAt(map.walls, p, 0.4)
-        setSelectedWall(w?.id ?? null)
-        onHint(w ? 'Drag its ends to move them. Delete removes it.' : 'Click a wall or door to pick it.')
+      if (picking) {
+        const w = wallAt(pickable, p, 0.4)
+        const additive = e.ctrlKey || e.metaKey || e.shiftKey
+        if (!w) {
+          // Empty space: drag a box round the walls to pick.
+          setDrag({ kind: 'marquee', a: p, b: p, additive })
+          if (!additive) {
+            setSelectedWall(null)
+            setPickedWalls([])
+          }
+          return
+        }
+        if (additive) {
+          const all = [...new Set([...pickedWalls, ...(selectedWall ? [selectedWall] : [])])]
+          const next = all.includes(w.id) ? all.filter((id) => id !== w.id) : [...all, w.id]
+          setPickedWalls(next.length > 1 ? next : [])
+          setSelectedWall(next.length === 1 ? next[0] : null)
+          onHint(`${next.length} picked. Delete removes them.`)
+          return
+        }
+        setPickedWalls([])
+        setSelectedWall(w.id)
+        onHint('Drag its ends to move them. Delete removes it. Ctrl-click (or drag a box round them) to pick more.')
         return
       }
       if (wallDraw === 'door' || wallDraw === 'window') {
         // On a wall: the door (or window) is set into it. Anywhere else: one standing on its own.
         const win = wallDraw === 'window'
-        const w = wallUnder(map.walls, p, snapR)
+        const w = wallUnder(map.walls.filter((x) => !x.blocker), p, snapR)
         if (w) setDrag({ kind: 'door', a: p, b: p, wallId: w.id, window: win })
         else {
           const q = wallPt(p).at
@@ -407,7 +389,10 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       if (wallChain) {
         const last = wallChain[wallChain.length - 1]
         if (Math.hypot(q.x - last.x, q.y - last.y) > 0.05) {
-          onChange({ ...map, walls: [...map.walls, ...withoutOverlaps(map.walls, [{ id: crypto.randomUUID(), a: last, b: q }], () => crypto.randomUUID())] })
+          // Blockers sit freely over walls; a wall is only cut where another wall already is.
+          const piece = { id: crypto.randomUUID(), a: last, b: q }
+          const added = wallDraw === 'blocker' ? [{ ...piece, blocker: true }] : withoutOverlaps(map.walls.filter((w) => !w.blocker), [piece], () => crypto.randomUUID())
+          onChange({ ...map, walls: [...map.walls, ...added] })
           // Back at the first corner: the shape is closed, so that's the wall done.
           if (wallChain.length >= 2 && Math.hypot(q.x - wallChain[0].x, q.y - wallChain[0].y) < 0.01) {
             setWallChain(null)
@@ -420,7 +405,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       onHint('Click the next corner (click the first one again to close the shape). Double-click, Enter or Escape stops; Ctrl+Z takes back the last piece.')
       return
     }
-    if (tool === 'images' && !viewer && e.button === 0) {
+    if (imageTool && !viewer && e.button === 0) {
       const sizeId = target.closest('[data-image-size]')?.getAttribute('data-image-size')
       const imageId = sizeId ?? target.closest('[data-image]')?.getAttribute('data-image')
       const img = imageId ? map.images.find((i) => i.id === imageId) : undefined
@@ -447,10 +432,10 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
         return
       }
       const q = at(p)
-      const light: MapLight = { id: crypto.randomUUID(), x: q.x, y: q.y, bright: 20, dim: 20 }
+      const light: MapLight = { id: crypto.randomUUID(), x: q.x, y: q.y, bright: newLight.bright, dim: newLight.dim }
       onChange({ ...map, lights: [...map.lights, light] })
       setSelectedLight(light.id)
-      onHint('A torch’s worth of light placed. Change how far it reaches in its options; drag it to move it.')
+      onHint(`${newLight.name} placed. Drag it to move it; its options change how far it reaches.`)
       return
     }
     if (e.button === 1 || (tool === 'move' && !tokenId && (!shapeId || viewer) && !target.closest('[data-start]'))) {
@@ -490,34 +475,6 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       return
     }
     if (viewer && tool !== 'ruler') return
-    if (tool === 'fog' && fogTool.draw === 'move') {
-      const f = fogShapeAt(map, p)
-      setSelectedFog(f?.id ?? null)
-      if (!f) onHint('Click on fog (or a cut) to pick it.')
-      else if (f.locked) onHint('This fog is locked. Unlock it to move it.')
-      else setDrag({ kind: 'fogMove', id: f.id, grab: p, at: p })
-      return
-    }
-    if (tool === 'fog') {
-      const q = at(p)
-      const base = { id: crypto.randomUUID(), op: fogTool.op }
-      if (fogTool.draw === 'points') {
-        // Clicking near the first point (or double-clicking) closes the shape.
-        if (points && points.length >= 3 && Math.hypot(q.x - points[0].x, q.y - points[0].y) < 0.35) closePoints(points)
-        else if (points && e.detail >= 2) closePoints(points)
-        else setPoints([...(points ?? []), q])
-        return
-      }
-      fogStart.current = q
-      const shape: FogShape =
-        fogTool.draw === 'rect'
-          ? { ...base, kind: 'rect', x: q.x, y: q.y, w: 0, h: 0 }
-          : fogTool.draw === 'circle'
-            ? { ...base, kind: 'circle', cx: q.x, cy: q.y, r: 0 }
-            : { ...base, kind: 'stroke', width: fogTool.width, points: fogTool.draw === 'line' ? [q, q] : [p] }
-      setDrag({ kind: 'fog', shape })
-      return
-    }
     if (tool === 'ruler') setDrag({ kind: 'measure', from: c, to: c })
     else if (tool === 'cone' || tool === 'sphere' || tool === 'line' || tool === 'cube') {
       // Starts from the nearest square corner or centre when snapping, else exactly where you pressed.
@@ -547,7 +504,8 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
         onHint(`Moving ${gridDistanceFt(drag.from, at, map.feetPerCell)} ft.${stopped ? (viewer ? ' A wall is in the way.' : ' A wall is in the way — hold Alt to drag through it.') : ''}`)
       setDrag({ ...drag, at, free, stopped })
       sendDrag(drag.id, free)
-    } else if (drag.kind === 'measure') {
+    } else if (drag.kind === 'marquee') setDrag({ ...drag, b: p })
+    else if (drag.kind === 'measure') {
       setDrag({ ...drag, to: c })
       onHint(`${gridDistanceFt(drag.from, c, map.feetPerCell)} ft.`)
     } else if (drag.kind === 'shape') {
@@ -556,7 +514,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       const sizeFt = sizeFromDrag(drag.t.kind, drag.t.origin, p, map.feetPerCell, snap)
       setDrag({ ...drag, moved: true, t: { ...drag.t, toward: p, sizeFt } })
       onHint(templateLabel({ ...drag.t, sizeFt }))
-    } else if (drag.kind === 'shapeMove' || drag.kind === 'fogMove') setDrag({ ...drag, at: p })
+    } else if (drag.kind === 'shapeMove') setDrag({ ...drag, at: p })
     else if (drag.kind === 'start') setDrag({ ...drag, at: { x: Math.floor(p.x), y: Math.floor(p.y) } })
     else if (drag.kind === 'imageMove') setDrag({ ...drag, at: p })
     else if (drag.kind === 'imageSize') setDrag({ ...drag, at: p })
@@ -576,15 +534,6 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     else if (drag.kind === 'room') setDrag({ ...drag, b: snapRoomCorner(map.walls, p, snap, snapR).at })
     else if (drag.kind === 'wallEnd') setDrag({ ...drag, at: wallPt(p, drag.id).at })
     else if (drag.kind === 'light') setDrag({ ...drag, at: p })
-    else if (drag.kind === 'fog') {
-      const s = drag.shape
-      const q = at(p)
-      if (s.kind === 'stroke' && fogTool.draw === 'brush') {
-        const last = s.points[s.points.length - 1]
-        if (Math.hypot(p.x - last.x, p.y - last.y) > 0.15) setDrag({ kind: 'fog', shape: { ...s, points: [...s.points, p] } })
-      } else if (s.kind === 'stroke') setDrag({ kind: 'fog', shape: { ...s, points: [fogStart.current, q] } })
-      else setDrag({ kind: 'fog', shape: fogFromDrag(s, fogStart.current, q) })
-    }
   }
 
   // A token being dragged goes out to everyone as it moves — at most every 50 ms, and always when it's let go.
@@ -598,13 +547,12 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
   }
 
   function onHoverMove(e: React.PointerEvent): void {
-    if (points) setHover(at(toMap(e)))
-    else if (wallChain) setHover(wallPt(toMap(e)).at)
-    if (tool === 'walls' && !viewer && wallDraw !== 'select' && !drag) {
+    if (wallChain) setHover(wallPt(toMap(e)).at)
+    if (tool === 'walls' && !viewer && !picking && !drag) {
       const p = toMap(e)
       if (wallDraw === 'door' || wallDraw === 'window') {
         // Over a wall, the door (or window) it would get.
-        const w = wallUnder(map.walls, p, snapR)
+        const w = wallUnder(map.walls.filter((x) => !x.blocker), p, snapR)
         if (w) {
           const { t0, t1 } = doorSpan(w, p, p, snap)
           const along = (t: number): Pt => ({ x: w.a.x + t * (w.b.x - w.a.x), y: w.a.y + t * (w.b.y - w.a.y) })
@@ -617,6 +565,16 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
 
   function onPointerUp(): void {
     if (!drag) return
+    if (drag.kind === 'marquee') {
+      const box = { x0: Math.min(drag.a.x, drag.b.x), y0: Math.min(drag.a.y, drag.b.y), x1: Math.max(drag.a.x, drag.b.x), y1: Math.max(drag.a.y, drag.b.y) }
+      const hit = pickable.filter((w) => segTouchesBox(w, box)).map((w) => w.id)
+      const ids = drag.additive ? [...new Set([...pickedWalls, ...(selectedWall ? [selectedWall] : []), ...hit])] : hit
+      setPickedWalls(ids.length > 1 ? ids : [])
+      setSelectedWall(ids.length === 1 ? ids[0] : null)
+      if (ids.length) onHint(ids.length === 1 ? 'Drag its ends to move them. Delete removes it.' : `${ids.length} picked. Delete removes them (locked ones stay).`)
+      setDrag(null)
+      return
+    }
     if (drag.kind === 'token') {
       const moved = drag.at.x !== drag.from.x || drag.at.y !== drag.from.y
       // Where it was dropped goes out last (not the last position sent mid-drag), so everyone sees it land there.
@@ -660,7 +618,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     } else if (drag.kind === 'room') {
       if (Math.abs(drag.b.x - drag.a.x) > 0.2 && Math.abs(drag.b.y - drag.a.y) > 0.2) {
         // A wall it shares with a room already there isn't drawn twice.
-        onChange({ ...map, walls: [...map.walls, ...withoutOverlaps(map.walls, roomWalls(drag.a, drag.b, () => crypto.randomUUID()), () => crypto.randomUUID())] })
+        onChange({ ...map, walls: [...map.walls, ...withoutOverlaps(map.walls.filter((w) => !w.blocker), roomWalls(drag.a, drag.b, () => crypto.randomUUID()), () => crypto.randomUUID())] })
         onHint('Room drawn. Use Door to set doors into its walls.')
       }
     } else if (drag.kind === 'wallEnd') {
@@ -681,17 +639,6 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
       const { dx, dy } = offset(drag)
       const l = map.lights.find((x) => x.id === drag.id)
       if (l && (dx || dy)) updateLight({ ...l, x: l.x + dx, y: l.y + dy })
-    } else if (drag.kind === 'fogMove') {
-      const { dx, dy } = offset(drag)
-      const f = map.fog.find((x) => x.id === drag.id)
-      if (f && (dx || dy)) updateFog(moveFogShape(f, dx, dy))
-    } else if (drag.kind === 'fog') {
-      const s = drag.shape
-      const empty = (s.kind === 'rect' && (s.w < 0.1 || s.h < 0.1)) || (s.kind === 'circle' && s.r < 0.1)
-      if (!empty) {
-        onChange({ ...map, fog: [...map.fog, s] })
-        onHint(s.op === 'add' ? 'Fog drawn. Ctrl+Z undoes.' : 'Fog cut away. Ctrl+Z undoes.')
-      }
     }
     setDrag(null)
   }
@@ -734,12 +681,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
   if (drag?.kind === 'shape' && !drag.existing) shown.push(drag.t)
   const selectedShown = shown.find((t) => t.id === selectedShape)
 
-  // Fog as it'd be with the stroke in progress (or the point shape so far) included.
-  const draftFog: FogShape | null = drag?.kind === 'fog' ? drag.shape : points && points.length >= 3 ? { id: 'draft', op: fogTool.op, kind: 'poly', points } : null
-  const movedFog = drag?.kind === 'fogMove' ? map.fog.map((f) => (f.id === drag.id ? moveFogShape(f, offset(drag).dx, offset(drag).dy) : f)) : map.fog
-  const fogShapes = draftFog ? [...movedFog, draftFog] : movedFog
-  const pickedShown = selectedFog ? movedFog.find((f) => f.id === selectedFog) : undefined
-  // The part of the endless grid on screen (a little more), for drawing the floor, grid lines, fog and darkness.
+  // The part of the endless grid on screen (a little more), for drawing the floor, grid lines and darkness.
   const vis: Bounds = {
     x0: Math.floor(-view.x / (CELL * view.zoom)) - 2,
     y0: Math.floor(-view.y / (CELL * view.zoom)) - 2,
@@ -802,7 +744,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
   const seen = useMemo(
     () => (liveSight ? visibleCells({ ...map, tokens: liveTokens }, liveSight.sources, liveSight.lights) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [liveSight, liveTokens, map.walls, map.ambient, map.feetPerCell, map.cols, map.rows, map.images, map.fog, map.templates, map.partyStarts, map.lights]
+    [liveSight, liveTokens, map.walls, map.ambient, map.feetPerCell, map.cols, map.rows, map.images, map.templates, map.partyStarts, map.lights]
   )
   const inSight = (c: Combatant): boolean => !seen || c.kind === 'player' || (c.kind === 'vehicle' && !!c.party) || (!!liveTokens[c.id] && tokenSeen(liveTokens[c.id], seen))
   const tokens = combatants.filter(inSight).map((c) => {
@@ -861,12 +803,12 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
         <g transform={`translate(${view.x} ${view.y}) scale(${view.zoom})`}>
           <rect {...area} fill="url(#bm-floor)" />
           {imagesShown.map((i) =>
-            viewer && i.hidden ? null : <MapImageSvg key={i.id} i={i} active={tool === 'images' && !viewer} selected={i.id === selectedImage && tool === 'images' && !viewer} />
+            viewer && i.hidden ? null : <MapImageSvg key={i.id} i={i} active={imageTool && !viewer} selected={i.id === selectedImage && imageTool && !viewer} />
           )}
           {/* Grid lines over the images, so an image can be lined up with them. */}
           <rect {...area} fill="url(#bm-grid)" pointerEvents="none" />
           <CentreMark area={area} zoom={view.zoom} />
-          {imagesShown.map((i) => (i.id === selectedImage && tool === 'images' && !viewer ? <ImageFrame key={i.id} i={i} /> : null))}
+          {imagesShown.map((i) => (i.id === selectedImage && imageTool && !viewer ? <ImageFrame key={i.id} i={i} /> : null))}
 
           {shown.map((t) => (
             <Template key={t.id} t={t} feetPerCell={map.feetPerCell} selected={t.id === selectedShape} movable={tool === 'move' && !viewer} />
@@ -889,9 +831,22 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
           {/* Walls as one shape (outline, then stone), so joins and corners merge; the picked one on top; doors over them all. Players only see doors. */}
           {!viewer && <WallLayer walls={wallsShown} />}
           {!viewer &&
-            wallsShown.map((w) => (!isOpening(w) && w.id === selectedWall ? <WallSvg key={w.id} w={w} selected editing={tool === 'walls'} doorClick={false} /> : null))}
-          {wallsShown.map((w) => (isOpening(w) ? <WallSvg key={w.id} w={w} selected={w.id === selectedWall} editing={tool === 'walls' && !viewer} doorClick={tool === 'move' && !viewer} /> : null))}
+            wallsShown.map((w) => (!isOpening(w) && (w.id === selectedWall || pickedWalls.includes(w.id)) ? <WallSvg key={w.id} w={w} selected editing={tool === 'walls'} doorClick={false} /> : null))}
+          {wallsShown.map((w) => (isOpening(w) ? <WallSvg key={w.id} w={w} selected={w.id === selectedWall || pickedWalls.includes(w.id)} editing={tool === 'walls' && !viewer} doorClick={tool === 'move' && !viewer} /> : null))}
           {drag?.kind === 'door' && <WallSvg w={{ id: 'draft', ...draftDoor(drag, map.walls, snap), ...(drag.window ? { window: true } : { door: true }) }} selected editing={false} doorClick={false} />}
+          {drag?.kind === 'marquee' && (
+            <rect
+              x={Math.min(drag.a.x, drag.b.x) * CELL}
+              y={Math.min(drag.a.y, drag.b.y) * CELL}
+              width={Math.abs(drag.b.x - drag.a.x) * CELL}
+              height={Math.abs(drag.b.y - drag.a.y) * CELL}
+              fill="var(--accent)"
+              fillOpacity={0.12}
+              stroke="var(--accent)"
+              strokeWidth={1.5 / view.zoom}
+              pointerEvents="none"
+            />
+          )}
           {drag?.kind === 'room' &&
             roomWalls(drag.a, drag.b, () => 'draft').map((w, i) => (
               <line key={i} x1={w.a.x * CELL} y1={w.a.y * CELL} x2={w.b.x * CELL} y2={w.b.y * CELL} stroke="var(--accent)" strokeWidth={4} strokeDasharray="8 5" strokeLinecap="round" pointerEvents="none" />
@@ -913,28 +868,6 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
           {!viewer && (tool === 'light' || lightsShown.some((l) => l.id === selectedLight)) &&
             lightsShown.map((l) => <LightMarker key={l.id} l={l} feetPerCell={map.feetPerCell} selected={l.id === selectedLight} active={tool === 'light'} />)}
 
-          {fogShapes.length > 0 && (
-            <>
-              <mask id="bm-fog" maskUnits="userSpaceOnUse" {...area}>
-                <rect {...area} fill="black" />
-                {fogShapes.map((f) => (
-                  <FogShapeSvg key={f.id} f={f} />
-                ))}
-              </mask>
-              <rect {...area} fill="#0b0907" opacity={viewer ? 1 : 0.6} mask="url(#bm-fog)" pointerEvents="none" />
-            </>
-          )}
-          {draftFog && <FogOutline f={draftFog} />}
-          {pickedShown && <FogOutline f={pickedShown} />}
-          {points && (
-            <g pointerEvents="none">
-              <polyline points={[...points, ...(hover ? [hover] : [])].map((q) => `${q.x * CELL},${q.y * CELL}`).join(' ')} fill="none" stroke={fogTool.op === 'add' ? 'var(--text-primary)' : 'var(--accent)'} strokeWidth={2} strokeDasharray="6 4" />
-              {points.map((q, i) => (
-                <circle key={i} cx={q.x * CELL} cy={q.y * CELL} r={i === 0 ? 7 : 4} fill={i === 0 ? 'var(--bg-surface)' : 'var(--text-primary)'} stroke="var(--accent)" strokeWidth={2} />
-              ))}
-            </g>
-          )}
-
           {/* The shape being placed or resized shows its size; a selected one has a handle to drag. */}
           {drag?.kind === 'shape' && <SizeLabel t={drag.t} feetPerCell={map.feetPerCell} />}
           {selectedShown && drag?.kind !== 'shape' && !selectedShown.locked && <Handle t={selectedShown} feetPerCell={map.feetPerCell} />}
@@ -953,11 +886,6 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
           <ShapeOptions t={shape} feetPerCell={map.feetPerCell} onChange={updateShape} onRemove={() => removeShape(shape.id)} onClose={() => setSelectedShape(null)} />
         </Beside>
       )}
-      {fogPicked && !shape && (
-        <Beside box={fogBox(fogPicked)} view={view} area={size}>
-          <FogOptions f={fogPicked} onChange={updateFog} onRemove={() => removeFog(fogPicked.id)} onClose={() => setSelectedFog(null)} />
-        </Beside>
-      )}
       {wallPicked && (
         <Beside box={{ x0: Math.min(wallPicked.a.x, wallPicked.b.x), y0: Math.min(wallPicked.a.y, wallPicked.b.y), x1: Math.max(wallPicked.a.x, wallPicked.b.x), y1: Math.max(wallPicked.a.y, wallPicked.b.y) }} view={view} area={size}>
           <WallOptions w={wallPicked} onChange={updateWall} onRemove={() => removeWall(wallPicked.id)} onClose={() => setSelectedWall(null)} />
@@ -968,7 +896,7 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
           <LightOptions l={lightPicked} onChange={updateLight} onRemove={() => removeLight(lightPicked.id)} onClose={() => setSelectedLight(null)} />
         </Beside>
       )}
-      {imagePicked && tool === 'images' && !viewer && (
+      {imagePicked && imageTool && !viewer && (
         <Beside box={{ x0: imagePicked.x, y0: imagePicked.y, x1: imagePicked.x + imagePicked.w, y1: imagePicked.y + imagePicked.h }} view={view} area={size}>
         <ImageOptions
           i={imagePicked}
@@ -1075,37 +1003,6 @@ function ShapeOptions({ t, feetPerCell, onChange, onRemove, onClose }: { t: MapT
         <LockToggle locked={!!t.locked} onChange={(locked) => onChange({ ...t, locked: locked || undefined })} />
         <HideToggle hidden={!!t.hidden} onChange={(hidden) => onChange({ ...t, hidden: hidden || undefined })} />
         <button type="button" className="gb-btn gb-btn--ghost" onClick={onRemove} disabled={t.locked} style={{ fontSize: 12, padding: '3px 8px', color: 'var(--danger)', marginLeft: 'auto', opacity: t.locked ? 0.4 : 1 }}>
-          Delete
-        </button>
-      </div>
-    </div>
-  )
-}
-
-const FOG_NAMES: Record<FogShape['kind'], string> = { rect: 'Square', circle: 'Circle', poly: 'Drawn shape', stroke: 'Brush stroke' }
-
-/** The picked fog: fog or cut, locked or not, and a way to remove it. */
-function FogOptions({ f, onChange, onRemove, onClose }: { f: FogShape; onChange: (f: FogShape) => void; onRemove: () => void; onClose: () => void }): JSX.Element {
-  return (
-    <div style={panel}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <strong style={{ flex: 1, fontSize: 13 }}>
-          {FOG_NAMES[f.kind]} ({f.op === 'add' ? 'fog' : 'cut'})
-        </strong>
-        <button type="button" onClick={onClose} title="Done" style={iconBtn}>
-          <XIcon size={11} />
-        </button>
-      </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {(['add', 'cut'] as const).map((op) => (
-          <button key={op} type="button" disabled={f.locked} onClick={() => onChange({ ...f, op })} style={{ ...presetBtn, ...(f.op === op ? { borderColor: 'var(--accent)', color: 'var(--accent-hover)' } : {}), opacity: f.locked ? 0.45 : 1 }}>
-            {op === 'add' ? 'Fog' : 'Cut'}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <LockToggle locked={!!f.locked} onChange={(locked) => onChange({ ...f, locked: locked || undefined })} />
-        <button type="button" className="gb-btn gb-btn--ghost" onClick={onRemove} disabled={f.locked} style={{ fontSize: 12, padding: '3px 8px', color: 'var(--danger)', marginLeft: 'auto', opacity: f.locked ? 0.4 : 1 }}>
           Delete
         </button>
       </div>
@@ -1295,13 +1192,6 @@ function LightOptions({ l, onChange, onRemove, onClose }: { l: MapLight; onChang
       </div>
       {feet('bright', 'Bright')}
       {feet('dim', 'Dim')}
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {LIGHT_PRESETS.map((pr) => (
-          <button key={pr.name} type="button" onClick={() => onChange({ ...l, bright: pr.bright, dim: pr.dim })} style={{ ...presetBtn, ...(l.bright === pr.bright && l.dim === pr.dim ? { borderColor: 'var(--accent)', color: 'var(--accent-hover)' } : {}) }} title={`${pr.bright} ft bright, ${pr.dim} ft dim`}>
-            {pr.name}
-          </button>
-        ))}
-      </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <button type="button" onClick={() => onChange({ ...l, off: !l.off || undefined })} style={{ ...presetBtn, ...(l.off ? {} : { borderColor: 'var(--accent)', color: 'var(--accent-hover)' }) }} title={l.off ? 'Put out — click to light it' : 'Lit — click to put it out'}>
           {l.off ? 'Off' : 'On'}
@@ -1317,13 +1207,14 @@ function LightOptions({ l, onChange, onRemove, onClose }: { l: MapLight; onChang
 
 /** Every wall (not door) drawn as one shape: all the dark edges first, then all the stone, so where walls meet they read as one wall. */
 function WallLayer({ walls }: { walls: MapWall[] }): JSX.Element | null {
-  const d = walls
-    .filter((w) => !isOpening(w))
-    .map((w) => `M${w.a.x * CELL} ${w.a.y * CELL}L${w.b.x * CELL} ${w.b.y * CELL}`)
-    .join('')
-  if (!d) return null
+  const path = (list: MapWall[]): string => list.map((w) => `M${w.a.x * CELL} ${w.a.y * CELL}L${w.b.x * CELL} ${w.b.y * CELL}`).join('')
+  const d = path(walls.filter((w) => !isOpening(w) && !w.blocker))
+  const blockers = path(walls.filter((w) => w.blocker))
+  if (!d && !blockers) return null
   return (
     <g pointerEvents="none">
+      {/* Blockers: only the DM sees them, as a dashed red line. */}
+      {blockers && <path d={blockers} fill="none" stroke="#e05a4f" strokeWidth={3} strokeDasharray="8 6" strokeLinecap="round" strokeOpacity={0.85} />}
       <path d={d} fill="none" stroke="rgba(0,0,0,0.75)" strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" />
       <path d={d} fill="none" stroke="#d9cba8" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
       <path d={d} fill="none" stroke="#efe4c8" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" strokeOpacity={0.7} />
@@ -1408,7 +1299,7 @@ function LightMarker({ l, feetPerCell, selected, active }: { l: MapLight; feetPe
   return (
     <g data-light={l.id} style={{ cursor: active ? (l.locked ? 'not-allowed' : 'move') : undefined }} pointerEvents={active ? undefined : 'none'} opacity={l.off ? 0.5 : 1}>
       <title>{`Light — ${l.bright} ft bright, ${l.dim} ft dim${l.off ? ' (off)' : ''}`}</title>
-      {(selected || active) && (
+      {selected && (
         <>
           <circle cx={cx} cy={cy} r={ring(l.bright)} fill="none" stroke="#f2c94c" strokeWidth={1.5} strokeDasharray="6 5" pointerEvents="none" />
           <circle cx={cx} cy={cy} r={ring(l.bright + l.dim)} fill="none" stroke="#f2c94c" strokeOpacity={0.5} strokeWidth={1.5} strokeDasharray="3 6" pointerEvents="none" />
@@ -1573,36 +1464,6 @@ export function LockToggle({ locked, onChange }: { locked: boolean; onChange: (l
       {locked ? 'Locked' : 'Lock'}
     </button>
   )
-}
-
-/** One fog shape in the fog mask: white paints fog, black cuts it. */
-function FogShapeSvg({ f }: { f: FogShape }): JSX.Element {
-  const colour = f.op === 'add' ? 'white' : 'black'
-  switch (f.kind) {
-    case 'rect':
-      return <rect x={f.x * CELL} y={f.y * CELL} width={f.w * CELL} height={f.h * CELL} fill={colour} />
-    case 'circle':
-      return <circle cx={f.cx * CELL} cy={f.cy * CELL} r={f.r * CELL} fill={colour} />
-    case 'poly':
-      return <polygon points={f.points.map((q) => `${q.x * CELL},${q.y * CELL}`).join(' ')} fill={colour} />
-    case 'stroke':
-      return <polyline points={f.points.map((q) => `${q.x * CELL},${q.y * CELL}`).join(' ')} fill="none" stroke={colour} strokeWidth={f.width * CELL} strokeLinecap="round" strokeLinejoin="round" />
-  }
-}
-
-/** A dashed outline of the fog shape being drawn — light for fog, orange for a cut. */
-function FogOutline({ f }: { f: FogShape }): JSX.Element {
-  const style = { fill: 'none', stroke: f.op === 'add' ? 'var(--text-primary)' : 'var(--accent)', strokeWidth: 2, strokeDasharray: '6 4', pointerEvents: 'none' as const }
-  switch (f.kind) {
-    case 'rect':
-      return <rect x={f.x * CELL} y={f.y * CELL} width={f.w * CELL} height={f.h * CELL} {...style} />
-    case 'circle':
-      return <circle cx={f.cx * CELL} cy={f.cy * CELL} r={f.r * CELL} {...style} />
-    case 'poly':
-      return <polygon points={f.points.map((q) => `${q.x * CELL},${q.y * CELL}`).join(' ')} {...style} />
-    case 'stroke':
-      return <polyline points={f.points.map((q) => `${q.x * CELL},${q.y * CELL}`).join(' ')} {...style} />
-  }
 }
 
 /**

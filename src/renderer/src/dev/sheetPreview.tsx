@@ -312,6 +312,7 @@ const musicApi = {
 // ?friends and ?packs: a few friends, a request, and two packs (one on for the campaign).
 const relayApi = {
   status: async () => 'connected',
+  myUserId: async () => 'me',
   getAvatar: async () => null,
   setAvatar: async () => ({ ok: true, data: undefined }),
   onFriendsChanged: () => () => {},
@@ -336,6 +337,22 @@ const relayApi = {
   }
 }
 // ?account and ?messages: who you are, and a party chat with a few lines.
+// ?combat's Props tool: an in-memory library (pictures don't show, since they'd come from the campaign folder).
+let fakeProps = { folders: ['Furniture', 'Nature'], props: [{ path: 'Furniture/Table.webp', name: 'Table', folder: 'Furniture' }, { path: 'Furniture/Chair.webp', name: 'Chair', folder: 'Furniture' }, { path: 'Nature/Oak tree.webp', name: 'Oak tree', folder: 'Nature' }, { path: 'Barrel.webp', name: 'Barrel', folder: '' }] }
+const propsResult = async (next = fakeProps) => {
+  fakeProps = next
+  return { ok: true, data: fakeProps }
+}
+const propsApi = {
+  list: async () => propsResult(),
+  read: async () => ({ ok: true, data: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" rx="6" fill="#8b5a2b"/></svg>')}` }),
+  add: async (_c: string, folder: string, items: { name: string }[]) => propsResult({ ...fakeProps, props: [...fakeProps.props, ...items.map((i) => ({ path: `${folder ? folder + '/' : ''}${i.name}.webp`, name: i.name, folder }))] }),
+  rename: async (_c: string, path: string, name: string) => propsResult({ ...fakeProps, props: fakeProps.props.map((p) => (p.path === path ? { ...p, name, path: `${p.folder ? p.folder + '/' : ''}${name}.webp` } : p)) }),
+  move: async (_c: string, paths: string[], folder: string) => propsResult({ ...fakeProps, props: fakeProps.props.map((p) => (paths.includes(p.path) ? { ...p, folder, path: `${folder ? folder + '/' : ''}${p.name}.webp` } : p)) }),
+  trash: async (_c: string, paths: string[]) => propsResult({ folders: fakeProps.folders.filter((f) => !paths.includes(f)), props: fakeProps.props.filter((p) => !paths.includes(p.path) && !paths.includes(p.folder)) }),
+  createFolder: async (_c: string, parent: string, name: string) => propsResult({ ...fakeProps, folders: [...fakeProps.folders, parent ? `${parent}/${name}` : name].sort() }),
+  renameFolder: async (_c: string, folder: string, name: string) => propsResult({ folders: fakeProps.folders.map((f) => (f === folder ? name : f)), props: fakeProps.props.map((p) => (p.folder === folder ? { ...p, folder: name, path: `${name}/${p.name}.webp` } : p)) })
+}
 const identityApi = {
   getCurrent: async () => ({ id: 'me', displayName: 'Kian' }),
   hasRemembered: async () => true,
@@ -514,7 +531,7 @@ const handoutsApi = {
 }
 ;(window as unknown as { goblin: unknown }).goblin = new Proxy(
   {},
-  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : key === 'handouts' ? handoutsApi : key === 'quests' ? questsApi : key === 'stash' ? stashApi : key === 'reputation' ? reputationApi : key === 'worldMap' ? worldMapApi : key === 'campaigns' ? campaignsApi : base[key]) }
+  { get: (_t, key) => (key === 'identity' ? identityApi : key === 'messages' ? messagesApi : key === 'relay' ? relayApi : key === 'packs' ? packsApi : key === 'campaignPacks' ? campaignPacksApi : key === 'music' ? musicApi : key === 'calendar' ? calendarApi : key === 'vehicles' ? vehiclesApi : key === 'battleMap' ? battleMapApi : key === 'initiative' ? initiativeApi : key === 'characters' ? charactersApi : key === 'handouts' ? handoutsApi : key === 'quests' ? questsApi : key === 'stash' ? stashApi : key === 'reputation' ? reputationApi : key === 'worldMap' ? worldMapApi : key === 'campaigns' ? campaignsApi : key === 'props' ? propsApi : base[key]) }
 )
 
 // A demo pack with a starship, for the vehicles preview's "Add a vehicle".

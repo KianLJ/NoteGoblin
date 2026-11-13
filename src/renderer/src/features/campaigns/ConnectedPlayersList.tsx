@@ -5,6 +5,27 @@ import { ForceRollDialog } from './ForceRollDialog'
 import { useLastTruthy } from '../../ui/useLastTruthy'
 import { DiceIcon } from '../player/characterSheetTabs/icons'
 import { playSfx } from '../audio/soundEffects'
+import { Modal } from '../../ui/Modal'
+import { Button } from '../../ui/Button'
+import { XIcon } from '../../ui/icons'
+
+function SheetIcon(): JSX.Element {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <rect x="3" y="1.5" width="10" height="13" rx="1.2" />
+      <path d="M5.5 5h5M5.5 8h5M5.5 11h3" />
+    </svg>
+  )
+}
+
+function CopyIcon(): JSX.Element {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="5" width="8.5" height="9" rx="1.2" />
+      <path d="M3 10.5V3a1 1 0 0 1 1-1h6.5" />
+    </svg>
+  )
+}
 
 interface ConnectedPlayersListProps {
   sessionId: string | null
@@ -23,6 +44,8 @@ export function ConnectedPlayersList({
   const [players, setPlayers] = useState<PresencePlayer[]>([])
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [forceRollTarget, setForceRollTarget] = useState<PresencePlayer | null>(null)
+  const [kickTarget, setKickTarget] = useState<PresencePlayer | null>(null)
+  const lastKickTarget = useLastTruthy(kickTarget)
   const lastForceRollTarget = useLastTruthy(forceRollTarget)
   const [myName, setMyName] = useState('The DM')
   const [disconnectToast, setDisconnectToast] = useState<string | null>(null)
@@ -36,11 +59,25 @@ export function ConnectedPlayersList({
 
   function openMenu(e: MouseEvent, player: PresencePlayer): void {
     e.preventDefault()
+    const character = playerCharacters.get(player.userId)
     setMenu({
       x: e.clientX,
       y: e.clientY,
-      items: [{ label: 'Force a roll…', icon: <DiceIcon size={13} />, onSelect: () => setForceRollTarget(player) }]
+      items: [
+        ...(character ? [{ label: `Open ${character.name}’s sheet`, icon: <SheetIcon />, onSelect: () => onSelectPlayer(player.userId) }] : []),
+        { label: 'Force a roll…', icon: <DiceIcon size={13} />, onSelect: () => setForceRollTarget(player) },
+        { label: `Copy ${player.displayName}’s name`, icon: <CopyIcon />, onSelect: () => void navigator.clipboard.writeText(player.displayName) },
+        { label: 'Remove from the table…', icon: <XIcon size={12} />, danger: true, separatorBefore: true, onSelect: () => setKickTarget(player) }
+      ]
     })
+  }
+
+  async function kick(player: PresencePlayer): Promise<void> {
+    setKickTarget(null)
+    const result = await window.goblin.sessions.kick(player.userId)
+    setDisconnectToast(result.ok ? `${player.displayName} was removed from the table.` : result.error)
+    clearTimeout(disconnectTimerRef.current)
+    disconnectTimerRef.current = setTimeout(() => setDisconnectToast(null), 4000)
   }
 
   function sendForceRoll(player: PresencePlayer, request: ForceRollRequest): void {
@@ -72,7 +109,7 @@ export function ConnectedPlayersList({
           receivedFirstUpdate = true
           if (left) {
             playSfx('playerDisconnected')
-            setDisconnectToast(left.displayName)
+            setDisconnectToast(`${left.displayName} disconnected.`)
             clearTimeout(disconnectTimerRef.current)
             disconnectTimerRef.current = setTimeout(() => setDisconnectToast(null), 5000)
           }
@@ -85,7 +122,7 @@ export function ConnectedPlayersList({
 
   const toast = disconnectToast && (
     <p key={disconnectToast} className="gb-toast-fade" style={{ fontSize: 12, color: 'var(--text-muted)', padding: 'var(--space-2) var(--space-3) 0' }}>
-      {disconnectToast} disconnected.
+      {disconnectToast}
     </p>
   )
 
@@ -120,7 +157,7 @@ export function ConnectedPlayersList({
             key={player.userId}
             onClick={character ? () => onSelectPlayer(player.userId) : undefined}
             onContextMenu={(e) => openMenu(e, player)}
-            title={character ? `View ${character.name}'s sheet — right-click to force a roll` : 'Right-click to force a roll'}
+            title={character ? `View ${character.name}'s sheet — right-click for more` : 'Right-click for more'}
             style={{
               padding: 'var(--space-2) var(--space-3)',
               borderBottom: '1px solid var(--border-subtle)',
@@ -151,6 +188,19 @@ export function ConnectedPlayersList({
       })}
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
+      <Modal open={kickTarget !== null} onClose={() => setKickTarget(null)} width={360}>
+        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 var(--space-4)' }}>
+          Remove {lastKickTarget?.displayName} from the table? They’re disconnected now, and need inviting again to come back. Their notes and character stay.
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+          <Button variant="secondary" onClick={() => setKickTarget(null)}>
+            Cancel
+          </Button>
+          <Button variant="primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => kickTarget && void kick(kickTarget)}>
+            Remove
+          </Button>
+        </div>
+      </Modal>
       {lastForceRollTarget && (
         <ForceRollDialog
           key={lastForceRollTarget.userId}

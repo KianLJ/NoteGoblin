@@ -58,3 +58,16 @@ export function readAvatarFile(file: File): Promise<string> {
     img.src = url
   })
 }
+
+/** Your relay user id (null until known, or signed out): what hidden blocks and scenes name you by. */
+export function useMyUserId(): string | null {
+  const [id, setId] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    void window.goblin.relay.myUserId().then((v) => live && setId(v))
+    return () => {
+      live = false
+    }
+  }, [])
+  return id
+}

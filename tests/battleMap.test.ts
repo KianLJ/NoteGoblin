@@ -233,3 +233,23 @@ describe('long tokens', () => {
     expect(again.tokens['ship-2']).toMatchObject({ size: 2, h: 8, sized: true })
   })
 })
+
+describe('blockers', () => {
+  it('stop tokens but not sight, and alone do not turn vision on', async () => {
+    const { blockingWalls, visionActive } = await import('@shared/vision')
+    const map = { ...emptyBattleMap(), walls: [{ id: 'b', a: { x: 0, y: 0 }, b: { x: 2, y: 0 }, blocker: true }] }
+    expect(blockingWalls(map, 'move')).toHaveLength(1)
+    expect(blockingWalls(map, 'sight')).toHaveLength(0)
+    expect(visionActive(map)).toBe(false)
+  })
+})
+
+describe('picking walls with a box', () => {
+  it('picks a wall the box touches: an end inside, or passing through it', async () => {
+    const { segTouchesBox } = await import('@shared/vision')
+    const box = { x0: 0, y0: 0, x1: 2, y1: 2 }
+    expect(segTouchesBox({ a: { x: 1, y: 1 }, b: { x: 5, y: 5 } }, box)).toBe(true)
+    expect(segTouchesBox({ a: { x: -1, y: 1 }, b: { x: 3, y: 1 } }, box)).toBe(true)
+    expect(segTouchesBox({ a: { x: 3, y: 0 }, b: { x: 3, y: 5 } }, box)).toBe(false)
+  })
+})

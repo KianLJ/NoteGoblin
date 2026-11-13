@@ -9,6 +9,7 @@ import {
 } from 'react'
 import type { Folder, Note } from '@shared/ipc'
 import { ContextMenu, type ContextMenuItem, type ContextMenuState } from '../../ui/ContextMenu'
+import { useDragSelect } from '../../ui/useDragSelect'
 import { Modal } from '../../ui/Modal'
 import { useLastTruthy } from '../../ui/useLastTruthy'
 import { Button } from '../../ui/Button'
@@ -181,6 +182,9 @@ export function NoteTreeSection({
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Drag a box from empty space round notes and folders to select them (Ctrl or Shift adds to the selection).
+  const listRef = useRef<HTMLDivElement>(null)
+  useDragSelect(listRef, (keys, additive) => setSelected((prev) => new Set(additive ? [...prev, ...keys] : keys)))
   const [pendingDelete, setPendingDelete] = useState<{ message: string; folderIds: string[]; noteIds: string[] } | null>(null)
   const lastPendingDelete = useLastTruthy(pendingDelete)
   const lastSelectedKeyRef = useRef<string | null>(null)
@@ -655,6 +659,7 @@ export function NoteTreeSection({
     return (
       <div key={folder.id}>
         <div
+          data-select-id={makeKey('folder', folder.id)}
           tabIndex={0}
           draggable={!isRenaming && canManage}
           title={isMine ? undefined : `Created by ${folder.authorDisplayName}`}
@@ -760,6 +765,7 @@ export function NoteTreeSection({
     return (
       <div
         key={note.id}
+        data-select-id={makeKey('note', note.id)}
         ref={(el) => {
           if (el) rowRefs.current.set(note.id, el)
           else rowRefs.current.delete(note.id)
@@ -964,6 +970,7 @@ export function NoteTreeSection({
       )}
 
       <div
+        ref={listRef}
         onContextMenu={openBackgroundMenu}
         onClick={() => setSelected(new Set())}
         onDragOver={handleRootDragOver}

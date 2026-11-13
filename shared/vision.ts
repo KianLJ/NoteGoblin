@@ -62,12 +62,12 @@ export const LIGHT_PRESETS: Array<{ name: string; bright: number; dim: number }>
  * windows are glass; for movement, every wall, closed door and closed window.
  */
 export function blockingWalls(map: Pick<BattleMap, 'walls'>, use: 'sight' | 'move' = 'sight'): Seg[] {
-  return map.walls.filter((w) => (w.window ? use === 'move' && !w.open : !w.door || !w.open))
+  return map.walls.filter((w) => (w.blocker ? use === 'move' : w.window ? use === 'move' && !w.open : !w.door || !w.open))
 }
 
 /** Whether the map restricts what players see: once it has walls, or it's dark. A plain lit map shows everything, as before. */
 export function visionActive(map: Pick<BattleMap, 'walls' | 'ambient'>): boolean {
-  return map.walls.length > 0 || map.ambient === 'dark'
+  return map.walls.some((w) => !w.blocker) || map.ambient === 'dark'
 }
 
 /** Where segment p→q meets segment a→b: t along p→q, u along a→b (both 0–1 inside them); null when parallel. */
@@ -392,6 +392,22 @@ export function addExplored(code: string | undefined, r: Region): string {
 }
 
 /** The nearest wall to a point (in squares), within `within`, for picking one to change. */
+/** Whether segment a→b touches the box (x0,y0)–(x1,y1): an end inside it, or crossing one of its sides. */
+export function segTouchesBox(s: Seg, box: { x0: number; y0: number; x1: number; y1: number }): boolean {
+  const inside = (p: Pt): boolean => p.x >= box.x0 && p.x <= box.x1 && p.y >= box.y0 && p.y <= box.y1
+  if (inside(s.a) || inside(s.b)) return true
+  const c = [
+    { x: box.x0, y: box.y0 },
+    { x: box.x1, y: box.y0 },
+    { x: box.x1, y: box.y1 },
+    { x: box.x0, y: box.y1 }
+  ]
+  return c.some((p, i) => {
+    const hit = intersect(s.a, s.b, p, c[(i + 1) % 4])
+    return !!hit && hit.t >= 0 && hit.t <= 1 && hit.u >= 0 && hit.u <= 1
+  })
+}
+
 export function wallAt<W extends Seg>(walls: W[], p: Pt, within = 0.3): W | null {
   let best: W | null = null
   let bestD = within

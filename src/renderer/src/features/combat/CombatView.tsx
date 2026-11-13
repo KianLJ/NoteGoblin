@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import { sortedByInitiative, withCombatantHp, type Combatant } from '@shared/encounter'
-import { activeBattle, canStand, startArea, MAX_TOKEN_SIZE, tokenCentre, turnToken, fogEverything, hiddenCombatantIds, isFogged, isTestUser, newBattle, type Ambient, type BattleMap, type MapImage, type Pt, type TemplateKind } from '@shared/battleMap'
+import { activeBattle, canStand, startArea, MAX_TOKEN_SIZE, tokenCentre, turnToken, hiddenCombatantIds, isFogged, isTestUser, newBattle, type Ambient, type BattleMap, type MapImage, type Pt, type TemplateKind } from '@shared/battleMap'
 import { lightsOf, LIGHT_PRESETS, viewerKey, viewerSources, visionActive } from '@shared/vision'
 import { buildCheckRollEntry, diceGroups } from '@shared/dice'
 import { deriveSheet } from '@shared/content/sheet'
@@ -35,11 +35,13 @@ import { playSfx } from '../audio/soundEffects'
 import { CharacterTabs, HpControls, InitiativeField, MonsterAbilities, Stat, hpChange } from './CombatPanels'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { ResizableSidebar } from '../../ui/ResizableSidebar'
-import { BattleMapView, HideToggle, LockToggle, type FogTool, type MapTool, type Sight, type WallDraw } from './BattleMapView'
-import { MapControls, RAIL, ToolOptions, ToolRail, railKey, type RailTool } from './MapToolbar'
+import { BattleMapView, HideToggle, LockToggle, type MapTool, type Sight, type WallDraw } from './BattleMapView'
+import { MapControls, RAIL, ToolOptions, ToolRail, railKey, type LightPreset, type PropMode, type RailTool } from './MapToolbar'
 import { TestPlayersMenu } from './TestPlayersMenu'
 import { EncounterLibrary } from './EncounterLibrary'
 import { useRemoteDrags } from './useRemoteDrags'
+import { imageSize } from '../../data/propLibrary'
+import { PropLibrary } from './PropLibrary'
 
 interface CombatViewProps {
   /** The session the DM is hosting — rolls and turn cues go to the table. */
@@ -66,9 +68,11 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
   const { monsters } = useAllMonsters()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tool, setTool] = useState<MapTool>('move')
+  const [propsOpen, setPropsOpen] = useState(true)
   const [hint, setHint] = useState(RAIL[0].hint)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [fogTool, setFogTool] = useState<FogTool>({ op: 'add', draw: 'rect', width: 1 })
+  const [propMode, setPropMode] = useState<PropMode>('place')
+  const [newLight, setNewLight] = useState<LightPreset>(LIGHT_PRESETS[1])
   const [wallDraw, setWallDraw] = useState<WallDraw>('room')
   // The spell area the Spell areas tool places (the last one picked).
   const [shapeKind, setShapeKind] = useState<TemplateKind>('cone')
@@ -89,11 +93,12 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
   }
 
   function pickTool(r: RailTool): void {
+    if (r === 'props') setPropsOpen(true)
     setTool(r === 'shapes' ? shapeKind : r)
     setHint(RAIL.find((x) => x.tool === r)!.hint)
   }
 
-  // A tool's key picks it (V, R, S, F, W, L, I) — the player's tools only, while playing as one.
+  // A tool's key picks it (V, R, S, F, W, L, I, P) — the player's tools only, while playing as one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const r = railKey(e, !!playAs)
@@ -102,6 +107,22 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  /** A prop goes in the middle of the view, a square and a half across at its longest, picked so it can be dragged and sized straight away. */
+  async function addProp(path: string, name: string): Promise<void> {
+    if (!campaignId) return
+    const read = await window.goblin.props.read(campaignId, path)
+    if (!read.ok) return setHint(read.error)
+    const { w: nw, h: nh } = await imageSize(read.data)
+    const centre = centreRef.current?.() ?? { x: 0, y: 0 }
+    const long = 1.5
+    const w = nw >= nh ? long : Math.max(0.5, (long * nw) / nh)
+    const h = nw >= nh ? Math.max(0.5, (long * nh) / nw) : long
+    const added: MapImage = { id: crypto.randomUUID(), src: read.data, x: centre.x - w / 2, y: centre.y - h / 2, w, h, naturalW: nw, naturalH: nh }
+    setMap((m) => ({ ...m, images: [...m.images, added] }))
+    setSelectedImage(added.id)
+    setHint(`${name} added. Drag it into place, and drag its corner to size it. Add a blocker (Walls & doors) if tokens shouldn’t walk through it.`)
+  }
 
   /** Map images go in the middle of the view, 20 squares across (drag the corner, or set pixels per square, to fit the grid). */
   function addImages(files: File[]): void {
@@ -126,7 +147,7 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
     })
   }
 
-  // Ctrl+Z undoes the last map change (a move, a shape, fog); Ctrl+Y or Ctrl+Shift+Z redoes it. Typing in a box keeps its own undo.
+  // Ctrl+Z undoes the last map change (a move, a shape, a wall); Ctrl+Y or Ctrl+Shift+Z redoes it. Typing in a box keeps its own undo.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const el = e.target as HTMLElement
@@ -274,14 +295,14 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{encounter.combatants.length === 0 ? 'Add combatants in the tracker on the left, or load an encounter from a session scene.' : ''}</span>
         <div style={{ flex: 1 }} />
         <TestPlayersMenu />
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title="Use the map as a player would: see only what they see, and move only their token (walls, doors and fog stop it)">
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title="Use the map as a player would: see only what they see, and move only their token (walls and doors stop it)">
           Play as
           <select
             className="gb-input"
             value={playAs}
             onChange={(e) => {
               setPlayAs(e.target.value)
-              setHint(e.target.value ? 'Drag your token to move it — walls, closed doors and fog stop it. Scroll to zoom.' : RAIL[0].hint)
+              setHint(e.target.value ? 'Drag your token to move it — walls and closed doors stop it. Scroll to zoom.' : RAIL[0].hint)
             }}
             style={{ fontSize: 12, padding: '2px 6px', maxWidth: 170 }}
           >
@@ -329,9 +350,10 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
             turnId={turnId}
             selectedId={selectedId}
             onSelect={setSelectedId}
-            tool={tool}
-            fogTool={fogTool}
-            wallDraw={wallDraw}
+            // Blockers belong to the Props tool, but they're drawn and picked the way walls are.
+            tool={tool === 'props' && propMode !== 'place' ? 'walls' : tool}
+            newLight={newLight}
+            wallDraw={tool === 'props' ? (propMode === 'blocker' ? 'blocker' : 'selectBlocker') : wallDraw}
             snap={snap}
             onHint={setHint}
             sight={sight}
@@ -371,6 +393,8 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
             }}
           />
           <ToolRail tool={tool} onTool={pickTool} playerOnly={!!playAs} />
+          {/* The chosen tool's options and undo/redo share one row, so they can never overlap. */}
+          <div style={{ position: 'absolute', top: 12, left: 64, right: 12, zIndex: 5, display: 'flex', alignItems: 'flex-start', gap: 8, pointerEvents: 'none' }}>
           {!playAs && (
             <ToolOptions
               tool={tool}
@@ -378,13 +402,26 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
                 setShapeKind(k)
                 setTool(k)
               }}
-              fogTool={fogTool}
-              onFogTool={setFogTool}
+              propMode={propMode}
+              onPropMode={setPropMode}
+              newLight={newLight}
+              onNewLight={setNewLight}
               wallDraw={wallDraw}
               onWallDraw={setWallDraw}
               onAddImages={addImages}
+              onOpenProps={() => setPropsOpen(true)}
               onHint={setHint}
             />
+          )}
+          {playAs && (
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+              <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 6px 14px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--accent)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', fontSize: 12, color: 'var(--text-primary)' }}>
+                <span>Playing as {playingName}: you see and move as they would.</span>
+                <button type="button" className="gb-btn gb-btn--secondary" style={{ fontSize: 12, padding: '2px 10px', whiteSpace: 'nowrap' }} onClick={() => setPlayAs('')}>
+                  Back to DM
+                </button>
+              </div>
+            </div>
           )}
           <MapControls
             canUndo={canUndoBattleMap()}
@@ -396,16 +433,8 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
             settingsOpen={settingsOpen}
             onSettings={() => setSettingsOpen((o) => !o)}
           />
-          {playAs && (
-            <div style={{ position: 'absolute', top: 12, left: 64, right: 190, zIndex: 5, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-              <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 6px 14px', borderRadius: 10, background: 'var(--bg-surface)', border: '1px solid var(--accent)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', fontSize: 12, color: 'var(--text-primary)' }}>
-                <span>Playing as {playingName}: you see and move as they would.</span>
-                <button type="button" className="gb-btn gb-btn--secondary" style={{ fontSize: 12, padding: '2px 10px', whiteSpace: 'nowrap' }} onClick={() => setPlayAs('')}>
-                  Back to DM
-                </button>
-              </div>
-            </div>
-          )}
+          </div>
+          {!playAs && tool === 'props' && propsOpen && campaignId && <PropLibrary campaignId={campaignId} onPlace={(path, name) => void addProp(path, name)} onClose={() => setPropsOpen(false)} onHint={setHint} />}
           {settingsOpen && <MapSettings map={map} onChange={setMap} onClose={() => setSettingsOpen(false)} />}
           <div style={{ position: 'absolute', left: 12, bottom: 12, maxWidth: 'calc(100% - 80px)', fontSize: 12, color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: 8, pointerEvents: 'none' }}>{hint}</div>
         </section>
@@ -950,12 +979,6 @@ function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m:
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, fog: [fogEverything(map)] })} title="Cover the whole map, then cut away what the party can see">
-          Fog everything
-        </button>
-        <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, fog: [] })} disabled={map.fog.length === 0}>
-          Clear fog
-        </button>
         <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, templates: [] })} disabled={map.templates.length === 0}>
           Clear templates
         </button>

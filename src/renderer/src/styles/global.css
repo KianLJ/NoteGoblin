@@ -238,3 +238,84 @@ button {
 :root[data-theme='dark'] .gb-slider {
   background: var(--text-muted);
 }
+
+/* The box drawn while drag-selecting (see ui/useDragSelect.ts). */
+.gb-drag-select {
+  position: fixed;
+  z-index: 10000;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  pointer-events: none;
+}
+
+/* The app's top bar: round icon buttons, in groups. */
+.gb-topbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+.gb-topbtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.gb-topbtn:hover {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+.gb-topbtn.on {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+.gb-topbtn-num {
+  font-variant-numeric: tabular-nums;
+}
+/* A count in the corner (unread messages, friend requests). */
+.gb-topbtn-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 2px solid var(--bg-canvas);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+}
+/* Connected to the relay or not. */
+.gb-topbtn-dot {
+  position: absolute;
+  left: 18px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-surface);
+  background: var(--text-muted);
+}
+.gb-topbtn-dot--on {
+  background: var(--success);
+}

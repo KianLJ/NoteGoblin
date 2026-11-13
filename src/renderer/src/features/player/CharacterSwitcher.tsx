@@ -14,10 +14,8 @@ interface CharacterSwitcherProps {
   onRequestEdit: (character: CharacterSheet) => void
   /** Deletion lives here, not on the sheet itself — a character you're actively looking at is exactly where a stray click is most likely to land, so it's somewhere you only visit to switch/manage characters, behind a two-click confirm. */
   onDelete: (character: CharacterSheet) => void
-  /** The joined session id, if any — Leave only makes sense (and only shows) while actually connected to someone's table. */
+  /** The joined session id, if any (the switcher's button shows when you're at someone's table). */
   sessionId: string | null
-  /** Fired after sessions.leave() resolves — clears the player's joinedSession state, same as the DM-initiated disconnect path AppShell already handles. */
-  onLeaveSession: () => void
 }
 
 /**
@@ -25,21 +23,34 @@ interface CharacterSwitcherProps {
  * characters (edit and delete on hover), a new one, and leaving the table — the player side's twin of
  * CampaignSwitcher, sharing its look (canvas.css's gb-switcher-*). Classic layout keeps the old one (ClassicCharacterSwitcher).
  */
-export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onRequestEdit, onDelete, sessionId, onLeaveSession }: CharacterSwitcherProps): JSX.Element {
+/** Leaving the DM's table: beside the campaign's name, top left, like the DM's Host button. */
+export function LeaveTableButton({ onLeft }: { onLeft: () => void }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  return (
+    <ConfirmButton
+      label={busy ? 'Leaving…' : 'Leave'}
+      confirmLabel="Leave the table?"
+      variant="ghost"
+      danger
+      disabled={busy}
+      onConfirm={async () => {
+        setBusy(true)
+        await window.goblin.sessions.leave()
+        stopMusic()
+        setBusy(false)
+        onLeft()
+      }}
+      title="Disconnect from the DM’s session"
+      style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999 }}
+    />
+  )
+}
+
+export function CharacterSwitcher({ characters, current, onSelect, onRequestCreate, onRequestEdit, onDelete, sessionId }: CharacterSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   // Two clicks to delete: the first arms the row's delete ("Delete?"), the second deletes. Anything else disarms it.
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
-  const [leaveBusy, setLeaveBusy] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  async function leaveSession(): Promise<void> {
-    setLeaveBusy(true)
-    await window.goblin.sessions.leave()
-    stopMusic()
-    setLeaveBusy(false)
-    setOpen(false)
-    onLeaveSession()
-  }
 
   useEffect(() => {
     if (!open) {
@@ -126,22 +137,6 @@ export function CharacterSwitcher({ characters, current, onSelect, onRequestCrea
           >
             + New character
           </button>
-
-          {sessionId && (
-            <div className="gb-switcher-hosting">
-              <span className="gb-switcher-hosting-label gb-switcher-hosting-label--on">At the DM’s table</span>
-              <ConfirmButton
-                label="Leave"
-                confirmLabel="Sure?"
-                variant="ghost"
-                danger
-                disabled={leaveBusy}
-                onConfirm={() => void leaveSession()}
-                title="Disconnect from this session"
-                style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999 }}
-              />
-            </div>
-          )}
         </div>
       )}
 

@@ -262,7 +262,6 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter, campai
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 tool={tool}
-                fogTool={{ op: 'add', draw: 'rect', width: 1 }}
                 snap
                 onHint={setHint}
                 viewer={{ canDrag: (id) => mine.has(id), onMoveToken: (id, x, y) => void move(id, x, y), onFaceToken: (id, facing) => void face(id, facing) }}

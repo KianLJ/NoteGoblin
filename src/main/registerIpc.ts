@@ -26,12 +26,14 @@ import { getRelaySession, getRelayStatus, isFriendOnline, getFriendHostingSessio
 import { initAudioSync, noteAudioRemoved, scheduleAudioSync, setLibraryMeta, type LibraryMeta } from './audioSync'
 import { queryOnline, connectPresence } from './relaySocket'
 import { setDiscordActivity } from './discordPresence'
+import { addProps, createPropFolder, listProps, readProp, moveProps, renameProp, renamePropFolder, trashProps } from './propLibrary'
 import { listCustomMusic, addCustomMusicTrack, removeCustomMusicTrack, renameCustomMusicTrack, getCustomMusicTrack, mimeTypeForPath } from './customMusic'
 import { listCustomEntitySfx, setCustomEntitySfx, removeCustomEntitySfx } from './customEntitySfx'
 import {
   startSessionHost,
   stopSessionHost,
   inviteToSession,
+  kickFromSession,
   subscribeDmPresence,
   broadcastCampaignChanged,
   broadcastActiveCampaignChanged,
@@ -85,6 +87,7 @@ import type {
   SessionStartResult,
   SessionStatus,
   ApiResult,
+  PropListing,
   Campaign,
   Note,
   Folder,
@@ -453,6 +456,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const relaySession = getRelaySession()
     if (!relaySession) return { ok: false, error: 'Not connected to the relay.' }
     const result = await inviteToSession(relaySession.token, friendUserId)
+    return result.ok ? { ok: true, data: undefined } : result
+  })
+
+  ipcMain.handle('sessions:kick', async (_event, userId: string): Promise<ApiResult<void>> => {
+    if (!getHostedSession()) return { ok: false, error: 'Not hosting.' }
+    const relaySession = getRelaySession()
+    if (!relaySession) return { ok: false, error: 'Not connected to the relay.' }
+    const result = await kickFromSession(relaySession.token, String(userId))
     return result.ok ? { ok: true, data: undefined } : result
   })
 
@@ -1271,7 +1282,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const me = ensureMyHostUser()
     if (!('error' in me)) {
       // Its first scene is shown to the table now (before the deck's marked presented — see revealScene).
-      campaignService.revealScene(me.db, campaignId, deckId, me.userId, 0)
+      campaignService.revealScene(me.db, campaignId, deckId, me.userId, 0, playersInCampaign(campaignId))
       const result = campaignService.markDeckPresented(me.db, campaignId, deckId, me.userId)
       // Flips the deck from invisible-to-players to visible — even a player
       // just sitting on the Sessions tab (not yet auto-followed anything)
@@ -1286,7 +1297,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     if (typeof campaignId === 'string' && typeof deckId === 'string' && Number.isInteger(sceneIndex)) {
       const me = ensureMyHostUser()
       if (!('error' in me)) {
-        const result = campaignService.revealScene(me.db, campaignId, deckId, me.userId, sceneIndex)
+        const result = campaignService.revealScene(me.db, campaignId, deckId, me.userId, sceneIndex, playersInCampaign(campaignId))
         if (result.ok && result.data && getHostedSession()) broadcastCampaignChanged(campaignId)
       }
     }
@@ -1898,6 +1909,39 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('music:broadcast-volume', (_event, volume: number): void => {
     if (getHostedSession()) broadcastMusicVolume(volume)
   })
+
+  // Battle map props, per campaign — see propLibrary.ts. Every call answers with the library as it now stands.
+  const propCall = async (fn: () => PropListing | Promise<PropListing>): Promise<ApiResult<PropListing>> => {
+    try {
+      return { ok: true, data: await fn() }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'That didn’t work.' }
+    }
+  }
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+  const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+  ipcMain.handle('props:list', (_e, campaignId: unknown) => propCall(() => listProps(str(campaignId))))
+  ipcMain.handle('props:read', async (_e, campaignId: unknown, path: unknown): Promise<ApiResult<string>> => {
+    try {
+      return { ok: true, data: readProp(str(campaignId), str(path)) }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Couldn’t read that prop.' }
+    }
+  })
+  ipcMain.handle('props:add', (_e, campaignId: unknown, folder: unknown, items: unknown) =>
+    propCall(() =>
+      addProps(
+        str(campaignId),
+        str(folder),
+        (Array.isArray(items) ? items : []).map((i) => ({ name: str(i?.name), dataUrl: str(i?.dataUrl) }))
+      )
+    )
+  )
+  ipcMain.handle('props:rename', (_e, campaignId: unknown, path: unknown, name: unknown) => propCall(() => renameProp(str(campaignId), str(path), str(name))))
+  ipcMain.handle('props:move', (_e, campaignId: unknown, paths: unknown, folder: unknown) => propCall(() => moveProps(str(campaignId), strs(paths), str(folder))))
+  ipcMain.handle('props:trash', (_e, campaignId: unknown, paths: unknown) => propCall(() => trashProps(str(campaignId), strs(paths))))
+  ipcMain.handle('props:create-folder', (_e, campaignId: unknown, parent: unknown, name: unknown) => propCall(() => createPropFolder(str(campaignId), str(parent), str(name))))
+  ipcMain.handle('props:rename-folder', (_e, campaignId: unknown, folder: unknown, name: unknown) => propCall(() => renamePropFolder(str(campaignId), str(folder), str(name))))
 
   // DM's own local additions to a mood — see customMusic.ts's doc comment.
   ipcMain.handle('music:list-custom', (): Record<string, { id: string; title: string }[]> => listCustomMusic(userDataDir))

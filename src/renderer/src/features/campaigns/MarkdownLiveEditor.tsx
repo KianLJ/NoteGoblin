@@ -61,6 +61,8 @@ interface MarkdownLiveEditorProps {
   onOneShotPlay?: (cueId: string) => void
   /** The campaign's players, for a hidden block's "who else sees it" (right-click) and its label. */
   players?: TablePlayer[]
+  /** Who's reading: a hidden part just for them is labelled so (in the scene's own words, if it has them). */
+  viewer?: { userId: string; label?: string }
   /** The note's own things to insert from the right-click menu (an image, a link to a note, a statblock). */
   insertMenu?: ContextMenuItem[]
   /** Blocks actual document edits at the CodeMirror level (no cursor, no typing, paste rejected) — not a CSS overlay, which only stops mouse-driven interaction and leaves keyboard input (e.g. Tab-focusing in) still able to "type" locally even though nothing would ever save. Reconfigurable live via a Compartment since editorUserIds can change while a note's already open. */
@@ -607,15 +609,17 @@ function livePreviewExtension(
  * sight — the label names them). Rebuilt on every change, and when the
  * player list arrives (an empty dispatch), since the names come from it.
  */
-function hiddenBlockField(playersRef: { current: TablePlayer[] }): StateField<DecorationSet> {
+type Viewer = { userId: string; label?: string } | undefined
+
+function hiddenBlockField(playersRef: { current: TablePlayer[] }, viewerRef: { current: Viewer }): StateField<DecorationSet> {
   return StateField.define<DecorationSet>({
-    create: (state) => hiddenDecorations(state.doc, playersRef.current),
-    update: (_value, tr) => hiddenDecorations(tr.state.doc, playersRef.current),
+    create: (state) => hiddenDecorations(state.doc, playersRef.current, viewerRef.current),
+    update: (_value, tr) => hiddenDecorations(tr.state.doc, playersRef.current, viewerRef.current),
     provide: (f) => EditorView.decorations.from(f)
   })
 }
 
-function hiddenDecorations(doc: Text, players: TablePlayer[]): DecorationSet {
+function hiddenDecorations(doc: Text, players: TablePlayer[], viewer: Viewer): DecorationSet {
   const lines = doc.toString().split('\n')
   const ranges: Range<Decoration>[] = []
   const nameOf = (id: string): string | undefined => players.find((p) => p.userId === id)?.displayName
@@ -624,7 +628,7 @@ function hiddenDecorations(doc: Text, players: TablePlayer[]): DecorationSet {
     for (let i = b.open; i <= last; i++) {
       const line = doc.line(i + 1)
       if (i === b.open) {
-        ranges.push(Decoration.line({ class: 'cm-hidden-line cm-hidden-open', attributes: { 'data-label': hiddenBlockLabel(b.audience, nameOf) } }).range(line.from))
+        ranges.push(Decoration.line({ class: 'cm-hidden-line cm-hidden-open', attributes: { 'data-label': hiddenBlockLabel(b.audience, nameOf, viewer) } }).range(line.from))
         const ids = line.text.indexOf('@')
         if (ids >= 0) ranges.push(Decoration.replace({}).range(line.from + ids, line.to))
       } else {
@@ -822,7 +826,7 @@ const imageDropHandler = EditorView.domEventHandlers({
 
 export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownLiveEditorProps>(
   function MarkdownLiveEditor(
-    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay, players, readOnly, insertMenu },
+    { defaultValue, campaignId, knownTitlesRef, notesRef, onChange, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay, players, viewer, readOnly, insertMenu },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
@@ -831,6 +835,7 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
     const [menu, setMenu] = useState<ContextMenuState | null>(null)
     const setMenuRef = useRef(setMenu)
     const playersRef = useRef<TablePlayer[]>(players ?? [])
+    const viewerRef = useRef<Viewer>(viewer)
     const insertMenuRef = useRef<ContextMenuItem[]>(insertMenu ?? [])
     insertMenuRef.current = insertMenu ?? []
 
@@ -848,7 +853,7 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
             markdown({ extensions: [GFM] }),
             EditorView.lineWrapping,
             livePreviewExtension(knownTitlesRef, campaignId, setMenuRef, onWikilinkClick, onWikilinkContextMenu, onDiceRoll, onOneShotPlay),
-            hiddenBlockField(playersRef),
+            hiddenBlockField(playersRef, viewerRef),
             editorMenuHandler(setMenuRef, playersRef, insertMenuRef),
             keymap.of([
               { key: 'Mod-b', run: (view) => toggleWrap(view, '**') },
@@ -913,8 +918,9 @@ export const MarkdownLiveEditor = forwardRef<MarkdownLiveEditorHandle, MarkdownL
     // The player list arrives after the editor's made: labels redraw with their names.
     useEffect(() => {
       playersRef.current = players ?? []
+      viewerRef.current = viewer
       viewRef.current?.dispatch({})
-    }, [players])
+    }, [players, viewer])
 
     // readOnly CAN change without a remount — e.g. the author grants you
     // edit access via the party sidebar while you already have the note

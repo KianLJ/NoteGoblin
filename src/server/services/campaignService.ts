@@ -18,7 +18,7 @@ import { dependents, enableProblems } from '@shared/content/packFiles'
 import { contentPackSchema } from '@shared/content/schema'
 import { SessionDeckRepo, type SessionDeckRow } from '../repositories/sessionDeckRepo'
 import { UserRepo } from '../repositories/userRepo'
-import { mergeHiddenBlocks, stripDmAsides, type SessionScene, readScene } from '@shared/sessionDeck'
+import { mergeHiddenBlocks, sceneVisibleTo, stripDmAsides, unmarkHiddenBlocks, type SessionScene, readScene } from '@shared/sessionDeck'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
 import {
@@ -163,6 +163,8 @@ export interface CampaignJson {
 }
 
 export interface NoteJson {
+  /** A scene's own label for a player's hidden parts (see SessionScene.hiddenLabel). */
+  hiddenLabel?: string
   id: string
   campaignId: string
   authorUserId: string
@@ -238,15 +240,18 @@ function parseEditorUserIds(raw: string): string[] {
  * taken out (see shared/sessionDeck.ts), on every read path that can return
  * this row.
  */
-function toNoteJson(userRepo: UserRepo, row: NoteRow, canSeeHidden: boolean, viewerId?: string): NoteJson {
+function toNoteJson(userRepo: UserRepo, row: NoteRow, canSeeHidden: boolean, viewerId?: string, scene?: SessionScene): NoteJson {
   const author = userRepo.findById(row.author_user_id)
+  // A scene can have players' own hidden parts read as plain text, or labelled its own way.
+  const body = canSeeHidden ? row.body_markdown : stripDmAsides(row.body_markdown, viewerId)
   return {
+    ...(scene?.hiddenLabel && !canSeeHidden ? { hiddenLabel: scene.hiddenLabel } : {}),
     id: row.id,
     campaignId: row.campaign_id,
     authorUserId: row.author_user_id,
     authorDisplayName: author?.display_name ?? 'Unknown',
     title: row.title,
-    bodyMarkdown: canSeeHidden ? row.body_markdown : stripDmAsides(row.body_markdown, viewerId),
+    bodyMarkdown: !canSeeHidden && scene?.hiddenNotice === false ? unmarkHiddenBlocks(body) : body,
     visibility: row.visibility,
     folderId: row.folder_id,
     editorUserIds: parseEditorUserIds(row.editor_user_ids),
@@ -584,18 +589,20 @@ export function listNotes(
   // Nor, after that, a scene the DM hasn't presented yet (see revealScene).
   const deckRepo = new SessionDeckRepo(db)
   const decks = new Map<string, SessionDeckRow | undefined>()
-  const sceneShown = (row: NoteRow): boolean => {
-    if (!row.scene_deck_id) return true
+  const sceneOf = (row: NoteRow): SessionScene | undefined => {
+    if (!row.scene_deck_id) return undefined
     if (!decks.has(row.scene_deck_id)) decks.set(row.scene_deck_id, deckRepo.findById(row.scene_deck_id))
     const deck = decks.get(row.scene_deck_id)
-    if (!deck?.presented_at) return false
-    const scenes = parseScenes(deck.scenes_json)
-    const scene = scenes.find((s) => s.noteId === row.id)
-    return !!scene?.revealed
+    return deck ? parseScenes(deck.scenes_json).find((s) => s.noteId === row.id) : undefined
+  }
+  const sceneShown = (row: NoteRow): boolean => {
+    if (!row.scene_deck_id) return true
+    const scene = sceneOf(row)
+    return !!scene && sceneVisibleTo(scene, userId)
   }
   const visibleRows = viewerIsDm ? rows : rows.filter(sceneShown)
   // A note's `::` hidden blocks are for its author and the DM only.
-  return { ok: true, data: visibleRows.map((row) => toNoteJson(userRepo, row, viewerIsDm || row.author_user_id === userId, userId)) }
+  return { ok: true, data: visibleRows.map((row) => toNoteJson(userRepo, row, viewerIsDm || row.author_user_id === userId, userId, viewerIsDm ? undefined : sceneOf(row))) }
 }
 
 export function createNote(
@@ -1756,13 +1763,21 @@ export function moveCampaignPack(db: DatabaseType, campaignId: string, userId: s
   return { ok: true, data: repo.list(campaignId) }
 }
 
+/** What the host keeps on a scene and the DM can't set over the wire: whether it's been presented, and who saw it. */
+function kept(raw: object | undefined): Pick<SessionScene, 'revealed' | 'seenBy'> {
+  if (!raw) return {}
+  const s = raw as { revealed?: unknown; seenBy?: unknown }
+  const seenBy = Array.isArray(s.seenBy) ? s.seenBy.filter((id): id is string => typeof id === 'string') : []
+  return { ...(typeof s.revealed === 'boolean' ? { revealed: s.revealed } : {}), ...(seenBy.length ? { seenBy } : {}) }
+}
+
 function parseScenes(raw: string): SessionScene[] {
   try {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter((s): s is { noteId: string } & Record<string, unknown> => typeof s === 'object' && s !== null && typeof s.noteId === 'string')
-      .map((s) => ({ ...readScene(s), ...(typeof s.revealed === 'boolean' ? { revealed: s.revealed } : {}) }))
+      .map((s) => ({ ...readScene(s), ...kept(s) }))
   } catch {
     return []
   }
@@ -1777,11 +1792,10 @@ function validateSceneReorder(existing: SessionScene[], input: unknown): { scene
     if (typeof s !== 'object' || s === null) return { error: 'Invalid scene.' }
     const noteId = (s as { noteId?: unknown }).noteId
     if (typeof noteId !== 'string' || !existingIds.has(noteId)) return { error: 'Invalid scene.' }
-    const revealed = existing.find((e) => e.noteId === noteId)?.revealed
     scenes.push({
       ...readScene(s as { noteId: string } & Record<string, unknown>),
-      // Only presenting reveals a scene (revealScene) — a reorder keeps what's stored.
-      ...(revealed !== undefined ? { revealed } : {})
+      // Only presenting reveals a scene and records who saw it (revealScene) — a reorder keeps what's stored.
+      ...kept(existing.find((e) => e.noteId === noteId))
     })
   }
   if (scenes.length !== existing.length || new Set(scenes.map((s) => s.noteId)).size !== existing.length) {
@@ -1827,8 +1841,8 @@ export function listSessionDecks(db: DatabaseType, campaignId: string, userId: s
       .map((row) => {
         const deck = toSessionDeckJson(row)
         if (isDm) return deck
-        // Players get only the scenes the DM has presented — what's still to come stays the DM's.
-        const shown = deck.scenes.filter((s) => s.revealed)
+        // Players get only the scenes they've been shown (or the DM has shown them) — what's still to come stays the DM's.
+        const shown = deck.scenes.filter((s) => sceneVisibleTo(s, userId))
         return { ...deck, scenes: shown.map((s) => ({ noteId: s.noteId, encounterIds: [], music: [] })) }
       })
       // And a session with nothing presented yet isn't listed for them at all.
@@ -1854,17 +1868,29 @@ export function markDeckPresented(db: DatabaseType, campaignId: string, deckId: 
  * before markDeckPresented on a first presentation. Returns whether anything changed (players then need to
  * refetch).
  */
-export function revealScene(db: DatabaseType, campaignId: string, deckId: string, userId: string, sceneIndex: number): ServiceResult<boolean> {
+export function revealScene(db: DatabaseType, campaignId: string, deckId: string, userId: string, sceneIndex: number, present: string[] = []): ServiceResult<boolean> {
   const campaign = makeCampaignRepo(db).findById(campaignId)
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
   if (campaign.dm_user_id !== userId) return { ok: false, status: 403, error: 'Only the DM can present a scene.' }
+  return { ok: true, data: markSceneSeen(db, campaignId, deckId, sceneIndex, present) }
+}
+
+/**
+ * The scene at `sceneIndex` is up on the table now: it's presented, and `present` (the players connected to the
+ * campaign) have seen it. The host calls this itself too, when a player arrives mid-presentation. Returns whether
+ * anything changed (players then need to refetch).
+ */
+export function markSceneSeen(db: DatabaseType, campaignId: string, deckId: string, sceneIndex: number, present: string[]): boolean {
   const deckRepo = new SessionDeckRepo(db)
   const deck = deckRepo.findById(deckId)
-  if (!deck || deck.campaign_id !== campaignId) return { ok: false, status: 404, error: 'Session deck not found.' }
+  if (!deck || deck.campaign_id !== campaignId) return false
   const scenes = parseScenes(deck.scenes_json)
-  if (!scenes[sceneIndex] || scenes[sceneIndex].revealed) return { ok: true, data: false }
-  deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes.map((s, i) => (i === sceneIndex ? { ...s, revealed: true } : s))) })
-  return { ok: true, data: true }
+  const scene = scenes[sceneIndex]
+  if (!scene) return false
+  const seenBy = [...new Set([...(scene.seenBy ?? []), ...present])]
+  if (scene.revealed && seenBy.length === (scene.seenBy?.length ?? 0)) return false
+  deckRepo.update(deckId, { scenesJson: JSON.stringify(scenes.map((s, i) => (i === sceneIndex ? { ...s, revealed: true, ...(seenBy.length ? { seenBy } : {}) } : s))) })
+  return true
 }
 
 /** Only the DM can create a session deck. */

@@ -57,6 +57,7 @@ const api: AppApi = {
     stop: () => ipcRenderer.invoke('sessions:stop'),
     status: () => ipcRenderer.invoke('sessions:status'),
     invite: (friendUserId) => ipcRenderer.invoke('sessions:invite', friendUserId),
+    kick: (userId) => ipcRenderer.invoke('sessions:kick', userId),
     join: (sessionId) => ipcRenderer.invoke('sessions:join', sessionId),
     leave: () => ipcRenderer.invoke('sessions:leave'),
     setViewRole: (role) => ipcRenderer.invoke('sessions:set-view-role', role),
@@ -287,6 +288,16 @@ const api: AppApi = {
       ipcRenderer.on('ws:force-roll', listener)
       return () => ipcRenderer.removeListener('ws:force-roll', listener)
     }
+  },
+  props: {
+    list: (campaignId) => ipcRenderer.invoke('props:list', campaignId),
+    read: (campaignId, path) => ipcRenderer.invoke('props:read', campaignId, path),
+    add: (campaignId, folder, items) => ipcRenderer.invoke('props:add', campaignId, folder, items),
+    rename: (campaignId, path, name) => ipcRenderer.invoke('props:rename', campaignId, path, name),
+    move: (campaignId, paths, folder) => ipcRenderer.invoke('props:move', campaignId, paths, folder),
+    trash: (campaignId, paths) => ipcRenderer.invoke('props:trash', campaignId, paths),
+    createFolder: (campaignId, parent, name) => ipcRenderer.invoke('props:create-folder', campaignId, parent, name),
+    renameFolder: (campaignId, folder, name) => ipcRenderer.invoke('props:rename-folder', campaignId, folder, name)
   },
   music: {
     broadcast: (trackId, fadeMs) => ipcRenderer.invoke('music:broadcast', trackId, fadeMs),

@@ -63,7 +63,7 @@ export const TOOL_MINI: Partial<Record<ToolKind, { w: number; h: number }>> = {
 }
 
 /** Tools opened from the app's header (the Codex button, the version's What's New) rather than the canvas's bottom bar. */
-export const HEADER_TOOLS: ToolKind[] = ['codex', 'whatsnew']
+export const HEADER_TOOLS: ToolKind[] = ['codex', 'whatsnew', 'friends']
 
 /**
  * The smallest box each tool's contents can be shown in (excluding the title

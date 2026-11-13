@@ -76,6 +76,8 @@ export interface Campaign {
 }
 
 export interface Note {
+  /** A scene's own label for a player's hidden parts (see SessionScene.hiddenLabel). */
+  hiddenLabel?: string
   id: string
   campaignId: string
   authorUserId: string
@@ -267,6 +269,12 @@ export type UpdateStatus =
   | { state: 'ready'; version: string }
   | { state: 'error'; message: string; checkedAt: number }
 
+/** A campaign's battle map props: files in its folder's `.props`, by "/"-separated path. Folders are paths too ("" is the top). */
+export interface PropListing {
+  folders: string[]
+  props: Array<{ path: string; name: string; folder: string }>
+}
+
 export interface AppApi {
   getAppVersion: () => Promise<string>
   updates: {
@@ -312,12 +320,14 @@ export interface AppApi {
     status: () => Promise<SessionStatus>
     /** DM-only — adds a friend (by their relay userId) to this session's allow-list. */
     invite: (friendUserId: string) => Promise<ApiResult<void>>
+    /** DM-only — takes a player off the table (they'd need inviting again to come back). */
+    kick: (userId: string) => Promise<ApiResult<void>>
     join: (sessionId: string) => Promise<ApiResult<void>>
     leave: () => Promise<void>
     /** Which view the window is showing — lets a dev build host and play its own session at once (see registerIpc.ts's isOwnHostedCall). */
     setViewRole: (role: 'dm' | 'player') => Promise<void>
     /** Fires when a joined session drops unexpectedly (DM closed the app, network dropped) — never for a manual `leave()` call. */
-    onDisconnected: (callback: (reason: 'dm-left' | 'connection-lost') => void) => () => void
+    onDisconnected: (callback: (reason: 'dm-left' | 'kicked' | 'connection-lost') => void) => () => void
   }
   // Every method here takes an optional trailing `sessionId`: omit it to work
   // directly against the DM's own campaign data (no network/hosting
@@ -629,6 +639,17 @@ export interface AppApi {
   // src/renderer/src/data/musicLibrary.ts); no audio ever crosses the wire,
   // just which track and how long to fade. DM-only broadcast, no relay path
   // for a player to initiate (see sessionHost.ts's broadcastMusic).
+  props: {
+    list: (campaignId: string) => Promise<ApiResult<PropListing>>
+    /** One prop's picture as a data URL, for putting on a map (which travels to players). */
+    read: (campaignId: string, path: string) => Promise<ApiResult<string>>
+    add: (campaignId: string, folder: string, items: Array<{ name: string; dataUrl: string }>) => Promise<ApiResult<PropListing>>
+    rename: (campaignId: string, path: string, name: string) => Promise<ApiResult<PropListing>>
+    move: (campaignId: string, paths: string[], folder: string) => Promise<ApiResult<PropListing>>
+    trash: (campaignId: string, paths: string[]) => Promise<ApiResult<PropListing>>
+    createFolder: (campaignId: string, parent: string, name: string) => Promise<ApiResult<PropListing>>
+    renameFolder: (campaignId: string, folder: string, name: string) => Promise<ApiResult<PropListing>>
+  }
   music: {
     /** `trackId: null` stops music entirely. A no-op unless actually hosting. */
     broadcast: (trackId: string | null, fadeMs: number) => Promise<void>
