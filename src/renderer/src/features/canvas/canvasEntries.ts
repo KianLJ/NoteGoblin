@@ -48,8 +48,32 @@ function load(mode: CanvasMode): Record<string, CanvasEntry> {
   }
 }
 
-function get(mode: CanvasMode): Record<string, CanvasEntry> {
+/**
+ * While a shared collection is open, its things are what this mode's canvas
+ * holds: reads come from it, and anything put on (or closed) goes to it
+ * instead of this computer's own store — so every box works as it always
+ * does. See features/boards/useSharedCollection.ts.
+ */
+export interface EntryRedirect {
+  entries: Record<string, CanvasEntry>
+  put: (entry: CanvasEntry) => void
+  drop: (nodeId: string) => void
+}
+const redirects: Partial<Record<CanvasMode, EntryRedirect>> = {}
+
+export function setEntryRedirect(mode: CanvasMode, redirect: EntryRedirect | null): void {
+  if (redirect) redirects[mode] = redirect
+  else delete redirects[mode]
+  listeners.forEach((l) => l())
+}
+
+/** This computer's own things, whatever's open. */
+export function localEntries(mode: CanvasMode): Record<string, CanvasEntry> {
   return (cache[mode] ??= load(mode))
+}
+
+function get(mode: CanvasMode): Record<string, CanvasEntry> {
+  return redirects[mode]?.entries ?? localEntries(mode)
 }
 
 function set(mode: CanvasMode, next: Record<string, CanvasEntry>): void {
@@ -63,7 +87,14 @@ function set(mode: CanvasMode, next: Record<string, CanvasEntry>): void {
 }
 
 export function putEntry(mode: CanvasMode, entry: CanvasEntry): void {
-  set(mode, { ...get(mode), [entryNodeId(entry)]: entry })
+  const redirect = redirects[mode]
+  if (redirect) return redirect.put(entry)
+  set(mode, { ...localEntries(mode), [entryNodeId(entry)]: entry })
+}
+
+/** Into this computer's own store, even while a shared collection is open (a box taken out of one). */
+export function putLocalEntry(mode: CanvasMode, entry: CanvasEntry): void {
+  set(mode, { ...localEntries(mode), [entryNodeId(entry)]: entry })
 }
 
 /** Everything on this mode's canvases right now, by node id — what a saved layout keeps a copy of. */
@@ -76,13 +107,15 @@ export function allEntries(mode: CanvasMode): Record<string, CanvasEntry> {
  * closed. Ones still here are left alone, so a sticky edited after the layout was saved keeps its newer text.
  */
 export function restoreEntries(mode: CanvasMode, saved: Record<string, unknown>): void {
-  const current = get(mode)
+  const current = localEntries(mode)
   const missing = Object.entries(saved).filter(([id, e]) => !(id in current) && typeof e === 'object' && e !== null && typeof (e as { kind?: unknown }).kind === 'string')
   if (missing.length) set(mode, { ...current, ...(Object.fromEntries(missing) as Record<string, CanvasEntry>) })
 }
 
 export function dropEntry(mode: CanvasMode, nodeId: string): void {
-  const { [nodeId]: _gone, ...rest } = get(mode)
+  const redirect = redirects[mode]
+  if (redirect) return redirect.drop(nodeId)
+  const { [nodeId]: _gone, ...rest } = localEntries(mode)
   set(mode, rest)
 }
 

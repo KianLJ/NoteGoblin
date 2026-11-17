@@ -10,7 +10,7 @@ import { WoundTags } from '../campaigns/WoundTags'
 import { useEffect, useMemo, useState } from 'react'
 import type { CharacterSheet } from '@shared/ipc'
 import type { CharacterSheetData } from '@shared/dnd5e'
-import type { PlayerBattleMap, BattleMap } from '@shared/battleMap'
+import { markColour, type PlayerBattleMap, type BattleMap } from '@shared/battleMap'
 import { emptyCombatant, type Combatant, type InjuryLevel, type PlayerVisibleCombatant, type PlayerVisibleInitiativeState } from '@shared/encounter'
 import { deriveSheet } from '@shared/content/sheet'
 import { diceGroups } from '@shared/dice'
@@ -29,6 +29,8 @@ import { ResizableSidebar } from '../../ui/ResizableSidebar'
 import { BattleMapView, type MapTool, type Sight } from './BattleMapView'
 import { RAIL, ToolRail, railKey } from './MapToolbar'
 import { useRemoteDrags } from './useRemoteDrags'
+import { useMapMarks } from './useMapMarks'
+import { useMyUserId } from '../account/avatar'
 import { CharacterTabs, HpControls, InitiativeField, PanelBlock, Stat, hpChange } from './CombatPanels'
 
 interface Props {
@@ -104,6 +106,11 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter, campai
   const [pendingFacing, setPendingFacing] = useState<Record<string, number>>({})
   // The DM and the rest of the party dragging tokens right now.
   const remoteDrags = useRemoteDrags(sessionId)
+  // Everyone's pointers and drawings; and which of those tools the DM lets players use.
+  const marks = useMapMarks(sessionId)
+  const myId = useMyUserId()
+  const allowed = map?.playerMarks ?? { pointer: true, draw: true }
+  const usable = (t: string): t is MapTool => t === 'move' || t === 'ruler' || (t === 'pointer' && allowed.pointer) || (t === 'draw' && allowed.draw)
 
   // The map and turn order now, then every change as it happens.
   useEffect(() => {
@@ -167,11 +174,16 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter, campai
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const t = railKey(e, true)
-      if (t === 'move' || t === 'ruler') setTool(t)
+      if (t && usable(t)) setTool(t)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  })
+
+  // The DM turning a tool off puts you back to moving.
+  useEffect(() => {
+    if (!usable(tool)) setTool('move')
+  })
 
   /** Turning your own token: shown straight away, then the DM's app confirms it (or puts it back). */
   async function face(combatantId: string, facing: number): Promise<void> {
@@ -268,12 +280,16 @@ export function PlayerCombatView({ sessionId, character, onSaveCharacter, campai
                 remoteDrags={remoteDrags}
                 onLiveDrag={(id, x, y) => void window.goblin.battleMap.dragToken(sessionId, id, x, y)}
                 sight={sight}
+                marks={marks}
+                onMark={(m) => void window.goblin.battleMap.markAsPlayer(sessionId, m)}
+                markAs={{ by: character?.name ?? 'You', colour: markColour(myId ?? '') }}
               />
               <ToolRail
                 tool={tool}
                 playerOnly
+                hide={[...(allowed.pointer ? [] : (['pointer'] as const)), ...(allowed.draw ? [] : (['draw'] as const))]}
                 onTool={(t) => {
-                  if (t !== 'move' && t !== 'ruler') return
+                  if (!usable(t)) return
                   setTool(t)
                   setHint(RAIL.find((r) => r.tool === t)!.hint)
                 }}

@@ -42,6 +42,8 @@ import { EncounterLibrary } from './EncounterLibrary'
 import { useRemoteDrags } from './useRemoteDrags'
 import { imageSize } from '../../data/propLibrary'
 import { PropLibrary } from './PropLibrary'
+import './mapSettings.css'
+import { useMapMarks } from './useMapMarks'
 
 interface CombatViewProps {
   /** The session the DM is hosting — rolls and turn cues go to the table. */
@@ -73,6 +75,8 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [propMode, setPropMode] = useState<PropMode>('place')
   const [newLight, setNewLight] = useState<LightPreset>(LIGHT_PRESETS[1])
+  // Players' pointers and drawings (yours go out from the map itself).
+  const marks = useMapMarks(null)
   const [wallDraw, setWallDraw] = useState<WallDraw>('room')
   // The spell area the Spell areas tool places (the last one picked).
   const [shapeKind, setShapeKind] = useState<TemplateKind>('cone')
@@ -353,6 +357,8 @@ export function CombatView({ sessionId, campaignId, playerCharacters }: CombatVi
             // Blockers belong to the Props tool, but they're drawn and picked the way walls are.
             tool={tool === 'props' && propMode !== 'place' ? 'walls' : tool}
             newLight={newLight}
+            marks={marks}
+            onMark={(m) => void window.goblin.battleMap.mark(m)}
             wallDraw={tool === 'props' ? (propMode === 'blocker' ? 'blocker' : 'selectBlocker') : wallDraw}
             snap={snap}
             onHint={setHint}
@@ -912,81 +918,113 @@ function RollLog(): JSX.Element {
 
 /** Feet per square, lighting and sight, party start spots, and clearing things off the whole map. */
 function MapSettings({ map, onChange, onClose }: { map: BattleMap; onChange: (m: BattleMap) => void; onClose: () => void }): JSX.Element {
+  const marks = { pointer: map.playerMarks?.pointer !== false, draw: map.playerMarks?.draw !== false }
+  const setMarks = (patch: Partial<typeof marks>): void => {
+    const next = { ...marks, ...patch }
+    // Both on is the default, so nothing's stored for it.
+    const { playerMarks: _old, ...rest } = map
+    onChange(next.pointer && next.draw ? rest : { ...rest, playerMarks: next })
+  }
+  const clear: Array<{ label: string; hint: string; disabled: boolean; run: () => void }> = [
+    { label: 'Walls', hint: 'Remove every wall, door and window that isn’t locked', disabled: !map.walls.some((w) => !w.locked), run: () => onChange({ ...map, walls: map.walls.filter((w) => w.locked) }) },
+    { label: 'Lights', hint: 'Remove every light that isn’t locked', disabled: !map.lights.some((l) => !l.locked), run: () => onChange({ ...map, lights: map.lights.filter((l) => l.locked) }) },
+    { label: 'Images', hint: 'Remove every map image and prop that isn’t locked', disabled: !map.images.some((i) => !i.locked), run: () => onChange({ ...map, images: map.images.filter((i) => i.locked) }) },
+    { label: 'Spell areas', hint: 'Remove every spell area', disabled: map.templates.length === 0, run: () => onChange({ ...map, templates: [] }) },
+    { label: 'Explored', hint: 'Players’ maps go dark again everywhere they can’t see right now', disabled: Object.keys(map.explored).length === 0, run: () => onChange({ ...map, explored: {} }) }
+  ]
   return (
-    <div style={{ position: 'absolute', top: 60, right: 12, zIndex: 6, width: 320, maxHeight: 'calc(100% - 120px)', overflowY: 'auto', padding: 'var(--space-3)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <strong style={{ flex: 1, fontSize: 13 }}>Map</strong>
-        <button type="button" onClick={onClose} style={iconBtn} title="Close">
+    <div className="bms" role="dialog" aria-label="Map settings">
+      <header className="bms-head">
+        <strong>Map settings</strong>
+        <button type="button" className="bms-close" onClick={onClose} title="Close" aria-label="Close map settings">
           <XIcon size={12} />
         </button>
-      </div>
-      <label style={{ ...labelCol, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        Feet per square
-        <input type="number" min={1} className="gb-input" value={map.feetPerCell} onChange={(e) => onChange({ ...map, feetPerCell: Math.max(1, Number(e.target.value) || 5) })} style={{ ...field, width: 64 }} />
-      </label>
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>The grid goes on for ever. Add map images with the Map images tool on the left, then line them up with the grid.</p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-        <span style={{ flex: 1, color: 'var(--text-secondary)' }} title="Where players' tokens appear when they join this battle — drag the P1, P2… squares on the map. Only you see them.">
-          Party start spots: {map.partyStarts.length}
-        </span>
-        <button type="button" className="gs-chip" disabled={map.partyStarts.length === 0} onClick={() => onChange({ ...map, partyStarts: map.partyStarts.slice(0, -1) })} aria-label="One fewer start spot">
-          −
-        </button>
-        <button
-          type="button"
-          className="gs-chip"
-          onClick={() => {
-            // The next free square down the starting area's left edge; drag it into place from there.
-            const area = startArea(map)
-            for (let x = area.x0; x < area.x0 + 200; x++)
-              for (let y = area.y0; y < area.y1; y++)
-                if (!map.partyStarts.some((q) => q.x === x && q.y === y) && canStand(map, { x, y, size: 1 })) {
-                  onChange({ ...map, partyStarts: [...map.partyStarts, { x, y }] })
-                  return
-                }
-          }}
-          aria-label="Another start spot"
-        >
-          +
-        </button>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={labelCol}>Lighting</span>
-        <div style={{ display: 'flex', gap: 4 }}>
+      </header>
+
+      <section className="bms-group">
+        <h4>Grid</h4>
+        <div className="bms-row">
+          <span className="bms-text">
+            <strong>Feet per square</strong>
+            <small>How far one square is, for moving and measuring.</small>
+          </span>
+          <input type="number" min={1} className="gb-input bms-num" value={map.feetPerCell} onChange={(e) => onChange({ ...map, feetPerCell: Math.max(1, Number(e.target.value) || 5) })} aria-label="Feet per square" />
+        </div>
+        <div className="bms-row">
+          <span className="bms-text">
+            <strong>Party start spots</strong>
+            <small>Where players’ tokens appear. Drag the P1, P2… squares on the map; only you see them.</small>
+          </span>
+          <span className="bms-stepper">
+            <button type="button" disabled={map.partyStarts.length === 0} onClick={() => onChange({ ...map, partyStarts: map.partyStarts.slice(0, -1) })} aria-label="One fewer start spot">
+              −
+            </button>
+            <b>{map.partyStarts.length}</b>
+            <button
+              type="button"
+              onClick={() => {
+                // The next free square down the starting area's left edge; drag it into place from there.
+                const area = startArea(map)
+                for (let x = area.x0; x < area.x0 + 200; x++)
+                  for (let y = area.y0; y < area.y1; y++)
+                    if (!map.partyStarts.some((q) => q.x === x && q.y === y) && canStand(map, { x, y, size: 1 })) {
+                      onChange({ ...map, partyStarts: [...map.partyStarts, { x, y }] })
+                      return
+                    }
+              }}
+              aria-label="Another start spot"
+            >
+              +
+            </button>
+          </span>
+        </div>
+      </section>
+
+      <section className="bms-group">
+        <h4>Lighting and sight</h4>
+        <div className="bms-seg" role="radiogroup" aria-label="Lighting">
           {(['bright', 'dim', 'dark'] as Ambient[]).map((a) => (
-            <button key={a} type="button" style={{ ...toolButton(map.ambient === a), border: '1px solid var(--border-subtle)' }} onClick={() => onChange({ ...map, ambient: a })} title={AMBIENT_HINT[a]}>
-              {a === 'bright' ? 'Bright' : a === 'dim' ? 'Dim' : 'Dark'}
+            <button key={a} type="button" role="radio" aria-checked={map.ambient === a} className={map.ambient === a ? 'on' : ''} onClick={() => onChange({ ...map, ambient: a })}>
+              {a === 'bright' ? 'Daylight' : a === 'dim' ? 'Dim' : 'Dark'}
             </button>
           ))}
         </div>
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
-          {AMBIENT_HINT[map.ambient]} Once a map has walls or is dark, players only see what their party has line of sight to (darkvision comes from their sheets).
-        </p>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-          <input type="checkbox" checked={map.sharedVision !== false} onChange={(e) => onChange({ ...map, sharedVision: e.target.checked ? undefined : false })} />
-          Players share what the party sees
-        </label>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, explored: {} })} disabled={Object.keys(map.explored).length === 0} title="Players' maps go dark again everywhere they can't see right now">
-            Forget explored
-          </button>
-          <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, walls: map.walls.filter((w) => w.locked) })} disabled={!map.walls.some((w) => !w.locked)}>
-            Remove walls
-          </button>
-          <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, lights: map.lights.filter((l) => l.locked) })} disabled={!map.lights.some((l) => !l.locked)}>
-            Remove lights
-          </button>
+        <small className="bms-hint">{AMBIENT_HINT[map.ambient]} With walls, or in the dark, players only see what their party can.</small>
+        <Toggle label="Players share what the party sees" hint="Off: each player only sees from their own character." on={map.sharedVision !== false} onChange={(on) => onChange({ ...map, sharedVision: on ? undefined : false })} />
+      </section>
+
+      <section className="bms-group">
+        <h4>Players can</h4>
+        <Toggle label="Point at the map" hint="A pointer with a little trail, that everyone sees." on={marks.pointer} onChange={(pointer) => setMarks({ pointer })} />
+        <Toggle label="Draw on the map" hint="Drawings fade a few seconds after they let go." on={marks.draw} onChange={(draw) => setMarks({ draw })} />
+      </section>
+
+      <section className="bms-group">
+        <h4>Clear the map</h4>
+        <div className="bms-clear">
+          {clear.map((c) => (
+            <button key={c.label} type="button" disabled={c.disabled} title={c.hint} onClick={c.run}>
+              {c.label}
+            </button>
+          ))}
         </div>
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, templates: [] })} disabled={map.templates.length === 0}>
-          Clear templates
-        </button>
-        <button type="button" className="gb-btn gb-btn--secondary" style={btn} onClick={() => onChange({ ...map, images: map.images.filter((i) => i.locked) })} disabled={!map.images.some((i) => !i.locked)}>
-          Remove images
-        </button>
-      </div>
+        <small className="bms-hint">Locked things stay. Ctrl+Z puts anything back.</small>
+      </section>
     </div>
+  )
+}
+
+/** A labelled on/off switch, for the map settings. */
+function Toggle({ label, hint, on, onChange }: { label: string; hint: string; on: boolean; onChange: (on: boolean) => void }): JSX.Element {
+  return (
+    <label className="bms-row bms-toggle">
+      <span className="bms-text">
+        <strong>{label}</strong>
+        <small>{hint}</small>
+      </span>
+      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
+      <span className="gb-toggle-track" aria-hidden="true" />
+    </label>
   )
 }
 
@@ -1194,16 +1232,3 @@ function TurnIcon({ dir }: { dir: 1 | -1 }): JSX.Element {
 const btn = { fontSize: 12, padding: '4px 10px' } as const
 const pill = { border: '1px solid var(--accent)', color: 'var(--accent-hover)', background: 'none', borderRadius: 999, padding: '1px 8px', fontSize: 12, cursor: 'pointer', font: 'inherit' } as const
 const iconBtn = { background: 'none', border: 0, color: 'var(--text-muted)', cursor: 'pointer', padding: 0, display: 'inline-flex' } as const
-const labelCol = { display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--text-muted)' } as const
-const field = { fontSize: 12, padding: '3px 6px' } as const
-const toolButton = (on: boolean): React.CSSProperties => ({
-  whiteSpace: 'nowrap',
-  border: 0,
-  background: on ? 'var(--accent-subtle)' : 'none',
-  color: on ? 'var(--accent-hover)' : 'var(--text-secondary)',
-  padding: '5px 10px',
-  borderRadius: 7,
-  cursor: 'pointer',
-  fontSize: 12,
-  font: 'inherit'
-})

@@ -18,6 +18,7 @@ import { dependents, enableProblems } from '@shared/content/packFiles'
 import { contentPackSchema } from '@shared/content/schema'
 import { SessionDeckRepo, type SessionDeckRow } from '../repositories/sessionDeckRepo'
 import { UserRepo } from '../repositories/userRepo'
+import { applyBoardChange, normalizeBoards, type BoardActor, type CampaignBoards } from '@shared/boards'
 import { mergeHiddenBlocks, sceneVisibleTo, stripDmAsides, unmarkHiddenBlocks, type SessionScene, readScene } from '@shared/sessionDeck'
 import { getVaultPath } from '../files/vaultConfig'
 import { CampaignFileRepo, NoteFileRepo, FolderFileRepo } from '../files/vaultStore'
@@ -1610,6 +1611,74 @@ export function changeStash(db: DatabaseType, campaignId: string, userId: string
      ON CONFLICT(campaign_id) DO UPDATE SET stash_json = excluded.stash_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
   ).run(campaignId, JSON.stringify(result.stash))
   return { ok: true, data: result.stash }
+}
+
+// Shared collections change many times a second while someone drags or types, so the current copy lives in memory
+// and goes to the database a moment after the changes stop.
+const boardCache = new Map<string, CampaignBoards>()
+const boardSaves = new Map<string, ReturnType<typeof setTimeout>>()
+
+function readBoards(db: DatabaseType, campaignId: string): CampaignBoards {
+  const cached = boardCache.get(campaignId)
+  if (cached) return cached
+  const row = db.prepare('SELECT boards_json FROM campaign_boards WHERE campaign_id = ?').get(campaignId) as { boards_json: string } | undefined
+  let doc: CampaignBoards = { boards: [] }
+  try {
+    if (row) doc = normalizeBoards(JSON.parse(row.boards_json))
+  } catch {
+    /* unreadable: start empty rather than break the box */
+  }
+  boardCache.set(campaignId, doc)
+  return doc
+}
+
+function saveBoardsSoon(db: DatabaseType, campaignId: string): void {
+  clearTimeout(boardSaves.get(campaignId))
+  boardSaves.set(
+    campaignId,
+    setTimeout(() => {
+      boardSaves.delete(campaignId)
+      db.prepare(
+        `INSERT INTO campaign_boards (campaign_id, boards_json) VALUES (?, ?)
+         ON CONFLICT(campaign_id) DO UPDATE SET boards_json = excluded.boards_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+      ).run(campaignId, JSON.stringify(boardCache.get(campaignId) ?? { boards: [] }))
+    }, 800)
+  )
+}
+
+/** Writes any shared collections still waiting to be saved (when the app closes). */
+export function flushBoards(db: DatabaseType): void {
+  for (const [campaignId, timer] of boardSaves) {
+    clearTimeout(timer)
+    db.prepare(
+      `INSERT INTO campaign_boards (campaign_id, boards_json) VALUES (?, ?)
+       ON CONFLICT(campaign_id) DO UPDATE SET boards_json = excluded.boards_json, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+    ).run(campaignId, JSON.stringify(boardCache.get(campaignId) ?? { boards: [] }))
+  }
+  boardSaves.clear()
+}
+
+/** Every shared collection in a campaign — everyone in it sees them all. */
+export function getBoards(db: DatabaseType, campaignId: string, userId: string): ServiceResult<CampaignBoards> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  return { ok: true, data: readBoards(db, campaignId) }
+}
+
+/** One change to a shared collection by anyone in the campaign (shared/boards.ts's applyBoardChange says what's allowed). Answers with who made it, as everyone else applies it. */
+export function changeBoards(db: DatabaseType, campaignId: string, userId: string, change: unknown): ServiceResult<BoardActor> {
+  const campaignRepo = makeCampaignRepo(db)
+  const campaign = campaignRepo.findById(campaignId)
+  if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' }
+  if (!campaignRepo.getRole(campaign.id, userId)) return { ok: false, status: 403, error: 'Join this campaign first.' }
+  const actor: BoardActor = { id: userId, name: new UserRepo(db).findById(userId)?.display_name ?? 'Someone', isDm: campaign.dm_user_id === userId }
+  const result = applyBoardChange(readBoards(db, campaignId), change, actor)
+  if (!result.ok) return { ok: false, status: 400, error: result.error }
+  boardCache.set(campaignId, result.doc)
+  saveBoardsSoon(db, campaignId)
+  return { ok: true, data: actor }
 }
 
 /** The quest log — all of it for the DM, only the shared quests for a player. */

@@ -319,3 +319,17 @@ button {
 .gb-topbtn-dot--on {
   background: var(--success);
 }
+
+/* A drawing on the battle map, once let go of: it stays a few seconds, then fades (DRAW_FADE_MS). */
+.bm-mark-fade {
+  animation: bm-mark-fade 5s linear forwards;
+}
+@keyframes bm-mark-fade {
+  0%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

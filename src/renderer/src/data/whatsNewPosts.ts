@@ -52,6 +52,25 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.16.0',
+    title: 'Collections the whole table shares',
+    intro: 'Until now your canvas has been yours alone. This update adds collections the whole party works in together, and lets everyone point and draw on the battle map.',
+    sections: [
+      {
+        heading: 'Shared collections',
+        body: 'Right-click the canvas and choose Add, then Shared collection. Anyone at the table can make one, players and DM alike, and its tile turns up on everyone’s canvas. Open it and it’s a collection like any other: the same boxes, the same right-click menu, the same way back out at the top left. Put notes, sticky notes, images, statblocks and Codex entries in it, and everyone sees them appear, move and change as it happens, along with each other’s cursors.'
+      },
+      {
+        heading: 'Yours to change, everyone’s to see',
+        body: 'Each box in a shared collection belongs to whoever put it there. You can move, resize, change and close your own; other people’s you can see and bring to the front, but not change. Want help? Let everyone edit mine, beside the breadcrumb, opens all of yours up, and clicking it again takes that back. The DM can change anything. Only tools that make sense together are there: notes, initiative, calendar, quests, reputation, the world map and the Codex.'
+      },
+      {
+        heading: 'Point and draw',
+        body: 'Point and Draw sit beside the breadcrumb in a shared collection, and on the battle map’s tool rail for everyone (Q and D). Hold the mouse down to point, and everyone sees your pointer with a short trail and your name. Drawings stay for a few seconds and then fade, so nobody can fill the map with scribbles. The DM can turn pointing and drawing off for players in the map’s settings, which have also been tidied into clear groups.'
+      }
+    ]
+  },
+  {
     version: '0.15.0',
     title: 'Props, blockers, and a table that remembers who saw what',
     intro: 'The battle map gets a proper way to dress a scene, and the table keeps better track of who has seen what. Here’s what’s new.',

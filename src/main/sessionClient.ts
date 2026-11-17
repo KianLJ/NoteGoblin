@@ -8,6 +8,9 @@ import type {
   ForceRollFrame,
   CharacterHpFrame,
   BattleMapDragFrame,
+  BattleMapMarkFrame,
+  BoardChangeFrame,
+  BoardPresenceFrame,
   InitiativeFrame,
   MessageFrame,
   PresenceFrame,
@@ -335,6 +338,17 @@ function handleFrame(raw: WebSocket.RawData): void {
   if (payload.type === 'battle-map-drag' && clientWindow) {
     const frame = payload as BattleMapDragFrame
     clientWindow.webContents.send('ws:battle-map-drag', { sessionId: currentSessionId, combatantId: frame.combatantId, x: frame.x, y: frame.y })
+  }
+  if (payload.type === 'board-change' && clientWindow) {
+    const f = payload as BoardChangeFrame
+    clientWindow.webContents.send('ws:board-change', { sessionId: currentSessionId, campaignId: f.campaignId, change: f.change, actor: f.actor })
+  }
+  if (payload.type === 'board-presence' && clientWindow) {
+    const f = payload as BoardPresenceFrame
+    clientWindow.webContents.send('ws:board-presence', { sessionId: currentSessionId, campaignId: f.campaignId, presence: f.presence })
+  }
+  if (payload.type === 'battle-map-mark' && clientWindow) {
+    clientWindow.webContents.send('ws:battle-map-mark', { sessionId: currentSessionId, mark: (payload as BattleMapMarkFrame).mark })
   }
   if (payload.type === 'character-hp' && clientWindow) {
     const frame = payload as CharacterHpFrame

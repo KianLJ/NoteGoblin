@@ -1,5 +1,10 @@
 // Dev-only: the canvas and its newer pieces with sample content, for screenshots in the "What's new" post.
 // Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor, =encounters, =cues, =hidden). Not part of the app build.
+import { useSharedCollection } from '../features/boards/useSharedCollection'
+import { useCanvasLayout } from '../features/canvas/useCanvasLayout'
+import { useCanvasEntries } from '../features/canvas/canvasEntries'
+import { entryItems } from '../features/canvas/entryItems'
+import type { CanvasHandle } from '../features/canvas/Canvas'
 import { useRef, useState } from 'react'
 import { Canvas } from '../features/canvas/Canvas'
 import { TOOL_ICONS } from '../features/canvas/toolIcons'
@@ -542,6 +547,7 @@ function ShowcaseScene({ scene }: { scene: string }): JSX.Element {
   if (scene === 'initiative') return <InitiativeShot />
   if (scene === 'audio') return <AudioShot />
   if (scene === 'cues') return <CuesShot />
+  if (scene === 'board') return <BoardShot />
   if (scene === 'hidden') return <HiddenShot />
   if (scene === 'encounters') return <EncountersShot />
   if (scene === 'editor') return <MonsterEditor monster={goblin} onClose={() => {}} onSaved={() => {}} />
@@ -555,6 +561,37 @@ function ShowcaseScene({ scene }: { scene: string }): JSX.Element {
     )
   if (scene === 'sessions') return <SessionsShot />
   return <Overview />
+}
+
+/** ?showcase=board: a shared collection as Kian (a player) sees it — the real canvas, with a fake DM's app behind it. */
+function BoardShot(): JSX.Element {
+  const canvasRef = useRef<CanvasHandle>(null)
+  const [rootLayout, setRootLayout, rootNav] = useCanvasLayout('player')
+  const shared = useSharedCollection({ mode: 'player', campaignId: 'camp', sessionId: 's', isDm: false, rootLayout, setRootLayout, rootNav, canvasRef })
+  const layout = shared.active?.layout ?? rootLayout
+  const setLayout = shared.active?.setLayout ?? setRootLayout
+  const nav = shared.active?.nav ?? rootNav
+  const entries = useCanvasEntries('player')
+  const items = [...shared.tiles, ...entryItems('player', layout, entries)]
+  return (
+    <div style={{ height: '100vh', display: 'flex' }}>
+      <Canvas
+        key={nav.path.join('/')}
+        ref={canvasRef}
+        mode="player"
+        layout={layout}
+        setLayout={setLayout}
+        nav={nav}
+        items={items}
+        toolIcons={TOOL_ICONS}
+        hiddenTools={['codex', ...(shared.active?.hiddenTools ?? [])]}
+        contextMenu={(at) => ({ add: [shared.add(at)].filter((x): x is NonNullable<typeof x> => !!x), open: [shared.open(at)].filter((x): x is NonNullable<typeof x> => !!x) })}
+        crumbExtra={shared.active?.crumbExtra}
+        shared={!!shared.active}
+        overlay={shared.active?.overlay}
+      />
+    </div>
+  )
 }
 
 // A timer partway through a session, so the dock and the timer box have something to show.

@@ -11,7 +11,7 @@ export type LightPreset = (typeof LIGHT_PRESETS)[number]
 /** The Props tool: put props on the map and move them, or draw (and pick) the invisible blockers that go round them. */
 export type PropMode = 'place' | 'blocker' | 'pickBlocker'
 
-export type RailTool = 'move' | 'ruler' | 'shapes' | 'walls' | 'light' | 'images' | 'props'
+export type RailTool = 'move' | 'ruler' | 'pointer' | 'draw' | 'shapes' | 'walls' | 'light' | 'images' | 'props'
 
 export const isShape = (t: MapTool): t is TemplateKind => t === 'cone' || t === 'sphere' || t === 'line' || t === 'cube'
 export const railOf = (t: MapTool): RailTool => (isShape(t) ? 'shapes' : t)
@@ -19,6 +19,8 @@ export const railOf = (t: MapTool): RailTool => (isShape(t) ? 'shapes' : t)
 export const RAIL: Array<{ tool: RailTool; label: string; key: string; hint: string; dmOnly?: boolean }> = [
   { tool: 'move', label: 'Move', key: 'V', hint: 'Drag a token to move it (walls stop it; hold Alt to drag through), or drag the map to pan. Click a door to open or close it.' },
   { tool: 'ruler', label: 'Measure', key: 'R', hint: 'Drag between squares to measure. Diagonals count as one square.' },
+  { tool: 'pointer', label: 'Point', key: 'Q', hint: 'Hold the mouse down and move it to point things out: everyone sees your pointer and its trail.' },
+  { tool: 'draw', label: 'Draw', key: 'D', hint: 'Drag to draw on the map for everyone to see. Drawings fade a few seconds after you let go.' },
   { tool: 'shapes', label: 'Spell areas', key: 'S', hint: 'Pick a shape above, then drag from where it starts: the distance sets its size.', dmOnly: true },
   { tool: 'walls', label: 'Walls & doors', key: 'W', hint: 'Draw rooms and walls, then set doors into them. Walls and closed doors stop tokens and sight.', dmOnly: true },
   { tool: 'light', label: 'Lights', key: 'L', hint: 'Pick a kind of light along the top, then click the map to place one; click a light to change how far it reaches. The map’s lighting is in Map settings.', dmOnly: true },
@@ -48,11 +50,11 @@ const PROP_MODES: Array<{ mode: PropMode; label: string; hint: string }> = [
 ]
 
 /** The tools, down the left of the map. */
-export function ToolRail({ tool, onTool, playerOnly = false }: { tool: MapTool; onTool: (t: RailTool) => void; playerOnly?: boolean }): JSX.Element {
+export function ToolRail({ tool, onTool, playerOnly = false, hide = [] }: { tool: MapTool; onTool: (t: RailTool) => void; playerOnly?: boolean; hide?: RailTool[] }): JSX.Element {
   const active = railOf(tool)
   return (
     <div style={{ position: 'absolute', left: 12, top: 12, zIndex: 5, display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 12, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', boxShadow: '0 6px 20px rgba(0,0,0,0.45)' }}>
-      {RAIL.filter((r) => !playerOnly || !r.dmOnly).map((r, i, list) => (
+      {RAIL.filter((r) => (!playerOnly || !r.dmOnly) && !hide.includes(r.tool)).map((r, i, list) => (
         <div key={r.tool}>
           {i > 0 && list[i - 1].dmOnly !== r.dmOnly && <div style={{ height: 1, background: 'var(--border-subtle)', margin: '3px 4px' }} />}
           <button type="button" onClick={() => onTool(r.tool)} title={`${r.label} (${r.key})`} aria-label={r.label} aria-pressed={active === r.tool} style={railButton(active === r.tool)}>
@@ -228,7 +230,7 @@ export function MapControls({ canUndo, canRedo, onUndo, onRedo, snap, onSnap, se
   )
 }
 
-/** Picks a tool from its key (V, R, S, F, W, L, I, P) — not while typing. */
+/** Picks a tool from its key (V, R, Q, D, S, W, L, I, P) — not while typing. */
 export function railKey(e: KeyboardEvent, playerOnly = false): RailTool | null {
   const el = e.target as HTMLElement
   if (e.ctrlKey || e.metaKey || e.altKey || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable) return null
@@ -271,6 +273,22 @@ export function ToolIcon({ tool }: { tool: RailTool }): JSX.Element {
         <Svg>
           <rect x="1.5" y="3" width="13" height="10" rx="0.5" />
           <path d="M1.5 6.3h13M1.5 9.7h13M5.5 3v3.3M10.5 3v3.3M8 6.3v3.4M5.5 9.7V13M10.5 9.7V13" />
+        </Svg>
+      )
+    case 'pointer':
+      // An arrow with a little trail behind it.
+      return (
+        <Svg>
+          <path d="M6 2.5l7 6.2-3.3.4 1.9 3.9-1.6.8-1.9-3.9L6 12z" />
+          <path d="M2.5 5.5l1.2.5M2 8.6l1.3.1M3.1 11.4l1-.8" />
+        </Svg>
+      )
+    case 'draw':
+      // A pencil drawing a squiggle.
+      return (
+        <Svg>
+          <path d="M9.8 2.7l2.5 2.5-6.2 6.2-3.1.6.6-3.1z" />
+          <path d="M2 14c1.5-1 2.5 1 4 0s2.5 1 4 0" />
         </Svg>
       )
     case 'light':

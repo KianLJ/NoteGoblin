@@ -1,0 +1,66 @@
+/* Shared collections: everyone else's cursors, pointers and drawings, drawn in the collection's own space. */
+.gb-shared-probe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1000px;
+  height: 1000px;
+  pointer-events: none;
+  visibility: hidden;
+}
+/* While pointing or drawing: takes the mouse everywhere in the collection. */
+.gb-shared-capture {
+  position: absolute;
+  left: -100000px;
+  top: -100000px;
+  width: 200000px;
+  height: 200000px;
+  z-index: 99998;
+  cursor: crosshair;
+  touch-action: none;
+}
+.gb-shared-marks {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 99999;
+}
+.gb-shared-cursor {
+  position: absolute;
+  z-index: 100000;
+  transform-origin: 0 0;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  transition: left 80ms linear, top 80ms linear;
+}
+.gb-shared-cursor span {
+  margin-top: 12px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #0b0907;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.gb-canvas-crumb-note {
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.gb-canvas-crumb--on {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+.gb-canvas-crumb-error {
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--danger);
+  white-space: nowrap;
+}

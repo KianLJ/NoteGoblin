@@ -38,6 +38,10 @@ export type RequestKind =
   | 'battleMap.image'
   | 'battleMap.moveToken'
   | 'battleMap.dragToken'
+  | 'battleMap.mark'
+  | 'boards.get'
+  | 'boards.change'
+  | 'boards.presence'
   | 'battleMap.faceToken'
   | 'campaignPacks.list'
   | 'folders.list'
@@ -224,6 +228,38 @@ export interface BattleMapDragFrame {
   combatantId: string
   x: number | null
   y: number | null
+}
+
+/** A change someone made to a shared collection (shared/boards.ts), for everyone else to apply to their copy. */
+export interface BoardChangeFrame {
+  type: 'board-change'
+  campaignId: string
+  change: unknown
+  actor: { id: string; name: string; isDm: boolean }
+}
+
+/** Someone's cursor, pointer or drawing on a shared collection, right now. Never saved. */
+export interface BoardPresenceFrame {
+  type: 'board-presence'
+  campaignId: string
+  presence: BoardPresence
+}
+
+export interface BoardPresence {
+  boardId: string
+  userId: string
+  name: string
+  colour: string
+  /** Where their cursor is on the collection; null when it's left. */
+  cursor: { x: number; y: number } | null
+  /** A pointer or drawing of theirs (shared/battleMap.ts's MapMark, in canvas pixels). */
+  mark?: unknown
+}
+
+/** Someone pointing at or drawing on the battle map, right now (see shared/battleMap.ts's MapMark). Never saved. */
+export interface BattleMapMarkFrame {
+  type: 'battle-map-mark'
+  mark: unknown
 }
 
 /** A map's picture, in pieces under the relay's message cap — sent to a player who asks ('worldMap.image'). */

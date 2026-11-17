@@ -19,6 +19,10 @@ import type {
   ForceRollFrame,
   CharacterHpFrame,
   BattleMapDragFrame,
+  BattleMapMarkFrame,
+  BoardChangeFrame,
+  BoardPresenceFrame,
+  BoardPresence,
   SceneChangedFrame,
   MusicChangedFrame,
   MusicTrackChunkFrame,
@@ -34,7 +38,7 @@ import type {
 import { announceHostingStatus } from './relaySocket'
 import type { CharacterSheet, ForceRollRequest, Handout, Message } from '@shared/ipc'
 import { sanitizeForPlayer, type InitiativeState } from '@shared/encounter'
-import { canStand, hiddenCombatantIds, IMAGE_REF, imageIdOf, isFogged, mapForPlayer, tokenCentre, type BattleMap } from '@shared/battleMap'
+import { canStand, hiddenCombatantIds, IMAGE_REF, imageIdOf, isFogged, mapForPlayer, markColour, readMark, tokenCentre, type BattleMap, type MapMark } from '@shared/battleMap'
 import { canReach, visionActive } from '@shared/vision'
 import type { DiceRollLogEntry } from '@shared/dice'
 import type { LiveSceneState } from '@shared/sessionDeck'
@@ -359,6 +363,26 @@ export function broadcastTokenDrag(combatantId: string, x: number | null, y: num
   for (const [userId, tokens] of seenTokens) if (userId !== exceptUserId && tokens.has(combatantId)) sendToRelay(userId, frame)
 }
 
+/** A change to a shared collection, to everyone in that campaign except whoever made it (and the DM's own window, when a player made it). */
+export function broadcastBoardChange(campaignId: string, change: unknown, actor: BoardChangeFrame['actor'], exceptUserId?: string): void {
+  const frame: BoardChangeFrame = { type: 'board-change', campaignId, change, actor }
+  for (const p of players.values()) if (p.campaignId === campaignId && p.userId !== exceptUserId) sendToRelay(p.userId, frame)
+  if (exceptUserId && dmWindow) dmWindow.webContents.send('ws:board-change', { sessionId: null, campaignId, change, actor })
+}
+
+/** Someone's cursor, pointer or drawing on a shared collection, to everyone else in that campaign. */
+export function broadcastBoardPresence(campaignId: string, presence: BoardPresence, exceptUserId?: string): void {
+  const frame: BoardPresenceFrame = { type: 'board-presence', campaignId, presence }
+  for (const p of players.values()) if (p.campaignId === campaignId && p.userId !== exceptUserId) sendToRelay(p.userId, frame)
+  if (exceptUserId && dmWindow) dmWindow.webContents.send('ws:board-presence', { sessionId: null, campaignId, presence })
+}
+
+/** A pointer or drawing on the battle map, to everyone at the table except whoever's making it. */
+export function broadcastMark(mark: MapMark, exceptUserId?: string): void {
+  const frame: BattleMapMarkFrame = { type: 'battle-map-mark', mark }
+  for (const p of players.values()) if (p.userId !== exceptUserId) sendToRelay(p.userId, frame)
+}
+
 function playerMap(map: BattleMap, encounter: InitiativeState, userId: string): ReturnType<typeof mapForPlayer> {
   return mapForPlayer(map, hiddenCombatantIds(encounter.combatants), { combatants: encounter.combatants, userId })
 }
@@ -674,6 +698,27 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       }
       return { reqId: frame.reqId, ok: true, data: { imageId } }
     }
+    // Shared collections: anyone at the table reads and changes them; every change goes straight to everyone else.
+    case 'boards.get':
+      return fromService(frame.reqId, campaignService.getBoards(db, str('campaignId'), userId))
+    case 'boards.change': {
+      const campaignId = str('campaignId')
+      const change = input('change')
+      const result = campaignService.changeBoards(db, campaignId, userId, change)
+      if (result.ok) broadcastBoardChange(campaignId, change, result.data, userId)
+      return result.ok ? { reqId: frame.reqId, ok: true, data: result.data } : { reqId: frame.reqId, ok: false, error: result.error }
+    }
+    // Where someone's cursor is on a shared collection, and what they're pointing at or drawing: passed on, never kept.
+    case 'boards.presence': {
+      const campaignId = str('campaignId')
+      const raw = input('presence') as Partial<BoardPresence> | undefined
+      const player = players.get(userId)
+      if (!raw || typeof raw.boardId !== 'string' || player?.campaignId !== campaignId) return { reqId: frame.reqId, ok: true, data: undefined }
+      const cursor = raw.cursor && Number.isFinite(raw.cursor.x) && Number.isFinite(raw.cursor.y) ? { x: raw.cursor.x, y: raw.cursor.y } : null
+      const mark = raw.mark === undefined ? undefined : readMark(raw.mark)
+      broadcastBoardPresence(campaignId, { boardId: raw.boardId, userId, name: player.characterName || username, colour: markColour(userId), cursor, ...(mark ? { mark } : {}) }, userId)
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
     // Anyone at the table changes the party stash, one change at a time.
     case 'stash.get':
       return fromService(frame.reqId, campaignService.getStash(db, str('campaignId'), userId))
@@ -773,6 +818,17 @@ async function dispatch(userId: string, username: string, frame: RequestFrame): 
       if (!battle || !c || c.kind !== 'player' || c.userId !== userId || battle.map.tokens[combatantId]?.locked) return { reqId: frame.reqId, ok: true, data: undefined }
       if (dmWindow) dmWindow.webContents.send('ws:battle-map-drag', { sessionId: null, combatantId, x, y })
       broadcastTokenDrag(combatantId, x, y, userId)
+      return { reqId: frame.reqId, ok: true, data: undefined }
+    }
+    // A player pointing at or drawing on the map: if the DM allows it, everyone else sees it, in the player's own name and colour.
+    case 'battleMap.mark': {
+      const mark = readMark(p.mark)
+      const allowed = battle?.map.playerMarks ?? { pointer: true, draw: true }
+      if (!battle || !mark || !allowed[mark.kind === 'pointer' ? 'pointer' : 'draw']) return { reqId: frame.reqId, ok: true, data: undefined }
+      const name = players.get(userId)?.characterName || username
+      const theirs = { ...mark, id: `${userId}:${mark.id}`, by: name, colour: markColour(userId) }
+      if (dmWindow) dmWindow.webContents.send('ws:battle-map-mark', { sessionId: null, mark: theirs })
+      broadcastMark(theirs, userId)
       return { reqId: frame.reqId, ok: true, data: undefined }
     }
     // A player turning their own token (facing shown, not locked): handed to the DM's map.

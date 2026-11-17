@@ -119,6 +119,13 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('ws:battle-map-player-face', listener)
     },
     dragToken: (sessionId, combatantId, x, y) => ipcRenderer.invoke('battleMap:drag-token', sessionId, combatantId, x, y),
+    mark: (mark) => ipcRenderer.invoke('battleMap:mark', mark),
+    markAsPlayer: (sessionId, mark) => ipcRenderer.invoke('battleMap:mark-player', sessionId, mark),
+    onMark: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, m: { sessionId: string | null; mark: unknown }): void => callback(m)
+      ipcRenderer.on('ws:battle-map-mark', listener)
+      return () => ipcRenderer.removeListener('ws:battle-map-mark', listener)
+    },
     onDrag: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, drag: { sessionId: string | null; combatantId: string; x: number | null; y: number | null }): void => callback(drag)
       ipcRenderer.on('ws:battle-map-drag', listener)
@@ -149,6 +156,21 @@ const api: AppApi = {
   reputation: {
     get: (campaignId, sessionId) => ipcRenderer.invoke('reputation:get', campaignId, sessionId),
     save: (campaignId, doc) => ipcRenderer.invoke('reputation:save', campaignId, doc)
+  },
+  boards: {
+    get: (campaignId, sessionId) => ipcRenderer.invoke('boards:get', campaignId, sessionId),
+    change: (campaignId, change, sessionId) => ipcRenderer.invoke('boards:change', campaignId, change, sessionId),
+    presence: (campaignId, presence, sessionId) => ipcRenderer.invoke('boards:presence', campaignId, presence, sessionId),
+    onChange: (callback) => {
+      const listener = (_e: Electron.IpcRendererEvent, m: Parameters<typeof callback>[0]): void => callback(m)
+      ipcRenderer.on('ws:board-change', listener)
+      return () => ipcRenderer.removeListener('ws:board-change', listener)
+    },
+    onPresence: (callback) => {
+      const listener = (_e: Electron.IpcRendererEvent, m: Parameters<typeof callback>[0]): void => callback(m)
+      ipcRenderer.on('ws:board-presence', listener)
+      return () => ipcRenderer.removeListener('ws:board-presence', listener)
+    }
   },
   stash: {
     get: (campaignId, sessionId) => ipcRenderer.invoke('stash:get', campaignId, sessionId),

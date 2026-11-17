@@ -5,14 +5,14 @@
 // with Move, can be dragged, resized from its handle, or sized exactly.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { VehicleArc } from '@shared/content/schema'
-import { canStand, normalizeFacing, tokenCentre, tokenH, tokenW, turnToken, gridDistanceFt, mapBounds, snapHalf, templateLabel, type BattleMap, type Bounds, type MapImage, type MapLight, type MapTemplate, type MapToken, type MapWall, type TemplateKind } from '@shared/battleMap'
+import { canStand, DRAW_FADE_MS, MARK_POINTS_MAX, normalizeFacing, tokenCentre, tokenH, tokenW, turnToken, gridDistanceFt, mapBounds, snapHalf, templateLabel, type BattleMap, type Bounds, type MapImage, type MapMark, type MapLight, type MapTemplate, type MapToken, type MapWall, type TemplateKind } from '@shared/battleMap'
 import type { Combatant } from '@shared/encounter'
 import { isTrackpadWheel } from '@shared/canvasLayout'
 import { blockingWalls, canReach, decodeExplored, slideMove, lightsOf, tokenSeen, visibleCells, LIGHT_PRESETS, sightBounds, visibilityPolygon, segTouchesBox, wallAt, type LightSource, type VisionSource } from '@shared/vision'
 import { doorSpan, insertDoor, isOpening, roomWalls, snapRoomCorner, snapWallPoint, wallUnder, withoutOverlaps, type SnapKind } from '@shared/walls'
 import { XIcon } from '../../ui/icons'
 
-export type MapTool = 'move' | 'ruler' | TemplateKind | 'walls' | 'light' | 'images' | 'props'
+export type MapTool = 'move' | 'ruler' | 'pointer' | 'draw' | TemplateKind | 'walls' | 'light' | 'images' | 'props'
 /** Walls tool: draw walls corner by corner, drag out a door, or pick one to change. */
 export type WallDraw = 'wall' | 'room' | 'door' | 'window' | 'blocker' | 'select' | 'selectBlocker'
 
@@ -33,6 +33,11 @@ interface Props {
   selectedId: string | null
   onSelect: (id: string | null) => void
   tool: MapTool
+  /** Everyone else's pointers and drawings (see useMapMarks). */
+  marks?: MapMark[]
+  /** Sends your own pointer or drawing to the table; who you are, for its name and colour. */
+  onMark?: (m: MapMark) => void
+  markAs?: { by: string; colour: string }
   /** What a click with the Lights tool places (picked along the top bar). */
   newLight?: { name: string; bright: number; dim: number }
   /** Snap shapes to square corners and centres (and sizes to whole squares). */
@@ -78,6 +83,8 @@ type Drag =
   | { kind: 'door'; a: Pt; b: Pt; wallId: string | null; window: boolean }
   /** A room: four walls between two corners. */
   | { kind: 'room'; a: Pt; b: Pt }
+  /** Pointing at the map, or drawing on it. */
+  | { kind: 'mark'; mark: MapMark }
   /** A box dragged out with Pick: every wall it touches is picked. */
   | { kind: 'marquee'; a: Pt; b: Pt; additive: boolean }
   | { kind: 'wallEnd'; id: string; end: 'a' | 'b'; at: Pt }
@@ -108,7 +115,7 @@ function handlePoint(t: MapTemplate, feetPerCell: number): Pt {
   return { x: t.origin.x + Math.cos(ang) * L, y: t.origin.y + Math.sin(ang) * L }
 }
 
-export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, snap, onHint, viewer, wallDraw = 'wall', sight, centreRef, selectedImage = null, onSelectImage, remoteDrags = NO_DRAGS, onLiveDrag, aim = null, tokenPopup, newLight = LIGHT_PRESETS[1] }: Props): JSX.Element {
+export function BattleMapView({ map, onChange, combatants, turnId, selectedId, onSelect, tool, snap, onHint, viewer, wallDraw = 'wall', sight, centreRef, selectedImage = null, onSelectImage, remoteDrags = NO_DRAGS, onLiveDrag, aim = null, tokenPopup, newLight = LIGHT_PRESETS[1], marks = NO_MARKS, onMark, markAs = { by: 'DM', colour: '#e8a33d' } }: Props): JSX.Element {
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState({ x: 40, y: 70, zoom: 1 })
   const [size, setSize] = useState({ w: 800, h: 600 })
@@ -302,6 +309,13 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     const tokenId = target.closest('[data-token]')?.getAttribute('data-token')
     const shapeId = target.closest('[data-template]')?.getAttribute('data-template')
     const handleId = target.closest('[data-handle]')?.getAttribute('data-handle')
+    // Pointing or drawing: anyone, on anything (the DM may turn it off for players).
+    if ((tool === 'pointer' || tool === 'draw') && e.button === 0 && onMark) {
+      const mark: MapMark = { id: crypto.randomUUID(), kind: tool, by: markAs.by, colour: markAs.colour, points: [p] }
+      setDrag({ kind: 'mark', mark })
+      sendMark(mark, true)
+      return
+    }
     // Aiming: a token is the target; anywhere else (or another button) stops aiming.
     if (aim) {
       if (e.button === 0 && tokenId && tokenId !== aim.from) aim.onPick(tokenId)
@@ -488,6 +502,17 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     if (!drag) return
     const p = toMap(e)
     const c = cellOf(p)
+    if (drag.kind === 'mark') {
+      const pts = drag.mark.points
+      const last = pts[pts.length - 1]
+      if (Math.hypot(p.x - last.x, p.y - last.y) < 0.04) return
+      // A pointer keeps only its last few points: the trail.
+      const points = drag.mark.kind === 'pointer' ? [...pts, p].slice(-POINTER_TRAIL) : [...pts, p].slice(0, MARK_POINTS_MAX)
+      const mark = { ...drag.mark, points }
+      setDrag({ kind: 'mark', mark })
+      sendMark(mark)
+      return
+    }
     if (drag.kind === 'pan') {
       fitted.current = true
       setView((v) => ({ ...v, x: drag.px + e.clientX - drag.x, y: drag.py + e.clientY - drag.y }))
@@ -536,6 +561,17 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
     else if (drag.kind === 'light') setDrag({ ...drag, at: p })
   }
 
+  // Your own drawings, fading after you let go; and your pointer or drawing going out as it changes (at most every 40 ms).
+  const [myMarks, setMyMarks] = useState<MapMark[]>([])
+  const lastMarkSent = useRef(0)
+  function sendMark(mark: MapMark, now = false): void {
+    if (!onMark) return
+    const t = performance.now()
+    if (!now && t - lastMarkSent.current < 40) return
+    lastMarkSent.current = t
+    onMark(mark)
+  }
+
   // A token being dragged goes out to everyone as it moves — at most every 50 ms, and always when it's let go.
   const lastSent = useRef(0)
   function sendDrag(id: string, at: Pt | null): void {
@@ -565,6 +601,16 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
 
   function onPointerUp(): void {
     if (!drag) return
+    if (drag.kind === 'mark') {
+      const mark = { ...drag.mark, done: true }
+      sendMark(mark, true)
+      if (mark.kind === 'draw') {
+        setMyMarks((all) => [...all, mark])
+        setTimeout(() => setMyMarks((all) => all.filter((m) => m.id !== mark.id)), DRAW_FADE_MS)
+      }
+      setDrag(null)
+      return
+    }
     if (drag.kind === 'marquee') {
       const box = { x0: Math.min(drag.a.x, drag.b.x), y0: Math.min(drag.a.y, drag.b.y), x1: Math.max(drag.a.x, drag.b.x), y1: Math.max(drag.a.y, drag.b.y) }
       const hit = pickable.filter((w) => segTouchesBox(w, box)).map((w) => w.id)
@@ -868,6 +914,10 @@ export function BattleMapView({ map, onChange, combatants, turnId, selectedId, o
           {!viewer && (tool === 'light' || lightsShown.some((l) => l.id === selectedLight)) &&
             lightsShown.map((l) => <LightMarker key={l.id} l={l} feetPerCell={map.feetPerCell} selected={l.id === selectedLight} active={tool === 'light'} />)}
 
+          {[...marks, ...myMarks, ...(drag?.kind === 'mark' ? [drag.mark] : [])].map((m) => (
+            <MarkSvg key={m.id} m={m} zoom={view.zoom} />
+          ))}
+
           {/* The shape being placed or resized shows its size; a selected one has a handle to drag. */}
           {drag?.kind === 'shape' && <SizeLabel t={drag.t} feetPerCell={map.feetPerCell} />}
           {selectedShown && drag?.kind !== 'shape' && !selectedShown.locked && <Handle t={selectedShown} feetPerCell={map.feetPerCell} />}
@@ -1007,6 +1057,43 @@ function ShapeOptions({ t, feetPerCell, onChange, onRemove, onClose }: { t: MapT
         </button>
       </div>
     </div>
+  )
+}
+
+const NO_MARKS: MapMark[] = []
+const POINTER_TRAIL = 14
+
+/** Someone's pointer (a dot with a fading trail and their name) or drawing (fading out once they've let go). */
+function MarkSvg({ m, zoom }: { m: MapMark; zoom: number }): JSX.Element {
+  const pts = m.points.map((q) => ({ x: q.x * CELL, y: q.y * CELL }))
+  if (m.kind === 'draw') {
+    return (
+      <polyline
+        className={m.done ? 'bm-mark-fade' : undefined}
+        points={pts.map((q) => `${q.x},${q.y}`).join(' ')}
+        fill="none"
+        stroke={m.colour}
+        strokeWidth={4}
+        vectorEffect="non-scaling-stroke"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        pointerEvents="none"
+      />
+    )
+  }
+  const head = pts[pts.length - 1]
+  return (
+    <g pointerEvents="none" opacity={m.done ? 0.5 : 1}>
+      {pts.slice(1).map((q, i) => (
+        <line key={i} x1={pts[i].x} y1={pts[i].y} x2={q.x} y2={q.y} stroke={m.colour} strokeOpacity={(i + 1) / pts.length} strokeWidth={(2 + (4 * (i + 1)) / pts.length) / zoom} strokeLinecap="round" />
+      ))}
+      <circle cx={head.x} cy={head.y} r={7 / zoom} fill={m.colour} stroke="#0b0907" strokeWidth={2 / zoom} />
+      {m.by && (
+        <text x={head.x + 11 / zoom} y={head.y - 9 / zoom} fontSize={12 / zoom} fontWeight={700} fill={m.colour} stroke="#0b0907" strokeWidth={3 / zoom} paintOrder="stroke">
+          {m.by}
+        </text>
+      )}
+    </g>
   )
 }
 

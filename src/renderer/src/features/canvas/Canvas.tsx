@@ -96,6 +96,10 @@ interface CanvasProps {
   onSequenceMove?: (id: string, to: number) => void
   /** After the breadcrumb, inside a collection (a session's Present button). */
   crumbExtra?: ReactNode
+  /** Drawn in canvas space, over the boxes (other people's cursors in a shared collection). */
+  overlay?: ReactNode
+  /** A shared collection is showing: no layouts, collections inside it, or Browser boxes (they're one person's). */
+  shared?: boolean
   /** Small text in the top-left corner: the open campaign's name. */
   title?: string
   /** Beside the title (the DM's Host button). */
@@ -117,7 +121,7 @@ const ZOOM_STEP = 1.2
  * back to the layout once they settle, so the tools inside don't re-render
  * on every frame.
  */
-export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, onSequenceMove, crumbExtra, title, titleExtra, onRestoreBoxes }, ref) {
+export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, onSequenceMove, crumbExtra, title, titleExtra, onRestoreBoxes, overlay, shared }, ref) {
   const viewportRef = useRef<HTMLDivElement>(null)
   // The dot grid's pattern id (useId's colons aren't safe inside url(#…)).
   const gridId = `gb-grid${useId().replace(/:/g, '')}`
@@ -267,7 +271,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     }
     const { add, open = [] } = contextMenu(at)
     // Everything new goes under one Add ▸; the workspace's own new things first, then the ones every canvas has.
-    const addMenu: ContextMenuItem = { label: 'Add', icon: <PlusIcon />, submenu: [...add, sticky, image, browser, ...(nav ? [collection] : [])] }
+    const addMenu: ContextMenuItem = { label: 'Add', icon: <PlusIcon />, submenu: [...add, sticky, image, ...(shared ? [] : [browser]), ...(nav && !shared ? [collection] : [])] }
     setMenu({ x: e.clientX, y: e.clientY, items: [addMenu, ...open.map((item, i) => (i === 0 ? { ...item, separatorBefore: true } : item))] })
   }
 
@@ -421,6 +425,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
 
   function renderNode({ item, node }: (typeof rendered)[number]): JSX.Element {
     const isCollection = item.id.startsWith(COLLECTION_PREFIX)
+    const isTile = isCollection || !!item.tileOpen
     return (
       <CanvasNode
         key={item.id}
@@ -436,10 +441,12 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         front={node!.z === topZ}
         pinned={node!.pinned}
         onTogglePin={() => setLayout((l) => setPinned(l, item.id, !node!.pinned, vpRef.current))}
-        minimized={isCollection || !!node!.minimized}
-        onToggleMinimize={isCollection ? () => nav?.enter(item.id.slice(COLLECTION_PREFIX.length)) : () => setLayout((l) => setMinimized(l, item.id, !node!.minimized, item.miniSize))}
+        minimized={isTile || !!node!.minimized}
+        onToggleMinimize={
+          isCollection ? () => nav?.enter(item.id.slice(COLLECTION_PREFIX.length)) : item.tileOpen ?? (() => setLayout((l) => setMinimized(l, item.id, !node!.minimized, item.miniSize)))
+        }
         mini={item.mini}
-        tileOpenTitle={isCollection ? 'Open' : undefined}
+        tileOpenTitle={isTile ? 'Open' : undefined}
         onMoveOut={nav?.path.length ? () => nav.moveOut(item.id) : undefined}
         minContent={MIN_CONTENT[dynamicKind(item.id)]}
         className={item.className}
@@ -543,6 +550,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
             </span>
           )
         })}
+          {overlay}
         </CanvasZoomContext.Provider>
         </div>
       </div>
@@ -624,6 +632,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
         )}
         <div className="gb-canvas-toolbar-sep" />
         <div className="gb-canvas-toolbar-group" role="group" aria-label="View">
+          {/* Layouts are your own canvas's, not a shared collection's. */}
+          {!shared && (
           <LayoutsMenu
             mode={mode}
             onApply={(preset) => {
@@ -640,6 +650,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
             }}
             onSaveCurrent={(label) => presetFromLayout(layout, 'new', label, allEntries(mode))}
           />
+          )}
           <button type="button" className="gb-dock-tool" data-label="Fit everything in view" aria-label="Fit everything in view" onClick={fitAll} disabled={rendered.length === 0}>
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

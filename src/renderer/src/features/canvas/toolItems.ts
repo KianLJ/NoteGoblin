@@ -21,6 +21,8 @@ export interface CanvasItem {
   /** What it shows while minimized, at `miniSize`, instead of the plain tile. */
   mini?: ReactNode
   miniSize?: { w: number; h: number }
+  /** A tile that opens like a collection (a shared collection): what Open, or a double-click, does. */
+  tileOpen?: () => void
 }
 
 /** A tool with a small view of its own for when it's minimized (see TOOL_MINI). */

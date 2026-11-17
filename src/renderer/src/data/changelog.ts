@@ -7,6 +7,18 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.16.0',
+    title: 'Collections the whole table shares',
+    highlights: [
+      'Shared collections: anyone at the table, player or DM, can make one from right-click → Add, and its tile appears on everyone’s canvas. Inside it’s a collection like any other — notes, sticky notes, images, statblocks and Codex entries — except everyone sees the same boxes move and change as it happens',
+      'Each box in a shared collection is its owner’s to move, change or close; everyone else sees it but can’t change it until the owner lets them (Let everyone edit mine). The DM can change anything',
+      'See everyone’s cursors in a shared collection, and point or draw for the whole table (drawings fade after a few seconds)',
+      'Only the tools made for sharing work inside one: notes, initiative, calendar, quests, reputation, the world map and the Codex',
+      'On the battle map, everyone can point (Q) and draw (D) for the table: a pointer leaves a short trail, and drawings fade after five seconds so the map never fills up',
+      'Map settings are reorganised into Grid, Lighting and sight, Players can, and Clear the map, and the DM can turn players’ pointing and drawing on or off'
+    ]
+  },
+  {
     version: '0.15.0',
     title: 'Props, blockers, and a table that remembers who saw what',
     highlights: [

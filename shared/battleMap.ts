@@ -148,6 +148,8 @@ export interface BattleMap {
   ambient: Ambient
   /** Players see what any of the party sees (the default); false: each only what their own character sees. */
   sharedVision?: boolean
+  /** What players may do on the map besides moving their tokens: point at it, and draw on it. Both on unless set false. */
+  playerMarks?: { pointer: boolean; draw: boolean }
   /** What each viewer has seen so far ('party', or 'user:<id>' without shared vision), as encoded squares (see vision.ts's encodeCells) — shown dimmed once out of sight. */
   explored: Record<string, string>
 }
@@ -438,6 +440,8 @@ export interface PlayerBattleMap {
   walls: MapWall[]
   lights: LightSource[]
   ambient: Ambient
+  /** Whether the DM lets players point at and draw on the map. */
+  playerMarks?: { pointer: boolean; draw: boolean }
   /** What this player sees from, when the map limits sight (vision.ts's visionActive); null: they see the whole map. */
   vision: { sources: VisionSource[]; explored: string | null } | null
 }
@@ -489,8 +493,53 @@ export function mapForPlayer(map: BattleMap, hiddenIds: ReadonlySet<string> = ne
     walls: map.walls,
     lights: lightsOf(map, unseen),
     ambient: map.ambient,
+    playerMarks: { pointer: map.playerMarks?.pointer !== false, draw: map.playerMarks?.draw !== false },
     vision
   }
+}
+
+/**
+ * A mark someone is making on the map right now, seen by everyone at the
+ * table but never saved: a pointer (where they're pointing, with a short
+ * trail) or a line they're drawing (it fades a few seconds after they let
+ * go). Sent whole each time it changes, so a missed update doesn't matter.
+ */
+export interface MapMark {
+  id: string
+  kind: 'pointer' | 'draw'
+  /** Who's making it, shown beside a pointer, and their colour. */
+  by: string
+  colour: string
+  /** In squares. A pointer sends its last few, for the trail. */
+  points: Pt[]
+  /** Let go of: a pointer goes, a drawing fades. */
+  done?: boolean
+}
+
+export const MARK_POINTS_MAX = 400
+export const DRAW_FADE_MS = 5000
+
+/** A mark straight off the wire, made safe; null when it isn't one. */
+export function readMark(raw: unknown): MapMark | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  if (typeof m.id !== 'string' || (m.kind !== 'pointer' && m.kind !== 'draw') || !Array.isArray(m.points)) return null
+  const points = m.points
+    .filter((p): p is Pt => !!p && typeof p === 'object' && Number.isFinite((p as Pt).x) && Number.isFinite((p as Pt).y))
+    .slice(-MARK_POINTS_MAX)
+    .map((p) => ({ x: p.x, y: p.y }))
+  if (!points.length) return null
+  const colour = typeof m.colour === 'string' && /^#[0-9a-f]{6}$/i.test(m.colour) ? m.colour : '#e8a33d'
+  return { id: m.id.slice(0, 64), kind: m.kind, by: typeof m.by === 'string' ? m.by.slice(0, 40) : '', colour, points, ...(m.done === true ? { done: true } : {}) }
+}
+
+const MARK_COLOURS = ['#e8a33d', '#4fb3d9', '#7ccf6b', '#d96b9e', '#b38cf0', '#e5d34a', '#5fd1b5', '#f07f5a']
+
+/** Each person's own colour for their marks, the same every time. */
+export function markColour(who: string): string {
+  let h = 0
+  for (const ch of who) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return MARK_COLOURS[h % MARK_COLOURS.length]
 }
 
 /** The ids of hidden combatants, for mapForPlayer. */
@@ -593,6 +642,7 @@ export function normalizeBattleMap(input: unknown): BattleMap {
     lights: Array.isArray(m.lights) ? m.lights.filter((l) => l && typeof l.id === 'string' && typeof l.x === 'number' && typeof l.y === 'number') : [],
     ambient: m.ambient === 'dim' || m.ambient === 'dark' ? m.ambient : 'bright',
     ...(m.sharedVision === false ? { sharedVision: false } : {}),
+    ...(m.playerMarks && typeof m.playerMarks === 'object' ? { playerMarks: { pointer: m.playerMarks.pointer !== false, draw: m.playerMarks.draw !== false } } : {}),
     explored: m.explored && typeof m.explored === 'object' ? (m.explored as BattleMap['explored']) : {}
   }
 }

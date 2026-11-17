@@ -1,3 +1,4 @@
+import { useSharedCollection } from '../boards/useSharedCollection'
 import { usePartyPresence } from '../player/PartyList'
 import { WorldMap } from './WorldMap'
 import { ReputationTracker } from './ReputationTracker'
@@ -109,7 +110,13 @@ export function CampaignWorkspace({
   sharedTools,
   canvasRef
 }: CampaignWorkspaceProps): JSX.Element {
-  const [layout, setLayout, nav] = useCanvasLayout('dm')
+  const [rootLayout, setRootLayout, rootNav] = useCanvasLayout('dm')
+  // Shared collections: anyone at the table makes one; open, it's the canvas showing, like any collection.
+  const shared = useSharedCollection({ mode: 'dm', campaignId: campaign?.id ?? null, sessionId: null, isDm: true, rootLayout, setRootLayout, rootNav, canvasRef })
+  const layout = shared.active?.layout ?? rootLayout
+  const setLayout = shared.active?.setLayout ?? setRootLayout
+  const nav = shared.active?.nav ?? rootNav
+  // Shared collections: anyone at the table makes them, and they're on every canvas.
   const knownSheets = useKnownPlayerSheets(campaign?.id ?? null, playerCharacters)
   const entries = useCanvasEntries('dm')
   // One set of session decks for the Sessions list, each session's box and the presenter (the DM's local path — see Calendar's note below).
@@ -465,6 +472,7 @@ export function CampaignWorkspace({
   }
 
   const items: CanvasItem[] = [
+    ...shared.tiles,
     ...toolItems('dm', layout, tools, TOOL_ICONS),
     ...[...tabNotes, ...(notes ?? []).filter((n) => !tabNotes.some((t) => t.id === n.id) && findNode(layout, `note:${n.id}`))].map(
       (note): CanvasItem => ({
@@ -546,12 +554,15 @@ export function CampaignWorkspace({
     if (campaign) {
       add.push(
         { label: 'Party note', icon: <FileIcon />, onSelect: () => void newNoteAt('shared', at) },
-        { label: 'DM-only note', icon: <FileIcon />, onSelect: () => void newNoteAt('dm', at) }
+        // A DM-only note in a shared collection would be a box nobody else could see.
+        ...(shared.active ? [] : [{ label: 'DM-only note', icon: <FileIcon />, onSelect: () => void newNoteAt('dm', at) }])
       )
     }
     if (deckHere) add.unshift({ label: 'Scene', icon: <SessionIcon />, onSelect: () => void addSceneAt(deckHere, at) })
     add.push({ label: 'Monster statblock…', icon: <PawIcon />, onSelect: () => setMonsterPickAt(at) })
-    if (campaign) add.push({ label: 'Session', icon: <SessionIcon />, onSelect: () => void newSession(at) })
+    if (campaign && !shared.active) add.push({ label: 'Session', icon: <SessionIcon />, onSelect: () => void newSession(at) })
+    const newBoard = shared.add(at)
+    if (newBoard) add.push(newBoard)
     const open: ContextMenuItem[] = knownSheets.map(
       (known): ContextMenuItem => ({
         label: `Open ${known.sheet.name || 'Unnamed Character'}’s sheet${known.live ? '' : ' (away)'}`,
@@ -568,6 +579,8 @@ export function CampaignWorkspace({
         submenu: closedTools.map((kind) => ({ label: TOOL_META[kind].title, icon: TOOL_ICONS[kind], onSelect: () => canvasRef.current?.openTool(kind, at) }))
       })
     }
+    const closedBoards = shared.open(at)
+    if (closedBoards) open.push(closedBoards)
     return { add, open }
   }
 
@@ -629,7 +642,7 @@ export function CampaignWorkspace({
             : undefined
         }
         crumbExtra={
-          deckHere && (
+          shared.active?.crumbExtra ?? (deckHere && (
           <>
           <Button
             variant="secondary"
@@ -651,7 +664,7 @@ export function CampaignWorkspace({
             </Button>
           )}
           </>
-          )
+          ))
         }
         ref={canvasRef}
         mode="dm"
@@ -660,10 +673,12 @@ export function CampaignWorkspace({
         items={items}
         toolIcons={TOOL_ICONS}
         // The timer has its own live button in the dock (below), not a plain icon.
-        hiddenTools={[...HEADER_TOOLS, 'timer']}
+        hiddenTools={[...HEADER_TOOLS, 'timer', ...(shared.active?.hiddenTools ?? [])]}
         dock={<TimerDockButton onOpen={() => canvasRef.current?.openTool('timer')} onClose={() => canvasRef.current?.closeTool('timer')} />}
         floating={<DiceButton sessionId={hostedSessionId ?? null} />}
         contextMenu={contextMenu}
+        shared={!!shared.active}
+        overlay={shared.active?.overlay}
         title={campaign?.name}
         titleExtra={campaign && <HostButton hostedSessionId={hostedSessionId ?? null} onHostedSessionChange={onHostedSessionChange} />}
         corner={

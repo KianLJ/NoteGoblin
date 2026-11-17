@@ -3,6 +3,8 @@ import { LIBRARY_AUDIO_SCHEME, registerLibraryAudio } from './libraryAudio'
 import { join, extname } from 'path'
 import { readFile } from 'node:fs/promises'
 import { registerIpcHandlers } from './registerIpc'
+import { flushBoards } from '@server/services/campaignService'
+import { getHostDb } from '@server/db/hostDb'
 import { resolveVaultAssetPath } from '@server/files/vaultStore'
 import { resolveCustomMusicPath } from './customMusic'
 import { resolveCustomEntitySfxPath } from './customEntitySfx'
@@ -233,6 +235,15 @@ app.whenReady().then(() => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
+})
+
+// Shared collections save a moment after changes stop; anything still waiting is written before the app closes.
+app.on('before-quit', () => {
+  try {
+    flushBoards(getHostDb(app.getPath('userData')))
+  } catch {
+    /* nothing to save, or no database: nothing lost */
+  }
 })
 
 app.on('window-all-closed', () => {

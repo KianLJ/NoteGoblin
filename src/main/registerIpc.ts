@@ -34,6 +34,9 @@ import {
   stopSessionHost,
   inviteToSession,
   kickFromSession,
+  broadcastMark,
+  broadcastBoardChange,
+  broadcastBoardPresence,
   subscribeDmPresence,
   broadcastCampaignChanged,
   broadcastActiveCampaignChanged,
@@ -102,6 +105,9 @@ import type { CampaignStash } from '@shared/stash'
 import type { CampaignReputation } from '@shared/reputation'
 import type { CampaignMaps } from '@shared/worldMap'
 import type { BattleLibrary, BattleMap, PlayerBattleMap } from '@shared/battleMap'
+import { readMark } from '@shared/battleMap'
+import type { BoardActor, CampaignBoards } from '@shared/boards'
+import type { BoardPresence } from '@server/relay/sessionProtocol'
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 import { normalizeWithOwnPacks } from '@shared/content/sheet'
@@ -936,6 +942,44 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       if (getHostedSession()) broadcastCampaignChanged(campaignId)
     }
     return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+  })
+
+  // Shared collections: the DM's computer holds them; a player's reads and changes go to it over the session.
+  ipcMain.handle('boards:get', async (_event, campaignId: string, sessionId?: string): Promise<ApiResult<CampaignBoards>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.getBoards(me.db, campaignId, me.userId)
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest<CampaignBoards>('boards.get', { campaignId })
+  })
+  ipcMain.handle('boards:change', async (_event, campaignId: string, change: unknown, sessionId?: string): Promise<ApiResult<BoardActor>> => {
+    if (!sessionId) {
+      const me = ensureMyHostUser()
+      if ('error' in me) return { ok: false, error: me.error }
+      const result = campaignService.changeBoards(me.db, campaignId, me.userId, change)
+      if (result.ok && getHostedSession()) broadcastBoardChange(campaignId, change, result.data)
+      return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
+    }
+    const err = requireJoinedSession(sessionId)
+    if (err) return err
+    return sendSessionRequest<BoardActor>('boards.change', { campaignId, change })
+  })
+  ipcMain.handle('boards:presence', (_event, campaignId: string, presence: unknown, sessionId?: string): void => {
+    if (sessionId) {
+      if (!requireJoinedSession(sessionId)) void sendSessionRequest('boards.presence', { campaignId, presence })
+      return
+    }
+    if (!getHostedSession()) return
+    const p = presence as Partial<BoardPresence> | null
+    if (!p || typeof p.boardId !== 'string') return
+    const me = ensureMyHostUser()
+    const mark = p.mark === undefined ? undefined : readMark(p.mark)
+    const cursor = p.cursor && Number.isFinite(p.cursor.x) && Number.isFinite(p.cursor.y) ? { x: p.cursor.x, y: p.cursor.y } : null
+    broadcastBoardPresence(campaignId, { boardId: p.boardId, userId: 'error' in me ? 'dm' : me.userId, name: 'DM', colour: '#e8a33d', cursor, ...(mark ? { mark } : {}) })
   })
 
   // The party stash: the DM's own computer holds it; a player's read and changes go to it over the session.
@@ -1829,6 +1873,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // DM: a token being dragged right now, shown live to the players who can see it.
   ipcMain.handle('battleMap:drag', (_event, combatantId: string, x: number | null, y: number | null): void => {
     if (getHostedSession()) broadcastTokenDrag(combatantId, x, y)
+  })
+  // DM: pointing at or drawing on the map, shown to everyone at the table.
+  ipcMain.handle('battleMap:mark', (_event, mark: unknown): void => {
+    const m = readMark(mark)
+    if (m && getHostedSession()) broadcastMark(m)
+  })
+  // Player: pointing at or drawing on the map (the DM's app checks it's allowed and passes it round).
+  ipcMain.handle('battleMap:mark-player', (_event, sessionId: string, mark: unknown): void => {
+    if (!requireJoinedSession(sessionId)) void sendSessionRequest('battleMap.mark', { mark })
   })
   // Player: their own token being dragged right now (no answer needed; the move itself comes after).
   ipcMain.handle('battleMap:drag-token', (_event, sessionId: string, combatantId: string, x: number | null, y: number | null): void => {

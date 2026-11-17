@@ -108,7 +108,8 @@ export const DYNAMIC_SIZE: Record<string, { w: number; h: number }> = {
   sticky: { w: 224, h: 192 },
   collection: { w: 96, h: 96 },
   image: { w: 400, h: 332 },
-  browser: { w: 760, h: 640 }
+  browser: { w: 760, h: 640 },
+  board: { w: 96, h: 96 }
 }
 
 export function dynamicKind(id: string): string {

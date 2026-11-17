@@ -220,6 +220,14 @@ CREATE TABLE IF NOT EXISTS campaign_stash (
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- Shared collections (see shared/boards.ts): one JSON document per campaign that anyone at the table changes, one
+-- change at a time. Not a foreign key, like campaign_stash.
+CREATE TABLE IF NOT EXISTS campaign_boards (
+  campaign_id TEXT PRIMARY KEY,
+  boards_json TEXT NOT NULL DEFAULT '{"boards":[]}',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- The reputation tracker (see shared/reputation.ts): one JSON document per campaign, DM-written; players read only the
 -- shown entries, without the DM's notes.
 CREATE TABLE IF NOT EXISTS campaign_reputation (

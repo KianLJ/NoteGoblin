@@ -5,6 +5,8 @@ export interface CanvasImage {
   kind: 'image'
   id: string
   name: string
+  /** The picture itself, when it came from a shared collection (so everyone has it); otherwise it's on this computer. */
+  src?: string
 }
 
 /** An image on the canvas, fitted inside its box (resize the box to resize it). */
@@ -12,13 +14,17 @@ export function ImageBox({ image }: { image: CanvasImage }): JSX.Element {
   const [src, setSrc] = useState<string | null | undefined>(undefined)
   useEffect(() => {
     let live = true
+    if (image.src) {
+      setSrc(image.src)
+      return
+    }
     getCanvasImage(image.id)
       .then((url) => live && setSrc(url ?? null))
       .catch(() => live && setSrc(null))
     return () => {
       live = false
     }
-  }, [image.id])
+  }, [image.id, image.src])
   if (src === undefined) return <div />
   if (src === null) return <div className="gb-canvas-image-missing">This image isn’t on this computer any more.</div>
   return (

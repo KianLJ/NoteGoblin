@@ -253,3 +253,14 @@ describe('picking walls with a box', () => {
     expect(segTouchesBox({ a: { x: 3, y: 0 }, b: { x: 3, y: 5 } }, box)).toBe(false)
   })
 })
+
+describe('marks on the map', () => {
+  it('only takes a pointer or drawing with real points, and keeps it short', async () => {
+    const { readMark, MARK_POINTS_MAX } = await import('@shared/battleMap')
+    expect(readMark({ id: 'a', kind: 'erase', points: [{ x: 1, y: 1 }] })).toBeNull()
+    expect(readMark({ id: 'a', kind: 'draw', points: [{ x: 'no' }] })).toBeNull()
+    const long = readMark({ id: 'a', kind: 'draw', by: 'Sam', colour: 'red', points: Array.from({ length: 1000 }, (_, i) => ({ x: i, y: 0 })) })
+    expect(long?.points).toHaveLength(MARK_POINTS_MAX)
+    expect(long?.colour).toMatch(/^#/)
+  })
+})

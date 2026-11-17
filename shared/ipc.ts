@@ -6,6 +6,7 @@ import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, R
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
+import type { BoardActor, BoardChange, CampaignBoards } from './boards'
 import type { CampaignVehicles } from './vehicles'
 import type { CampaignQuests } from './quests'
 import type { CampaignStash, StashChange } from './stash'
@@ -410,6 +411,12 @@ export interface AppApi {
     dragToken: (sessionId: string, combatantId: string, x: number | null, y: number | null) => Promise<void>
     /** Someone else dragging a token right now (the DM hears players' drags; players hear the DM's and each other's). */
     onDrag: (callback: (drag: { sessionId: string | null; combatantId: string; x: number | null; y: number | null }) => void) => () => void
+    /** DM: a pointer or drawing of theirs, to the table. */
+    mark: (mark: unknown) => Promise<void>
+    /** Player: a pointer or drawing of theirs (the DM's app passes it on if allowed). */
+    markAsPlayer: (sessionId: string, mark: unknown) => Promise<void>
+    /** Someone else's pointer or drawing (made safe with readMark). */
+    onMark: (callback: (m: { sessionId: string | null; mark: unknown }) => void) => () => void
     onUpdate: (callback: (update: { sessionId: string | null; map: PlayerBattleMap | null }) => void) => () => void
     onImage: (callback: (image: { imageId: string; image: string }) => void) => () => void
   }
@@ -649,6 +656,16 @@ export interface AppApi {
     trash: (campaignId: string, paths: string[]) => Promise<ApiResult<PropListing>>
     createFolder: (campaignId: string, parent: string, name: string) => Promise<ApiResult<PropListing>>
     renameFolder: (campaignId: string, folder: string, name: string) => Promise<ApiResult<PropListing>>
+  }
+  /** Shared collections (shared/boards.ts): `sessionId` for a player (their reads and changes go to the DM). */
+  boards: {
+    get: (campaignId: string, sessionId?: string) => Promise<ApiResult<CampaignBoards>>
+    /** One change; others get it as it lands. Fails (with why) when it isn't allowed. */
+    change: (campaignId: string, change: BoardChange, sessionId?: string) => Promise<ApiResult<BoardActor>>
+    /** Where your cursor is on a collection, and what you're pointing at or drawing (never kept). */
+    presence: (campaignId: string, presence: { boardId: string; cursor: { x: number; y: number } | null; mark?: unknown }, sessionId?: string) => Promise<void>
+    onChange: (callback: (m: { sessionId: string | null; campaignId: string; change: unknown; actor: BoardActor }) => void) => () => void
+    onPresence: (callback: (m: { sessionId: string | null; campaignId: string; presence: { boardId: string; userId: string; name: string; colour: string; cursor: { x: number; y: number } | null; mark?: unknown } }) => void) => () => void
   }
   music: {
     /** `trackId: null` stops music entirely. A no-op unless actually hosting. */

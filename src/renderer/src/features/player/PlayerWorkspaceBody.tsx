@@ -1,3 +1,4 @@
+import { useSharedCollection } from '../boards/useSharedCollection'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { WorldMap } from '../campaigns/WorldMap'
 import { ReputationTracker } from '../campaigns/ReputationTracker'
@@ -107,7 +108,12 @@ export function PlayerWorkspaceBody({
     deleteOfflineCampaign,
     campaignPacks
   } = workspace
-  const [layout, setLayout, nav] = useCanvasLayout('player')
+  const [rootLayout, setRootLayout, rootNav] = useCanvasLayout('player')
+  // Shared collections need the DM's app, so only while at their table; open, one is the canvas showing.
+  const shared = useSharedCollection({ mode: 'player', campaignId: sessionId && !isOffline ? (activeCampaign?.id ?? null) : null, sessionId, isDm: false, rootLayout, setRootLayout, rootNav, canvasRef })
+  const layout = shared.active?.layout ?? rootLayout
+  const setLayout = shared.active?.setLayout ?? setRootLayout
+  const nav = shared.active?.nav ?? rootNav
   const entries = useCanvasEntries('player')
   const party = usePartyPresence(sessionId, !isOffline ? (activeCampaign?.id ?? null) : null)
 
@@ -336,7 +342,7 @@ export function PlayerWorkspaceBody({
     }
   }
 
-  const items: CanvasItem[] = [...toolItems('player', layout, tools, TOOL_ICONS), ...entryItems('player', layout, entries)]
+  const items: CanvasItem[] = [...shared.tiles, ...toolItems('player', layout, tools, TOOL_ICONS), ...entryItems('player', layout, entries)]
   for (const { ref, title } of tabItems) {
     if (ref.kind === 'character') {
       const character = characters?.find((c) => c.id === ref.id)
@@ -461,6 +467,11 @@ export function PlayerWorkspaceBody({
         submenu: closedTools.map((kind) => ({ label: TOOL_META[kind].title, icon: TOOL_ICONS[kind], onSelect: () => canvasRef.current?.openTool(kind, at) }))
       })
     }
+    // Shared collections need the DM's app, so only while at their table.
+    const newBoard = shared.add(at)
+    if (newBoard) add.push(newBoard)
+    const closedBoards = shared.open(at)
+    if (closedBoards) open.push(closedBoards)
     return { add, open }
   }
 
@@ -539,7 +550,10 @@ export function PlayerWorkspaceBody({
         setLayout={setLayout}
         items={items}
         toolIcons={TOOL_ICONS}
-        hiddenTools={HEADER_TOOLS}
+        hiddenTools={[...HEADER_TOOLS, ...(shared.active?.hiddenTools ?? [])]}
+        crumbExtra={shared.active?.crumbExtra}
+        shared={!!shared.active}
+        overlay={shared.active?.overlay}
         contextMenu={contextMenu}
         // A saved layout's note and character boxes only show while their tab is open — so loading it opens them.
         onRestoreBoxes={(ids) => {

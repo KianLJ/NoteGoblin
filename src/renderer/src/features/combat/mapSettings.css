@@ -1,0 +1,177 @@
+/* The battle map's settings: a panel under the cog, in groups. */
+.bms {
+  position: absolute;
+  top: 60px;
+  right: 12px;
+  z-index: 6;
+  width: 330px;
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.bms-head {
+  display: flex;
+  align-items: center;
+}
+.bms-head strong {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+.bms-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.bms-close:hover {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+.bms-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-raised);
+}
+.bms-group h4 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bms-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bms-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bms-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.bms-text small,
+.bms-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.bms .bms-num {
+  flex-shrink: 0;
+  width: 60px;
+  padding: 3px 6px;
+  text-align: center;
+}
+.bms-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.bms-stepper button {
+  width: 26px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.bms-stepper button:hover:not(:disabled) {
+  background: var(--accent-subtle);
+}
+.bms-stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.bms-stepper b {
+  min-width: 18px;
+  text-align: center;
+  font-size: 13px;
+}
+.bms-seg {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+.bms-seg button {
+  flex: 1;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.bms-seg button.on {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+.bms-toggle {
+  cursor: pointer;
+}
+.bms-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.bms-toggle input:checked + .gb-toggle-track {
+  background: var(--accent);
+}
+.bms-toggle input:checked + .gb-toggle-track::after {
+  background: var(--text-on-accent);
+  transform: translateX(13px);
+}
+.bms-toggle input:focus-visible + .gb-toggle-track {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.bms-clear {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.bms-clear button {
+  padding: 5px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.bms-clear button:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.bms-clear button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
