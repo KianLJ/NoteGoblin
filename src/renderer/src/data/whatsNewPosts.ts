@@ -52,6 +52,17 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.16.1',
+    title: 'A quieter shared collection',
+    intro: 'A small one: shared collections get out of your way.',
+    sections: [
+      {
+        heading: 'Icons, not words',
+        body: 'Inside a shared collection, the bar beside its name used to spell everything out. Now it’s a row of small icons that stay quiet until you hover them: who it’s shared with, Point, Draw, a lock that lets everyone edit your boxes (or stops them), and a bin to delete it, which still asks before it does. Hover any icon to see what it does.'
+      }
+    ]
+  },
+  {
     version: '0.16.0',
     title: 'Collections the whole table shares',
     intro: 'Until now your canvas has been yours alone. This update adds collections the whole party works in together, and lets everyone point and draw on the battle map.',

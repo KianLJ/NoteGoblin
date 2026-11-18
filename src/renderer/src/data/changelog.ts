@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.16.1',
+    title: 'A quieter shared collection',
+    highlights: [
+      'The controls beside a shared collection’s name are small icons now, out of the way until you need them: shared, point, draw, a lock for who can edit your boxes, and delete (which still asks first). Hover any of them to see what it does'
+    ]
+  },
+  {
     version: '0.16.0',
     title: 'Collections the whole table shares',
     highlights: [
