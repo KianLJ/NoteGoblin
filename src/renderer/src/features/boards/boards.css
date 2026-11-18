@@ -48,15 +48,49 @@
   font-weight: 700;
   white-space: nowrap;
 }
-.gb-canvas-crumb-note {
-  padding: 0 6px;
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
+.gb-canvas-crumb-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border-subtle);
 }
-.gb-canvas-crumb--on {
+/* The shared collection's controls, beside its breadcrumb: small icon buttons, quiet until hovered. */
+.gb-canvas-crumb-icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.gb-canvas-crumb-icon:hover {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+.gb-canvas-crumb-icon--quiet {
+  cursor: default;
+}
+.gb-canvas-crumb-icon--quiet:hover {
+  background: none;
+  color: var(--text-muted);
+}
+.gb-canvas-crumb-icon--on {
   background: var(--accent-subtle);
   color: var(--accent-hover);
+}
+.gb-canvas-crumb-icon--danger:hover {
+  color: var(--danger);
+}
+/* Delete is a house button (it asks "Delete?" first): kept as small as the icons beside it. */
+.gb-btn.gb-canvas-crumb-icon {
+  font-size: 11px;
+  border: none;
+  box-shadow: none;
 }
 .gb-canvas-crumb-error {
   padding: 0 8px;

@@ -264,32 +264,43 @@ function SharedCrumbs({
   const sharedAll = yours.length > 0 && yours.every((n) => n.editors === 'all')
   return (
     <>
-      <span className="gb-canvas-crumb-note" title={`Made by ${board.ownerName}. Everyone at the table sees it and what’s in it; each box is its owner’s to change.`}>
-        Shared
+      <span className="gb-canvas-crumb-sep" aria-hidden="true" />
+      <span className="gb-canvas-crumb-icon gb-canvas-crumb-icon--quiet" title={`Shared: made by ${board.ownerName}. Everyone at the table sees it; each box is its owner’s to change.`} aria-label="Shared collection">
+        <Icon d="M5.5 7.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zM1.5 13c.4-2.2 2-3.4 4-3.4s3.6 1.2 4 3.4M10.6 3a2.1 2.1 0 0 1 0 4.1M12.3 9.6c1.1.5 1.9 1.6 2.2 3.4" />
       </span>
       {(['pointer', 'draw'] as const).map((t) => (
-        <button key={t} type="button" className={`gb-canvas-crumb${tool.value === t ? ' gb-canvas-crumb--on' : ''}`} onClick={() => tool.set(tool.value === t ? null : t)} title={t === 'pointer' ? 'Hold and move to point things out to everyone' : 'Draw for everyone to see; it fades after a few seconds'}>
-          {t === 'pointer' ? 'Point' : 'Draw'}
+        <button
+          key={t}
+          type="button"
+          className={`gb-canvas-crumb-icon${tool.value === t ? ' gb-canvas-crumb-icon--on' : ''}`}
+          onClick={() => tool.set(tool.value === t ? null : t)}
+          title={t === 'pointer' ? 'Point: hold and move to point things out to everyone' : 'Draw for everyone to see; it fades after a few seconds'}
+          aria-label={t === 'pointer' ? 'Point' : 'Draw'}
+          aria-pressed={tool.value === t}
+        >
+          {t === 'pointer' ? <Icon d="M5 2.5l7.5 6.4-3.5.4 2 4.1-1.7.8-2-4.1L5 12.6zM1.8 5.6l1.3.5M1.4 8.8l1.4.1M2.4 11.8l1.1-.8" /> : <Icon d="M10 2.6l2.6 2.6-6.4 6.4-3.2.6.6-3.2zM2 14c1.5-1 2.5 1 4 0s2.5 1 4 0" />}
         </button>
       ))}
       {yours.length > 0 && (
         <button
           type="button"
-          className="gb-canvas-crumb"
+          className={`gb-canvas-crumb-icon${sharedAll ? ' gb-canvas-crumb-icon--on' : ''}`}
           onClick={() => shareAll(sharedAll ? [] : 'all')}
-          title={sharedAll ? 'Only you (and the DM) can move and change your boxes here again' : 'Let everyone move and change your boxes here'}
+          title={sharedAll ? 'Your boxes here: everyone can edit them. Click so only you (and the DM) can again.' : 'Your boxes here: only you can edit them. Click to let everyone.'}
+          aria-label={sharedAll ? 'Stop letting everyone edit your boxes' : 'Let everyone edit your boxes'}
+          aria-pressed={sharedAll}
         >
-          {sharedAll ? 'Stop sharing mine' : 'Let everyone edit mine'}
+          {sharedAll ? <Icon d="M4 7.5V5a4 4 0 0 1 7.6-1.7M3 7.5h10v6.5H3z" /> : <Icon d="M4.5 7.5V5a3.5 3.5 0 0 1 7 0v2.5M3 7.5h10v6.5H3z" />}
         </button>
       )}
       {mine && (
         <ConfirmButton
-          label="Delete"
-          confirmLabel="Delete for everyone?"
+          label={<Icon d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 9h6.6l.7-9M6.8 7v4.5M9.2 7v4.5" />}
+          confirmLabel="Delete?"
           variant="ghost"
           danger
+          className="gb-canvas-crumb-icon gb-canvas-crumb-icon--danger"
           title="Delete this shared collection, and everything in it, for everyone"
-          style={{ fontSize: 11, padding: '1px 8px' }}
           onConfirm={() => {
             onDelete()
             send({ kind: 'deleteBoard', boardId: board.id })
@@ -298,6 +309,14 @@ function SharedCrumbs({
       )}
       {error && <span className="gb-canvas-crumb-error">{error}</span>}
     </>
+  )
+}
+
+function Icon({ d }: { d: string }): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
   )
 }
 
