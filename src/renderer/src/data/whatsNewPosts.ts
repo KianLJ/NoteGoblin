@@ -27,6 +27,7 @@ import orderShot from '../assets/whatsnew/0.14.0/order.jpg'
 import propsShot from '../assets/whatsnew/0.15.0/props.png'
 import lightsShot from '../assets/whatsnew/0.15.0/lights.png'
 import scenesShot from '../assets/whatsnew/0.15.0/scenes.png'
+import plannerShot from '../assets/whatsnew/0.17.0/planner.jpg'
 
 export interface WhatsNewSection {
   heading: string
@@ -51,6 +52,27 @@ export interface WhatsNewPost {
 
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
+  {
+    version: '0.17.0',
+    title: 'A session planner',
+    intro: 'The hardest part of any campaign is getting everyone round the same table. Now NoteGoblin helps with that too.',
+    sections: [
+      {
+        heading: 'Plan a session',
+        body: 'There’s a new calendar button in the top bar, just left of Messages. Click Plan a session, pick the campaign, and its players (and whoever runs it) are asked for you, as long as they’re your friends. Add a few times by day and hour, then click Ask them. Everyone asked gets a notification, says yes, maybe or no to each time, and you book the one that works. Booked sessions can go straight into Google, Outlook or Apple Calendar, and NoteGoblin reminds you the day before and the hour before.',
+        image: plannerShot,
+        caption: 'The month on the left, a day laid out underneath, and your plans on the right.'
+      },
+      {
+        heading: 'Who’s busy when',
+        body: 'Add the things you’ve got on to the calendar, with their times: work, a dentist, anything. Pick a day and everyone’s busy times sit side by side, with the stretches when you’re all free picked out in green, so a busy morning doesn’t rule out an evening game. Drag along your own line to mark a busy time, drag either end of a bar to change it, and click one to take it off. Times snap to the quarter hour and are written on the bar. Your friends see when you’re busy, never what it is.'
+      },
+      {
+        heading: 'Suggest a better time',
+        body: 'Times you’ve been asked about show on your calendar too. If none of them suit, click Suggest another time, drag out one that does, and send it. It shows on everyone’s calendar with your name on it, and they can click it to say yes or no.'
+      }
+    ]
+  },
   {
     version: '0.16.1',
     title: 'A quieter shared collection',

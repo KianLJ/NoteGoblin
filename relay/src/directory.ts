@@ -3,6 +3,7 @@ import type { Env } from './env'
 import { hashPassword, verifyPassword } from './lib/hash'
 import { signToken, verifyToken } from './lib/token'
 import { LOCKED_MESSAGE, isLocked, withFailure, type LoginFailures } from './lib/loginLimit'
+import { busyTimesOnly, readBusy, readPlan, whoToPing, withoutSuggestion, withSuggestion, withVote, type BusyBlock, type PlanView, type SessionPlan } from './lib/planner'
 
 /**
  * The account registry and friend graph for the whole relay, as a single
@@ -48,7 +49,10 @@ interface FriendRequests {
   outgoing: string[] // userIds *this* user has requested
 }
 
-type NotificationKind = 'friend-request' | 'friend-accepted' | 'session-invite' | 'message'
+type NotificationKind = 'friend-request' | 'friend-accepted' | 'session-invite' | 'message' | PlanNotificationKind
+
+/** The session planner's pings: asked to a plan, new times to answer, a time booked (or moved), the booking called off. */
+type PlanNotificationKind = 'plan-invite' | 'plan-times' | 'plan-booked' | 'plan-cancelled'
 
 interface Notification {
   id: string
@@ -58,6 +62,10 @@ interface Notification {
   sessionId?: string
   /** Only for kind === 'message' — which conversation kind this is, so the client can route "open this thread" correctly, and so a burst of messages from the same sender/kind collapses into one bumped notification (see pushNotification's dedup) instead of spamming the list. */
   messageKind?: MessageKind
+  /** For the planner's kinds: which plan, its name, and (booked) when it starts. */
+  planId?: string
+  planTitle?: string
+  at?: string
   createdAt: string
   read: boolean
 }
@@ -200,6 +208,8 @@ export class Directory extends Server<Env> {
     if (req.method === 'POST' && action === 'mark-read' && segments[segments.length - 2] === 'messages') {
       return this.handleMarkMessagesRead(req)
     }
+    if (req.method === 'GET' && action === 'planner') return this.handleGetPlanner(req)
+    if (req.method === 'POST' && segments[segments.length - 2] === 'planner') return this.handlePlanner(req, action)
 
     return json({ error: 'Not found' }, 404)
   }
@@ -820,6 +830,160 @@ export class Directory extends Server<Env> {
     return json(valid)
   }
 
+  // --- The session planner -------------------------------------------------
+  // Plans live here (not in anyone's campaign) so friends can answer while the
+  // organiser's app is closed. Storage: `busy:<userId>` (BusyBlock[]),
+  // `plan:<id>` (SessionPlan), `plans:<userId>` (ids of the plans they're in).
+
+  private async planIds(userId: string): Promise<string[]> {
+    return (await this.ctx.storage.get<string[]>(`plans:${userId}`)) ?? []
+  }
+
+  private async setPlanIndex(userId: string, planId: string, inIt: boolean): Promise<void> {
+    const ids = await this.planIds(userId)
+    const next = inIt ? (ids.includes(planId) ? ids : [...ids, planId]) : ids.filter((id) => id !== planId)
+    if (next !== ids) await this.ctx.storage.put(`plans:${userId}`, next)
+  }
+
+  /** A plan with everyone in it (organiser first): names, pictures and busy times (no titles). */
+  private async planView(plan: SessionPlan): Promise<PlanView> {
+    const members = await Promise.all(
+      [plan.ownerId, ...plan.memberIds].map(async (id) => {
+        const account = await this.ctx.storage.get<StoredAccount>(`user:${id}`)
+        return {
+          userId: id,
+          username: account?.username ?? 'Unknown',
+          ...(account?.avatar ? { avatar: account.avatar } : {}),
+          busy: busyTimesOnly((await this.ctx.storage.get<BusyBlock[]>(`busy:${id}`)) ?? [])
+        }
+      })
+    )
+    return { ...plan, members }
+  }
+
+  /** Everything the planner box shows: your busy times and every plan you're in. */
+  private async handleGetPlanner(req: Request): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const plans: PlanView[] = []
+    for (const id of await this.planIds(account.id)) {
+      const plan = await this.ctx.storage.get<SessionPlan>(`plan:${id}`)
+      if (plan && (plan.ownerId === account.id || plan.memberIds.includes(account.id))) plans.push(await this.planView(plan))
+    }
+    plans.sort((a, b) => (a.booked?.start ?? a.proposals[0]?.start ?? '9').localeCompare(b.booked?.start ?? b.proposals[0]?.start ?? '9'))
+    const friendIds = (await this.ctx.storage.get<string[]>(`friends:${account.id}`)) ?? []
+    const friendsBusy = Object.fromEntries(await Promise.all(friendIds.map(async (id) => [id, busyTimesOnly((await this.ctx.storage.get<BusyBlock[]>(`busy:${id}`)) ?? [])] as const)))
+    return json({ myBusy: (await this.ctx.storage.get<BusyBlock[]>(`busy:${account.id}`)) ?? [], friendsBusy, plans })
+  }
+
+  /** Tells everyone in a plan (but whoever did it) to re-fetch the planner. */
+  private async pushPlanChanged(plan: SessionPlan, exceptId: string): Promise<void> {
+    await Promise.all([plan.ownerId, ...plan.memberIds].filter((id) => id !== exceptId).map((id) => this.pushLive(id, { type: 'planner-changed' })))
+  }
+
+  private async pingPlan(userIds: string[], kind: PlanNotificationKind, fromUserId: string, plan: SessionPlan): Promise<void> {
+    const extra = { planId: plan.id, planTitle: plan.title, ...(plan.booked ? { at: plan.booked.start } : {}) }
+    await Promise.all(userIds.filter((id) => id !== fromUserId).map((id) => this.pushNotification(id, kind, fromUserId, undefined, undefined, extra)))
+  }
+
+  private async handlePlanner(req: Request, action: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const body = ((await req.json().catch(() => null)) ?? {}) as Record<string, unknown>
+
+    if (action === 'availability') {
+      await this.ctx.storage.put(`busy:${account.id}`, readBusy(body.busy))
+      // Your friends and everyone planning with you see your busy times change.
+      const tell = new Set((await this.ctx.storage.get<string[]>(`friends:${account.id}`)) ?? [])
+      for (const id of await this.planIds(account.id)) {
+        const plan = await this.ctx.storage.get<SessionPlan>(`plan:${id}`)
+        if (plan) for (const uid of [plan.ownerId, ...plan.memberIds]) tell.add(uid)
+      }
+      tell.delete(account.id)
+      await Promise.all([...tell].map((id) => this.pushLive(id, { type: 'planner-changed' })))
+      return json({ ok: true })
+    }
+
+    const planId = typeof body.planId === 'string' ? body.planId : typeof (body.plan as { id?: unknown })?.id === 'string' ? (body.plan as { id: string }).id : ''
+    const before = planId ? ((await this.ctx.storage.get<SessionPlan>(`plan:${planId}`)) ?? null) : null
+    // Anyone asked can answer, suggest a time, or take back one they suggested; the rest is the organiser's.
+    if (before && action !== 'vote' && action !== 'suggest' && action !== 'unsuggest' && before.ownerId !== account.id) return json({ error: 'Only the organiser can change this plan.' }, 403)
+
+    if (action === 'save') {
+      const friendIds = (await this.ctx.storage.get<string[]>(`friends:${account.id}`)) ?? []
+      const read = readPlan(body.plan, account.id, friendIds, before, new Date().toISOString())
+      if ('error' in read) return badRequest(read.error)
+      const plan = { ...read.plan, id: read.plan.id || crypto.randomUUID() }
+      await this.ctx.storage.put(`plan:${plan.id}`, plan)
+      const removed = before?.memberIds.filter((id) => !plan.memberIds.includes(id)) ?? []
+      for (const id of [plan.ownerId, ...plan.memberIds]) await this.setPlanIndex(id, plan.id, true)
+      for (const id of removed) {
+        await this.setPlanIndex(id, plan.id, false)
+        await this.pushLive(id, { type: 'planner-changed' })
+      }
+      const { invited, newTimes } = whoToPing(before, plan)
+      await this.pingPlan(invited, 'plan-invite', account.id, plan)
+      await this.pingPlan(newTimes, 'plan-times', account.id, plan)
+      // A booked time that moved, or went with its proposal.
+      const stillAsked = plan.memberIds.filter((id) => !invited.includes(id))
+      if (before?.booked && plan.booked && plan.booked.start !== before.booked.start) await this.pingPlan(stillAsked, 'plan-booked', account.id, plan)
+      if (before?.booked && !plan.booked) await this.pingPlan(stillAsked, 'plan-cancelled', account.id, plan)
+      await this.pushPlanChanged(plan, account.id)
+      return json(await this.planView(plan))
+    }
+
+    if (!before) return badRequest('No such plan')
+
+    if (action === 'vote') {
+      const plan = withVote(before, account.id, String(body.proposalId ?? ''), body.answer ?? null)
+      if (!plan) return badRequest('You can’t answer that.')
+      await this.ctx.storage.put(`plan:${plan.id}`, plan)
+      await this.pushPlanChanged(plan, account.id)
+      return json(await this.planView(plan))
+    }
+
+    if (action === 'suggest') {
+      const plan = withSuggestion(before, account.id, crypto.randomUUID(), body.start, body.minutes, new Date().toISOString())
+      if (!plan) return badRequest('You can’t suggest that time.')
+      await this.ctx.storage.put(`plan:${plan.id}`, plan)
+      await this.pingPlan([plan.ownerId, ...plan.memberIds], 'plan-times', account.id, plan)
+      await this.pushPlanChanged(plan, account.id)
+      return json(await this.planView(plan))
+    }
+
+    if (action === 'unsuggest') {
+      const plan = withoutSuggestion(before, account.id, String(body.proposalId ?? ''), new Date().toISOString())
+      if (!plan) return badRequest('You can’t take that time off.')
+      await this.ctx.storage.put(`plan:${plan.id}`, plan)
+      await this.pushPlanChanged(plan, account.id)
+      return json(await this.planView(plan))
+    }
+
+    if (action === 'book') {
+      // A proposal's id books it; null calls the booking off.
+      const proposal = body.proposalId === null ? null : before.proposals.find((p) => p.id === body.proposalId)
+      if (proposal === undefined) return badRequest('No such time')
+      const plan: SessionPlan = { ...before, updatedAt: new Date().toISOString() }
+      if (proposal) plan.booked = { proposalId: proposal.id, start: proposal.start, minutes: proposal.minutes }
+      else delete plan.booked
+      await this.ctx.storage.put(`plan:${plan.id}`, plan)
+      if (proposal) await this.pingPlan(plan.memberIds, 'plan-booked', account.id, plan)
+      else if (before.booked) await this.pingPlan(plan.memberIds, 'plan-cancelled', account.id, before)
+      await this.pushPlanChanged(plan, account.id)
+      return json(await this.planView(plan))
+    }
+
+    if (action === 'delete') {
+      await this.ctx.storage.delete(`plan:${before.id}`)
+      for (const id of [before.ownerId, ...before.memberIds]) await this.setPlanIndex(id, before.id, false)
+      if (before.booked && Date.parse(before.booked.start) > Date.now()) await this.pingPlan(before.memberIds, 'plan-cancelled', account.id, before)
+      await this.pushPlanChanged(before, account.id)
+      return json({ ok: true })
+    }
+
+    return json({ error: 'Not found' }, 404)
+  }
+
   /** Called by other rooms (e.g. session.ts on invite) that want to notify a user but don't own account data themselves — deliberately unauthenticated, same trust model as handleInternalFriendIds. */
   private async handleInternalNotify(req: Request): Promise<Response> {
     const body = (await req.json().catch(() => null)) as
@@ -838,7 +1002,8 @@ export class Directory extends Server<Env> {
     kind: NotificationKind,
     fromUserId: string,
     sessionId?: string,
-    messageKind?: MessageKind
+    messageKind?: MessageKind,
+    plan?: { planId: string; planTitle: string; at?: string }
   ): Promise<void> {
     const fromAccount = await this.ctx.storage.get<StoredAccount>(`user:${fromUserId}`)
     const notification: Notification = {
@@ -848,6 +1013,7 @@ export class Directory extends Server<Env> {
       fromUsername: fromAccount?.username ?? 'Unknown',
       sessionId,
       messageKind,
+      ...plan,
       createdAt: new Date().toISOString(),
       read: false
     }
@@ -860,6 +1026,8 @@ export class Directory extends Server<Env> {
     if (kind === 'message') {
       existing = existing.filter((n) => !(n.kind === 'message' && n.fromUserId === fromUserId && n.messageKind === messageKind))
     }
+    // The planner too: one ping per plan, the latest news.
+    if (plan) existing = existing.filter((n) => n.planId !== plan.planId)
     await this.ctx.storage.put(`notifications:${userId}`, [notification, ...existing].slice(0, MAX_NOTIFICATIONS_PER_USER))
 
     await this.pushLive(userId, { type: 'notification', notification })

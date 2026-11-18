@@ -3,6 +3,7 @@
 
 import type { Ability, CharacterSheetData, SkillName } from './dnd5e'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, RelayStatus, WhisperThread } from './relay'
+import type { BusyBlock, PlanAnswer, PlannerState, PlanView, SessionPlan } from './planner'
 import type { InitiativeState, PlayerVisibleInitiativeState } from './encounter'
 import type { DiceRollLogEntry } from './dice'
 import type { CalendarConfig } from './calendar'
@@ -804,6 +805,26 @@ export interface AppApi {
       /** Marks every unread 'message' notification from one sender/kind as read — call when opening (or while actively viewing) that thread, so the tab/thread unread counters clear. */
       markRead: (fromUserId: string, kind: 'friend' | 'whisper') => Promise<ApiResult<void>>
     }
+    // The session planner, relay-side so friends can answer while you're offline
+    // (relay/src/directory.ts's planner handlers check who may do what).
+    planner: {
+      get: () => Promise<ApiResult<PlannerState>>
+      /** Everything you have on (replaces the whole list); friends see the times, never the titles. */
+      setBusy: (busy: BusyBlock[]) => Promise<ApiResult<unknown>>
+      /** Creates (no id) or changes one of your plans; returns it as everyone sees it. */
+      save: (plan: Pick<SessionPlan, 'title' | 'memberIds' | 'proposals' | 'campaignId' | 'campaignName'> & { id?: string }) => Promise<ApiResult<PlanView>>
+      /** Your answer to one of a plan's times; null takes it back. */
+      vote: (planId: string, proposalId: string, answer: PlanAnswer | null) => Promise<ApiResult<PlanView>>
+      /** Someone asked suggesting a time of their own (an ISO start, minutes long); they're down as a yes for it. */
+      suggest: (planId: string, start: string, minutes: number) => Promise<ApiResult<PlanView>>
+      /** Taking back a time you suggested (or, the organiser, anyone's). */
+      unsuggest: (planId: string, proposalId: string) => Promise<ApiResult<PlanView>>
+      /** The organiser booking one of the times, or (null) calling the booking off. */
+      book: (planId: string, proposalId: string | null) => Promise<ApiResult<PlanView>>
+      remove: (planId: string) => Promise<ApiResult<unknown>>
+    }
+    /** Someone in one of your plans changed something: re-fetch planner.get(). */
+    onPlannerChanged: (callback: () => void) => () => void
     // Relay account management — uses your own relay session under the
     // hood, same as everything else here; the relay itself only allows this
     // for one specific admin username (see Directory.isAdmin), so this is a

@@ -1,3 +1,4 @@
+import { useSessionReminders } from '../planner/useSessionReminders'
 import { BrowserPanel } from '../browser/BrowserPanel'
 import { UndoToast } from '../../ui/UndoToast'
 import { ShortcutSheet } from '../../ui/ShortcutSheet'
@@ -14,6 +15,7 @@ import { BestiaryIcon, PacksIcon } from './icons'
 import { ContentPacksModal } from '../content/ContentPacksModal'
 import { FriendsButton, FriendsPanel } from '../friends/FriendsPanel'
 import { MessagesButton } from '../chat/MessagesButton'
+import { PlannerButton } from '../planner/PlannerButton'
 import { NotificationToasts } from '../notifications/NotificationToasts'
 import { RollAnimationOverlay } from '../dice/RollAnimationOverlay'
 import { useNotifications } from '../notifications/useNotifications'
@@ -137,6 +139,8 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   // button can also be gated on it — a friend showing as "hosting" doesn't
   // mean you've actually been invited to their session.
   const notifications = useNotifications()
+  // Booked sessions: a reminder the day before and the hour before.
+  useSessionReminders()
   const invitedSessionIds = new Set(
     notifications.notifications.filter((n) => n.kind === 'session-invite' && n.sessionId).map((n) => n.sessionId!)
   )
@@ -553,6 +557,12 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             </button>
           )}
           <div className="gb-topbar-group">
+          <PlannerButton
+            campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
+            campaignName={mode === 'dm' ? activeCampaign?.name : playerWorkspace.activeCampaign?.name}
+            campaignDmId={mode === 'dm' ? activeCampaign?.dmUserId : playerWorkspace.activeCampaign?.dmUserId}
+            sessionId={mode === 'dm' ? null : playerSessionId}
+          />
           <MessagesButton
             campaignId={mode === 'dm' ? (activeCampaign?.id ?? null) : (playerWorkspace.activeCampaign?.id ?? null)}
             sessionId={mode === 'dm' ? hostedSessionId : playerSessionId}

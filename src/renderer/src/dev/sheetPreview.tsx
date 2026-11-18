@@ -1,6 +1,9 @@
 // Dev-only: the character sheet on its own, with window.goblin stubbed, for
 // checking its layout in a plain browser (see vite.sheet-preview.config.ts).
 // Never imported by the app.
+import { readBusy, readPlan, withoutSuggestion, withSuggestion, withVote } from '../../../../relay/src/lib/planner'
+import type { BusyBlock } from '@shared/planner'
+import { type PlanAnswer, type PlannerState, type PlanView, type SessionPlan } from '@shared/planner'
 import { applyBoardChange, type CampaignBoards } from '@shared/boards'
 import React, { useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
@@ -314,7 +317,114 @@ const musicApi = {
   }
 }
 // ?friends and ?packs: a few friends, a request, and two packs (one on for the campaign).
+// ?showcase=planner: the session planner on an in-memory relay, with the relay's own rules (relay/src/lib/planner.ts).
+const planUsers: Record<string, string> = { me: 'Kian', f1: 'Sam', f2: 'Ollie', f3: 'Priya', f4: 'Marcus' }
+// Something on `days` from today, from `from` to `to` o'clock local (past midnight if `to` is smaller).
+const busyAt = (days: number, from: number, to: number, title?: string): BusyBlock => {
+  const d = new Date()
+  const s = new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, from)
+  const e = new Date(d.getFullYear(), d.getMonth(), d.getDate() + days + (to <= from ? 1 : 0), to)
+  return { id: crypto.randomUUID(), start: s.toISOString(), end: e.toISOString(), ...(title ? { title } : {}) }
+}
+const planBusy: Record<string, BusyBlock[]> = {
+  me: [busyAt(0, 9, 17, 'Work'), busyAt(1, 9, 17, 'Work'), busyAt(3, 13, 16, 'Dentist'), busyAt(4, 9, 18, 'Work')],
+  f1: [busyAt(0, 8, 16), busyAt(1, 18, 20), busyAt(6, 0, 0)],
+  f2: [busyAt(0, 12, 19), busyAt(5, 10, 14)],
+  f3: [],
+  f4: [busyAt(1, 17, 22), busyAt(2, 9, 17)]
+}
+const inDays = (days: number, hourUtc: number): string => {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + days)
+  d.setUTCHours(hourUtc, 0, 0, 0)
+  return d.toISOString()
+}
+let planStore: SessionPlan[] = [
+  {
+    id: 'plan-1',
+    ownerId: 'me',
+    title: 'Ashes of the Crown: session 13',
+    campaignId: 'camp',
+    campaignName: 'Ashes of the Crown',
+    memberIds: ['f1', 'f2', 'f3'],
+    proposals: [
+      { id: 'a', start: inDays(2, 19), minutes: 180 },
+      { id: 'b', start: inDays(3, 18), minutes: 240 },
+      { id: 'c', start: inDays(9, 19), minutes: 180 }
+    ],
+    votes: { a: { f1: 'yes', f2: 'yes', f3: 'maybe', me: 'yes' }, b: { f1: 'yes', f2: 'no' }, c: { f3: 'yes' } },
+    booked: { proposalId: 'a', start: inDays(2, 19), minutes: 180 },
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'plan-2',
+    ownerId: 'f1',
+    title: 'One-shot: the Drowned Bell',
+    memberIds: ['me', 'f4'],
+    proposals: [
+      { id: 'd', start: inDays(5, 18), minutes: 240 },
+      { id: 'e', start: inDays(6, 13), minutes: 300 },
+      { id: 'f', start: inDays(6, 17), minutes: 240, by: 'f4' }
+    ],
+    votes: { d: { f1: 'yes' }, f: { f4: 'yes' } },
+    updatedAt: new Date().toISOString()
+  }
+]
+const planView = (p: SessionPlan): PlanView => ({ ...p, members: [p.ownerId, ...p.memberIds].map((id) => ({ userId: id, username: planUsers[id] ?? id, busy: planBusy[id] ?? [] })) })
+const plannerState = (): PlannerState => ({ myBusy: planBusy.me, friendsBusy: { f1: planBusy.f1, f2: planBusy.f2, f3: planBusy.f3, f4: planBusy.f4 }, plans: planStore.filter((p) => p.ownerId === 'me' || p.memberIds.includes('me')).map(planView) })
+const plannerApi = {
+  get: async () => ({ ok: true, data: plannerState() }),
+  setBusy: async (busy: BusyBlock[]) => {
+    planBusy.me = readBusy(busy)
+    return { ok: true, data: { ok: true } }
+  },
+  save: async (raw: Partial<SessionPlan>) => {
+    const before = planStore.find((p) => p.id === raw.id) ?? null
+    const r = readPlan(raw, 'me', ['f1', 'f2', 'f3', 'f4'], before, new Date().toISOString())
+    if ('error' in r) return { ok: false, error: r.error }
+    const plan = { ...r.plan, id: r.plan.id || crypto.randomUUID() }
+    planStore = [...planStore.filter((p) => p.id !== plan.id), plan]
+    return { ok: true, data: planView(plan) }
+  },
+  suggest: async (planId: string, start: string, minutes: number) => {
+    const plan = planStore.find((p) => p.id === planId)
+    const next = plan && withSuggestion(plan, 'me', crypto.randomUUID(), start, minutes, new Date().toISOString())
+    if (!next) return { ok: false, error: 'You can’t suggest that time.' }
+    planStore = planStore.map((p) => (p.id === planId ? next : p))
+    return { ok: true, data: planView(next) }
+  },
+  unsuggest: async (planId: string, proposalId: string) => {
+    const plan = planStore.find((p) => p.id === planId)
+    const next = plan && withoutSuggestion(plan, 'me', proposalId, new Date().toISOString())
+    if (!next) return { ok: false, error: 'You can’t take that time off.' }
+    planStore = planStore.map((p) => (p.id === planId ? next : p))
+    return { ok: true, data: planView(next) }
+  },
+  vote: async (planId: string, proposalId: string, answer: PlanAnswer | null) => {
+    const plan = planStore.find((p) => p.id === planId)
+    const next = plan && withVote(plan, 'me', proposalId, answer)
+    if (!next) return { ok: false, error: 'You can’t answer that.' }
+    planStore = planStore.map((p) => (p.id === planId ? next : p))
+    return { ok: true, data: planView(next) }
+  },
+  book: async (planId: string, proposalId: string | null) => {
+    const plan = planStore.find((p) => p.id === planId)!
+    const prop = plan.proposals.find((p) => p.id === proposalId)
+    const next: SessionPlan = { ...plan }
+    if (prop) next.booked = { proposalId: prop.id, start: prop.start, minutes: prop.minutes }
+    else delete next.booked
+    planStore = planStore.map((p) => (p.id === planId ? next : p))
+    return { ok: true, data: planView(next) }
+  },
+  remove: async (planId: string) => {
+    planStore = planStore.filter((p) => p.id !== planId)
+    return { ok: true, data: { ok: true } }
+  }
+}
+
 const relayApi = {
+  planner: plannerApi,
+  onPlannerChanged: () => () => {},
   status: async () => 'connected',
   myUserId: async () => 'me',
   getAvatar: async () => null,

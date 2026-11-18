@@ -3,6 +3,7 @@ import { Button } from '../../ui/Button'
 import type { Notifications } from './useNotifications'
 import type { RelayNotification } from '@shared/relay'
 import { XIcon } from '../../ui/icons'
+import { openPlanner } from '../planner/usePlanner'
 
 interface NotificationToastsProps {
   notifications: Notifications
@@ -20,6 +21,14 @@ function describe(n: RelayNotification): string {
       return `${n.fromUsername} invited you to their session.`
     case 'message':
       return n.messageKind === 'whisper' ? `${n.fromUsername} whispered you.` : `${n.fromUsername} sent you a message.`
+    case 'plan-invite':
+      return `${n.fromUsername} is planning “${n.planTitle}” and wants to know when you can play.`
+    case 'plan-times':
+      return `${n.fromUsername} added times to “${n.planTitle}”: which suit you?`
+    case 'plan-booked':
+      return `“${n.planTitle}” is pencilled in for ${n.at ? new Date(n.at).toLocaleString(undefined, { weekday: 'long', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'a time'}.`
+    case 'plan-cancelled':
+      return `${n.fromUsername} called off “${n.planTitle}”.`
   }
 }
 
@@ -97,6 +106,18 @@ export function NotificationToasts({ notifications: notificationsApi, onJoined }
               <XIcon size={12} />
             </button>
           </div>
+          {n.kind.startsWith('plan-') && n.kind !== 'plan-cancelled' && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                markRead(n.id)
+                openPlanner()
+              }}
+              style={{ fontSize: 11, padding: '2px 8px', alignSelf: 'flex-start' }}
+            >
+              Open planner
+            </Button>
+          )}
           {n.kind === 'session-invite' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Button

@@ -1,5 +1,6 @@
 // Dev-only: the canvas and its newer pieces with sample content, for screenshots in the "What's new" post.
 // Open http://localhost:5180/sheet-preview.html?showcase=overview (or =statblock, =sessions, =whatsnew, =editor, =encounters, =cues, =hidden). Not part of the app build.
+import { PlannerPanel } from '../features/planner/PlannerPanel'
 import { useSharedCollection } from '../features/boards/useSharedCollection'
 import { useCanvasLayout } from '../features/canvas/useCanvasLayout'
 import { useCanvasEntries } from '../features/canvas/canvasEntries'
@@ -509,6 +510,15 @@ function ShowcaseScene({ scene }: { scene: string }): JSX.Element {
   if (scene === 'search') return <SearchShot />
   if (scene === 'table') return <TableShot />
   if (scene === 'browser') return <BrowserShot />
+  if (scene === 'planner')
+    // The session planner, as its top-bar popover shows it.
+    return (
+      <div style={{ height: '100vh', padding: 16, background: 'var(--bg-surface)' }}>
+        <div className="gb-card gb-plan-pop" style={{ position: 'static' }}>
+          <PlannerPanel campaignId="camp" campaignName="Ashes of the Crown" campaignDmId="f1" sessionId={null} />
+        </div>
+      </div>
+    )
   if (scene === 'worldmap')
     // The DM's world map (left) and a player's (right), on an in-memory map.
     return (

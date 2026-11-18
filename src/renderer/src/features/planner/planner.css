@@ -1,0 +1,741 @@
+/* The Session planner box (PlannerPanel.tsx). */
+/* The top bar's popover (PlannerButton.tsx). */
+.gb-plan-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(1000px, calc(100vw - 24px));
+  height: min(760px, calc(100vh - 70px));
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Calendar and day on the left, plans on the right; stacked when narrow. */
+.gb-plan {
+  --kind: #b0703c;
+  /* The shared form buttons take their colour from this. */
+  --quest: var(--kind);
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  color: var(--text-primary);
+}
+
+.gb-plan-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.gb-plan-col--plans {
+  border-left: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 760px) {
+  .gb-plan {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .gb-plan-col {
+    overflow: visible;
+  }
+  .gb-plan-col--plans {
+    border-top: 1px solid var(--border-subtle);
+    border-left: none;
+  }
+}
+
+.gb-plan-hint,
+.gb-plan-saved {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.gb-plan-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+  text-align: center;
+}
+
+.gb-plan-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.gb-plan-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--kind, var(--accent));
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gb-plan-week-day {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* A plan. */
+.gb-plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong, var(--border-subtle));
+  border-radius: 8px;
+  background: var(--bg-surface-raised);
+}
+
+.gb-plan-card--booked {
+  border-left-color: var(--kind, var(--accent));
+}
+
+.gb-plan-card--past {
+  opacity: 0.6;
+}
+
+.gb-plan-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gb-plan-card-head strong {
+  display: block;
+  font-family: var(--font-display, inherit);
+  font-size: 15px;
+}
+
+.gb-plan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.gb-plan-people {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.gb-plan-avatar {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: -5px;
+  border: 2px solid var(--bg-surface-raised);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--kind, var(--accent)) 35%, var(--bg-surface));
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  object-fit: cover;
+}
+
+.gb-plan-booked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--kind, var(--accent)) 16%, transparent);
+  font-size: 12px;
+}
+
+.gb-plan-booked-label {
+  color: var(--kind, var(--accent));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gb-plan-booked-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.gb-plan-times {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gb-plan-time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-surface-sunken, rgb(0 0 0 / 0.15));
+  font-size: 12px;
+}
+
+.gb-plan-time--booked {
+  outline: 1px solid var(--kind, var(--accent));
+}
+
+.gb-plan-time-when {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gb-plan-tally {
+  display: flex;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-plan-tally-yes {
+  color: var(--success);
+}
+
+.gb-plan-tally-maybe {
+  color: var(--accent);
+}
+
+.gb-plan-tally-no {
+  color: var(--danger);
+}
+
+.gb-plan-time-acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gb-plan-answers {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+}
+
+.gb-plan-answer {
+  padding: 2px 9px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.gb-plan-answer + .gb-plan-answer {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.gb-plan-answer--yes[aria-pressed='true'] {
+  background: var(--success);
+  color: var(--text-on-accent, #fff);
+}
+
+.gb-plan-answer--maybe[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+}
+
+.gb-plan-answer--no[aria-pressed='true'] {
+  background: var(--danger);
+  color: var(--text-on-accent, #fff);
+}
+
+.gb-plan-book {
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.gb-plan-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* The plan form. */
+.gb-plan-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The month. */
+.gb-plan-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gb-plan-cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.gb-plan-cal-day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 3px;
+  border: none;
+  border-radius: 5px;
+  background: var(--bg-surface-sunken, rgb(0 0 0 / 0.15));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+button.gb-plan-cal-day:hover {
+  outline: 1px solid var(--border-strong, var(--text-muted));
+}
+
+.gb-plan-cal-day--out {
+  background: none;
+  cursor: default;
+}
+
+.gb-plan-cal-day--today .gb-plan-cal-num {
+  color: var(--kind);
+  font-weight: 700;
+}
+
+.gb-plan-cal-day[aria-pressed='true'] {
+  outline: 2px solid var(--kind);
+}
+
+.gb-plan-cal-day--gone {
+  opacity: 0.5;
+}
+
+.gb-plan-cal-num {
+  display: flex;
+  justify-content: space-between;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* How many friends have something on that day. */
+.gb-plan-cal-others {
+  min-width: 13px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 25%, transparent);
+  color: var(--text-primary);
+  font-size: 9px;
+  text-align: center;
+}
+
+.gb-plan-cal-chip {
+  overflow: hidden;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-plan-cal-chip--session {
+  background: var(--kind);
+  color: var(--text-on-accent, #fff);
+}
+
+/* Proposed, not booked yet: an outline, not a fill. */
+.gb-plan-cal-chip--proposed {
+  border: 1px dashed var(--kind);
+  color: var(--text-primary);
+}
+
+.gb-plan-cal-chip--mine {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--text-secondary);
+}
+
+.gb-plan-cal-more {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+/* A day: everyone's busy times side by side. */
+.gb-plan-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface-raised);
+}
+
+.gb-plan-day-title {
+  font-family: var(--font-display, inherit);
+  font-size: 14px;
+}
+
+.gb-plan-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gb-plan-line {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.gb-plan-line-who {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-plan-line-track {
+  position: relative;
+  height: 28px;
+  border-radius: 3px;
+  background: var(--bg-surface-sunken, rgb(0 0 0 / 0.15));
+}
+
+.gb-plan-line--axis .gb-plan-line-track {
+  height: 12px;
+  background: none;
+}
+
+.gb-plan-line-tick {
+  position: absolute;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-plan-line-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  border-radius: 3px;
+}
+
+.gb-plan-line-bar--busy {
+  background: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.gb-plan-line-bar--free {
+  background: color-mix(in srgb, var(--success) 60%, transparent);
+}
+
+.gb-plan-line-bar--session {
+  background: var(--kind);
+}
+
+.gb-plan-line-bar--proposed {
+  border: 1px dashed var(--kind);
+  background: color-mix(in srgb, var(--kind) 18%, transparent);
+}
+
+.gb-plan-line-bar--draft {
+  border: 1px dashed var(--text-primary);
+  background: color-mix(in srgb, var(--kind) 45%, transparent);
+}
+
+.gb-plan-line-bar--ghost {
+  outline: 1px solid var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 25%, transparent);
+  pointer-events: none;
+}
+
+button.gb-plan-line-bar {
+  padding: 0;
+  border: none;
+  cursor: pointer;
+}
+
+button.gb-plan-line-bar:hover {
+  outline: 1px solid var(--text-primary);
+}
+
+.gb-plan-line-track--pick {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.gb-plan-line-track--pick:hover {
+  background: color-mix(in srgb, var(--kind) 10%, var(--bg-surface-sunken, rgb(0 0 0 / 0.15)));
+}
+
+.gb-plan-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gb-plan-free {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.gb-plan-free-pick {
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--success) 60%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.gb-plan-free-pick:hover {
+  background: color-mix(in srgb, var(--success) 28%, transparent);
+}
+
+.gb-plan-mine-when {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.gb-plan-time > .gb-plan-mine-title {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.gb-plan-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gb-plan-hint .gb-plan-hours {
+  display: inline-block;
+  width: 56px;
+  margin: 0 4px;
+  padding: 1px 4px;
+}
+
+.gb-plan-when {
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.gb-plan-when:hover {
+  text-decoration: underline;
+}
+
+
+/* The plan form's campaign picker and its "add a time" row. */
+.gb-plan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gb-plan-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.gb-plan-add > .gb-input {
+  flex: 1 1 120px;
+  width: auto;
+  min-width: 0;
+}
+
+.gb-plan-length {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.gb-plan-length .gb-input {
+  width: 58px;
+}
+
+/* Times written on a bar; a short one clips them. */
+.gb-plan-line-text {
+  display: block;
+  overflow: hidden;
+  padding: 0 5px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 28px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.gb-plan-line-bar--session .gb-plan-line-text {
+  color: var(--text-on-accent, #fff);
+}
+
+/* What dragging on an empty line does. */
+.gb-plan-line-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-strong, var(--text-muted));
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.gb-plan-line-track--pick:hover .gb-plan-line-empty {
+  border-color: var(--kind);
+  color: var(--text-secondary);
+}
+
+.gb-plan-line-bar--ghost {
+  z-index: 1;
+}
+
+.gb-plan-line-text--stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 11px;
+}
+
+/* A bar's draggable ends. */
+.gb-plan-line-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.gb-plan-line-handle--s {
+  left: -3px;
+}
+
+.gb-plan-line-handle--e {
+  right: -3px;
+}
+
+.gb-plan-line-handle::after {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--text-primary);
+  opacity: 0.55;
+  content: '';
+}
+
+.gb-plan-line-bar:hover .gb-plan-line-handle::after {
+  opacity: 1;
+}
+
+span.gb-plan-line-bar[role='button'] {
+  cursor: pointer;
+}
+
+span.gb-plan-line-bar[role='button']:hover,
+.gb-plan-line-bar--picked {
+  outline: 2px solid var(--text-primary);
+  z-index: 1;
+}
+
+.gb-plan-by {
+  display: inline-flex;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Suggesting a time, and answering a picked one. */
+.gb-plan-suggest,
+.gb-plan-picked {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px dashed var(--kind);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--kind) 10%, var(--bg-surface-raised));
+  font-size: 12px;
+}
+
+.gb-plan-suggest {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gb-plan-picked {
+  border-style: solid;
+}
+
+.gb-plan-picked-head,
+.gb-plan-picked-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.gb-plan-picked .gb-plan-tally {
+  flex-wrap: wrap;
+}

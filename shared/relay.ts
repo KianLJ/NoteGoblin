@@ -37,12 +37,17 @@ export interface AdminAccountSummary {
 
 export interface RelayNotification {
   id: string
-  kind: 'friend-request' | 'friend-accepted' | 'session-invite' | 'message'
+  /** The plan-* kinds are the session planner's: asked to a plan, new times to answer, a time booked or moved, the booking called off. */
+  kind: 'friend-request' | 'friend-accepted' | 'session-invite' | 'message' | 'plan-invite' | 'plan-times' | 'plan-booked' | 'plan-cancelled'
   fromUserId: string
   fromUsername: string
   sessionId?: string
   /** Only set for kind === 'message' — which conversation kind this is, for routing "open this thread" and for the Messages panel's unread tab/thread counters (see ChatPanel.tsx). */
   messageKind?: 'friend' | 'whisper'
+  /** The planner's kinds: which plan, its name, and (booked) when it starts. */
+  planId?: string
+  planTitle?: string
+  at?: string
   createdAt: string
   read: boolean
 }

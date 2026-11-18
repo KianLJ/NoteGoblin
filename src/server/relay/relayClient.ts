@@ -1,5 +1,6 @@
 import type { AdminAccountSummary, FriendRequest, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
 import type { CloudCharacter } from '@shared/cloudCharacter'
+import type { PlannerState } from '@shared/planner'
 import { RELAY_URL, RELAY_DIRECTORY_PATH } from './relayConfig'
 
 /** {userId, username} only — the directory doesn't know who's online, that's presence.ts's job. Callers merge in online status separately (see registerIpc.ts). */
@@ -189,4 +190,16 @@ export function markMessagesRead(
   kind: 'friend' | 'whisper'
 ): Promise<ClientResult<{ ok: true }>> {
   return call('/messages/mark-read', 'POST', token, { fromUserId, kind })
+}
+
+/** The session planner: your free hours and every plan you're in (see Directory.handleGetPlanner). */
+export function getPlanner(token: string): Promise<ClientResult<PlannerState>> {
+  return call('/planner', 'GET', token)
+}
+
+export type PlannerAction = 'availability' | 'save' | 'vote' | 'suggest' | 'unsuggest' | 'book' | 'delete'
+
+/** One change to the planner — the relay checks who may do what (see Directory.handlePlanner). */
+export function plannerAction(token: string, action: PlannerAction, body: unknown): Promise<ClientResult<unknown>> {
+  return call(`/planner/${action}`, 'POST', token, body)
 }

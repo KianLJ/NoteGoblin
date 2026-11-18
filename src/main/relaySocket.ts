@@ -150,6 +150,9 @@ export function connectPresence(token: string, window: BrowserWindow): void {
       // pushed live so ChatPanel.tsx can append it without a refetch,
       // matching the campaign-chat 'ws:message' push's shape/purpose.
       window.webContents.send('relay:message', msg.message)
+    } else if (msg.type === 'planner-changed') {
+      // Someone in one of your plans changed it (or their busy days): the planner re-fetches.
+      window.webContents.send('relay:planner-changed')
     }
   })
 

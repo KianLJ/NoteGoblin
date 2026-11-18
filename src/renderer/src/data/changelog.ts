@@ -7,6 +7,18 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.17.0',
+    title: 'A session planner',
+    highlights: [
+      'Session planner: a new button in the top bar, beside Messages. Plan a session, pick a few times, and your friends say yes or no to each; book the one that suits and everyone gets told',
+      'Pick a campaign and its players (and whoever runs it) are asked for you, as long as they’re your friends',
+      'Add the things you’ve got on to the calendar, with their times: everyone’s busy times sit side by side for a day, with the stretches when you’re all free. Friends see your times, never what they are',
+      'Drag along a day to mark yourself busy or propose a session time, then drag either end to adjust it; times snap to the quarter hour',
+      'None of the times suit you? Suggest your own: it shows on everyone’s calendar and they can say yes or no to it',
+      'Times you’re asked about show on your calendar, booked sessions can go into Google, Outlook or Apple Calendar, and you get a reminder the day before and the hour before'
+    ]
+  },
+  {
     version: '0.16.1',
     title: 'A quieter shared collection',
     highlights: [

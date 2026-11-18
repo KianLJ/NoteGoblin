@@ -449,6 +449,21 @@ const api: AppApi = {
       },
       markRead: (fromUserId, kind) => ipcRenderer.invoke('relay:messages:mark-read', fromUserId, kind)
     },
+    planner: {
+      get: () => ipcRenderer.invoke('relay:planner:get'),
+      setBusy: (busy) => ipcRenderer.invoke('relay:planner:do', 'availability', { busy }),
+      save: (plan) => ipcRenderer.invoke('relay:planner:do', 'save', { plan }),
+      vote: (planId, proposalId, answer) => ipcRenderer.invoke('relay:planner:do', 'vote', { planId, proposalId, answer }),
+      suggest: (planId, start, minutes) => ipcRenderer.invoke('relay:planner:do', 'suggest', { planId, start, minutes }),
+      unsuggest: (planId, proposalId) => ipcRenderer.invoke('relay:planner:do', 'unsuggest', { planId, proposalId }),
+      book: (planId, proposalId) => ipcRenderer.invoke('relay:planner:do', 'book', { planId, proposalId }),
+      remove: (planId) => ipcRenderer.invoke('relay:planner:do', 'delete', { planId })
+    },
+    onPlannerChanged: (callback) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('relay:planner-changed', listener)
+      return () => ipcRenderer.removeListener('relay:planner-changed', listener)
+    },
     admin: {
       listAccounts: () => ipcRenderer.invoke('relay:admin:list-accounts'),
       removeAccount: (userId) => ipcRenderer.invoke('relay:admin:remove-account', userId),

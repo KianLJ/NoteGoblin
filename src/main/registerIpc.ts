@@ -110,6 +110,7 @@ import type { BoardActor, CampaignBoards } from '@shared/boards'
 import type { BoardPresence } from '@server/relay/sessionProtocol'
 import type { PlayerVisibleInitiativeState } from '@shared/encounter'
 import type { AdminAccountSummary, FriendRequest, FriendSummary, RelayMessage, RelayNotification, WhisperThread } from '@shared/relay'
+import type { PlannerState } from '@shared/planner'
 import { normalizeWithOwnPacks } from '@shared/content/sheet'
 import { packFileName, readPackFile, writePackFile } from '@shared/content/packFiles'
 import type { ContentPack } from '@shared/content/schema'
@@ -2256,6 +2257,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return relayClient.listMessages(session.token, withUserId, kind)
     }
   )
+
+  // --- The session planner: plans live on the relay, so friends answer while your app is closed ---
+  ipcMain.handle('relay:planner:get', async (): Promise<ApiResult<PlannerState>> => {
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Sign in to the relay to plan sessions with friends.' }
+    return relayClient.getPlanner(session.token)
+  })
+  const PLANNER_ACTIONS: relayClient.PlannerAction[] = ['availability', 'save', 'vote', 'suggest', 'unsuggest', 'book', 'delete']
+  ipcMain.handle('relay:planner:do', async (_event, action: relayClient.PlannerAction, body: unknown): Promise<ApiResult<unknown>> => {
+    if (!PLANNER_ACTIONS.includes(action)) return { ok: false, error: 'Unknown planner action.' }
+    const session = getRelaySession()
+    if (!session) return { ok: false, error: 'Sign in to the relay to plan sessions with friends.' }
+    return relayClient.plannerAction(session.token, action, body)
+  })
 
   ipcMain.handle('relay:messages:whisper-threads', async (): Promise<ApiResult<WhisperThread[]>> => {
     const session = getRelaySession()
