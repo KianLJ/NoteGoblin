@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.17.4',
+    title: 'Notifications on a sleeping Android phone',
+    highlights: [
+      'Fixed Android phones only getting notifications while the browser was open: they now arrive with the phone locked and the browser closed'
+    ]
+  },
+  {
     version: '0.17.3',
     title: 'Notifications that say what happened',
     highlights: [

@@ -132,9 +132,10 @@ export async function sendPush(target: PushTarget, message: PushMessage, keys: V
         'content-encoding': 'aes128gcm',
         'content-type': 'application/octet-stream',
         ttl: String(24 * 3600),
+        // High: every push shows a notification, and Android holds back anything less while the phone sleeps.
         // No Topic header: Apple refuses ours (400 BadWebPushTopic), and the notification's own tag already replaces
         // an older one on the phone.
-        urgency: 'normal'
+        urgency: 'high'
       },
       body
     })

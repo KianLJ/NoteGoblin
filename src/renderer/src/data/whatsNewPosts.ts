@@ -53,6 +53,17 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.17.4',
+    title: 'Notifications on a sleeping Android phone',
+    intro: 'A fix for Android phones.',
+    sections: [
+      {
+        heading: 'Through while it sleeps',
+        body: 'On some Android phones, notifications only turned up once the browser was opened again. NoteGoblin now marks them as urgent, so they wake the phone and arrive straight away. If yours still waits, set your browser’s battery use to Unrestricted in Settings, and on a Samsung take it off the sleeping apps list.'
+      }
+    ]
+  },
+  {
     version: '0.17.3',
     title: 'Notifications that say what happened',
     intro: 'Your phone tells you what’s going on now, not just that something did.',
