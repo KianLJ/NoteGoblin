@@ -1,3 +1,4 @@
+import { INTERNAL_HEADER } from './lib/webPush'
 import { Server, getServerByName, type Connection, type ConnectionContext } from 'partyserver'
 import type { Env } from './env'
 import { verifyToken } from './lib/token'
@@ -25,10 +26,10 @@ export class Presence extends Server<Env> {
     return 'dev-insecure-secret-do-not-deploy-with-this'
   }
 
-  /** Called by directory.ts to forward a just-created notification to a specific user's live connection(s), if any are open — deliberately unauthenticated cross-DO call, mirroring directory.ts's own internal endpoints. */
+  /** Called by directory.ts to forward a just-created notification to a specific user's live connection(s), if any are open: only with the relay secret, as anyone can reach this URL. */
   async onRequest(req: Request): Promise<Response> {
     const url = new URL(req.url)
-    if (req.method !== 'POST' || url.pathname.split('/').filter(Boolean).pop() !== 'push') {
+    if (req.method !== 'POST' || url.pathname.split('/').filter(Boolean).pop() !== 'push' || req.headers.get(INTERNAL_HEADER) !== this.secret()) {
       return new Response('Not found', { status: 404 })
     }
     const body = (await req.json().catch(() => null)) as { userId?: string; payload?: unknown } | null
@@ -130,7 +131,7 @@ export class Presence extends Server<Env> {
 
   private async fetchFriendIds(userId: string): Promise<string[]> {
     const directory = await getServerByName(this.env.Directory, 'global-directory')
-    const res = await directory.fetch(`https://internal/friend-ids/${userId}`)
+    const res = await directory.fetch(`https://internal/friend-ids/${userId}`, { headers: { [INTERNAL_HEADER]: this.secret() } })
     if (!res.ok) return []
     return (await res.json()) as string[]
   }

@@ -1,3 +1,4 @@
+import { INTERNAL_HEADER } from './lib/webPush'
 import { Server, getServerByName, type Connection, type ConnectionContext } from 'partyserver'
 import type { Env } from './env'
 import { verifyToken } from './lib/token'
@@ -74,6 +75,30 @@ export class Session extends Server<Env> {
       return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } })
     }
 
+    // The DM's app (which carries the table's chat) asking for a chat message to reach phones: party chat to everyone
+    // at the table but its sender, a whisper to its other side. Only the DM can ask, and only for people at this table.
+    if (req.method === 'POST' && action === 'chat-push') {
+      const authHeader = req.headers.get('authorization')
+      if (!authHeader?.startsWith('Bearer ')) return new Response('Unauthorized', { status: 401 })
+      const payload = await verifyToken(this.secret(), authHeader.slice('Bearer '.length))
+      if (!payload) return new Response('Unauthorized', { status: 401 })
+      const data = await this.getSessionData()
+      if (!data || data.dmUserId !== payload.userId) return new Response('Only the session owner can do that', { status: 403 })
+      const body = (await req.json().catch(() => null)) as { channel?: string; fromUserId?: string; toUserId?: string | null; campaignId?: string; campaignName?: string } | null
+      if (!body || (body.channel !== 'party' && body.channel !== 'whisper')) return new Response('channel is required', { status: 400 })
+      // The DM's app knows its own side by its own (local) id; anyone not invited here is the DM.
+      const atTable = (id: unknown): string => (typeof id === 'string' && data.allowedPlayerIds.includes(id) ? id : data.dmUserId)
+      const from = atTable(body.fromUserId)
+      const to = body.channel === 'party' ? [data.dmUserId, ...data.allowedPlayerIds].filter((id) => id !== from) : [atTable(body.toUserId)].filter((id) => id !== from)
+      const directory = await getServerByName(this.env.Directory, 'global-directory')
+      await directory.fetch('https://internal/chat-push', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', [INTERNAL_HEADER]: this.secret() },
+        body: JSON.stringify({ userIds: to, fromUserId: from, channel: body.channel, campaignId: body.campaignId, campaignName: body.campaignName })
+      })
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } })
+    }
+
     if (req.method === 'POST' && action === 'invite') {
       const authHeader = req.headers.get('authorization')
       if (!authHeader?.startsWith('Bearer ')) return new Response('Unauthorized', { status: 401 })
@@ -97,7 +122,7 @@ export class Session extends Server<Env> {
       try {
         const notifyRes = await directory.fetch('https://internal/notify', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', [INTERNAL_HEADER]: this.secret() },
           body: JSON.stringify({
             userId: body.userId,
             kind: 'session-invite',

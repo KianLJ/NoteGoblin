@@ -3,6 +3,9 @@
 // payload encrypted for the one browser it's for (RFC 8291, aes128gcm). Pure
 // WebCrypto, so it runs on Workers and in tests alike.
 
+/** The header rooms send to each other's internal endpoints, carrying RELAY_SECRET: they're reachable from outside too, so it's what tells a room's call apart from anyone's. */
+export const INTERNAL_HEADER = 'x-relay-internal'
+
 /** A browser's push subscription, as `PushSubscription.toJSON()` gives it. */
 export interface PushTarget {
   endpoint: string
@@ -166,4 +169,12 @@ export function notificationPush(n: { kind: string; fromUsername: string; messag
     default:
       return { title: 'NoteGoblin', body: `Something new from ${who}.`, url }
   }
+}
+
+/** A campaign chat message (party chat, or a whisper at the table), which the DM's app hands the relay to push. */
+export function chatPush(m: { channel: 'party' | 'whisper'; fromUsername: string; campaignId?: string; campaignName?: string }): PushMessage {
+  const where = m.campaignName || 'your campaign'
+  return m.channel === 'party'
+    ? { title: where, body: `${m.fromUsername} said something in party chat.`, tag: `party-${m.campaignId ?? where}`, url: '/viewer/' }
+    : { title: m.fromUsername, body: `Whispered you in ${where}.`, tag: `whisper-${m.fromUsername}`, url: '/viewer/' }
 }

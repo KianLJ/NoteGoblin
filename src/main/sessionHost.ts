@@ -3,6 +3,8 @@ import WebSocket from 'ws'
 import { v4 as uuid } from 'uuid'
 import { getHostDb } from '@server/db/hostDb'
 import { UserRepo } from '@server/repositories/userRepo'
+import { CampaignRepo } from '@server/repositories/campaignRepo'
+import { getRelaySession } from './relayState'
 import * as campaignService from '@server/services/campaignService'
 import type { ServiceResult } from '@server/services/campaignService'
 import { RELAY_URL, relaySessionPath } from '@server/relay/relayConfig'
@@ -548,6 +550,22 @@ export function broadcastMessage(campaignId: string, message: Message): void {
   if (dmSubscribedCampaignId === campaignId && dmWindow) {
     dmWindow.webContents.send('ws:message', { sessionId: currentSessionId, message })
   }
+  pushChat(campaignId, message)
+}
+
+/**
+ * Asks the relay to send a chat message to phones (the viewer's notifications): it works out who's at this table and
+ * says who and where, never the words. Best effort: chat works the same without it.
+ */
+function pushChat(campaignId: string, message: Message): void {
+  const relay = getRelaySession()
+  if (!relay || !currentSessionId) return
+  const campaignName = new CampaignRepo(getHostDb(app.getPath('userData'))).findById(campaignId)?.name
+  void fetch(`${RELAY_URL}${relaySessionPath(currentSessionId)}/chat-push`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${relay.token}` },
+    body: JSON.stringify({ channel: message.channel, fromUserId: message.senderUserId, toUserId: message.recipientUserId, campaignId, campaignName })
+  }).catch(() => undefined)
 }
 
 function handleFrame(raw: WebSocket.RawData): void {

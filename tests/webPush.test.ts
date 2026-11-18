@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { b64url, encryptPayload, fromB64url, notificationPush, readPushTarget, vapidAuth } from '../relay/src/lib/webPush'
+import { b64url, chatPush, encryptPayload, fromB64url, notificationPush, readPushTarget, vapidAuth } from '../relay/src/lib/webPush'
 
 const enc = new TextEncoder()
 
@@ -64,6 +64,8 @@ describe('web push from the relay', () => {
 
   it('says who and what, never what a message says', () => {
     expect(notificationPush({ kind: 'message', fromUsername: 'Sam', messageKind: 'whisper' })).toMatchObject({ title: 'Sam', body: 'Whispered you.' })
+    expect(chatPush({ channel: 'party', fromUsername: 'Sam', campaignId: 'c1', campaignName: 'Ashes' })).toMatchObject({ title: 'Ashes', body: 'Sam said something in party chat.', tag: 'party-c1' })
+    expect(chatPush({ channel: 'whisper', fromUsername: 'Sam', campaignName: 'Ashes' })).toMatchObject({ title: 'Sam', body: 'Whispered you in Ashes.' })
     expect(notificationPush({ kind: 'plan-times', fromUsername: 'Sam', planId: 'p1', planTitle: 'Session 13' })).toMatchObject({ body: 'Sam added a time to “Session 13”: does it suit you?', tag: 'plan-p1' })
   })
 })

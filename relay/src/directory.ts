@@ -3,7 +3,7 @@ import type { Env } from './env'
 import { hashPassword, verifyPassword } from './lib/hash'
 import { signToken, verifyToken } from './lib/token'
 import { LOCKED_MESSAGE, isLocked, withFailure, type LoginFailures } from './lib/loginLimit'
-import { notificationPush, readPushTarget, sendPush, type PushTarget, type VapidKeys } from './lib/webPush'
+import { chatPush, INTERNAL_HEADER, notificationPush, readPushTarget, sendPush, type PushMessage, type PushTarget, type VapidKeys } from './lib/webPush'
 import { busyTimesOnly, readBusy, readPlan, whoToPing, withoutSuggestion, withSuggestion, withVote, type BusyBlock, type PlanView, type SessionPlan } from './lib/planner'
 
 /**
@@ -195,12 +195,15 @@ export class Directory extends Server<Env> {
     if (req.method === 'POST' && action === 'accept') return this.handleRespondRequest(req, true)
     if (req.method === 'POST' && action === 'decline') return this.handleRespondRequest(req, false)
     if (req.method === 'POST' && action === 'remove') return this.handleRemoveFriend(req)
-    if (req.method === 'GET' && segments[segments.length - 2] === 'friend-ids') return this.handleInternalFriendIds(action)
+    // Other rooms' calls (session.ts, presence.ts), never anyone else's: they carry the relay secret.
+    const internal = req.headers.get(INTERNAL_HEADER) === this.secret()
+    if (req.method === 'GET' && segments[segments.length - 2] === 'friend-ids') return internal ? this.handleInternalFriendIds(action) : json({ error: 'Not found' }, 404)
     if (req.method === 'GET' && action === 'notifications') return this.handleListNotifications(req)
     if (req.method === 'POST' && action === 'read' && segments[segments.length - 2] === 'notifications') {
       return this.handleMarkNotificationRead(req)
     }
-    if (req.method === 'POST' && action === 'notify') return this.handleInternalNotify(req)
+    if (req.method === 'POST' && action === 'notify') return internal ? this.handleInternalNotify(req) : json({ error: 'Not found' }, 404)
+    if (req.method === 'POST' && action === 'chat-push') return internal ? this.handleInternalChatPush(req) : json({ error: 'Not found' }, 404)
     if (req.method === 'POST' && action === 'send' && segments[segments.length - 2] === 'messages') {
       return this.handleSendMessage(req)
     }
@@ -989,7 +992,7 @@ export class Directory extends Server<Env> {
     return json({ error: 'Not found' }, 404)
   }
 
-  /** Called by other rooms (e.g. session.ts on invite) that want to notify a user but don't own account data themselves — deliberately unauthenticated, same trust model as handleInternalFriendIds. */
+  /** Called by other rooms (e.g. session.ts on invite) that want to notify a user but don't own account data themselves; only with the relay secret (see onRequest). */
   private async handleInternalNotify(req: Request): Promise<Response> {
     const body = (await req.json().catch(() => null)) as
       | { userId?: string; kind?: string; fromUserId?: string; sessionId?: string }
@@ -998,6 +1001,17 @@ export class Directory extends Server<Env> {
     if (body.kind !== 'friend-request' && body.kind !== 'session-invite') return badRequest('invalid kind')
 
     await this.pushNotification(body.userId, body.kind, body.fromUserId, body.sessionId)
+    return json({ ok: true })
+  }
+
+  /** A campaign chat message, from session.ts (the DM's app asked it): a push to each phone, and nothing else (the desktop has the message already). */
+  private async handleInternalChatPush(req: Request): Promise<Response> {
+    const body = (await req.json().catch(() => null)) as { userIds?: unknown; fromUserId?: string; channel?: string; campaignId?: string; campaignName?: string } | null
+    if (!body || !Array.isArray(body.userIds) || typeof body.fromUserId !== 'string' || (body.channel !== 'party' && body.channel !== 'whisper')) return badRequest('userIds, fromUserId and channel are required')
+    const from = await this.ctx.storage.get<StoredAccount>(`user:${body.fromUserId}`)
+    const message = chatPush({ channel: body.channel, fromUsername: from?.username ?? 'Someone', campaignId: body.campaignId, campaignName: typeof body.campaignName === 'string' ? body.campaignName.slice(0, 80) : undefined })
+    const ids = [...new Set(body.userIds.filter((id): id is string => typeof id === 'string' && id !== body.fromUserId))].slice(0, 50)
+    this.ctx.waitUntil(Promise.all(ids.map((id) => this.pushToDevices(id, message))).then(() => undefined))
     return json({ ok: true })
   }
 
@@ -1037,7 +1051,7 @@ export class Directory extends Server<Env> {
 
     await this.pushLive(userId, { type: 'notification', notification })
     // And to their phone (or any browser they turned notifications on in), after the reply goes.
-    this.ctx.waitUntil(this.pushToDevices(userId, notification))
+    this.ctx.waitUntil(this.pushToDevices(userId, notificationPush(notification)))
   }
 
   // --- Web Push --------------------------------------------------------------
@@ -1053,13 +1067,12 @@ export class Directory extends Server<Env> {
     }
   }
 
-  /** Sends a notification to every browser the user turned push on in, forgetting any the push service says are gone. */
-  private async pushToDevices(userId: string, notification: Notification): Promise<void> {
+  /** Sends a push to every browser the user turned push on in, forgetting any the push service says are gone. */
+  private async pushToDevices(userId: string, message: PushMessage): Promise<void> {
     const keys = this.vapid()
     if (!keys) return
     const targets = (await this.ctx.storage.get<PushTarget[]>(`push:${userId}`)) ?? []
     if (!targets.length) return
-    const message = notificationPush(notification)
     const results = await Promise.all(targets.map((t) => sendPush(t, message, keys, 'https://relay.notegoblin.uk')))
     if (results.includes('gone')) {
       const still = (await this.ctx.storage.get<PushTarget[]>(`push:${userId}`)) ?? []
@@ -1101,7 +1114,7 @@ export class Directory extends Server<Env> {
       const presence = await getServerByName(this.env.Presence, 'lobby')
       const res = await presence.fetch('https://internal/push', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', [INTERNAL_HEADER]: this.secret() },
         body: JSON.stringify({ userId, payload })
       })
       if (!res.ok) console.error('pushLive: presence push failed', res.status, await res.text().catch(() => ''))

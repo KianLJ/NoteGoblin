@@ -15,6 +15,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(message.title, {
       body: message.body,
       tag: message.tag,
+      // A newer one from the same thread replaces the old, and still buzzes.
+      renotify: !!message.tag,
       icon: 'icon-192.png',
       badge: 'icon-192.png',
       data: { url: message.url || '/viewer/' }

@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.17.2',
+    title: 'Party chat on your phone',
+    highlights: [
+      'Party chat and whispers at the table reach your phone’s notifications now, as well as friend requests, invites, messages and the session planner. They need the DM to be on this version',
+      'A second message from the same person buzzes again, instead of quietly replacing the first notification',
+      'The relay is tighter: only NoteGoblin itself can send notifications and live updates to you'
+    ]
+  },
+  {
     version: '0.17.1',
     title: 'Notifications on your phone',
     highlights: [

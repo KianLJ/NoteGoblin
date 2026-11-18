@@ -53,6 +53,25 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.17.2',
+    title: 'Party chat on your phone',
+    intro: 'Phone notifications now cover the table’s chat too.',
+    sections: [
+      {
+        heading: 'Every ping, on your phone',
+        body: 'With notifications turned on in the phone viewer, you now hear about party chat and whispers at the table as well as friend requests, invites, messages and the session planner. Party chat reaches everyone at the table but whoever said it; a whisper reaches the person it was for. As before, a notification says who and where, never what was said. Table chat goes through the DM’s app, so it needs the DM to be on this version.'
+      },
+      {
+        heading: 'A buzz every time',
+        body: 'When the same person messaged twice, the second notification used to quietly replace the first. Now it buzzes again, so you don’t miss the follow-up.'
+      },
+      {
+        heading: 'A tighter relay',
+        body: 'We closed a gap that let anyone send notifications or live updates to an account without signing in. Only NoteGoblin itself can send them now.'
+      }
+    ]
+  },
+  {
     version: '0.17.1',
     title: 'Notifications on your phone',
     intro: 'Your phone can tell you when a friend wants to play now, even when NoteGoblin is closed.',
