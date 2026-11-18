@@ -102,3 +102,8 @@ export const getCampaign = (id: string): Promise<CampaignSnapshot> => (DEMO ? de
 export const listCharacters = (): Promise<CharacterSummary[]> => (DEMO ? demo().then((d) => d.listCharacters()) : call('/characters'))
 export const getCharacter = (id: string): Promise<CloudCharacter> => (DEMO ? demo().then((d) => d.getCharacter()) : call(`/characters/${encodeURIComponent(id)}`))
 export const getPrefs = (): Promise<{ prefs: unknown }> => (DEMO ? demo().then((d) => d.getPrefs()) : call('/prefs'))
+
+/** The relay's public key for push notifications (push.ts), or null if push isn't set up there. */
+export const pushKey = (): Promise<{ publicKey: string | null }> => (DEMO ? Promise.resolve({ publicKey: null }) : call('/push-key', { auth: false }))
+export const subscribePush = (subscription: PushSubscriptionJSON): Promise<unknown> => call('/push/subscribe', { method: 'POST', body: { subscription } })
+export const unsubscribePush = (endpoint: string): Promise<unknown> => call('/push/unsubscribe', { method: 'POST', body: { endpoint } })

@@ -53,6 +53,25 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.17.1',
+    title: 'Notifications on your phone',
+    intro: 'Your phone can tell you when a friend wants to play now, even when NoteGoblin is closed.',
+    sections: [
+      {
+        heading: 'Turn them on',
+        body: 'Open the viewer on your phone (relay.notegoblin.uk/viewer), log in, and tap Turn on in the Notifications card at the top. Allow them when your phone asks. From then on you get friend requests, session invites, messages and every session planner ping: asked to a plan, a new time suggested, a session booked or called off. Tap one to open the viewer.'
+      },
+      {
+        heading: 'On iPhone',
+        body: 'iPhones only allow notifications from apps on the Home Screen. In Safari, tap Share, then Add to Home Screen, open NoteGoblin from your Home Screen, and turn them on there. The card tells you if you need to.'
+      },
+      {
+        heading: 'What they say',
+        body: 'Who and what, never the words of a message: “Sam whispered you”, not what Sam said. Logging out of the viewer turns notifications off on that phone, and Turn off does the same any time.'
+      }
+    ]
+  },
+  {
     version: '0.17.0',
     title: 'A session planner',
     intro: 'The hardest part of any campaign is getting everyone round the same table. Now NoteGoblin helps with that too.',

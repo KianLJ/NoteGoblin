@@ -1117,3 +1117,32 @@ button.v-skill:first-child {
 .v-main--wide > p {
   padding: var(--space-4);
 }
+
+/* --- Notifications on this phone (HomeView's PushSwitch) ---------- */
+
+.v-push {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface-raised, var(--bg-surface));
+}
+
+.v-push-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.v-push .gb-btn {
+  flex-shrink: 0;
+}
+
+.v-push .v-row-sub {
+  overflow: visible;
+  white-space: normal;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { applyThemePrefs, type ThemePrefs } from '@renderer/theme'
 import { getPrefs, getUsername, isSignedIn, signOut } from './api'
+import { turnPushOff } from './push'
 import { SIGNED_OUT_EVENT, clearCache } from './data'
 import { href, parentOf, useRoute } from './route'
 import { LoginView } from './views/LoginView'
@@ -56,7 +57,9 @@ export function App(): JSX.Element {
           <button
             type="button"
             className="v-signout"
-            onClick={() => {
+            onClick={async () => {
+              // Logging out stops this phone getting the account's notifications too.
+              await turnPushOff().catch(() => undefined)
               signOut()
               clearCache()
               setSignedIn(false)

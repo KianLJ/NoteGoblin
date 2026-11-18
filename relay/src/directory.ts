@@ -3,6 +3,7 @@ import type { Env } from './env'
 import { hashPassword, verifyPassword } from './lib/hash'
 import { signToken, verifyToken } from './lib/token'
 import { LOCKED_MESSAGE, isLocked, withFailure, type LoginFailures } from './lib/loginLimit'
+import { notificationPush, readPushTarget, sendPush, type PushTarget, type VapidKeys } from './lib/webPush'
 import { busyTimesOnly, readBusy, readPlan, whoToPing, withoutSuggestion, withSuggestion, withVote, type BusyBlock, type PlanView, type SessionPlan } from './lib/planner'
 
 /**
@@ -71,6 +72,8 @@ interface Notification {
 }
 
 const MAX_NOTIFICATIONS_PER_USER = 50
+/** Browsers (phones, mostly) one account can get push notifications in. */
+const MAX_PUSH_TARGETS = 10
 
 /**
  * 'friend' — either side of any relay friendship, anytime, campaign-
@@ -208,6 +211,8 @@ export class Directory extends Server<Env> {
     if (req.method === 'POST' && action === 'mark-read' && segments[segments.length - 2] === 'messages') {
       return this.handleMarkMessagesRead(req)
     }
+    if (req.method === 'GET' && action === 'push-key') return json({ publicKey: this.env.VAPID_PUBLIC_KEY ?? null })
+    if (req.method === 'POST' && segments[segments.length - 2] === 'push') return this.handlePushSubscription(req, action)
     if (req.method === 'GET' && action === 'planner') return this.handleGetPlanner(req)
     if (req.method === 'POST' && segments[segments.length - 2] === 'planner') return this.handlePlanner(req, action)
 
@@ -1031,6 +1036,58 @@ export class Directory extends Server<Env> {
     await this.ctx.storage.put(`notifications:${userId}`, [notification, ...existing].slice(0, MAX_NOTIFICATIONS_PER_USER))
 
     await this.pushLive(userId, { type: 'notification', notification })
+    // And to their phone (or any browser they turned notifications on in), after the reply goes.
+    this.ctx.waitUntil(this.pushToDevices(userId, notification))
+  }
+
+  // --- Web Push --------------------------------------------------------------
+  // The browsers someone turned notifications on in (the phone viewer), at
+  // `push:<userId>`: their push subscriptions, newest first.
+
+  private vapid(): VapidKeys | null {
+    if (!this.env.VAPID_PUBLIC_KEY || !this.env.VAPID_PRIVATE_JWK) return null
+    try {
+      return { publicKey: this.env.VAPID_PUBLIC_KEY, privateJwk: JSON.parse(this.env.VAPID_PRIVATE_JWK) as JsonWebKey }
+    } catch {
+      return null
+    }
+  }
+
+  /** Sends a notification to every browser the user turned push on in, forgetting any the push service says are gone. */
+  private async pushToDevices(userId: string, notification: Notification): Promise<void> {
+    const keys = this.vapid()
+    if (!keys) return
+    const targets = (await this.ctx.storage.get<PushTarget[]>(`push:${userId}`)) ?? []
+    if (!targets.length) return
+    const message = notificationPush(notification)
+    const results = await Promise.all(targets.map((t) => sendPush(t, message, keys, 'https://relay.notegoblin.uk')))
+    if (results.includes('gone')) {
+      const still = (await this.ctx.storage.get<PushTarget[]>(`push:${userId}`)) ?? []
+      const gone = new Set(targets.filter((_, i) => results[i] === 'gone').map((t) => t.endpoint))
+      await this.ctx.storage.put(`push:${userId}`, still.filter((t) => !gone.has(t.endpoint)))
+    }
+  }
+
+  /** Turning push on (`subscribe`, with the browser's subscription) or off (`unsubscribe`, with its endpoint) for this browser. */
+  private async handlePushSubscription(req: Request, action: string): Promise<Response> {
+    const account = await this.authenticate(req)
+    if (!account) return json({ error: 'Unauthorized' }, 401)
+    const body = ((await req.json().catch(() => null)) ?? {}) as { subscription?: unknown; endpoint?: unknown }
+    const key = `push:${account.id}`
+    const now = (await this.ctx.storage.get<PushTarget[]>(key)) ?? []
+    if (action === 'subscribe') {
+      if (!this.vapid()) return json({ error: 'Notifications aren’t set up on this relay yet.' }, 503)
+      const target = readPushTarget(body.subscription)
+      if (!target) return badRequest('That isn’t a push subscription this relay can send to.')
+      // Newest first, one per browser, and a handful at most.
+      await this.ctx.storage.put(key, [target, ...now.filter((t) => t.endpoint !== target.endpoint)].slice(0, MAX_PUSH_TARGETS))
+      return json({ ok: true })
+    }
+    if (action === 'unsubscribe') {
+      await this.ctx.storage.put(key, now.filter((t) => t.endpoint !== body.endpoint))
+      return json({ ok: true })
+    }
+    return json({ error: 'Not found' }, 404)
   }
 
   /** For friend-graph changes that don't warrant a persisted/bell notification (someone removed or declined you) — just nudges the other side's client to re-fetch its friends list if they're online. Silently a no-op if they're not. */

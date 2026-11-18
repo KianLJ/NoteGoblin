@@ -6,8 +6,10 @@ import '@renderer/styles/primitives.css'
 import '@renderer/styles/animations.css'
 import './viewer.css'
 import { App } from './App'
+import { registerServiceWorker } from './push'
 
 initTheme()
+registerServiceWorker()
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

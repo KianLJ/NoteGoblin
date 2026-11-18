@@ -8,6 +8,7 @@
     "src/renderer/src/color.ts",
     "relay/src/lib/loginLimit.ts",
     "relay/src/lib/planner.ts",
+    "relay/src/lib/webPush.ts",
     "src/renderer/src/wikilink.ts",
     "src/renderer/src/markdownTable.ts",
     "src/renderer/src/features/campaigns/noteEditorMenu.ts",

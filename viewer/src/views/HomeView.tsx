@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { pushState, turnPushOff, turnPushOn, type PushState } from '../push'
 import { listCampaigns, listCharacters } from '../api'
 import { useLoad } from '../data'
 import { href } from '../route'
@@ -23,6 +24,7 @@ export function HomeView({ username, setTitle }: { username: string | null; setT
   return (
     <div className="v-stack">
       {username && <p className="v-hello">Signed in as {username}</p>}
+      <PushSwitch />
 
       <section>
         <h2 className="v-section-title">Characters</h2>
@@ -62,5 +64,46 @@ export function HomeView({ username, setTitle }: { username: string | null; setT
         </div>
       </section>
     </div>
+  )
+}
+
+/** Notifications on this phone: friend requests, invites, messages and the session planner, even with the app closed. */
+function PushSwitch(): JSX.Element | null {
+  const [state, setState] = useState<PushState | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    void pushState().then(setState, () => setState('unsupported'))
+  }, [])
+  if (!state || state === 'unsupported') return null
+  async function flip(on: boolean): Promise<void> {
+    setBusy(true)
+    setError(null)
+    try {
+      setState(await (on ? turnPushOn() : turnPushOff()))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That didn’t work.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section className="v-push">
+      <div className="v-push-text">
+        <span className="v-row-title">Notifications</span>
+        <span className="v-row-sub">
+          {state === 'on' && 'On for this phone: friend requests, invites, messages and session plans.'}
+          {state === 'off' && 'Get friend requests, invites, messages and session plans here, even with NoteGoblin closed.'}
+          {state === 'blocked' && 'Blocked for this site. Allow notifications in your browser’s settings, then come back.'}
+          {state === 'add-to-home' && 'On iPhone, tap Share, then Add to Home Screen, and open NoteGoblin from there to turn them on.'}
+        </span>
+        {error && <span className="v-error">{error}</span>}
+      </div>
+      {(state === 'on' || state === 'off') && (
+        <button type="button" className={state === 'on' ? 'gb-btn' : 'gb-btn gb-btn--primary'} disabled={busy} onClick={() => void flip(state === 'off')}>
+          {state === 'on' ? 'Turn off' : 'Turn on'}
+        </button>
+      )}
+    </section>
   )
 }

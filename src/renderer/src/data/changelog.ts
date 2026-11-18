@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.17.1',
+    title: 'Notifications on your phone',
+    highlights: [
+      'The phone viewer can send you notifications now, even with it closed: friend requests, invites, messages and the session planner. Open the viewer, tap Turn on under Notifications, and allow them',
+      'On iPhone, add the viewer to your Home Screen first (Share, then Add to Home Screen) and turn them on from there',
+      'Notifications say who and what, never what a message says. Logging out of the viewer turns them off on that phone'
+    ]
+  },
+  {
     version: '0.17.0',
     title: 'A session planner',
     highlights: [
