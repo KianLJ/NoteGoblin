@@ -105,5 +105,6 @@ export const getPrefs = (): Promise<{ prefs: unknown }> => (DEMO ? demo().then((
 
 /** The relay's public key for push notifications (push.ts), or null if push isn't set up there. */
 export const pushKey = (): Promise<{ publicKey: string | null }> => (DEMO ? Promise.resolve({ publicKey: null }) : call('/push-key', { auth: false }))
-export const subscribePush = (subscription: PushSubscriptionJSON): Promise<unknown> => call('/push/subscribe', { method: 'POST', body: { subscription } })
+/** `tz` is the phone's time zone, so session times in its notifications are its own. */
+export const subscribePush = (subscription: PushSubscriptionJSON, tz: string): Promise<unknown> => call('/push/subscribe', { method: 'POST', body: { subscription, tz } })
 export const unsubscribePush = (endpoint: string): Promise<unknown> => call('/push/unsubscribe', { method: 'POST', body: { endpoint } })

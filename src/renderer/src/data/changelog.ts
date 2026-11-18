@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.17.3',
+    title: 'Notifications that say what happened',
+    highlights: [
+      'Phone notifications now carry a summary: the start of a message, the time a session is proposed or booked for (in your phone’s own time zone), or the quest that’s new',
+      'New quests, finished and failed ones, quest rewards and handouts reach players’ phones too, when the DM is on this version',
+      'Fixed notifications not reaching iPhones: Apple was turning them away'
+    ]
+  },
+  {
     version: '0.17.2',
     title: 'Party chat on your phone',
     highlights: [

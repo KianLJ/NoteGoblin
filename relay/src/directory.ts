@@ -3,7 +3,7 @@ import type { Env } from './env'
 import { hashPassword, verifyPassword } from './lib/hash'
 import { signToken, verifyToken } from './lib/token'
 import { LOCKED_MESSAGE, isLocked, withFailure, type LoginFailures } from './lib/loginLimit'
-import { chatPush, INTERNAL_HEADER, notificationPush, readPushTarget, sendPush, type PushMessage, type PushTarget, type VapidKeys } from './lib/webPush'
+import { INTERNAL_HEADER, notificationPush, readPushTarget, sendPush, TABLE_KINDS, tablePush, type PushMessage, type PushTarget, type TableKind, type VapidKeys } from './lib/webPush'
 import { busyTimesOnly, readBusy, readPlan, whoToPing, withoutSuggestion, withSuggestion, withVote, type BusyBlock, type PlanView, type SessionPlan } from './lib/planner'
 
 /**
@@ -203,7 +203,7 @@ export class Directory extends Server<Env> {
       return this.handleMarkNotificationRead(req)
     }
     if (req.method === 'POST' && action === 'notify') return internal ? this.handleInternalNotify(req) : json({ error: 'Not found' }, 404)
-    if (req.method === 'POST' && action === 'chat-push') return internal ? this.handleInternalChatPush(req) : json({ error: 'Not found' }, 404)
+    if (req.method === 'POST' && action === 'table-push') return internal ? this.handleInternalTablePush(req) : json({ error: 'Not found' }, 404)
     if (req.method === 'POST' && action === 'send' && segments[segments.length - 2] === 'messages') {
       return this.handleSendMessage(req)
     }
@@ -760,7 +760,7 @@ export class Directory extends Server<Env> {
     }
 
     await this.pushLive(body.toUserId, { type: 'message', message })
-    await this.pushNotification(body.toUserId, 'message', account.id, undefined, body.kind)
+    await this.pushNotification(body.toUserId, 'message', account.id, undefined, body.kind, undefined, message.body)
 
     return json(message)
   }
@@ -889,8 +889,10 @@ export class Directory extends Server<Env> {
     await Promise.all([plan.ownerId, ...plan.memberIds].filter((id) => id !== exceptId).map((id) => this.pushLive(id, { type: 'planner-changed' })))
   }
 
-  private async pingPlan(userIds: string[], kind: PlanNotificationKind, fromUserId: string, plan: SessionPlan): Promise<void> {
-    const extra = { planId: plan.id, planTitle: plan.title, ...(plan.booked ? { at: plan.booked.start } : {}) }
+  /** `at` is the time the ping is about (a new or suggested one); a booked plan's booking otherwise. */
+  private async pingPlan(userIds: string[], kind: PlanNotificationKind, fromUserId: string, plan: SessionPlan, at?: string): Promise<void> {
+    const when = at ?? plan.booked?.start
+    const extra = { planId: plan.id, planTitle: plan.title, ...(when ? { at: when } : {}) }
     await Promise.all(userIds.filter((id) => id !== fromUserId).map((id) => this.pushNotification(id, kind, fromUserId, undefined, undefined, extra)))
   }
 
@@ -930,8 +932,10 @@ export class Directory extends Server<Env> {
         await this.pushLive(id, { type: 'planner-changed' })
       }
       const { invited, newTimes } = whoToPing(before, plan)
-      await this.pingPlan(invited, 'plan-invite', account.id, plan)
-      await this.pingPlan(newTimes, 'plan-times', account.id, plan)
+      // The first time asked about, or the first new one, so the push can say when.
+      const firstNew = plan.proposals.find((p) => !before?.proposals.some((x) => x.id === p.id))?.start
+      await this.pingPlan(invited, 'plan-invite', account.id, plan, plan.proposals[0]?.start)
+      await this.pingPlan(newTimes, 'plan-times', account.id, plan, firstNew)
       // A booked time that moved, or went with its proposal.
       const stillAsked = plan.memberIds.filter((id) => !invited.includes(id))
       if (before?.booked && plan.booked && plan.booked.start !== before.booked.start) await this.pingPlan(stillAsked, 'plan-booked', account.id, plan)
@@ -954,7 +958,8 @@ export class Directory extends Server<Env> {
       const plan = withSuggestion(before, account.id, crypto.randomUUID(), body.start, body.minutes, new Date().toISOString())
       if (!plan) return badRequest('You can’t suggest that time.')
       await this.ctx.storage.put(`plan:${plan.id}`, plan)
-      await this.pingPlan([plan.ownerId, ...plan.memberIds], 'plan-times', account.id, plan)
+      const suggested = plan.proposals.find((p) => !before.proposals.some((x) => x.id === p.id))?.start
+      await this.pingPlan([plan.ownerId, ...plan.memberIds], 'plan-times', account.id, plan, suggested)
       await this.pushPlanChanged(plan, account.id)
       return json(await this.planView(plan))
     }
@@ -1004,16 +1009,18 @@ export class Directory extends Server<Env> {
     return json({ ok: true })
   }
 
-  /** A campaign chat message, from session.ts (the DM's app asked it): a push to each phone, and nothing else (the desktop has the message already). */
-  private async handleInternalChatPush(req: Request): Promise<Response> {
-    const body = (await req.json().catch(() => null)) as { userIds?: unknown; fromUserId?: string; channel?: string; campaignId?: string; campaignName?: string } | null
-    if (!body || !Array.isArray(body.userIds) || typeof body.fromUserId !== 'string' || (body.channel !== 'party' && body.channel !== 'whisper')) return badRequest('userIds, fromUserId and channel are required')
+  /** A table event from session.ts (the DM's app asked it): chat, a quest, a reward, a handout. A push to each phone and nothing else (the desktop has it already). */
+  private async handleInternalTablePush(req: Request): Promise<Response> {
+    const body = (await req.json().catch(() => null)) as { userIds?: unknown; fromUserId?: string; kind?: string; campaignId?: string; campaignName?: string; title?: string; text?: string } | null
+    if (!body || !Array.isArray(body.userIds) || typeof body.fromUserId !== 'string' || !TABLE_KINDS.includes(body.kind as TableKind)) return badRequest('userIds, fromUserId and kind are required')
     const from = await this.ctx.storage.get<StoredAccount>(`user:${body.fromUserId}`)
-    const message = chatPush({ channel: body.channel, fromUsername: from?.username ?? 'Someone', campaignId: body.campaignId, campaignName: typeof body.campaignName === 'string' ? body.campaignName.slice(0, 80) : undefined })
+    const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined)
+    const message = tablePush({ kind: body.kind as TableKind, fromUsername: from?.username ?? 'Someone', campaignId: str(body.campaignId, 64), campaignName: str(body.campaignName, 80), title: str(body.title, 200), text: str(body.text, 1000) })
     const ids = [...new Set(body.userIds.filter((id): id is string => typeof id === 'string' && id !== body.fromUserId))].slice(0, 50)
-    this.ctx.waitUntil(Promise.all(ids.map((id) => this.pushToDevices(id, message))).then(() => undefined))
+    this.ctx.waitUntil(Promise.all(ids.map((id) => this.pushToDevices(id, () => message))).then(() => undefined))
     return json({ ok: true })
   }
+
 
   /** Stores the notification (capped, most-recent-first) and forwards it live over the presence socket if the target is currently online — offline users just see it next time they fetch the list. */
   private async pushNotification(
@@ -1022,7 +1029,9 @@ export class Directory extends Server<Env> {
     fromUserId: string,
     sessionId?: string,
     messageKind?: MessageKind,
-    plan?: { planId: string; planTitle: string; at?: string }
+    plan?: { planId: string; planTitle: string; at?: string },
+    /** A message's words, for the push alone: the stored notification never keeps them. */
+    preview?: string
   ): Promise<void> {
     const fromAccount = await this.ctx.storage.get<StoredAccount>(`user:${fromUserId}`)
     const notification: Notification = {
@@ -1051,7 +1060,7 @@ export class Directory extends Server<Env> {
 
     await this.pushLive(userId, { type: 'notification', notification })
     // And to their phone (or any browser they turned notifications on in), after the reply goes.
-    this.ctx.waitUntil(this.pushToDevices(userId, notificationPush(notification)))
+    this.ctx.waitUntil(this.pushToDevices(userId, (tz) => notificationPush({ ...notification, preview }, tz)))
   }
 
   // --- Web Push --------------------------------------------------------------
@@ -1067,13 +1076,14 @@ export class Directory extends Server<Env> {
     }
   }
 
-  /** Sends a push to every browser the user turned push on in, forgetting any the push service says are gone. */
-  private async pushToDevices(userId: string, message: PushMessage): Promise<void> {
+  /** Sends a push to every browser the user turned push on in (each in its own time zone), forgetting any the push service says are gone. */
+  private async pushToDevices(userId: string, make: (tz?: string) => PushMessage): Promise<void> {
     const keys = this.vapid()
     if (!keys) return
     const targets = (await this.ctx.storage.get<PushTarget[]>(`push:${userId}`)) ?? []
-    if (!targets.length) return
-    const results = await Promise.all(targets.map((t) => sendPush(t, message, keys, 'https://relay.notegoblin.uk')))
+    if (!targets.length) return console.log('push: no devices', userId)
+    const results = await Promise.all(targets.map((t) => sendPush(t, make(t.tz), keys, 'https://relay.notegoblin.uk')))
+    console.log('push:', userId, results.join(','), targets.map((t) => new URL(t.endpoint).hostname).join(','))
     if (results.includes('gone')) {
       const still = (await this.ctx.storage.get<PushTarget[]>(`push:${userId}`)) ?? []
       const gone = new Set(targets.filter((_, i) => results[i] === 'gone').map((t) => t.endpoint))
@@ -1085,15 +1095,16 @@ export class Directory extends Server<Env> {
   private async handlePushSubscription(req: Request, action: string): Promise<Response> {
     const account = await this.authenticate(req)
     if (!account) return json({ error: 'Unauthorized' }, 401)
-    const body = ((await req.json().catch(() => null)) ?? {}) as { subscription?: unknown; endpoint?: unknown }
+    const body = ((await req.json().catch(() => null)) ?? {}) as { subscription?: unknown; endpoint?: unknown; tz?: unknown }
     const key = `push:${account.id}`
     const now = (await this.ctx.storage.get<PushTarget[]>(key)) ?? []
     if (action === 'subscribe') {
       if (!this.vapid()) return json({ error: 'Notifications aren’t set up on this relay yet.' }, 503)
-      const target = readPushTarget(body.subscription)
+      const target = readPushTarget(body.subscription, body.tz)
       if (!target) return badRequest('That isn’t a push subscription this relay can send to.')
       // Newest first, one per browser, and a handful at most.
       await this.ctx.storage.put(key, [target, ...now.filter((t) => t.endpoint !== target.endpoint)].slice(0, MAX_PUSH_TARGETS))
+      console.log('push: subscribed', account.id, new URL(target.endpoint).hostname)
       return json({ ok: true })
     }
     if (action === 'unsubscribe') {

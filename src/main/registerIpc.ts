@@ -52,6 +52,7 @@ import {
   broadcastHandout,
   playersInCampaign,
   sendQuestReward,
+  pushToTable,
   broadcastMessage,
   pushForceRoll,
   pushCharacterHp,
@@ -1017,10 +1018,22 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const me = ensureMyHostUser()
     if ('error' in me) return { ok: false, error: me.error }
     try {
+      const before = campaignService.getQuests(me.db, campaignId, me.userId)
       const result = campaignService.saveQuests(me.db, campaignId, me.userId, quests)
       if (result.ok) {
         mainWindow.webContents.send('ws:campaign-changed', { sessionId: '', campaignId })
-        if (getHostedSession()) broadcastCampaignChanged(campaignId)
+        if (getHostedSession()) {
+          broadcastCampaignChanged(campaignId)
+          // Phones hear about quests the party can now see, and shared ones that finish or fail.
+          const was = new Map((before.ok ? before.data.quests : []).map((q) => [q.id, q]))
+          for (const q of result.data.quests) {
+            const old = was.get(q.id)
+            if (!q.shared) continue
+            const to = q.forPlayers?.length ? { toUserIds: q.forPlayers } : {}
+            if (!old?.shared) pushToTable(campaignId, { kind: 'quest', title: q.title, text: [q.giver && `from ${q.giver}`, q.detail].filter(Boolean).join(': '), ...to })
+            else if (q.status !== old.status && q.status !== 'active') pushToTable(campaignId, { kind: q.status === 'done' ? 'quest-done' : 'quest-failed', title: q.title, ...to })
+          }
+        }
       }
       return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error }
     } catch (err) {
@@ -1085,6 +1098,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
     const xp = splitReward(quest.rewardXp ?? 0, party.length)
     sendQuestReward(party, quest.title, coinsEach, xp.each)
+    // What each of them got, on their phones too.
+    const each = [...coinList(coinsEach).map(([id, n]) => `${n} ${id}`), ...(xp.each ? [`${xp.each} XP`] : [])].join(', ')
+    if (each) pushToTable(campaignId, { kind: 'reward', toUserIds: party, title: quest.title, text: `${each} each` })
     changed.rewarded = true
     finish()
     return { ok: true, players: party.length, coinsEach, xpEach: xp.each, coinsLeftover, stashed }

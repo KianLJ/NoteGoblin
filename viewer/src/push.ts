@@ -32,8 +32,17 @@ export async function turnPushOn(): Promise<PushState> {
   const reg = await navigator.serviceWorker.register('/viewer/sw.js', { scope: '/viewer/' })
   await navigator.serviceWorker.ready
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }))
-  await subscribePush(sub.toJSON())
+  await subscribePush(sub.toJSON(), zone())
   return 'on'
+}
+
+const zone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone
+
+/** Tells the relay this phone's subscription again (its time zone may have changed, say after a trip); quietly, if push is on. */
+export async function refreshPush(): Promise<void> {
+  const reg = await navigator.serviceWorker?.getRegistration('/viewer/')
+  const sub = await reg?.pushManager.getSubscription()
+  if (sub) await subscribePush(sub.toJSON(), zone()).catch(() => undefined)
 }
 
 /** Stops them here: the relay forgets this browser, and so does the push service. */

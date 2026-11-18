@@ -10,6 +10,8 @@ export const INTERNAL_HEADER = 'x-relay-internal'
 export interface PushTarget {
   endpoint: string
   keys: { p256dh: string; auth: string }
+  /** The phone's time zone ('Europe/London'), so times in what it shows are its own. */
+  tz?: string
 }
 
 /** What the viewer's service worker shows (viewer/public/sw.js). */
@@ -63,7 +65,7 @@ async function hkdf(salt: Uint8Array<ArrayBuffer>, ikm: Uint8Array<ArrayBuffer>,
 const PUSH_HOSTS = ['.googleapis.com', '.push.services.mozilla.com', '.push.apple.com', '.notify.windows.com']
 
 /** A subscription from the wire, checked: an https endpoint at a known push service, and well-formed keys. */
-export function readPushTarget(raw: unknown): PushTarget | null {
+export function readPushTarget(raw: unknown, tz?: unknown): PushTarget | null {
   const o = raw as Partial<PushTarget> | null
   if (!o || typeof o.endpoint !== 'string' || o.endpoint.length > 1024 || typeof o.keys?.p256dh !== 'string' || typeof o.keys?.auth !== 'string') return null
   let url: URL
@@ -78,7 +80,8 @@ export function readPushTarget(raw: unknown): PushTarget | null {
   } catch {
     return null
   }
-  return { endpoint: o.endpoint, keys: { p256dh: o.keys.p256dh, auth: o.keys.auth } }
+  const zone = readTimeZone(tz)
+  return { endpoint: o.endpoint, keys: { p256dh: o.keys.p256dh, auth: o.keys.auth }, ...(zone ? { tz: zone } : {}) }
 }
 
 /** The payload encrypted for one subscription (RFC 8291): a single aes128gcm record, header included. */
@@ -119,6 +122,7 @@ export async function vapidAuth(endpoint: string, keys: VapidKeys, subject: stri
  * removed), so it should be forgotten; 'failed' is anything else, worth keeping and trying next time.
  */
 export async function sendPush(target: PushTarget, message: PushMessage, keys: VapidKeys, subject: string): Promise<'sent' | 'gone' | 'failed'> {
+  const host = new URL(target.endpoint).hostname
   try {
     const body = await encryptPayload(target, utf8(JSON.stringify(message)))
     const res = await fetch(target.endpoint, {
@@ -128,26 +132,58 @@ export async function sendPush(target: PushTarget, message: PushMessage, keys: V
         'content-encoding': 'aes128gcm',
         'content-type': 'application/octet-stream',
         ttl: String(24 * 3600),
-        urgency: 'normal',
-        ...(message.tag ? { topic: message.tag.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) } : {})
+        // No Topic header: Apple refuses ours (400 BadWebPushTopic), and the notification's own tag already replaces
+        // an older one on the phone.
+        urgency: 'normal'
       },
       body
     })
-    if (res.status === 404 || res.status === 410) return 'gone'
-    return res.ok ? 'sent' : 'failed'
-  } catch {
+    if (res.ok) return 'sent'
+    // What the push service said, for `wrangler tail`: its host, status and reason (Apple's is a short JSON), never the payload.
+    console.warn('push refused', host, res.status, (await res.text().catch(() => '')).slice(0, 200))
+    return res.status === 404 || res.status === 410 ? 'gone' : 'failed'
+  } catch (err) {
+    console.warn('push failed', host, err instanceof Error ? err.message : String(err))
     return 'failed'
   }
 }
 
+const clip = (text: string | undefined, max = 160): string | undefined => {
+  const t = text?.replace(/\s+/g, ' ').trim()
+  return t ? (t.length > max ? `${t.slice(0, max - 1)}…` : t) : undefined
+}
+
+/** A time as the phone's own clock shows it ("Fri 20 Nov, 19:00"), or in UTC, saying so, if the phone never said its zone. */
+export function timeIn(iso: string, tz?: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const shown = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: tz ?? 'UTC' }).format(d)
+  return tz ? shown : `${shown} UTC`
+}
+
+/** A time zone from the wire, if the platform knows it. */
+export function readTimeZone(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || !raw || raw.length > 64) return undefined
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: raw })
+    return raw
+  } catch {
+    return undefined
+  }
+}
+
 /**
- * What a phone shows for one of the relay's notifications: who and what, never a message's words (they go through
- * the browser maker's push service, encrypted, but there's no need). The relay doesn't know the phone's time zone, so
- * booked times say "tap to see when" rather than a time that might be wrong.
+ * What a phone shows for one of the relay's notifications: who, what, and a summary (a message's opening words, the
+ * time a session's asked or booked for, in the phone's own time zone). The payload is encrypted for that phone alone,
+ * so the push service in between can't read it.
  */
-export function notificationPush(n: { kind: string; fromUsername: string; messageKind?: string; planId?: string; planTitle?: string }): PushMessage {
+export function notificationPush(
+  n: { kind: string; fromUsername: string; messageKind?: string; planId?: string; planTitle?: string; at?: string; preview?: string },
+  tz?: string
+): PushMessage {
   const who = n.fromUsername
   const plan = `“${n.planTitle ?? 'a session'}”`
+  const when = n.at ? timeIn(n.at, tz) : ''
   const url = '/viewer/'
   switch (n.kind) {
     case 'friend-request':
@@ -157,24 +193,47 @@ export function notificationPush(n: { kind: string; fromUsername: string; messag
     case 'session-invite':
       return { title: 'Come and play', body: `${who} invited you to their session.`, tag: `invite-${who}`, url }
     case 'message':
-      return { title: who, body: n.messageKind === 'whisper' ? 'Whispered you.' : 'Sent you a message.', tag: `msg-${who}`, url }
+      return { title: n.messageKind === 'whisper' ? `${who} (whisper)` : who, body: clip(n.preview) ?? (n.messageKind === 'whisper' ? 'Whispered you.' : 'Sent you a message.'), tag: `msg-${who}`, url }
     case 'plan-invite':
-      return { title: 'Session planner', body: `${who} is planning ${plan}: when can you play?`, tag: `plan-${n.planId}`, url }
+      return { title: `Session planner: ${n.planTitle ?? 'a session'}`, body: `${who} wants to know when you can play.${when ? ` First time: ${when}.` : ''}`, tag: `plan-${n.planId}`, url }
     case 'plan-times':
-      return { title: 'Session planner', body: `${who} added a time to ${plan}: does it suit you?`, tag: `plan-${n.planId}`, url }
+      return { title: `Session planner: ${n.planTitle ?? 'a session'}`, body: `${who} suggested ${when || 'a new time'}. Does it suit you?`, tag: `plan-${n.planId}`, url }
     case 'plan-booked':
-      return { title: 'Session booked', body: `${plan} is pencilled in. Tap to see when.`, tag: `plan-${n.planId}`, url }
+      return { title: 'Session booked', body: `${plan} is pencilled in${when ? ` for ${when}` : ''}.`, tag: `plan-${n.planId}`, url }
     case 'plan-cancelled':
-      return { title: 'Session called off', body: `${who} called off ${plan}.`, tag: `plan-${n.planId}`, url }
+      return { title: 'Session called off', body: `${who} called off ${plan}${when ? ` (${when})` : ''}.`, tag: `plan-${n.planId}`, url }
     default:
       return { title: 'NoteGoblin', body: `Something new from ${who}.`, url }
   }
 }
 
-/** A campaign chat message (party chat, or a whisper at the table), which the DM's app hands the relay to push. */
-export function chatPush(m: { channel: 'party' | 'whisper'; fromUsername: string; campaignId?: string; campaignName?: string }): PushMessage {
-  const where = m.campaignName || 'your campaign'
-  return m.channel === 'party'
-    ? { title: where, body: `${m.fromUsername} said something in party chat.`, tag: `party-${m.campaignId ?? where}`, url: '/viewer/' }
-    : { title: m.fromUsername, body: `Whispered you in ${where}.`, tag: `whisper-${m.fromUsername}`, url: '/viewer/' }
+/** What happens at a campaign's table that's worth a push: its chat, and the DM's quests, rewards and handouts. */
+export type TableKind = 'party' | 'whisper' | 'quest' | 'quest-done' | 'quest-failed' | 'reward' | 'handout'
+export const TABLE_KINDS: TableKind[] = ['party', 'whisper', 'quest', 'quest-done', 'quest-failed', 'reward', 'handout']
+
+/**
+ * A table event, as the DM's app describes it (session.ts checks who it reaches): the campaign as the title, and who
+ * did what with a summary, such as the chat line, the quest and who gave it, or the reward.
+ */
+export function tablePush(m: { kind: TableKind; fromUsername: string; campaignId?: string; campaignName?: string; title?: string; text?: string }): PushMessage {
+  const where = m.campaignName || 'Your campaign'
+  const url = '/viewer/'
+  const title = clip(m.title, 80)
+  const text = clip(m.text)
+  switch (m.kind) {
+    case 'party':
+      return { title: where, body: text ? `${m.fromUsername}: ${text}` : `${m.fromUsername} said something in party chat.`, tag: `party-${m.campaignId ?? where}`, url }
+    case 'whisper':
+      return { title: `${m.fromUsername} (whisper)`, body: text ?? `Whispered you in ${where}.`, tag: `whisper-${m.fromUsername}`, url }
+    case 'quest':
+      return { title: `${where}: new quest`, body: [title, text].filter(Boolean).join(' · ') || 'A new quest.', tag: `quest-${m.campaignId}-${title}`, url }
+    case 'quest-done':
+      return { title: `${where}: quest done`, body: title ? `${title} is done.` : 'A quest is done.', tag: `quest-${m.campaignId}-${title}`, url }
+    case 'quest-failed':
+      return { title: `${where}: quest failed`, body: title ? `${title} failed.` : 'A quest failed.', tag: `quest-${m.campaignId}-${title}`, url }
+    case 'reward':
+      return { title: `${where}: reward`, body: [title, text].filter(Boolean).join(': ') || 'You got a reward.', url }
+    case 'handout':
+      return { title: `${where}: handout`, body: `${m.fromUsername} showed you ${title ? `“${title}”` : 'a handout'}.`, url }
+  }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { pushState, turnPushOff, turnPushOn, type PushState } from '../push'
+import { pushState, refreshPush, turnPushOff, turnPushOn, type PushState } from '../push'
 import { listCampaigns, listCharacters } from '../api'
 import { useLoad } from '../data'
 import { href } from '../route'
@@ -73,7 +73,10 @@ function PushSwitch(): JSX.Element | null {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    void pushState().then(setState, () => setState('unsupported'))
+    void pushState().then((s) => {
+      setState(s)
+      if (s === 'on') void refreshPush()
+    }, () => setState('unsupported'))
   }, [])
   if (!state || state === 'unsupported') return null
   async function flip(on: boolean): Promise<void> {

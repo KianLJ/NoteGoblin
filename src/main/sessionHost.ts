@@ -468,6 +468,8 @@ export function broadcastHandout(handout: Handout, only?: string[]): number {
     const frame: HandoutChunkFrame = { type: 'handout-chunk', handoutId: handout.id, index, total, chunk: json.slice(index * IMAGE_CHUNK_CHARS, (index + 1) * IMAGE_CHUNK_CHARS) }
     for (const p of to) sendToRelay(p.userId, frame)
   }
+  // And a ping on their phones, with its name.
+  if (to[0]?.campaignId) pushToTable(to[0].campaignId, { kind: 'handout', title: handout.title, toUserIds: to.map((p) => p.userId) })
   return to.length
 }
 
@@ -550,21 +552,32 @@ export function broadcastMessage(campaignId: string, message: Message): void {
   if (dmSubscribedCampaignId === campaignId && dmWindow) {
     dmWindow.webContents.send('ws:message', { sessionId: currentSessionId, message })
   }
-  pushChat(campaignId, message)
+  pushToTable(campaignId, { kind: message.channel, fromUserId: message.senderUserId, toUserId: message.recipientUserId, text: message.body })
+}
+
+/** Something at the table worth a phone notification (relay/src/lib/webPush.ts's TableKind). */
+export interface TablePush {
+  kind: 'party' | 'whisper' | 'quest' | 'quest-done' | 'quest-failed' | 'reward' | 'handout'
+  fromUserId?: string
+  toUserId?: string | null
+  /** Only these players; none means everyone at the table. */
+  toUserIds?: string[]
+  title?: string
+  text?: string
 }
 
 /**
- * Asks the relay to send a chat message to phones (the viewer's notifications): it works out who's at this table and
- * says who and where, never the words. Best effort: chat works the same without it.
+ * Asks the relay to send something at the table to phones (the viewer's notifications), with a summary: the chat
+ * line, the quest, the reward. The relay works out who's at this table. Best effort: nothing waits on it.
  */
-function pushChat(campaignId: string, message: Message): void {
+export function pushToTable(campaignId: string, push: TablePush): void {
   const relay = getRelaySession()
   if (!relay || !currentSessionId) return
   const campaignName = new CampaignRepo(getHostDb(app.getPath('userData'))).findById(campaignId)?.name
-  void fetch(`${RELAY_URL}${relaySessionPath(currentSessionId)}/chat-push`, {
+  void fetch(`${RELAY_URL}${relaySessionPath(currentSessionId)}/table-push`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${relay.token}` },
-    body: JSON.stringify({ channel: message.channel, fromUserId: message.senderUserId, toUserId: message.recipientUserId, campaignId, campaignName })
+    body: JSON.stringify({ ...push, campaignId, campaignName })
   }).catch(() => undefined)
 }
 

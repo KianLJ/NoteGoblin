@@ -53,6 +53,25 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.17.3',
+    title: 'Notifications that say what happened',
+    intro: 'Your phone tells you what’s going on now, not just that something did.',
+    sections: [
+      {
+        heading: 'A summary in every notification',
+        body: 'A message shows its first line. A session time someone proposes, suggests or books shows when, in your phone’s own time zone: “Sam suggested Fri 20 Nov, 19:00”. Party chat shows who said what. The notification is encrypted for your phone alone on its way there, so nobody in between can read it.'
+      },
+      {
+        heading: 'Quests, rewards and handouts',
+        body: 'When the DM shares a new quest, players get a notification with its name and who gave it; when a shared quest is done or fails, they hear about that too. A quest reward says what each of you got, and a handout says what you’ve been shown. These come from the DM’s app, so the DM needs to be on this version.'
+      },
+      {
+        heading: 'iPhones, fixed',
+        body: 'Some iPhones weren’t getting notifications at all: Apple was turning them away. They get through now, with nothing for you to turn on again.'
+      }
+    ]
+  },
+  {
     version: '0.17.2',
     title: 'Party chat on your phone',
     intro: 'Phone notifications now cover the table’s chat too.',

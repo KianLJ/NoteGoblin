@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { b64url, chatPush, encryptPayload, fromB64url, notificationPush, readPushTarget, vapidAuth } from '../relay/src/lib/webPush'
+import { b64url, encryptPayload, fromB64url, notificationPush, readPushTarget, readTimeZone, tablePush, timeIn, vapidAuth } from '../relay/src/lib/webPush'
 
 const enc = new TextEncoder()
 
@@ -62,10 +62,20 @@ describe('web push from the relay', () => {
     expect(readPushTarget({ endpoint: 'https://fcm.googleapis.com/x', keys: { p256dh: 'short', auth: keys.auth } })).toBeNull()
   })
 
-  it('says who and what, never what a message says', () => {
-    expect(notificationPush({ kind: 'message', fromUsername: 'Sam', messageKind: 'whisper' })).toMatchObject({ title: 'Sam', body: 'Whispered you.' })
-    expect(chatPush({ channel: 'party', fromUsername: 'Sam', campaignId: 'c1', campaignName: 'Ashes' })).toMatchObject({ title: 'Ashes', body: 'Sam said something in party chat.', tag: 'party-c1' })
-    expect(chatPush({ channel: 'whisper', fromUsername: 'Sam', campaignName: 'Ashes' })).toMatchObject({ title: 'Sam', body: 'Whispered you in Ashes.' })
-    expect(notificationPush({ kind: 'plan-times', fromUsername: 'Sam', planId: 'p1', planTitle: 'Session 13' })).toMatchObject({ body: 'Sam added a time to “Session 13”: does it suit you?', tag: 'plan-p1' })
+  it('sums each one up: the message, the time in the phone’s own zone, the quest', () => {
+    expect(notificationPush({ kind: 'message', fromUsername: 'Sam', preview: '  see you   at 7?  ' })).toMatchObject({ title: 'Sam', body: 'see you at 7?' })
+    expect(notificationPush({ kind: 'message', fromUsername: 'Sam', messageKind: 'whisper', preview: 'x'.repeat(300) }).body).toHaveLength(160)
+    expect(notificationPush({ kind: 'message', fromUsername: 'Sam' })).toMatchObject({ body: 'Sent you a message.' })
+    // 19:00 UTC on Friday 20 November is 19:00 in London and 14:00 in New York.
+    const at = '2026-11-20T19:00:00Z'
+    expect(notificationPush({ kind: 'plan-times', fromUsername: 'Sam', planId: 'p1', planTitle: 'Session 13', at }, 'Europe/London')).toMatchObject({ body: 'Sam suggested Fri 20 Nov, 19:00. Does it suit you?', tag: 'plan-p1' })
+    expect(timeIn(at, 'America/New_York')).toBe('Fri 20 Nov, 14:00')
+    expect(timeIn(at)).toBe('Fri 20 Nov, 19:00 UTC')
+    expect(notificationPush({ kind: 'plan-booked', fromUsername: 'Sam', planTitle: 'Session 13', at }, 'Europe/London').body).toBe('“Session 13” is pencilled in for Fri 20 Nov, 19:00.')
+    expect(readTimeZone('Europe/London')).toBe('Europe/London')
+    expect(readTimeZone('Mars/Olympus')).toBeUndefined()
+    expect(tablePush({ kind: 'party', fromUsername: 'Sam', campaignId: 'c1', campaignName: 'Ashes', text: 'Roll for it' })).toMatchObject({ title: 'Ashes', body: 'Sam: Roll for it', tag: 'party-c1' })
+    expect(tablePush({ kind: 'quest', fromUsername: 'Kian', campaignName: 'Ashes', title: 'The Drowned Bell', text: 'from the Harbourmaster: Find it' })).toMatchObject({ title: 'Ashes: new quest', body: 'The Drowned Bell · from the Harbourmaster: Find it' })
+    expect(tablePush({ kind: 'reward', fromUsername: 'Kian', campaignName: 'Ashes', title: 'The Drowned Bell', text: '25 gp, 100 XP each' }).body).toBe('The Drowned Bell: 25 gp, 100 XP each')
   })
 })
