@@ -12,19 +12,6 @@
       "port": 5180
     },
     {
-      "name": "viewer",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "vite",
-        "--config",
-        "viewer/vite.config.ts",
-        "--port",
-        "5190",
-        "--strictPort"
-      ],
-      "port": 5190
-    },
-    {
       "name": "web",
       "runtimeExecutable": "npx",
       "runtimeArgs": [

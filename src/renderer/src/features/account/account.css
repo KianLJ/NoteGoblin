@@ -726,3 +726,32 @@ button.ac-avatar:active {
 .st-link:hover {
   color: var(--danger);
 }
+
+/* Settings on a phone: the sections as a row of tabs along the top, the page below, rows stacking. */
+@media (max-width: 700px) {
+  .st {
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    max-height: 80vh;
+  }
+  .st-nav {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    padding: 0 0 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    scrollbar-width: none;
+  }
+  .st-nav h2 {
+    display: none;
+  }
+  .st-tab {
+    flex-shrink: 0;
+  }
+  .st-row {
+    flex-wrap: wrap;
+  }
+}

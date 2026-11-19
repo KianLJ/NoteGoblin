@@ -1,5 +1,7 @@
 import { setClassicLayout, useClassicLayout } from '../classic/classicLayout'
 import { GoblinLoader } from '../../ui/GoblinLoader'
+import { isWebApp } from '../../platform'
+import type { WebPushState } from '@shared/ipc'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { useMountAnimation } from '../../ui/useMountAnimation'
@@ -29,7 +31,7 @@ import type { AdminAccountSummary } from '@shared/relay'
 import { getStoredSfxEnabled, getStoredSfxVolume, setSfxEnabled, setSfxVolume } from '../audio/soundSettings'
 import { playSfx } from '../audio/soundEffects'
 
-type SettingsSection = 'profile' | 'appearance' | 'sound' | 'folder' | 'account' | 'admin' | 'about'
+type SettingsSection = 'profile' | 'appearance' | 'sound' | 'notifications' | 'folder' | 'account' | 'admin' | 'about'
 
 /**
  * Your account, top left beside the mode switch: a circle with your initial.
@@ -137,6 +139,7 @@ const SECTIONS: { id: SettingsSection; label: string; about: string }[] = [
   { id: 'profile', label: 'Profile', about: 'The name other people see.' },
   { id: 'appearance', label: 'Appearance', about: 'Light or dark, the size of everything, fonts and colours.' },
   { id: 'sound', label: 'Sound', about: 'The little sounds for dice, rests and people joining.' },
+  { id: 'notifications', label: 'Notifications', about: 'Messages, invites and session plans on this phone or browser, even with NoteGoblin closed.' },
   { id: 'folder', label: 'Notes folder', about: 'Where your campaigns are kept on this computer.' },
   { id: 'account', label: 'Account', about: 'Your password, and staying signed in.' },
   { id: 'admin', label: 'Relay admin', about: 'Accounts on the relay.' },
@@ -373,7 +376,8 @@ function SettingsWindow({ initialSection, onClose }: { initialSection: SettingsS
   }, [section])
 
   const isAdmin = identity?.displayName.trim().toLowerCase() === 'kyonk'
-  const sections = SECTIONS.filter((s) => s.id !== 'admin' || isAdmin)
+  // Notifications are the web app's (the desktop shows its own while it runs); the notes folder is the desktop's.
+  const sections = SECTIONS.filter((s) => (s.id !== 'admin' || isAdmin) && (s.id === 'notifications' ? !!window.goblin.webPush : s.id === 'folder' ? !isWebApp() : true))
   const current = sections.find((s) => s.id === section) ?? sections[0]
 
   return (
@@ -560,6 +564,8 @@ function SettingsWindow({ initialSection, onClose }: { initialSection: SettingsS
                 </div>
               </div>
             </div>
+          ) : current.id === 'notifications' ? (
+            <PushSettings />
           ) : current.id === 'folder' ? (
             <div className="st-group">
               <div className="st-row st-row--stack">
@@ -717,10 +723,10 @@ function Segmented({ value, options, onChange }: { value: string; options: [stri
 }
 
 /** An on/off switch (a real checkbox underneath). */
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }): JSX.Element {
+function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (checked: boolean) => void; label: string; disabled?: boolean }): JSX.Element {
   return (
     <span className="st-switch">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} aria-label={label} />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} aria-label={label} />
       <span className="st-switch-track" />
     </span>
   )
@@ -751,5 +757,53 @@ function SignOutIcon(): JSX.Element {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M6 2.5H3.5v11H6M10 5l3 3-3 3M13 8H6" />
     </svg>
+  )
+}
+
+/** The web app's notifications on this phone or browser (web/push.ts, through window.goblin.webPush). */
+function PushSettings(): JSX.Element {
+  const [state, setState] = useState<WebPushState | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    void window.goblin.webPush?.state().then(setState, () => setState('unsupported'))
+  }, [])
+  async function flip(on: boolean): Promise<void> {
+    const push = window.goblin.webPush
+    if (!push) return
+    setBusy(true)
+    setError(null)
+    try {
+      setState(await (on ? push.turnOn() : push.turnOff()))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That didn’t work.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const about: Record<WebPushState, string> = {
+    on: 'On for this phone or browser: friend requests, invites, messages, table chat, quests and session plans, with a line saying what happened.',
+    off: 'Get friend requests, invites, messages, table chat, quests and session plans here, even with NoteGoblin closed.',
+    blocked: 'Blocked for this site. Allow notifications for it in your browser’s settings, then come back.',
+    'add-to-home': 'On iPhone, tap Share, then Add to Home Screen, and open NoteGoblin from there to turn them on.',
+    unsupported: 'This browser can’t show notifications from websites.'
+  }
+  return (
+    <div className="st-group">
+      {!state ? (
+        <GoblinLoader label="Checking this browser" />
+      ) : (
+        <div className="st-row">
+          <span className="st-row-text">
+            <strong>Notifications on this device</strong>
+            <small>{about[state]}</small>
+          </span>
+          {(state === 'on' || state === 'off') && (
+            <Switch checked={state === 'on'} onChange={(on) => void flip(on)} label="Notifications on this device" disabled={busy} />
+          )}
+        </div>
+      )}
+      {error && <p className="st-msg st-msg--bad">{error}</p>}
+    </div>
   )
 }

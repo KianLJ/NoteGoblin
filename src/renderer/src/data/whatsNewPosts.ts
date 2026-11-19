@@ -53,6 +53,25 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.18.1',
+    title: 'NoteGoblin on your phone',
+    intro: 'The web app is at home on a phone now, and it takes over from the old viewer.',
+    sections: [
+      {
+        heading: 'Made for a small screen',
+        body: 'On a phone, NoteGoblin shows one box at a time, filling the screen. The boxes you have open sit as tabs along the top, so you can flick between your sheet, the party and the chat, and your tools sit in a bar along the bottom. Settings, notifications, Messages and the session planner all fit the narrow screen too.'
+      },
+      {
+        heading: 'Notifications from the app',
+        body: 'Open Settings and choose Notifications to turn them on for your phone or browser. On iPhone, add NoteGoblin to your Home Screen first (Share, then Add to Home Screen) and turn them on from there. Tapping one opens the app.'
+      },
+      {
+        heading: 'Goodbye, viewer',
+        body: 'The read-only phone viewer has made way for the full app: its old address takes you to relay.notegoblin.uk/app, and if you turned on notifications in it, they keep coming.'
+      }
+    ]
+  },
+  {
     version: '0.18.0',
     title: 'Play in your browser',
     intro: 'A friend without the app can now join your game from any browser.',

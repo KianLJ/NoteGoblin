@@ -7,7 +7,7 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
 const version = (JSON.parse(readFileSync(here('../package.json'), 'utf8')) as { version: string }).version
 
 /**
- * The web app (web/main.tsx): the desktop renderer, built into the relay's static assets (relay/viewer-dist/app/)
+ * The web app (web/main.tsx): the desktop renderer, built into the relay's static assets (relay/web-dist/app/)
  * and served at /app/ by the same worker, so its relay calls are same-origin. `electron` and `ws` are swapped for
  * browser stand-ins, and the relay's address is the page's own.
  */
@@ -37,7 +37,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: here('../relay/viewer-dist/app'),
+    outDir: here('../relay/web-dist/app'),
     emptyOutDir: true,
     chunkSizeWarningLimit: 8000
   }

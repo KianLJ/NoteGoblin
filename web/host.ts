@@ -15,6 +15,7 @@ import { normalizeWithOwnPacks } from '@shared/content/sheet'
 import { srdPack } from '@shared/content/srd'
 import type { ApiResult, CharacterSheet, Identity, LoginResult } from '@shared/ipc'
 import type { CloudCharacter } from '@shared/cloudCharacter'
+import { refreshPush, turnPushOff } from './push'
 
 const win = webWindow as never
 const ok = <T>(data: T): ApiResult<T> => ({ ok: true, data })
@@ -50,6 +51,8 @@ function start(session: RelaySession): LoginResult {
     void relayClient.getPrefs(session.token).then((r) => emit('relay:prefs-checked', r.ok ? (r.data.prefs ?? null) : null))
   }, 300)
   void loadCharacters()
+  // This browser's notifications, if on, told the relay again (its time zone may have changed).
+  void refreshPush()
   return { ok: true, identity: identityOf(session) }
 }
 
@@ -99,7 +102,9 @@ handle('identity:change-password', async (current: unknown, next: unknown): Prom
   const r = await relayClient.changePassword(check.data.token, String(next))
   return r.ok ? start({ ...s, token: check.data.token }) : fail(r.error)
 })
-handle('identity:sign-out', () => {
+handle('identity:sign-out', async () => {
+  // Signing out stops this browser getting the account's notifications too.
+  await turnPushOff().catch(() => undefined)
   leaveSession()
   disconnectPresence()
   setRelaySession(null)

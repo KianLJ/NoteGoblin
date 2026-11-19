@@ -258,6 +258,9 @@ export interface CampaignCalendar {
   updatedAt: string
 }
 
+/** Push notifications in the web app on this browser (web/push.ts): on, off, blocked in its settings, needing the Home Screen first (iPhone), or not possible here. */
+export type WebPushState = 'on' | 'off' | 'blocked' | 'add-to-home' | 'unsupported'
+
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
 /** Where the auto-updater is: shown by the version badge. */
@@ -279,6 +282,13 @@ export interface PropListing {
 
 export interface AppApi {
   getAppVersion: () => Promise<string>
+  /** The web app only (web/main.tsx): push notifications on this browser. The desktop shows its own while it runs. */
+  webPush?: {
+    state: () => Promise<WebPushState>
+    /** Asks for permission, so call it from a tap. */
+    turnOn: () => Promise<WebPushState>
+    turnOff: () => Promise<WebPushState>
+  }
   updates: {
     getStatus: () => Promise<UpdateStatus>
     /** Checks now (unless an update is already downloading or ready) and resolves with the status after. */

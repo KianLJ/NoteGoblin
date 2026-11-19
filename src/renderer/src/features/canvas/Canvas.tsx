@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getStoredFontScale } from '../../theme'
 import { isWebApp } from '../../platform'
+import { usePhoneLayout } from '../../ui/usePhoneLayout'
 import {
   GRID,
   addNode,
@@ -123,6 +124,7 @@ const ZOOM_STEP = 1.2
  * on every frame.
  */
 export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mode, layout, setLayout, items, toolIcons, hiddenTools = [], corner, floating, dock, contextMenu, nav, sequence, onSequenceMove, crumbExtra, title, titleExtra, onRestoreBoxes, overlay, shared }, ref) {
+  const phone = usePhoneLayout()
   const viewportRef = useRef<HTMLDivElement>(null)
   // The dot grid's pattern id (useId's colons aren't safe inside url(#…)).
   const gridId = `gb-grid${useId().replace(/:/g, '')}`
@@ -394,7 +396,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     className: 'gb-canvas-node--collection',
     content: null
   }))
-  const rendered = [...items, ...collectionItems].map((item) => ({ item, node: findNode(layout, item.id) })).filter((r) => r.node)
+  // In the web app a Browser box (from a layout saved on the desktop) has nothing to show: it's left out.
+  const rendered = [...items, ...collectionItems]
+    .map((item) => ({ item, node: findNode(layout, item.id) }))
+    .filter((r) => r.node && !(isWebApp() && dynamicKind(r.item.id) === 'browser'))
 
   /** The collection tile (on this canvas, not pinned) a box was dropped onto, if any. */
   function collectionUnder(id: string, r: { x: number; y: number; w: number; h: number }): string | null {
@@ -423,6 +428,31 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
   }
   // The same reading order the session's order is worked out by (CampaignWorkspace), over where the boxes are now.
   const liveSequence = sequence && !onSequenceMove && dragged && sequence.includes(dragged.id) ? readingOrder(sequence.map(seqRect).filter((n): n is NonNullable<typeof n> => !!n && !n.pinned)) : sequence
+
+  /** Closing a box, from its ✕ (on the canvas or the phone's tabs). */
+  function closeItem(item: CanvasItem, node: NonNullable<(typeof rendered)[number]['node']>): void {
+    const isCollection = item.id.startsWith(COLLECTION_PREFIX)
+    // Closing a collection's tile breaks it up: what's inside comes back out here, nothing's lost.
+    // A session's is only shelved — kept whole, opened again from the Sessions box.
+    const cid = item.id.slice(COLLECTION_PREFIX.length)
+    if (isCollection && layout.collections?.[cid]?.sessionDeckId) setLayout((l) => removeNode(l, item.id))
+    else if (isCollection) setLayout((l) => dissolveCollection(l, cid))
+    else {
+      // A thing put on the canvas (a sticky, a picture, a statblock, a Browser box) is gone once closed — so it
+      // can be brought back, where it was. Tools and notes only close; they're still there to reopen.
+      const entry = allEntries(mode)[item.id]
+      const at = node!.pinned ? null : { x: node!.x, y: node!.y, w: node!.w, h: node!.h }
+      if (entry && at) {
+        const title = typeof item.title === 'string' && item.title ? item.title : 'the box'
+        offerUndo(`Closed ${title}`, () => {
+          putEntry(mode, entry)
+          setLayout((l) => addNode(l, item.id, { w: at.w, h: at.h }, size.w, size.h, at))
+        })
+      }
+      setLayout((l) => removeNode(l, item.id))
+    }
+    item.onClose?.()
+  }
 
   function renderNode({ item, node }: (typeof rendered)[number]): JSX.Element {
     const isCollection = item.id.startsWith(COLLECTION_PREFIX)
@@ -463,28 +493,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
           const rect = node!.pinned ? onScreen(r) : r
           setLayout((l) => (into ? moveIntoCollection(setNodeRect(l, item.id, rect), item.id, into) : setNodeRect(l, item.id, rect)))
         }}
-        onClose={item.noClose ? undefined : () => {
-          // Closing a collection's tile breaks it up: what's inside comes back out here, nothing's lost.
-          // A session's is only shelved — kept whole, opened again from the Sessions box.
-          const cid = item.id.slice(COLLECTION_PREFIX.length)
-          if (isCollection && layout.collections?.[cid]?.sessionDeckId) setLayout((l) => removeNode(l, item.id))
-          else if (isCollection) setLayout((l) => dissolveCollection(l, cid))
-          else {
-            // A thing put on the canvas (a sticky, a picture, a statblock, a Browser box) is gone once closed — so it
-            // can be brought back, where it was. Tools and notes only close; they're still there to reopen.
-            const entry = allEntries(mode)[item.id]
-            const at = node!.pinned ? null : { x: node!.x, y: node!.y, w: node!.w, h: node!.h }
-            if (entry && at) {
-              const title = typeof item.title === 'string' && item.title ? item.title : 'the box'
-              offerUndo(`Closed ${title}`, () => {
-                putEntry(mode, entry)
-                setLayout((l) => addNode(l, item.id, { w: at.w, h: at.h }, size.w, size.h, at))
-              })
-            }
-            setLayout((l) => removeNode(l, item.id))
-          }
-          item.onClose?.()
-        }}
+        onClose={item.noClose ? undefined : () => closeItem(item, node!)}
       >
         {item.content}
       </CanvasNode>
@@ -494,6 +503,72 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
   // The Browser box is Electron's own web view: a browser tab has the real thing.
   const tools = TOOLS_BY_MODE[mode].filter((kind) => !hiddenTools.includes(kind) && !(kind === 'browser' && isWebApp()))
   const gridPx = GRID * vp.zoom
+
+  if (phone) {
+    // A phone has no room for a sheet of boxes: the front box fills the screen, the open ones are tabs along the top,
+    // and the bar below opens tools. Collections stay on the bigger screen.
+    const open = rendered.filter((r) => !r.item.id.startsWith(COLLECTION_PREFIX)).sort((a, b) => b.node!.z - a.node!.z)
+    const front = open[0]
+    const show = (item: CanvasItem): void => {
+      setLayout((l) => bringToFront(l, item.id))
+      item.onFocus?.()
+    }
+    return (
+      <div ref={viewportRef} className="gb-canvas gb-canvas--phone" data-mood={mood ?? undefined}>
+        {open.length > 0 && (
+          <div className="gb-phone-tabs" role="tablist" aria-label="Open boxes">
+            {[...open]
+              .sort((a, b) => a.item.id.localeCompare(b.item.id))
+              .map(({ item, node }) => (
+                <span key={item.id} className={item === front.item ? 'gb-phone-tab gb-phone-tab--on' : 'gb-phone-tab'} data-kind={dynamicKind(item.id)}>
+                  <button type="button" role="tab" aria-selected={item === front.item} onClick={() => show(item)}>
+                    {item.icon}
+                    <span className="gb-phone-tab-title">{item.title}</span>
+                  </button>
+                  {!item.noClose && (
+                    <button type="button" className="gb-phone-tab-close" aria-label={`Close ${typeof item.title === 'string' ? item.title : 'this'}`} onClick={() => closeItem(item, node!)}>
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+          </div>
+        )}
+        {front ? (
+          <div className={`gb-phone-box${front.item.className ? ` ${front.item.className}` : ''}`} data-kind={dynamicKind(front.item.id)} onPointerDown={() => front.item.onFocus?.()}>
+            {front.item.actions && <div className="gb-phone-box-actions">{front.item.actions}</div>}
+            <div className="gb-canvas-node-body gb-phone-box-body">{front.item.content}</div>
+          </div>
+        ) : (
+          <div className="gb-canvas-empty">
+            <strong>Nothing open</strong>
+            <span>Pick a tool from the bar below.</span>
+          </div>
+        )}
+        <div className="gb-phone-bar">
+          <div className="gb-canvas-corner">{corner}</div>
+          <div className="gb-phone-tools" role="group" aria-label="Tools">
+            {tools.map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                className={findNode(layout, kind) ? 'gb-dock-tool gb-dock-tool--open' : 'gb-dock-tool'}
+                data-kind={kind}
+                aria-label={TOOL_META[kind].title}
+                aria-pressed={front?.item.id === kind}
+                onClick={() => (findNode(layout, kind) ? show(items.find((i) => i.id === kind) ?? ({ id: kind } as CanvasItem)) : openTool(kind))}
+              >
+                {toolIcons[kind]}
+              </button>
+            ))}
+            {dock}
+          </div>
+          <div className="gb-canvas-floating">{floating}</div>
+        </div>
+        <ContextMenu state={menu} onClose={() => setMenu(null)} />
+      </div>
+    )
+  }
 
   return (
     <div

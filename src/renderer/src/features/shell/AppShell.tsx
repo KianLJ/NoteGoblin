@@ -423,7 +423,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
     // the "footer pushed off-screen" bug the scale wrapper exists to avoid.
     <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <header
-        className="gb-drag"
+        className="gb-drag gb-appheader"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -586,6 +586,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
             />
           )}
           </div>
+          <span className="gb-appheader-version">
           <VersionBadge
             variant="inline"
             onWhatsNew={(entries) => {
@@ -596,6 +597,7 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
               canvasRef.current?.openTool('whatsnew')
             }}
           />
+          </span>
         </div>
 
         <WindowControls />

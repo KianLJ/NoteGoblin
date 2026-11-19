@@ -41,8 +41,9 @@
 }
 
 @media (max-width: 760px) {
+  /* One after the other, scrolling together: a grid squeezed both into the window's height. */
   .gb-plan {
-    grid-template-columns: 1fr;
+    display: block;
     overflow-y: auto;
   }
   .gb-plan-col {

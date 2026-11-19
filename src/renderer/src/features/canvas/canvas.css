@@ -3197,3 +3197,182 @@ body.gb-canvas-dragging .gb-canvas-node-body {
     animation: none;
   }
 }
+
+/* --- A phone (Canvas.tsx's phone layout) --------------------------------------
+   One box at a time, filling the screen; the open ones as tabs along the top, and the tools in a bar along the
+   bottom that scrolls sideways. */
+
+.gb-canvas--phone {
+  display: flex;
+  flex-direction: column;
+}
+
+.gb-phone-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+  scrollbar-width: none;
+}
+
+.gb-phone-tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  max-width: 60vw;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface-raised);
+}
+
+.gb-phone-tab > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 4px 0 10px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.gb-phone-tab svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--kind, currentColor);
+}
+
+.gb-phone-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gb-phone-tab--on {
+  border-color: var(--kind, var(--accent));
+  background: color-mix(in srgb, var(--kind, var(--accent)) 18%, var(--bg-surface-raised));
+}
+
+.gb-phone-tab--on > button {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.gb-phone-tab > .gb-phone-tab-close {
+  min-width: 32px;
+  padding: 0 8px 0 4px;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+.gb-phone-box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-surface-raised);
+}
+
+.gb-phone-box-actions {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gb-phone-box > .gb-phone-box-body {
+  border-radius: 0;
+}
+
+.gb-phone-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+}
+
+.gb-phone-bar .gb-canvas-corner {
+  flex-shrink: 0;
+  box-shadow: none;
+}
+
+.gb-phone-tools {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.gb-phone-tools > * {
+  flex-shrink: 0;
+}
+
+.gb-phone-bar .gb-canvas-floating {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.gb-canvas--phone .gb-canvas-empty {
+  position: static;
+  flex: 1;
+  transform: none;
+}
+
+/* The app's top bar on a phone: tighter, scrolling sideways when it must, without the version. */
+@media (max-width: 700px) {
+  .gb-appheader {
+    gap: var(--space-2) !important;
+    padding-left: var(--space-2) !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .gb-appheader > * {
+    flex-shrink: 0;
+  }
+  .gb-appheader-version {
+    display: none;
+  }
+}
+
+/* Notification toasts on a phone: across the top, one at a time (the next shows once it's dealt with). */
+@media (max-width: 700px) {
+  .gb-toasts {
+    right: var(--space-2) !important;
+    left: var(--space-2);
+    width: auto !important;
+  }
+  .gb-toasts > :not(:first-child) {
+    display: none !important;
+  }
+}
+
+/* The top bar's popovers (the planner, Messages) on a phone: across the screen below the bar, whatever button opened them. */
+@media (max-width: 700px) {
+  .gb-plan-pop,
+  .ms-pop {
+    position: fixed !important;
+    top: 50px !important;
+    right: var(--space-2) !important;
+    left: var(--space-2) !important;
+    width: auto !important;
+    max-height: calc(100dvh - 60px);
+  }
+  .gb-plan-pop {
+    height: calc(100dvh - 60px) !important;
+  }
+}

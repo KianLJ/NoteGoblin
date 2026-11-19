@@ -14,13 +14,13 @@ export interface PushTarget {
   tz?: string
 }
 
-/** What the viewer's service worker shows (viewer/public/sw.js). */
+/** What the web app's service worker shows (web/public/sw.js, also served at the old viewer's /viewer/sw.js). */
 export interface PushMessage {
   title: string
   body: string
   /** Same tag, same notification: a newer one replaces it. */
   tag?: string
-  /** Where tapping it opens. */
+  /** Where tapping it opens: the web app. */
   url?: string
 }
 
@@ -185,7 +185,7 @@ export function notificationPush(
   const who = n.fromUsername
   const plan = `“${n.planTitle ?? 'a session'}”`
   const when = n.at ? timeIn(n.at, tz) : ''
-  const url = '/viewer/'
+  const url = '/app/'
   switch (n.kind) {
     case 'friend-request':
       return { title: 'Friend request', body: `${who} wants to be your friend.`, tag: `friend-${who}`, url }
@@ -218,7 +218,7 @@ export const TABLE_KINDS: TableKind[] = ['party', 'whisper', 'quest', 'quest-don
  */
 export function tablePush(m: { kind: TableKind; fromUsername: string; campaignId?: string; campaignName?: string; title?: string; text?: string }): PushMessage {
   const where = m.campaignName || 'Your campaign'
-  const url = '/viewer/'
+  const url = '/app/'
   const title = clip(m.title, 80)
   const text = clip(m.text)
   switch (m.kind) {

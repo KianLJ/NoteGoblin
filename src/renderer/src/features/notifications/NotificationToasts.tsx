@@ -65,6 +65,7 @@ export function NotificationToasts({ notifications: notificationsApi, onJoined }
 
   return (
     <div
+      className="gb-toasts"
       style={{
         position: 'fixed',
         // Below the 44px title bar, not the bottom-right corner — that's the

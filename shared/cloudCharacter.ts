@@ -4,12 +4,10 @@ import type { SpellNumbers } from './content/spellNumbers'
 import type { KnownSpell } from './content/sheet'
 
 /**
- * A character sheet as uploaded to the relay for the read-only web viewer
- * (relay/ serves it at /viewer/). The raw sheet travels as-is, alongside the
- * numbers the desktop's content engine derived from it: the viewer can't
- * derive them itself, since homebrew content packs only exist on the
- * desktop, and shipping the rules engine plus SRD data to a phone just to
- * re-run it would be wasteful anyway.
+ * A character sheet as kept in your relay account, which the web app reads
+ * back (web/host.ts). The raw sheet travels as-is, alongside the numbers the
+ * app's content engine derived from it, worked out where your content packs
+ * are active.
  */
 export interface CloudCharacter {
   id: string

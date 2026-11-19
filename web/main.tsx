@@ -4,4 +4,5 @@
 import './flag'
 import './host'
 import '../src/preload/index'
+import './webPush'
 import '../src/renderer/src/main'
