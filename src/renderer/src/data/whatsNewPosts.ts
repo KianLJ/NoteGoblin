@@ -53,6 +53,25 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.18.0',
+    title: 'Play in your browser',
+    intro: 'A friend without the app can now join your game from any browser.',
+    sections: [
+      {
+        heading: 'NoteGoblin, no install',
+        body: 'Open relay.notegoblin.uk/app in a browser and log in with your NoteGoblin account. It’s the same app as on your computer: join a friend’s game from the Friends menu, then read the party’s notes, chat, roll dice, set your initiative, move your token on the battle map, follow quests and handouts, and answer the session planner. The phone viewer has a Play in your browser link too.'
+      },
+      {
+        heading: 'Your characters come with you',
+        body: 'Character sheets are kept with your account, so the ones you make in the browser are the ones you see in the app, and the other way round. Changes save a moment after you stop.'
+      },
+      {
+        heading: 'What still needs the app',
+        body: 'The browser version is for players. Running a campaign and hosting a session need the desktop app, since your campaigns live on your computer, and so do homebrew packs, offline copies of campaigns and your own songs and sounds. Anything that needs the app says so.'
+      }
+    ]
+  },
+  {
     version: '0.17.4',
     title: 'Notifications on a sleeping Android phone',
     intro: 'A fix for Android phones.',

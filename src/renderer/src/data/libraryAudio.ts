@@ -1,4 +1,5 @@
 import manifest from './audioManifest.json'
+import { isWebApp } from '../platform'
 
 /**
  * The built-in music, ambience and Sound Board audio, as listed by scripts/audio-manifest.mjs. The app ships
@@ -19,9 +20,12 @@ export const LIBRARY_FILES: LibraryFile[] = manifest.files
 // The dev-only browser preview (vite.sheet-preview.config.ts) isn't Electron: it plays the repo's own files.
 const IN_ELECTRON = typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron')
 
-/** Where a built-in file plays from. */
+const encoded = (path: string): string => path.split('/').map(encodeURIComponent).join('/')
+
+/** Where a built-in file plays from: in the web app, streamed from the relay that serves it (relay/src/audio.ts). */
 export function libraryUrl(path: string): string {
-  return IN_ELECTRON ? `library-audio://file/${encodeURIComponent(path)}` : `/src/assets/${path.split('/').map(encodeURIComponent).join('/')}`
+  if (isWebApp()) return `/library/${encoded(path)}`
+  return IN_ELECTRON ? `library-audio://file/${encodeURIComponent(path)}` : `/src/assets/${encoded(path)}`
 }
 
 /** Which built-in file a `library-audio://` address is, or null for anything else (your own songs, say). */

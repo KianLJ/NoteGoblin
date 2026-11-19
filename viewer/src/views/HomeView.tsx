@@ -25,6 +25,14 @@ export function HomeView({ username, setTitle }: { username: string | null; setT
     <div className="v-stack">
       {username && <p className="v-hello">Signed in as {username}</p>}
       <PushSwitch />
+      {/* The whole app, for playing at someone's table from a browser (web/). */}
+      <a className="v-row" href="/app/">
+        <span className="v-row-main">
+          <span className="v-row-title">Play in your browser</span>
+          <span className="v-row-sub">The full NoteGoblin app: join a friend’s game, chat, roll and plan sessions, no install needed.</span>
+        </span>
+        <span className="v-row-meta">Open ›</span>
+      </a>
 
       <section>
         <h2 className="v-section-title">Characters</h2>

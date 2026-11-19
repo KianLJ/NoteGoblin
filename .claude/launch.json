@@ -23,6 +23,32 @@
         "--strictPort"
       ],
       "port": 5190
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "web/vite.config.ts"
+      ],
+      "port": 5195
+    },
+    {
+      "name": "web-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "web/vite.config.ts",
+        "--port",
+        "5196",
+        "--strictPort"
+      ],
+      "port": 5196,
+      "env": {
+        "NOTEGOBLIN_RELAY_URL": "http://127.0.0.1:8787"
+      }
     }
   ]
 }

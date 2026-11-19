@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getStoredFontScale } from '../../theme'
+import { isWebApp } from '../../platform'
 import {
   GRID,
   addNode,
@@ -490,7 +491,8 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ mo
     )
   }
 
-  const tools = TOOLS_BY_MODE[mode].filter((kind) => !hiddenTools.includes(kind))
+  // The Browser box is Electron's own web view: a browser tab has the real thing.
+  const tools = TOOLS_BY_MODE[mode].filter((kind) => !hiddenTools.includes(kind) && !(kind === 'browser' && isWebApp()))
   const gridPx = GRID * vp.zoom
 
   return (

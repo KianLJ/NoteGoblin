@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.web.json",
+  "include": [
+    "web/**/*",
+    "src/renderer/src/**/*",
+    "shared/**/*",
+    "relay/src/lib/planner.ts",
+    "src/preload/**/*",
+    "src/main/sessionClient.ts",
+    "src/main/relaySocket.ts",
+    "src/main/relayState.ts",
+    "src/server/relay/**/*"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@renderer/*": ["src/renderer/src/*"],
+      "@shared/*": ["shared/*"],
+      "@server/*": ["src/server/*"]
+    }
+  }
+}

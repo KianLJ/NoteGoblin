@@ -1017,7 +1017,7 @@ export class Directory extends Server<Env> {
     const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined)
     const message = tablePush({ kind: body.kind as TableKind, fromUsername: from?.username ?? 'Someone', campaignId: str(body.campaignId, 64), campaignName: str(body.campaignName, 80), title: str(body.title, 200), text: str(body.text, 1000) })
     const ids = [...new Set(body.userIds.filter((id): id is string => typeof id === 'string' && id !== body.fromUserId))].slice(0, 50)
-    this.ctx.waitUntil(Promise.all(ids.map((id) => this.pushToDevices(id, () => message))).then(() => undefined))
+    await Promise.all(ids.map((id) => this.pushToDevices(id, () => message)))
     return json({ ok: true })
   }
 
@@ -1059,8 +1059,9 @@ export class Directory extends Server<Env> {
     await this.ctx.storage.put(`notifications:${userId}`, [notification, ...existing].slice(0, MAX_NOTIFICATIONS_PER_USER))
 
     await this.pushLive(userId, { type: 'notification', notification })
-    // And to their phone (or any browser they turned notifications on in), after the reply goes.
-    this.ctx.waitUntil(this.pushToDevices(userId, (tz) => notificationPush({ ...notification, preview }, tz)))
+    // And to their phone (or any browser they turned notifications on in). Awaited, not left for after the reply:
+    // work after it can be cut short, and its log lines don't reach `wrangler tail`.
+    await this.pushToDevices(userId, (tz) => notificationPush({ ...notification, preview }, tz))
   }
 
   // --- Web Push --------------------------------------------------------------

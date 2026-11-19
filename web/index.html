@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#b5502c" />
+    <link rel="icon" type="image/png" href="/viewer/icon-192.png" />
+    <title>NoteGoblin</title>
+  </head>
+  <body>
+    <style>
+      html, body { margin: 0; height: 100%; background: #1a160f; }
+      html[data-theme='light'], html[data-theme='light'] body { background: #faf6ec; }
+      .gb-boot { height: 100vh; display: flex; align-items: center; justify-content: center; color: #8f8265; font: 700 11px/1 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+    </style>
+    <div id="root"><div class="gb-boot" role="status">Opening NoteGoblin</div></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

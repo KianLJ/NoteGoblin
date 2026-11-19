@@ -1,6 +1,6 @@
 {
   "name": "notegoblin",
-  "version": "0.17.4",
+  "version": "0.18.0",
   "description": "A D&D campaign companion for DMs and players — notes, character sheets, initiative, and live party chat with friends over the internet.",
   "main": "./out/main/index.js",
   "author": "NoteGoblin",
@@ -11,16 +11,18 @@
     "build": "node scripts/audio-manifest.mjs && electron-vite build",
     "build:win": "node scripts/audio-manifest.mjs && electron-vite build && electron-builder --win",
     "release:win": "node scripts/audio-manifest.mjs && electron-vite build && electron-builder --win --publish always",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc -p tsconfig.viewer.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc -p tsconfig.viewer.json && tsc -p tsconfig.webapp.json",
     "postinstall": "electron-builder install-app-deps",
     "viewer:dev": "vite --config viewer/vite.config.ts",
     "viewer:build": "vite build --config viewer/vite.config.ts",
-    "relay:dev": "npm run viewer:build && cd relay && npx wrangler dev",
-    "relay:deploy": "npm run viewer:build && cd relay && npx wrangler deploy",
+    "relay:dev": "npm run viewer:build && npm run web:build && cd relay && npx wrangler dev",
+    "relay:deploy": "npm run viewer:build && npm run web:build && cd relay && npx wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db": "node scripts/test-db.mjs",
-    "library:upload": "node scripts/upload-library.mjs"
+    "library:upload": "node scripts/upload-library.mjs",
+    "web:dev": "vite --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts"
   },
   "dependencies": {
     "@xhayper/discord-rpc": "^1.3.4",

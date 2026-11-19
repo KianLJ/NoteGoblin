@@ -7,6 +7,7 @@ import { setBrowserAccount } from '../browser/browserAccount'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ModeToggle, type Mode } from './ModeToggle'
+import { isWebApp } from '../../platform'
 import { WindowControls } from './WindowControls'
 import { VersionBadge } from './VersionBadge'
 import { WhatsNewView } from './WhatsNew'
@@ -80,7 +81,8 @@ interface AppShellProps {
 }
 
 export function AppShell({ displayName }: AppShellProps): JSX.Element {
-  const [mode, setMode] = useState<Mode>('dm')
+  // The web app is for players: running a campaign needs the desktop app (its campaigns live on your computer).
+  const [mode, setMode] = useState<Mode>(isWebApp() ? 'player' : 'dm')
   // The Homebrew Workshop covers the workspace without unmounting it, so a hosted or joined session carries on underneath.
   const [workshopOpen, setWorkshopOpen] = useState(false)
   // The Combat tab (DM only for now) sits over the workspace like the Workshop; the encounter lives in encounterStore, so nothing is lost switching back and forth.
@@ -162,13 +164,15 @@ export function AppShell({ displayName }: AppShellProps): JSX.Element {
   // hosted or joined game — DM is locked while you've joined someone else's
   // session, Player is locked while you're hosting your own.
   // Dev builds leave both modes open, so you can host and also join your own session as a player to test it.
-  const lockedMode: Mode | undefined = import.meta.env.DEV ? undefined : hostedSessionId ? 'player' : joinedSession ? 'dm' : undefined
+  const lockedMode: Mode | undefined = isWebApp() ? 'dm' : import.meta.env.DEV ? undefined : hostedSessionId ? 'player' : joinedSession ? 'dm' : undefined
   // Combat is the DM's map in DM mode, or the DM's map as shared with you while you're in their session
   // (out of one, the tab's still there, saying how to get to the fight).
   const combatShown = combatOpen
   // The DM's battle map is loaded, saved and shared behind the scenes, whether or not the Combat tab is open.
   useBattleMapSync(mode === 'dm' ? (activeCampaign?.id ?? null) : null, mode === 'dm' ? hostedSessionId : null)
-  const lockedReason = hostedSessionId
+  const lockedReason = isWebApp()
+    ? 'Running a campaign needs the NoteGoblin desktop app.'
+    : hostedSessionId
     ? 'Stop hosting to switch to Player mode.'
     : joinedSession
       ? 'Leave the session to switch to DM mode.'

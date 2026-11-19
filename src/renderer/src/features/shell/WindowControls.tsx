@@ -1,8 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { CloseWindowIcon, MaximizeIcon, MinimizeIcon, RestoreIcon } from './icons'
+import { isWebApp } from '../../platform'
 
 /** Hand-drawn minimize/maximize/close, since the window is frame:false — see main/index.ts for why (native titleBarOverlay's drag hit-testing was unreliable). Sits at the far right of the header, outside the drag region. */
-export function WindowControls(): JSX.Element {
+export function WindowControls(): JSX.Element | null {
+  // A browser tab has its own.
+  return isWebApp() ? null : <DesktopWindowControls />
+}
+
+function DesktopWindowControls(): JSX.Element {
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {

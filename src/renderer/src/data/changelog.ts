@@ -7,6 +7,17 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.18.0',
+    title: 'Play in your browser',
+    highlights: [
+      'NoteGoblin in a web browser, at relay.notegoblin.uk/app: log in with your account and play at a friend’s table without installing anything',
+      'The same app as on the desktop: join a game from Friends, the party’s notes, chat, dice, initiative, the battle map, quests, handouts and the session planner',
+      'Your characters are kept with your account, so the same sheets are there in the browser and in the app',
+      'For players: running a campaign and hosting still need the desktop app, as do homebrew packs and your own sounds',
+      'Notifications are sent more reliably'
+    ]
+  },
+  {
     version: '0.17.4',
     title: 'Notifications on a sleeping Android phone',
     highlights: [
