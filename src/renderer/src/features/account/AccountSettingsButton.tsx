@@ -784,7 +784,9 @@ function PushSettings(): JSX.Element {
   const about: Record<WebPushState, string> = {
     on: 'On for this phone or browser: friend requests, invites, messages, table chat, quests and session plans, with a line saying what happened.',
     off: 'Get friend requests, invites, messages, table chat, quests and session plans here, even with NoteGoblin closed.',
-    blocked: 'Blocked for this site. Allow notifications for it in your browser’s settings, then come back.',
+    blocked: /iphone|ipad/i.test(navigator.userAgent)
+      ? 'Blocked. On your iPhone open Settings, then Notifications, then NoteGoblin, and turn on Allow Notifications.'
+      : 'Blocked for this site. Allow notifications for it in your browser’s settings, then come back.',
     'add-to-home': 'On iPhone, tap Share, then Add to Home Screen, and open NoteGoblin from there to turn them on.',
     unsupported: 'This browser can’t show notifications from websites.'
   }

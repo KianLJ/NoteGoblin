@@ -53,6 +53,21 @@ export interface WhatsNewPost {
 /** Newest first. Each version's post shows once you're running that version (it needs a CHANGELOG entry too). */
 export const WHATS_NEW_POSTS: WhatsNewPost[] = [
   {
+    version: '0.18.2',
+    title: 'One app on your phone',
+    intro: 'The web app is the only NoteGoblin for your phone now.',
+    sections: [
+      {
+        heading: 'Swap your Home Screen icon',
+        body: 'The old viewer is gone, and its address opens the web app. If you added the viewer to your Home Screen, that icon can’t show notifications any more: remove it, open relay.notegoblin.uk/app in Safari, tap Share, then Add to Home Screen, and open NoteGoblin from the new icon. Then open Settings, choose Notifications and turn them on.'
+      },
+      {
+        heading: 'Blocked on iPhone?',
+        body: 'If your iPhone says notifications are blocked, NoteGoblin now tells you where to fix it: the iPhone’s Settings, then Notifications, then NoteGoblin, and turn on Allow Notifications.'
+      }
+    ]
+  },
+  {
     version: '0.18.1',
     title: 'NoteGoblin on your phone',
     intro: 'The web app is at home on a phone now, and it takes over from the old viewer.',

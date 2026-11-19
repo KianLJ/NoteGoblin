@@ -16,6 +16,4 @@ export interface Env {
   VAPID_PUBLIC_KEY?: string
   /** The matching private key as a JWK (JSON). Set with `wrangler secret put VAPID_PRIVATE_JWK`. */
   VAPID_PRIVATE_JWK?: string
-  /** The built web app (wrangler.jsonc's assets, at /app/). */
-  ASSETS: Fetcher
 }

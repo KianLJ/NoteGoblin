@@ -7,6 +7,15 @@ export interface ChangelogEntry {
 /** Newest first. Add a new entry here whenever package.json's version is bumped — VersionBadge/Changelog render straight from this list, so a future release just means a new entry at the top. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.18.2',
+    title: 'One app on your phone',
+    highlights: [
+      'The old phone viewer is gone for good: its address opens the web app',
+      'If your Home Screen has the old NoteGoblin icon, remove it and add the app again from relay.notegoblin.uk/app (Share, then Add to Home Screen), then turn notifications on in Settings, Notifications. The old icon can’t show the app’s notifications',
+      'On iPhone, if notifications are blocked, NoteGoblin now says where to turn them on'
+    ]
+  },
+  {
     version: '0.18.1',
     title: 'NoteGoblin on your phone',
     highlights: [

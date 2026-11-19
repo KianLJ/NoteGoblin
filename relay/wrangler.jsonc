@@ -25,11 +25,9 @@
   // The web app (web/, built by `npm run web:build` from the repo root into
   // ./web-dist/app/) — served at /app/ from this same worker, so it calls the
   // directory API same-origin with no CORS. Any path that isn't a built file
-  // falls through to the worker as before; ASSETS lets the worker hand one out
-  // under another path (the old viewer's service worker, see index.ts).
+  // falls through to the worker as before.
   "assets": {
-    "directory": "./web-dist",
-    "binding": "ASSETS"
+    "directory": "./web-dist"
   },
   "routes": [
     { "pattern": "relay.notegoblin.uk", "custom_domain": true }

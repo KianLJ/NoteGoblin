@@ -26,10 +26,12 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const url = (event.notification.data && event.notification.data.url) || '/app/'
+  // The app this worker belongs to (/app/, or /viewer/ for an old viewer's Home Screen app): opening anywhere else
+  // leaves that app on an iPhone.
+  const url = self.registration.scope
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((open) => {
-      const app = open.find((c) => new URL(c.url).pathname.startsWith('/app/'))
+      const app = open.find((c) => c.url.startsWith(url))
       return app ? app.focus() : self.clients.openWindow(url)
     })
   )
